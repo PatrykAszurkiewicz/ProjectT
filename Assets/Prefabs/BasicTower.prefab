@@ -1,0 +1,119 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2138885173737701668
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 102932535406297956}
+  - component: {fileID: 1385252472349385194}
+  m_Layer: 9
+  m_Name: BasicTower
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &102932535406297956
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138885173737701668}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -4.45, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 5068194430522686570}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1385252472349385194
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138885173737701668}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f29c0ba85860ca4c8c8fc1f70afd795, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  towerName: Basic Tower
+  damage: 10
+  range: 3
+  fireRate: 1
+  cost: 100
+  towerType: 0
+  spriteResourcePath: Sprites/spritesheet_transparent
+  spriteIndex: 0
+  spritesPerRow: 10
+  spriteSize: {x: 231, y: 185}
+  spriteScale: 0.8
+  enableAnimation: 1
+  animationFrameCount: 43
+  animationSpeed: 0.25
+  targetLayer:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  projectilePrefab: {fileID: 2844621228601224902, guid: 0e3a80326e5a3df4693f9aadb0191f35, type: 3}
+  firePoint: {fileID: 5068194430522686570}
+  canUpgrade: 1
+  upgradeTowerPrefab: {fileID: 0}
+  upgradeLevel: 1
+  maxUpgradeLevel: 3
+  useTentacleTurret: 1
+  tentacleLength: 1.2
+  tentacleWidth: 0.3
+  tentacleSegments: 8
+  tentacleSwayAmount: 0.1
+  tentacleSwaySpeed: 2
+  tentacleColor: {r: 0.337, g: 0.176, b: 0.259, a: 0.8}
+  tentacleTipColor: {r: 0.8, g: 0.3, b: 0.3, a: 1}
+  tentacleAnimationSpeed: 1
+  tentacleAttachmentOffset: {x: 0, y: -0.3}
+  downwardShorteningFactor: 0.5
+  meleeRange: 1.2
+  meleeDamageMultiplier: 1.5
+  meleeAttackDuration: 0.3
+  projectileRange: 5
+  rotationSpeed: 180
+  smoothRotation: 1
+  turretTransform: {fileID: 0}
+--- !u!1 &3321510626698392789
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5068194430522686570}
+  m_Layer: 9
+  m_Name: FirePoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5068194430522686570
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3321510626698392789}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.11, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 102932535406297956}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
