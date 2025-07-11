@@ -55,7 +55,7 @@ MonoBehaviour:
   spriteIndex: 0
   spritesPerRow: 10
   spriteSize: {x: 231, y: 185}
-  spriteScale: 0.8
+  spriteScale: 0.5
   enableAnimation: 1
   animationFrameCount: 43
   animationSpeed: 0.25
@@ -69,7 +69,7 @@ MonoBehaviour:
   upgradeLevel: 1
   maxUpgradeLevel: 3
   useTentacleTurret: 1
-  tentacleLength: 1.2
+  tentacleLength: 0.8
   tentacleWidth: 0.3
   tentacleSegments: 8
   tentacleSwayAmount: 0.1
@@ -79,10 +79,38 @@ MonoBehaviour:
   tentacleAnimationSpeed: 1
   tentacleAttachmentOffset: {x: 0, y: -0.3}
   downwardShorteningFactor: 0.5
-  meleeRange: 1.2
+  meleeRange: 1
   meleeDamageMultiplier: 1.5
   meleeAttackDuration: 0.3
   projectileRange: 5
+  swipeArcDegrees: 60
+  swipeSpeed: 8
+  swipeReach: 0.4
+  swipeIntensity: 1.5
+  swipeCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   rotationSpeed: 180
   smoothRotation: 1
   turretTransform: {fileID: 0}

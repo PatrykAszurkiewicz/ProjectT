@@ -51,7 +51,7 @@ public class Health : MonoBehaviour
         }
         else
         {
-            // TODO create prefabs for Heath
+            // TODO create prefabs for Health
             CreateSimpleHealthBar();
         }
     }
