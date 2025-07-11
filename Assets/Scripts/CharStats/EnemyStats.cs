@@ -1,16 +1,34 @@
 using UnityEngine;
 
-public class EnemyStats : MonoBehaviour
+public class EnemyStats : CharacterStats
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    public EnemyData enemyData;
+    private void Awake()
     {
-        
-    }
+        if (enemyData != null)
+        {
+            maxHealth = enemyData.maxHealth;
+            currentHealth = maxHealth;
 
-    // Update is called once per frame
-    void Update()
+            maxArmor = enemyData.maxArmor;
+            currentArmor = maxArmor;
+        }
+    }
+    public float Damage => enemyData?.damage ?? 0f;
+    public float MoveSpeed => enemyData?.moveSpeed ?? 1f;
+
+    public override void TakeDamage(float amount)
     {
-        
+        base.TakeDamage(amount);
+
+        if (IsDead())
+        {
+            Die();
+        }
+    }
+    private void Die()
+    {
+        // add death animation etc
+        Destroy(gameObject);
     }
 }

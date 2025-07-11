@@ -1,10 +1,8 @@
 using UnityEngine;
 
-public class PlayerStats : MonoBehaviour
+public class PlayerStats : CharacterStats
 {
-    [Header("Bars")]
-    public float maxHealth = 100f;
-    public float currentHealth = 100f;
+    [Header("Mana")]
 
     public float maxMana = 50f;
     public float currentMana = 50f;
@@ -20,7 +18,7 @@ public class PlayerStats : MonoBehaviour
     public float dashSpeed = 20f;
     public float dashCooldown = 1f;
     public float dashRegenRate = 2f;
-    [SerializeField] public int dashesLeft = 2;
+    public int dashesLeft = 2;
 
     [Header("Stamina")]
     public float maxStamina = 5f;
@@ -28,22 +26,10 @@ public class PlayerStats : MonoBehaviour
     public float staminaDrainRate = 1.5f;
     public float currentStamina = 5f;
 
-    public void TakeDamage(float amount)
-    {
-        currentHealth -= amount;
-        if (currentHealth < 0) currentHealth = 0;
-    }
-
     public void UseMana(float amount)
     {
         currentMana -= amount;
         if (currentMana < 0) currentMana = 0;
-    }
-
-    public void Heal(float amount)
-    {
-        currentHealth += amount;
-        if (currentHealth > maxHealth) currentHealth = maxHealth;
     }
 
     public void RegenerateMana(float amount)
