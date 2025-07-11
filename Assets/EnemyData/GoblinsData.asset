@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: GoblinsData
   m_EditorClassIdentifier: 
   enemyName: Goblin
-  maxHealth: 50
-  maxArmor: 10
+  maxHealth: 40
+  maxArmor: 5
   moveSpeed: 5
   damage: 10

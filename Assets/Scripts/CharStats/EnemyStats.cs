@@ -17,18 +17,4 @@ public class EnemyStats : CharacterStats
     public float Damage => enemyData?.damage ?? 0f;
     public float MoveSpeed => enemyData?.moveSpeed ?? 1f;
 
-    public override void TakeDamage(float amount)
-    {
-        base.TakeDamage(amount);
-
-        if (IsDead())
-        {
-            Die();
-        }
-    }
-    private void Die()
-    {
-        // add death animation etc
-        Destroy(gameObject);
-    }
 }

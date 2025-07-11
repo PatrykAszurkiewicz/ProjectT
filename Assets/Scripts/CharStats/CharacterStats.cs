@@ -12,8 +12,16 @@ public class CharacterStats : MonoBehaviour
         float mitigated = Mathf.Max(amount - currentArmor, 0f);
         currentHealth -= mitigated;
         currentHealth = Mathf.Max(currentHealth, 0f);
-    }
 
+        if (IsDead())
+        {
+            Die();
+        }
+    }
+    public virtual void Die()
+    {
+        Destroy(gameObject);
+    }
     public virtual void Heal(float amount)
     {
         currentHealth += amount;
