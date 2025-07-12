@@ -3,21 +3,24 @@ using UnityEngine.UI;
 
 public class EnemyHealthBar : MonoBehaviour
 {
-    [SerializeField] private Slider slider;
-    [SerializeField] private Vector3 offset;
+    [SerializeField] private Image fillImage;
+    [SerializeField] private Vector3 offset = new Vector3(0, 1f, 0);
 
     private Transform target;
+    private float maxHealth = 100f;
 
     public void Initialize(Transform targetTransform, float maxHealth)
     {
-        target = targetTransform;
-        slider.maxValue = maxHealth;
-        slider.value = maxHealth;
+        this.target = targetTransform;
+        this.maxHealth = maxHealth;
+        UpdateHealth(maxHealth);
     }
-
     public void UpdateHealth(float currentHealth)
     {
-        slider.value = currentHealth;
+        if (fillImage != null && maxHealth > 0)
+        {
+            fillImage.fillAmount = currentHealth / maxHealth;
+        }
     }
 
     private void LateUpdate()
@@ -25,7 +28,7 @@ public class EnemyHealthBar : MonoBehaviour
         if (target != null)
         {
             transform.position = target.position + offset;
-            transform.rotation = Quaternion.identity; // Zapobiega obracaniu
+            transform.rotation = Quaternion.identity;
         }
     }
 }

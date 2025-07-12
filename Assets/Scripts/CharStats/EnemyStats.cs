@@ -2,14 +2,13 @@ using UnityEngine;
 
 public class EnemyStats : CharacterStats
 {
-    public GameObject healthBarPrefab; // Przypisz prefab w Inspectorze
+    public GameObject healthBarPrefab;
     private EnemyHealthBar healthBar;
 
     public EnemyData enemyData;
 
     private void Start()
     {
-        // Zak³adamy, ¿e Awake ju¿ ustawi³o zdrowie
         if (healthBarPrefab != null)
         {
             GameObject bar = Instantiate(healthBarPrefab);
