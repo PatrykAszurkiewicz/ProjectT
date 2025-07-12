@@ -6,6 +6,7 @@ using UnityEditor;
 
 public class Tower : MonoBehaviour, IEnergyConsumer
 {
+    #region Public Properties - Tower Settings
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
     public float damage = 10f;
@@ -20,7 +21,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     public int spritesPerRow = 10;
     public Vector2 spriteSize = new Vector2(231, 185);
     public float spriteScale = 0.5f;
-
     public bool enableAnimation = true;
     public int animationFrameCount = 43;
     public float animationSpeed = 0.25f;
@@ -77,8 +77,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     public float energyBarHeight = 0.1f;
     public float energyBarWidth = 1f;
     public float energyBarOffset = 1.5f;
+    #endregion
 
-    // Private variables
+    #region Private Core Variables
+    // Core components
     private float lastFireTime;
     private GameObject currentTarget;
     private List<GameObject> enemiesInRange = new List<GameObject>();
@@ -86,33 +88,40 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     private CircleCollider2D rangeCollider;
     private TowerSlot parentSlot;
 
+    // Targeting and rotation
     private float targetAngle;
     private float currentAngle;
     private bool hasValidTarget = false;
 
-    // Tentacle system
+    // Visual state
+    private Vector3 originalScale;
+    private Color originalTowerColor;
+    #endregion
+
+    #region Private Tentacle System Variables
+    // Tentacle rendering
     private LineRenderer tentacleRenderer;
     private GameObject tentacleContainer;
     private Vector3[] tentaclePoints;
     private float tentacleSwayTimer;
+
+    // Animation states
     private bool isFiring = false;
     private float fireAnimationTimer = 0f;
     private bool isMeleeAttacking = false;
     private float meleeAttackTimer = 0f;
 
-    private AttackType currentAttackType = AttackType.None;
-
     // Melee swipe variables
     private bool isSwipingMelee = false;
     private float swipeTimer = 0f;
-    // TODO consider the angle of attack on the Enemy mechanics
-    //private float swipeStartAngle = 0f;
     private Vector3 swipeTargetPosition = Vector3.zero;
 
-    private Vector3 originalScale;
-    private Color originalTowerColor;
+    // Attack tracking
+    private AttackType currentAttackType = AttackType.None;
+    #endregion
 
-    // Energy-related private variables
+    #region Private Energy Variables
+    // Energy state
     private bool isEnergyDepleted = false;
     private bool isEnergyLow = false;
     private EnergyBar energyBar;
@@ -121,18 +130,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     public System.Action<float> OnEnergyChanged;
     public System.Action OnEnergyDepleted;
     public System.Action OnEnergyRestored;
+    #endregion
 
+    #region Enums and Properties
     private enum AttackType
     {
         None,
         Melee,
         Projectile
     }
-
-    // Properties
-    public bool CanUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && upgradeTowerPrefab != null;
-    public float NextFireTime => lastFireTime + (1f / fireRate);
-    public bool CanFire => Time.time >= NextFireTime;
 
     public enum TowerType
     {
@@ -143,6 +149,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         Poison
     }
 
+    // Properties
+    public bool CanUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && upgradeTowerPrefab != null;
+    public float NextFireTime => lastFireTime + (1f / fireRate);
+    public bool CanFire => Time.time >= NextFireTime;
+    #endregion
+
+    #region Unity Lifecycle
     void Awake()
     {
         InitializeTower();
@@ -234,7 +247,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer
             hasValidTarget = false;
         }
     }
+    #endregion
 
+    #region Initialization Methods
     void InitializeTower()
     {
         if (GetComponent<SpriteRenderer>() == null)
@@ -327,6 +342,50 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         return mat;
     }
 
+    void LoadTowerSprite()
+    {
+        Sprite[] sprites = Resources.LoadAll<Sprite>(spriteResourcePath);
+        if (sprites == null || sprites.Length == 0)
+        {
+            Debug.LogError($"Could not load sprites from path: {spriteResourcePath}");
+            return;
+        }
+
+        if (spriteIndex < sprites.Length)
+        {
+            spriteRenderer.sprite = sprites[spriteIndex];
+            Debug.Log($"Loaded tower sprite: {towerName} at index {spriteIndex}");
+            if (sprites.Length > 1)
+            {
+                StartCoroutine(
+                    Utilities.AnimateSprite(
+                        spriteRenderer,
+                        sprites,
+                        enableAnimation,
+                        animationFrameCount,
+                        spriteIndex,
+                        animationSpeed
+                    )
+                );
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"Sprite index {spriteIndex} is out of range. Using first sprite.");
+            spriteRenderer.sprite = sprites[0];
+        }
+    }
+
+    void SetupRangeCollider()
+    {
+        if (rangeCollider != null)
+        {
+            rangeCollider.radius = Mathf.Max(range, projectileRange);
+        }
+    }
+    #endregion
+
+    #region Tentacle System - Complete Original Logic
     void UpdateTentacle()
     {
         if (!useTentacleTurret || tentacleRenderer == null)
@@ -450,7 +509,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         }
         tentacleRenderer.colorGradient = gradient;
     }
+    #endregion
 
+    #region Targeting and Rotation System
     void UpdateTargetAngle()
     {
         if (currentTarget == null) return;
@@ -493,48 +554,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         return Mathf.Abs(angleDifference) <= 5f;
     }
 
-    void LoadTowerSprite()
-    {
-        Sprite[] sprites = Resources.LoadAll<Sprite>(spriteResourcePath);
-        if (sprites == null || sprites.Length == 0)
-        {
-            Debug.LogError($"Could not load sprites from path: {spriteResourcePath}");
-            return;
-        }
-
-        if (spriteIndex < sprites.Length)
-        {
-            spriteRenderer.sprite = sprites[spriteIndex];
-            Debug.Log($"Loaded tower sprite: {towerName} at index {spriteIndex}");
-            if (sprites.Length > 1)
-            {
-                StartCoroutine(
-                    Utilities.AnimateSprite(
-                        spriteRenderer,
-                        sprites,
-                        enableAnimation,
-                        animationFrameCount,
-                        spriteIndex,
-                        animationSpeed
-                    )
-                );
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"Sprite index {spriteIndex} is out of range. Using first sprite.");
-            spriteRenderer.sprite = sprites[0];
-        }
-    }
-
-    void SetupRangeCollider()
-    {
-        if (rangeCollider != null)
-        {
-            rangeCollider.radius = Mathf.Max(range, projectileRange);
-        }
-    }
-
     void FindTarget()
     {
         if (enemiesInRange.Count == 0) return;
@@ -565,6 +584,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         return distance <= projectileRange;
     }
 
+    bool IsValidTarget(GameObject target)
+    {
+        return ((1 << target.layer) & targetLayer) != 0;
+    }
+    #endregion
+
+    #region Combat System
     void FireAtTarget()
     {
         if (currentTarget == null || !CanOperate()) return;
@@ -663,7 +689,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer
             }
         }
     }
+    #endregion
 
+    #region Collision Detection
     void OnTriggerEnter2D(Collider2D other)
     {
         if (IsValidTarget(other.gameObject))
@@ -684,12 +712,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer
             }
         }
     }
+    #endregion
 
-    bool IsValidTarget(GameObject target)
-    {
-        return ((1 << target.layer) & targetLayer) != 0;
-    }
-
+    #region Upgrade System
     public void UpgradeTower()
     {
         if (!CanUpgrade) return;
@@ -720,8 +745,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer
             parentSlot.RemoveTower();
         }
     }
+    #endregion
 
-    // Energy Management Methods (IEnergyConsumer implementation)
+    #region Energy Management - IEnergyConsumer Implementation
     public void ConsumeEnergy(float amount)
     {
         float previousEnergy = currentEnergy;
@@ -792,13 +818,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer
 
     public bool IsEnergyDepleted()
     {
-        if (EnergyManager.Instance == null) return false; // ADD THIS LINE
+        if (EnergyManager.Instance == null) return false;
         return GetEnergyPercentage() <= EnergyManager.Instance.GetTowerDeadThreshold();
     }
 
     public bool IsEnergyLow()
     {
-        if (EnergyManager.Instance == null) return false; // ADD THIS LINE
+        if (EnergyManager.Instance == null) return false;
         return GetEnergyPercentage() <= EnergyManager.Instance.GetTowerCriticalThreshold();
     }
 
@@ -807,7 +833,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         return transform.position;
     }
 
-    // Energy state management
+    bool CanOperate()
+    {
+        return !requiresEnergyToFunction || !isEnergyDepleted;
+    }
+    #endregion
+
+    #region Energy State Management
     void UpdateEnergyState()
     {
         bool wasEnergyDepleted = isEnergyDepleted;
@@ -870,26 +902,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         // Use EnergyManager's common visual update method
         EnergyManager.Instance.UpdateConsumerVisuals(this, spriteRenderer);
     }
+    #endregion
 
-    bool CanOperate()
-    {
-        return !requiresEnergyToFunction || !isEnergyDepleted;
-    }
-
-    void OnDestroy()
-    {
-        if (EnergyManager.Instance != null)
-        {
-            EnergyManager.Instance.UnregisterEnergyConsumer(this);
-        }
-
-        if (energyBar != null)
-        {
-            Destroy(energyBar);
-        }
-    }
-
-    // Public methods for external access
+    #region Public Accessors
     public void SetDamage(float newDamage) => damage = newDamage;
     public void SetRange(float newRange)
     {
@@ -902,8 +917,25 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     public float GetFireRate() => fireRate;
     public int GetCost() => cost;
     public TowerType GetTowerType() => towerType;
+    #endregion
+
+    #region Cleanup
+    void OnDestroy()
+    {
+        if (EnergyManager.Instance != null)
+        {
+            EnergyManager.Instance.UnregisterEnergyConsumer(this);
+        }
+
+        if (energyBar != null)
+        {
+            Destroy(energyBar);
+        }
+    }
+    #endregion
 
 #if UNITY_EDITOR
+    #region Editor Gizmos
     void OnDrawGizmosSelected()
     {
         // Draw projectile range circle
@@ -994,5 +1026,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         // Energy text
         UnityEditor.Handles.Label(energyBarPos + Vector3.up * 0.3f, $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
     }
+    #endregion
 #endif
 }
