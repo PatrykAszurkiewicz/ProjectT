@@ -13,7 +13,11 @@ public class EnemyStats : CharacterStats
         {
             GameObject bar = Instantiate(healthBarPrefab);
             healthBar = bar.GetComponent<EnemyHealthBar>();
-            healthBar.Initialize(transform, maxHealth);
+
+            if (healthBar != null)
+            {
+                healthBar.Initialize(transform, maxHealth);
+            }
         }
     }
     private void Awake()

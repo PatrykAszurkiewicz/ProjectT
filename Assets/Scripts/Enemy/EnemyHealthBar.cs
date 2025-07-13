@@ -3,24 +3,22 @@ using UnityEngine.UI;
 
 public class EnemyHealthBar : MonoBehaviour
 {
-    [SerializeField] private Image fillImage;
-    [SerializeField] private Vector3 offset = new Vector3(0, 1f, 0);
+    [SerializeField] private ResourceBarUI barUI;
+    [SerializeField] private Vector3 offset = new Vector3(0, 1.5f, 0);
 
     private Transform target;
-    private float maxHealth = 100f;
+    private float maxHealth;
 
     public void Initialize(Transform targetTransform, float maxHealth)
     {
         this.target = targetTransform;
         this.maxHealth = maxHealth;
-        UpdateHealth(maxHealth);
+
+        barUI.SetValue(maxHealth, maxHealth);
     }
     public void UpdateHealth(float currentHealth)
     {
-        if (fillImage != null && maxHealth > 0)
-        {
-            fillImage.fillAmount = currentHealth / maxHealth;
-        }
+        barUI.SetValue(currentHealth, maxHealth);
     }
 
     private void LateUpdate()
