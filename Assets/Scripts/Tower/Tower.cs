@@ -1,25 +1,24 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-public class Tower : MonoBehaviour, IEnergyConsumer
+public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 {
-    #region Public Properties - Tower Settings
+    #region Tower Configuration
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
     public float damage = 10f;
-    public float range = 3f;
-    public float fireRate = 1f; // Shots per second
+    public float range = 5f;
+    public float fireRate = 1f;
     public int cost = 100;
     public TowerType towerType = TowerType.Basic;
 
     [Header("Visual Settings")]
     public string spriteResourcePath = "Sprites/spritesheet_transparent2";
     public int spriteIndex = 0;
-    public int spritesPerRow = 10;
-    public Vector2 spriteSize = new Vector2(231, 185);
     public float spriteScale = 0.5f;
     public bool enableAnimation = true;
     public int animationFrameCount = 43;
@@ -28,7 +27,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     [Header("Combat Settings")]
     public LayerMask targetLayer = -1;
     public GameObject projectilePrefab;
-    public Transform firePoint;
 
     [Header("Upgrade Settings")]
     public bool canUpgrade = true;
@@ -36,718 +34,418 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     public int upgradeLevel = 1;
     public int maxUpgradeLevel = 3;
 
-    [Header("Tentacle Turret Settings")]
+    [Header("Tentacle Settings")]
     public bool useTentacleTurret = true;
-    public float tentacleLength = 0.8f;
-    public float tentacleWidth = 0.3f;
-    public int tentacleSegments = 8;
-    public float tentacleSwayAmount = 0.1f;
-    public float tentacleSwaySpeed = 2f;
-    public Color tentacleColor = new Color(0.337f, 0.176f, 0.259f, 0.8f);
-    public Color tentacleTipColor = new Color(0.8f, 0.3f, 0.3f, 1f);
-    public float tentacleAnimationSpeed = 1f;
-    public Vector2 tentacleAttachmentOffset = new Vector2(0f, -0.3f);
-    public float downwardShorteningFactor = 0.5f;
+    public TentacleConfig tentacleConfig = new TentacleConfig();
 
-    [Header("Melee Attack Settings")]
-    public float meleeRange = 1.0f;
-    public float meleeDamageMultiplier = 1.5f;
-    public float meleeAttackDuration = 0.3f;
-    public float projectileRange = 5f;
-
-    [Header("Melee Swipe Settings")]
-    public float swipeArcDegrees = 60f;
-    public float swipeSpeed = 8f;
-    public float swipeReach = 0.4f;
-    public float swipeIntensity = 1.5f;
-    public AnimationCurve swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+    [Header("Melee Settings")]
+    public MeleeConfig meleeConfig = new MeleeConfig();
 
     [Header("Rotation Settings")]
     public float rotationSpeed = 180f;
     public bool smoothRotation = true;
-    public Transform turretTransform;
 
     [Header("Energy Settings")]
     public float maxEnergy = 100f;
     public float currentEnergy = 100f;
     public bool requiresEnergyToFunction = true;
-
-    [Header("Energy Bar Settings")]
     public bool showEnergyBar = true;
-    public float energyBarHeight = 0.1f;
-    public float energyBarWidth = 1f;
-    public float energyBarOffset = 1.5f;
+
+    [Header("Damage Settings")]
+    public float armorReduction = 0f; // 0-1 range, reduces incoming damage
+    public bool immuneToEnemyDamage = false;
+    public float damageFlashDuration = 0.15f;
+    public bool enableDamageEffects = true;
     #endregion
 
-    #region Private Core Variables
-    // Core components
-    private float lastFireTime;
-    private GameObject currentTarget;
-    private List<GameObject> enemiesInRange = new List<GameObject>();
-    private SpriteRenderer spriteRenderer;
-    private CircleCollider2D rangeCollider;
-    private TowerSlot parentSlot;
+    #region Configuration Classes
+    [System.Serializable]
+    public class TentacleConfig
+    {
+        public float length = 1.2f;
+        public float width = 0.3f;
+        public int segments = 8;
+        public float swayAmount = 0.1f;
+        public float swaySpeed = 2f;
+        public Color color = new Color(0.337f, 0.176f, 0.259f, 0.8f);
+        public Color tipColor = new Color(0.8f, 0.3f, 0.3f, 1f);
+        public float animationSpeed = 1f;
+        public Vector2 attachmentOffset = new Vector2(0f, -0.3f);
+        public float downwardShorteningFactor = 0.5f;
+    }
 
-    // Targeting and rotation
-    private float targetAngle;
-    private float currentAngle;
-    private bool hasValidTarget = false;
-
-    // Visual state
-    private Vector3 originalScale;
-    private Color originalTowerColor;
+    [System.Serializable]
+    public class MeleeConfig
+    {
+        public float range = 1.5f;
+        public float damageMultiplier = 1.5f;
+        public float attackDuration = 0.3f;
+        public float swipeArcDegrees = 60f;
+        public float swipeSpeed = 8f;
+        public float swipeReach = 0.4f;
+        public float swipeIntensity = 1.5f;
+        public AnimationCurve swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+    }
     #endregion
 
-    #region Private Tentacle System Variables
-    // Tentacle rendering
-    private LineRenderer tentacleRenderer;
-    private GameObject tentacleContainer;
-    private Vector3[] tentaclePoints;
-    private float tentacleSwayTimer;
+    #region Properties and Events
+    public enum TowerType { Basic, Artillery, Laser, Ice, Poison }
 
-    // Animation states
-    private bool isFiring = false;
-    private float fireAnimationTimer = 0f;
-    private bool isMeleeAttacking = false;
-    private float meleeAttackTimer = 0f;
+    public bool CanUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && upgradeTowerPrefab != null;
+    public bool CanFire => Time.time >= lastFireTime + (1f / fireRate);
+    public float ProjectileRange { get; private set; }
+    public Transform FirePoint => tentacleSystem?.FirePoint;
 
-    // Melee swipe variables
-    private bool isSwipingMelee = false;
-    private float swipeTimer = 0f;
-    private Vector3 swipeTargetPosition = Vector3.zero;
-
-    // Attack tracking
-    private AttackType currentAttackType = AttackType.None;
-    #endregion
-
-    #region Private Energy Variables
-    // Energy state
-    private bool isEnergyDepleted = false;
-    private bool isEnergyLow = false;
-    private EnergyBar energyBar;
-
-    // Energy events
+    // Energy Events
     public System.Action<float> OnEnergyChanged;
     public System.Action OnEnergyDepleted;
     public System.Action OnEnergyRestored;
+
+    // Damage Events
+    public System.Action<float, GameObject> OnDamageTaken;
+    public System.Action<GameObject> OnTowerDestroyed;
+    public System.Action OnTowerDisabled;
+    public System.Action OnTowerEnabled;
     #endregion
 
-    #region Enums and Properties
-    private enum AttackType
-    {
-        None,
-        Melee,
-        Projectile
-    }
+    #region Core Components
+    private TowerCombat combat;
+    private TowerTargeting targeting;
+    private TowerVisuals visuals;
+    private TowerTentacleSystem tentacleSystem;
+    private TowerEnergy energy;
 
-    public enum TowerType
-    {
-        Basic,
-        Artillery,
-        Laser,
-        Ice,
-        Poison
-    }
+    // Basic components
+    private SpriteRenderer spriteRenderer;
+    private CircleCollider2D rangeCollider;
+    private TowerSlot parentSlot;
+    private EnergyBar energyBar;
 
-    // Properties
-    public bool CanUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && upgradeTowerPrefab != null;
-    public float NextFireTime => lastFireTime + (1f / fireRate);
-    public bool CanFire => Time.time >= NextFireTime;
+    // Core state
+    private float lastFireTime;
+    private bool isEnergyDepleted, isEnergyLow;
+    private bool isDisabledByDamage = false;
+    private Coroutine damageFlashCoroutine;
+
+    // Public accessor for combat system debugging
+    public float LastFireTime => lastFireTime;
     #endregion
 
     #region Unity Lifecycle
     void Awake()
     {
-        InitializeTower();
-
-        if (swipeCurve == null || swipeCurve.length == 0)
-        {
-            swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
-        }
+        InitializeComponents();
+        InitializeSystems();
     }
 
     void Start()
     {
-        Application.targetFrameRate = 0;
-        QualitySettings.vSyncCount = 0;
-        LoadTowerSprite();
-        SetupRangeCollider();
-        SetupTentacleTurret();
-        parentSlot = GetComponentInParent<TowerSlot>();
-
-        // Calculate effective melee range based on tentacle reach
-        float effectiveTentacleReach = tentacleLength + tentacleAttachmentOffset.magnitude;
-        meleeRange = Mathf.Max(meleeRange, effectiveTentacleReach);
-
-        if (projectileRange <= meleeRange)
-        {
-            projectileRange = meleeRange * 2.5f;
-        }
-
-        Debug.Log($"Tower melee range set to: {meleeRange}, projectile range: {projectileRange}");
-
-        // Energy setup
-        EnergyManager.Instance.RegisterEnergyConsumer(this);
-
-        if (spriteRenderer != null)
-        {
-            originalTowerColor = spriteRenderer.color;
-        }
-
-        // Setup energy bar
-        SetupEnergyBar();
-
-        // Initialize energy visual state
-        UpdateEnergyVisuals();
+        SetupTower();
+        RegisterWithEnergyManager();
     }
 
     void Update()
     {
-        UpdateEnergyState();
+        if (!energy.UpdateEnergyState() || isDisabledByDamage) return;
 
-        if (CanOperate())
+        targeting.UpdateTargeting();
+
+        // Update tentacle system every frame - CRITICAL for fire point updates
+        if (useTentacleTurret && tentacleSystem != null)
         {
-            if (currentTarget == null)
-            {
-                FindTarget();
-            }
-            else
-            {
-                if (!IsTargetValid(currentTarget))
-                {
-                    currentTarget = null;
-                    hasValidTarget = false;
-                    return;
-                }
-                else
-                {
-                    hasValidTarget = true;
-                    UpdateTargetAngle();
-                }
-            }
-
-            if (smoothRotation && hasValidTarget && !isSwipingMelee)
-            {
-                UpdateSmoothRotation();
-            }
-
-            if (useTentacleTurret)
-            {
-                UpdateTentacle();
-            }
-
-            if (currentTarget != null && CanFire)
-            {
-                FireAtTarget();
-            }
+            tentacleSystem.UpdateTentacle(targeting.HasValidTarget, targeting.CurrentTarget);
         }
-        else
-        {
-            currentTarget = null;
-            hasValidTarget = false;
-        }
+
+        combat.TryFire(targeting.CurrentTarget);
     }
+
+    void OnDestroy() => Cleanup();
     #endregion
 
-    #region Initialization Methods
-    void InitializeTower()
+    #region Initialization
+    void InitializeComponents()
     {
-        if (GetComponent<SpriteRenderer>() == null)
+        // Ensure SpriteRenderer is properly created
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null)
         {
             spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
         }
-        else
-        {
-            spriteRenderer = GetComponent<SpriteRenderer>();
-        }
 
-        spriteRenderer.sortingOrder = 20;
-        spriteRenderer.sortingLayerName = "Default";
-
-        originalScale = Vector3.one * spriteScale;
-        transform.localScale = originalScale;
-
-        rangeCollider = gameObject.AddComponent<CircleCollider2D>();
-        rangeCollider.radius = range;
-        rangeCollider.isTrigger = true;
-
-        Debug.Log($"Tower initialized with sorting order: {spriteRenderer.sortingOrder}");
-    }
-
-    void SetupEnergyBar()
-    {
-        if (!showEnergyBar) return;
-
-        energyBar = gameObject.AddComponent<EnergyBar>();
-        energyBar.showEnergyBar = showEnergyBar;
-        energyBar.energyBarHeight = energyBarHeight;
-        energyBar.energyBarWidth = energyBarWidth;
-        energyBar.energyBarOffset = energyBarOffset;
-        energyBar.showEnergyText = true;
-
-        // Set colors based on EnergyManager settings
-        energyBar.SetColors(
-            EnergyManager.Instance.normalColor,
-            EnergyManager.Instance.lowEnergyColor,
-            EnergyManager.Instance.criticalEnergyColor,
-            EnergyManager.Instance.depletedEnergyColor
-        );
-
-        energyBar.Initialize(this, spriteRenderer);
-    }
-
-    void SetupTentacleTurret()
-    {
-        if (!useTentacleTurret) return;
-
-        tentacleContainer = new GameObject("TentacleContainer");
-        tentacleContainer.transform.SetParent(transform);
-        tentacleContainer.transform.localPosition = tentacleAttachmentOffset;
-
-        tentacleRenderer = tentacleContainer.AddComponent<LineRenderer>();
-        tentacleRenderer.material = CreateTentacleMaterial();
-        tentacleRenderer.startWidth = tentacleWidth;
-        tentacleRenderer.endWidth = tentacleWidth * 0.3f;
-        tentacleRenderer.positionCount = tentacleSegments;
-        tentacleRenderer.useWorldSpace = false;
-
+        // Wait a frame to ensure component is fully initialized
         if (spriteRenderer != null)
         {
-            tentacleRenderer.sortingLayerName = spriteRenderer.sortingLayerName;
-            tentacleRenderer.sortingOrder = spriteRenderer.sortingOrder - 4;
+            spriteRenderer.sortingOrder = 20;
+            spriteRenderer.sortingLayerName = "Default";
         }
 
-        tentaclePoints = new Vector3[tentacleSegments];
-        for (int i = 0; i < tentacleSegments; i++)
+        transform.localScale = Vector3.one * spriteScale;
+
+        // Setup collider
+        rangeCollider = GetComponent<CircleCollider2D>();
+        if (rangeCollider == null)
         {
-            float t = (float)i / (tentacleSegments - 1);
-            tentaclePoints[i] = Vector3.right * (tentacleLength * t);
+            rangeCollider = gameObject.AddComponent<CircleCollider2D>();
         }
+        rangeCollider.isTrigger = true;
+    }
 
-        turretTransform = tentacleContainer.transform;
+    void InitializeSystems()
+    {
+        // Initialize all subsystems - ensure spriteRenderer is ready
+        energy = new TowerEnergy(this);
+        visuals = new TowerVisuals(this, spriteRenderer);
+        targeting = new TowerTargeting(this);
+        combat = new TowerCombat(this);
 
-        if (firePoint == null)
+        if (useTentacleTurret)
         {
-            GameObject firePointObj = new GameObject("FirePoint");
-            firePointObj.transform.SetParent(tentacleContainer.transform);
-            firePointObj.transform.localPosition = Vector3.right * tentacleLength;
-            firePoint = firePointObj.transform;
+            tentacleSystem = new TowerTentacleSystem(this, tentacleConfig, meleeConfig);
         }
     }
 
-    Material CreateTentacleMaterial()
+    void SetupTower()
     {
-        Material mat = new Material(Shader.Find("Sprites/Default"));
-        mat.color = tentacleColor;
-        return mat;
+        parentSlot = GetComponentInParent<TowerSlot>();
+
+        // Setup tentacle system first
+        if (useTentacleTurret)
+        {
+            tentacleSystem?.Initialize();
+        }
+
+        // Calculate ranges AFTER tentacle system is initialized
+        float effectiveTentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
+        meleeConfig.range = Mathf.Max(meleeConfig.range, effectiveTentacleReach);
+
+        // Make projectile range much more generous - use the larger of the base range or a generous multiplier
+        float calculatedProjectileRange = meleeConfig.range * 3.5f;
+        ProjectileRange = Mathf.Max(range * 2f, calculatedProjectileRange);
+
+        // Make sure the range is reasonable - minimum 6 units
+        ProjectileRange = Mathf.Max(ProjectileRange, 6f);
+
+        // Setup collider to match the ACTUAL projectile range (add some buffer)
+        rangeCollider.radius = ProjectileRange + 0.5f;
+
+        visuals.LoadSprite();
+        energy.SetupEnergyBar();
+
+        Debug.Log($"Tower {towerName} RANGES:");
+        Debug.Log($"  Base Range: {range}");
+        Debug.Log($"  Melee Range: {meleeConfig.range}");
+        Debug.Log($"  Projectile Range: {ProjectileRange}");
+        Debug.Log($"  Collider Radius: {rangeCollider.radius}");
+        Debug.Log($"  Tentacle Length: {tentacleConfig.length}");
     }
 
-    void LoadTowerSprite()
+    void RegisterWithEnergyManager() => EnergyManager.Instance?.RegisterEnergyConsumer(this);
+    #endregion
+
+    #region IDamageable Implementation
+    public bool TakeDamage(float damageAmount, GameObject damageSource = null)
     {
-        Sprite[] sprites = Resources.LoadAll<Sprite>(spriteResourcePath);
-        if (sprites == null || sprites.Length == 0)
+        if (immuneToEnemyDamage || isDisabledByDamage) return false;
+
+        // Apply armor reduction
+        float actualDamage = damageAmount * (1f - armorReduction);
+
+        // Remove energy based on damage
+        ConsumeEnergy(actualDamage);
+
+        // Trigger damage effects
+        if (enableDamageEffects)
         {
-            Debug.LogError($"Could not load sprites from path: {spriteResourcePath}");
-            return;
+            StartDamageFlash();
         }
 
-        if (spriteIndex < sprites.Length)
+        // Log damage
+        string sourceName = damageSource != null ? damageSource.name : "Unknown";
+        Debug.Log($"Tower {towerName} took {actualDamage:F1} damage from {sourceName}. Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+
+        // Fire damage event
+        OnDamageTaken?.Invoke(actualDamage, damageSource);
+
+        // Check if tower is destroyed
+        if (IsEnergyDepleted())
         {
-            spriteRenderer.sprite = sprites[spriteIndex];
-            Debug.Log($"Loaded tower sprite: {towerName} at index {spriteIndex}");
-            if (sprites.Length > 1)
-            {
-                StartCoroutine(
-                    Utilities.AnimateSprite(
-                        spriteRenderer,
-                        sprites,
-                        enableAnimation,
-                        animationFrameCount,
-                        spriteIndex,
-                        animationSpeed
-                    )
-                );
-            }
+            DisableTower();
+            OnTowerDestroyed?.Invoke(damageSource);
+            return true;
         }
-        else
-        {
-            Debug.LogWarning($"Sprite index {spriteIndex} is out of range. Using first sprite.");
-            spriteRenderer.sprite = sprites[0];
-        }
+
+        return false;
     }
 
-    void SetupRangeCollider()
+    public bool CanTakeDamage()
     {
-        if (rangeCollider != null)
+        return !immuneToEnemyDamage && !isDisabledByDamage;
+    }
+
+    public float GetCurrentHealth()
+    {
+        return currentEnergy;
+    }
+
+    public float GetMaxHealth()
+    {
+        return maxEnergy;
+    }
+
+    public float GetHealthPercentage()
+    {
+        return GetEnergyPercentage();
+    }
+
+    public bool IsDestroyed()
+    {
+        return isDisabledByDamage || IsEnergyDepleted();
+    }
+
+    public void DisableTower()
+    {
+        if (isDisabledByDamage) return;
+
+        isDisabledByDamage = true;
+        OnTowerDisabled?.Invoke();
+
+        // Visual indication of disabled state
+        if (spriteRenderer != null)
         {
-            rangeCollider.radius = Mathf.Max(range, projectileRange);
+            Color disabledColor = spriteRenderer.color;
+            disabledColor.a = 0.5f;
+            spriteRenderer.color = disabledColor;
         }
+
+        Debug.Log($"Tower {towerName} has been disabled by damage!");
+    }
+
+    public void EnableTower()
+    {
+        if (!isDisabledByDamage) return;
+
+        isDisabledByDamage = false;
+        OnTowerEnabled?.Invoke();
+
+        // Restore visual state
+        if (spriteRenderer != null)
+        {
+            Color enabledColor = spriteRenderer.color;
+            enabledColor.a = 1f;
+            spriteRenderer.color = enabledColor;
+        }
+
+        Debug.Log($"Tower {towerName} has been re-enabled!");
+    }
+
+    private void StartDamageFlash()
+    {
+        if (damageFlashCoroutine != null)
+        {
+            StopCoroutine(damageFlashCoroutine);
+        }
+        damageFlashCoroutine = StartCoroutine(DamageFlashCoroutine());
+    }
+
+    private IEnumerator DamageFlashCoroutine()
+    {
+        if (spriteRenderer == null) yield break;
+
+        Color originalColor = spriteRenderer.color;
+        Color flashColor = EnergyManager.Instance?.damageFlashColor ?? Color.red;
+
+        // Flash effect
+        spriteRenderer.color = flashColor;
+        yield return new WaitForSeconds(damageFlashDuration);
+        spriteRenderer.color = originalColor;
+
+        damageFlashCoroutine = null;
     }
     #endregion
 
-    #region Tentacle System - Complete Original Logic
-    void UpdateTentacle()
-    {
-        if (!useTentacleTurret || tentacleRenderer == null)
-            return;
-
-        tentacleSwayTimer += Time.deltaTime * tentacleSwaySpeed;
-
-        if (isFiring)
-        {
-            fireAnimationTimer += Time.deltaTime * tentacleAnimationSpeed;
-            if (fireAnimationTimer >= 1f)
-            {
-                isFiring = false;
-                fireAnimationTimer = 0f;
-            }
-        }
-
-        if (isMeleeAttacking)
-        {
-            meleeAttackTimer += Time.deltaTime;
-            if (meleeAttackTimer >= meleeAttackDuration)
-            {
-                isMeleeAttacking = false;
-                meleeAttackTimer = 0f;
-            }
-        }
-
-        if (isSwipingMelee)
-        {
-            swipeTimer += Time.deltaTime * swipeSpeed;
-            if (swipeTimer >= 1f)
-            {
-                isSwipingMelee = false;
-                swipeTimer = 0f;
-            }
-        }
-
-        // Calculate tentacle curve
-        for (int i = 0; i < tentacleSegments; i++)
-        {
-            float t = (float)i / (tentacleSegments - 1);
-            Vector3 basePos = Vector3.right * (tentacleLength * t);
-
-            float swayOffset = Mathf.Sin(tentacleSwayTimer + t * Mathf.PI) * tentacleSwayAmount * t;
-            basePos.y += swayOffset;
-
-            Vector3 worldDir = turretTransform.TransformDirection(basePos.normalized);
-            if (worldDir.y < 0f)
-            {
-                float shorten = Mathf.Clamp01(1f - downwardShorteningFactor * -worldDir.y);
-                basePos.x *= shorten;
-                basePos.y *= shorten;
-            }
-
-            if (isFiring)
-            {
-                float fi = Mathf.Sin(fireAnimationTimer * Mathf.PI);
-                basePos.x += fi * 0.3f * t;
-                basePos.y *= (1f - fi * 0.5f);
-            }
-
-            if (isMeleeAttacking)
-            {
-                float mi = Mathf.Sin((meleeAttackTimer / meleeAttackDuration) * Mathf.PI);
-                basePos.x += mi * 0.5f * t;
-                float whip = Mathf.Sin(mi * Mathf.PI * 2f) * 0.3f * t;
-                basePos.y += whip;
-            }
-
-            if (isSwipingMelee)
-            {
-                float swipeProgress = swipeCurve.Evaluate(swipeTimer);
-                float swipeAngle = Mathf.Lerp(-swipeArcDegrees / 2f, swipeArcDegrees / 2f, swipeProgress);
-                float swipeAngleRad = swipeAngle * Mathf.Deg2Rad;
-                float swipeExtension = Mathf.Sin(swipeProgress * Mathf.PI) * swipeReach;
-                basePos.x += swipeExtension * t;
-
-                float radius = basePos.magnitude;
-                float currentAngleRad = Mathf.Atan2(basePos.y, basePos.x);
-                float newAngleRad = currentAngleRad + (swipeAngleRad * swipeIntensity * t);
-                basePos.x = Mathf.Cos(newAngleRad) * radius;
-                basePos.y = Mathf.Sin(newAngleRad) * radius;
-
-                float whipEffect = Mathf.Sin(swipeProgress * Mathf.PI * 2f) * 0.2f * t;
-                basePos.y += whipEffect;
-            }
-
-            if (hasValidTarget && currentTarget != null && !isSwipingMelee)
-            {
-                Vector3 tgtDir = transform.InverseTransformDirection(
-                    (currentTarget.transform.position - transform.position).normalized);
-                basePos += tgtDir * (t * 0.2f);
-            }
-
-            tentaclePoints[i] = basePos;
-        }
-
-        tentacleRenderer.SetPositions(tentaclePoints);
-
-        if (firePoint != null)
-        {
-            firePoint.position = tentacleContainer.transform.TransformPoint(
-                tentaclePoints[tentaclePoints.Length - 1]);
-        }
-
-        Gradient gradient = new Gradient();
-        if (isFiring || isMeleeAttacking || isSwipingMelee)
-        {
-            Color tipColor = isSwipingMelee ? Color.Lerp(tentacleTipColor, Color.white, 0.3f) : tentacleTipColor;
-            gradient.SetKeys(
-                new GradientColorKey[] { new GradientColorKey(tentacleColor, 0), new GradientColorKey(tipColor, 1) },
-                new GradientAlphaKey[] { new GradientAlphaKey(tentacleColor.a, 0), new GradientAlphaKey(1, 1) }
-            );
-        }
-        else
-        {
-            gradient.SetKeys(
-                new GradientColorKey[] { new GradientColorKey(tentacleColor, 0), new GradientColorKey(tentacleColor, 1) },
-                new GradientAlphaKey[] { new GradientAlphaKey(tentacleColor.a, 0), new GradientAlphaKey(tentacleColor.a, 1) }
-            );
-        }
-        tentacleRenderer.colorGradient = gradient;
-    }
-    #endregion
-
-    #region Targeting and Rotation System
-    void UpdateTargetAngle()
-    {
-        if (currentTarget == null) return;
-        Vector2 direction = (currentTarget.transform.position - transform.position).normalized;
-        targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-
-        while (targetAngle > 180f) targetAngle -= 360f;
-        while (targetAngle < -180f) targetAngle += 360f;
-    }
-
-    void UpdateSmoothRotation()
-    {
-        if (!hasValidTarget) return;
-
-        float angleDifference = Mathf.DeltaAngle(currentAngle, targetAngle);
-        float rotationStep = rotationSpeed * Time.deltaTime;
-
-        if (Mathf.Abs(angleDifference) <= rotationStep)
-        {
-            currentAngle = targetAngle;
-        }
-        else
-        {
-            currentAngle += Mathf.Sign(angleDifference) * rotationStep;
-        }
-
-        while (currentAngle > 180f) currentAngle -= 360f;
-        while (currentAngle < -180f) currentAngle += 360f;
-
-        if (turretTransform != null)
-        {
-            turretTransform.rotation = Quaternion.AngleAxis(currentAngle, Vector3.forward);
-        }
-    }
-
-    bool IsAimedAtTarget()
-    {
-        if (!smoothRotation) return true;
-        float angleDifference = Mathf.DeltaAngle(currentAngle, targetAngle);
-        return Mathf.Abs(angleDifference) <= 5f;
-    }
-
-    void FindTarget()
-    {
-        if (enemiesInRange.Count == 0) return;
-
-        enemiesInRange.RemoveAll(enemy => enemy == null || !IsTargetValid(enemy));
-        if (enemiesInRange.Count == 0) return;
-
-        GameObject closestEnemy = null;
-        float closestDistance = float.MaxValue;
-
-        foreach (GameObject enemy in enemiesInRange)
-        {
-            float distance = Vector2.Distance(transform.position, enemy.transform.position);
-            if (distance < closestDistance)
-            {
-                closestDistance = distance;
-                closestEnemy = enemy;
-            }
-        }
-
-        currentTarget = closestEnemy;
-    }
-
-    bool IsTargetValid(GameObject target)
+    #region Public Interface
+    public bool IsTargetInMeleeRange(GameObject target)
     {
         if (target == null) return false;
         float distance = Vector2.Distance(transform.position, target.transform.position);
-        return distance <= projectileRange;
+        float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
+        return distance <= tentacleReach + 0.4f;
     }
 
-    bool IsValidTarget(GameObject target)
+    public bool IsTargetInProjectileRange(GameObject target)
     {
-        return ((1 << target.layer) & targetLayer) != 0;
+        if (target == null) return false;
+        float distance = Vector2.Distance(transform.position, target.transform.position);
+        return distance <= ProjectileRange;
+    }
+
+    public void TriggerMeleeAttack() => tentacleSystem?.StartMeleeAttack();
+    public void TriggerProjectileAttack() => tentacleSystem?.StartProjectileAttack();
+
+    public bool IsOperational()
+    {
+        return CanOperate() && !isDisabledByDamage;
     }
     #endregion
 
-    #region Combat System
-    void FireAtTarget()
+    #region Combat Interface
+    public void FireAtTarget(GameObject target)
     {
-        if (currentTarget == null || !CanOperate()) return;
+        if (target == null || !CanOperate() || isDisabledByDamage) return;
 
         float energyCost = damage * 0.1f;
-        if (currentEnergy >= energyCost)
+        if (currentEnergy < energyCost) return;
+
+        ConsumeEnergy(energyCost);
+
+        float distanceToTarget = Vector2.Distance(transform.position, target.transform.position);
+        float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
+
+        Debug.Log($"FIRING DECISION for {towerName}:");
+        Debug.Log($"  Distance to target: {distanceToTarget:F2}");
+        Debug.Log($"  Tentacle reach: {tentacleReach:F2}");
+        Debug.Log($"  Melee range: {meleeConfig.range:F2}");
+        Debug.Log($"  Projectile range: {ProjectileRange:F2}");
+
+        if (distanceToTarget <= tentacleReach + 0.4f)
         {
-            ConsumeEnergy(energyCost);
-
-            float distanceToTarget = Vector2.Distance(transform.position, currentTarget.transform.position);
-            float tentacleReach = tentacleLength + tentacleAttachmentOffset.magnitude;
-
-            if (distanceToTarget <= tentacleReach + 0.4f)
-            {
-                currentAttackType = AttackType.Melee;
-                PerformMeleeAttack();
-            }
-            else if (distanceToTarget <= projectileRange)
-            {
-                currentAttackType = AttackType.Projectile;
-                PerformProjectileAttack();
-            }
-
-            lastFireTime = Time.time;
+            Debug.Log($"  -> MELEE ATTACK (within tentacle reach)");
+            combat.PerformMeleeAttack(target);
         }
-    }
-
-    void PerformMeleeAttack()
-    {
-        if (useTentacleTurret)
+        else if (distanceToTarget <= ProjectileRange)
         {
-            isMeleeAttacking = true;
-            meleeAttackTimer = 0f;
-            isSwipingMelee = true;
-            swipeTimer = 0f;
-
-            if (currentTarget != null)
-            {
-                swipeTargetPosition = currentTarget.transform.position;
-            }
-        }
-
-        if (currentTarget != null)
-        {
-            Health targetHealth = currentTarget.GetComponent<Health>();
-            if (targetHealth != null)
-            {
-                float meleeDamage = damage * meleeDamageMultiplier;
-                targetHealth.TakeDamage(meleeDamage);
-                Debug.Log($"Melee swipe attack dealt {meleeDamage} damage to {currentTarget.name}");
-            }
-        }
-    }
-
-    void PerformProjectileAttack()
-    {
-        if (useTentacleTurret)
-        {
-            isFiring = true;
-            fireAnimationTimer = 0f;
-        }
-
-        if (projectilePrefab != null)
-        {
-            FireProjectile();
+            Debug.Log($"  -> PROJECTILE ATTACK (within projectile range)");
+            combat.PerformProjectileAttack(target);
         }
         else
         {
-            DealDirectDamage();
+            Debug.LogWarning($"  -> TARGET OUT OF RANGE! Distance: {distanceToTarget:F2}, Max range: {ProjectileRange:F2}");
         }
+
+        lastFireTime = Time.time;
     }
+    #endregion
 
-    void FireProjectile()
+    #region Energy Interface
+    bool CanOperate() => !requiresEnergyToFunction || !isEnergyDepleted;
+
+    public void UpdateEnergyState()
     {
-        Vector3 spawnPosition = firePoint.position;
-        Vector3 direction = (currentTarget.transform.position - spawnPosition).normalized;
-        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-        Quaternion projectileRotation = Quaternion.AngleAxis(angle, Vector3.forward);
+        bool wasEnergyDepleted = isEnergyDepleted;
+        bool wasEnergyLow = isEnergyLow;
 
-        GameObject projectile = Instantiate(projectilePrefab, spawnPosition, projectileRotation);
-        Projectile projScript = projectile.GetComponent<Projectile>();
-        if (projScript != null)
-        {
-            projScript.Initialize(currentTarget, damage, range);
-        }
-    }
+        isEnergyDepleted = IsEnergyDepleted();
+        isEnergyLow = IsEnergyLow();
 
-    void DealDirectDamage()
-    {
-        if (currentTarget != null)
+        if (isEnergyDepleted != wasEnergyDepleted || isEnergyLow != wasEnergyLow)
         {
-            Health targetHealth = currentTarget.GetComponent<Health>();
-            if (targetHealth != null)
-            {
-                targetHealth.TakeDamage(damage);
-            }
+            tentacleSystem?.UpdateEnergyEffects(GetEnergyPercentage(), isEnergyDepleted, isEnergyLow);
+            energy.UpdateVisuals();
         }
     }
     #endregion
 
-    #region Collision Detection
-    void OnTriggerEnter2D(Collider2D other)
-    {
-        if (IsValidTarget(other.gameObject))
-        {
-            enemiesInRange.Add(other.gameObject);
-        }
-    }
-
-    void OnTriggerExit2D(Collider2D other)
-    {
-        if (enemiesInRange.Contains(other.gameObject))
-        {
-            enemiesInRange.Remove(other.gameObject);
-
-            if (currentTarget == other.gameObject)
-            {
-                currentTarget = null;
-            }
-        }
-    }
-    #endregion
-
-    #region Upgrade System
-    public void UpgradeTower()
-    {
-        if (!CanUpgrade) return;
-
-        TowerSlot slot = GetComponentInParent<TowerSlot>();
-        if (slot == null) return;
-
-        slot.RemoveTower();
-        GameObject upgradedTower = Instantiate(upgradeTowerPrefab.gameObject, slot.transform.position, Quaternion.identity);
-        upgradedTower.transform.SetParent(slot.transform, false);
-        upgradedTower.transform.localPosition = Vector3.zero;
-        upgradedTower.transform.localRotation = Quaternion.identity;
-        slot.currentTower = upgradedTower;
-        slot.isOccupied = true;
-
-        Tower upgradedTowerScript = upgradedTower.GetComponent<Tower>();
-        if (upgradedTowerScript != null)
-        {
-            upgradedTowerScript.upgradeLevel = upgradeLevel + 1;
-        }
-    }
-
-    public void SellTower()
-    {
-        if (parentSlot != null)
-        {
-            int sellValue = Mathf.RoundToInt(cost * 0.3f);
-            parentSlot.RemoveTower();
-        }
-    }
-    #endregion
-
-    #region Energy Management - IEnergyConsumer Implementation
+    #region IEnergyConsumer Implementation
     public void ConsumeEnergy(float amount)
     {
         float previousEnergy = currentEnergy;
@@ -756,12 +454,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         if (currentEnergy != previousEnergy)
         {
             OnEnergyChanged?.Invoke(currentEnergy);
-            UpdateEnergyVisuals();
+            energy.UpdateVisuals();
 
             if (currentEnergy <= 0f && previousEnergy > 0f)
-            {
                 OnEnergyDepleted?.Invoke();
-            }
         }
     }
 
@@ -773,11 +469,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         if (currentEnergy != previousEnergy)
         {
             OnEnergyChanged?.Invoke(currentEnergy);
-            UpdateEnergyVisuals();
+            energy.UpdateVisuals();
 
             if (previousEnergy <= 0f && currentEnergy > 0f)
-            {
                 OnEnergyRestored?.Invoke();
+
+            // Re-enable tower if it was disabled and now has energy
+            if (isDisabledByDamage && currentEnergy > 0f)
+            {
+                EnableTower();
             }
         }
     }
@@ -790,7 +490,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer
         if (currentEnergy != previousEnergy)
         {
             OnEnergyChanged?.Invoke(currentEnergy);
-            UpdateEnergyVisuals();
+            energy.UpdateVisuals();
         }
     }
 
@@ -798,139 +498,74 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     {
         maxEnergy = amount;
         currentEnergy = Mathf.Min(currentEnergy, maxEnergy);
-        UpdateEnergyVisuals();
+        energy.UpdateVisuals();
     }
 
-    public float GetEnergy()
-    {
-        return currentEnergy;
-    }
+    public float GetEnergy() => currentEnergy;
+    public float GetMaxEnergy() => maxEnergy;
+    public float GetEnergyPercentage() => maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
+    public Vector3 GetPosition() => transform.position;
 
-    public float GetMaxEnergy()
-    {
-        return maxEnergy;
-    }
+    public bool IsEnergyDepleted() =>
+        EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetTowerDeadThreshold();
 
-    public float GetEnergyPercentage()
-    {
-        return maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
-    }
-
-    public bool IsEnergyDepleted()
-    {
-        if (EnergyManager.Instance == null) return false;
-        return GetEnergyPercentage() <= EnergyManager.Instance.GetTowerDeadThreshold();
-    }
-
-    public bool IsEnergyLow()
-    {
-        if (EnergyManager.Instance == null) return false;
-        return GetEnergyPercentage() <= EnergyManager.Instance.GetTowerCriticalThreshold();
-    }
-
-    public Vector3 GetPosition()
-    {
-        return transform.position;
-    }
-
-    bool CanOperate()
-    {
-        return !requiresEnergyToFunction || !isEnergyDepleted;
-    }
+    public bool IsEnergyLow() =>
+        EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetTowerCriticalThreshold();
     #endregion
 
-    #region Energy State Management
-    void UpdateEnergyState()
+    #region Collision Events
+    void OnTriggerEnter2D(Collider2D other) => targeting.OnTriggerEnter(other);
+    void OnTriggerExit2D(Collider2D other) => targeting.OnTriggerExit(other);
+    #endregion
+
+    #region Upgrade System
+    public void UpgradeTower()
     {
-        bool wasEnergyDepleted = isEnergyDepleted;
-        bool wasEnergyLow = isEnergyLow;
+        if (!CanUpgrade || parentSlot == null) return;
 
-        isEnergyDepleted = IsEnergyDepleted();
-        isEnergyLow = IsEnergyLow();
+        parentSlot.RemoveTower();
+        var upgradedTower = Instantiate(upgradeTowerPrefab.gameObject, parentSlot.transform.position, Quaternion.identity);
+        upgradedTower.transform.SetParent(parentSlot.transform, false);
+        upgradedTower.transform.localPosition = Vector3.zero;
 
-        if (isEnergyDepleted != wasEnergyDepleted || isEnergyLow != wasEnergyLow)
-        {
-            UpdateEnergyDependentSystems();
-        }
+        parentSlot.currentTower = upgradedTower;
+        parentSlot.isOccupied = true;
+
+        var upgradedScript = upgradedTower.GetComponent<Tower>();
+        if (upgradedScript != null)
+            upgradedScript.upgradeLevel = upgradeLevel + 1;
     }
 
-    void UpdateEnergyDependentSystems()
+    public void SellTower()
     {
-        if (isEnergyDepleted)
+        if (parentSlot != null)
         {
-            // Tower completely stops functioning
+            int sellValue = Mathf.RoundToInt(cost * 0.3f);
+            parentSlot.RemoveTower();
         }
-        else if (isEnergyLow)
-        {
-            // TODO Optional weaken attacks when energy is low
-        }
-
-        if (useTentacleTurret)
-        {
-            UpdateTentacleEnergyEffects();
-        }
-    }
-
-    void UpdateTentacleEnergyEffects()
-    {
-        if (tentacleRenderer == null) return;
-
-        float energyPercentage = GetEnergyPercentage();
-
-        Color baseColor = tentacleColor;
-        if (isEnergyDepleted)
-        {
-            baseColor = Color.Lerp(baseColor, EnergyManager.Instance.depletedEnergyColor, 0.7f);
-        }
-        else if (isEnergyLow)
-        {
-            baseColor = Color.Lerp(baseColor, EnergyManager.Instance.criticalEnergyColor, 0.5f);
-        }
-
-        if (tentacleRenderer.material != null)
-        {
-            tentacleRenderer.material.color = baseColor;
-        }
-
-        tentacleSwaySpeed = Mathf.Lerp(0.5f, 2f, energyPercentage);
-        tentacleSwayAmount = Mathf.Lerp(0.05f, 0.1f, energyPercentage);
-    }
-
-    void UpdateEnergyVisuals()
-    {
-        if (spriteRenderer == null || EnergyManager.Instance == null) return;
-        // Use EnergyManager's common visual update method
-        EnergyManager.Instance.UpdateConsumerVisuals(this, spriteRenderer);
     }
     #endregion
 
     #region Public Accessors
     public void SetDamage(float newDamage) => damage = newDamage;
-    public void SetRange(float newRange)
-    {
-        range = newRange;
-        SetupRangeCollider();
-    }
+    public void SetRange(float newRange) { range = newRange; rangeCollider.radius = Mathf.Max(range, ProjectileRange); }
     public void SetFireRate(float newFireRate) => fireRate = newFireRate;
+    public void SetArmor(float newArmor) => armorReduction = Mathf.Clamp01(newArmor);
     public float GetDamage() => damage;
     public float GetRange() => range;
     public float GetFireRate() => fireRate;
+    public float GetArmor() => armorReduction;
     public int GetCost() => cost;
     public TowerType GetTowerType() => towerType;
     #endregion
 
     #region Cleanup
-    void OnDestroy()
+    void Cleanup()
     {
-        if (EnergyManager.Instance != null)
-        {
-            EnergyManager.Instance.UnregisterEnergyConsumer(this);
-        }
-
-        if (energyBar != null)
-        {
-            Destroy(energyBar);
-        }
+        EnergyManager.Instance?.UnregisterEnergyConsumer(this);
+        tentacleSystem?.Cleanup();
+        if (energyBar != null) Destroy(energyBar);
+        if (damageFlashCoroutine != null) StopCoroutine(damageFlashCoroutine);
     }
     #endregion
 
@@ -938,94 +573,69 @@ public class Tower : MonoBehaviour, IEnergyConsumer
     #region Editor Gizmos
     void OnDrawGizmosSelected()
     {
-        // Draw projectile range circle
-        Gizmos.color = Color.red;
-        UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, projectileRange);
+        // Draw base range (smallest)
+        Handles.color = Color.blue;
+        Handles.DrawWireDisc(transform.position, Vector3.forward, range);
 
-        // Draw melee range circle
-        Gizmos.color = Color.yellow;
-        UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, meleeRange);
+        // Draw melee range 
+        Handles.color = Color.yellow;
+        Handles.DrawWireDisc(transform.position, Vector3.forward, meleeConfig.range);
 
-        // Draw line to current target
-        if (currentTarget != null)
+        // Draw projectile range (should be largest)
+        Handles.color = Color.red;
+        Handles.DrawWireDisc(transform.position, Vector3.forward, ProjectileRange);
+
+        // Draw collider range (detection range)
+        Handles.color = Color.green;
+        Handles.DrawWireDisc(transform.position, Vector3.forward, rangeCollider != null ? rangeCollider.radius : 0f);
+
+        // Draw target line
+        if (targeting?.CurrentTarget != null)
         {
-            float distanceToTarget = Vector2.Distance(transform.position, currentTarget.transform.position);
-            if (distanceToTarget <= meleeRange)
-            {
-                Gizmos.color = Color.yellow;
-            }
+            float distance = Vector2.Distance(transform.position, targeting.CurrentTarget.transform.position);
+
+            if (distance <= meleeConfig.range)
+                Handles.color = Color.yellow; // Melee range
+            else if (distance <= ProjectileRange)
+                Handles.color = Color.red; // Projectile range
             else
-            {
-                Gizmos.color = Color.red;
-            }
-            Gizmos.DrawLine(transform.position, currentTarget.transform.position);
+                Handles.color = Color.gray; // Out of range
+
+            Handles.DrawLine(transform.position, targeting.CurrentTarget.transform.position);
+
+            // Show distance text
+            Vector3 midPoint = (transform.position + targeting.CurrentTarget.transform.position) / 2f;
+            Handles.Label(midPoint, $"Dist: {distance:F1}");
         }
 
-        // Draw tentacle preview in editor
-        if (useTentacleTurret && Application.isPlaying && tentaclePoints != null)
-        {
-            Gizmos.color = tentacleColor;
-            for (int i = 0; i < tentaclePoints.Length - 1; i++)
-            {
-                Vector3 worldPos1 = transform.TransformPoint(tentaclePoints[i]);
-                Vector3 worldPos2 = transform.TransformPoint(tentaclePoints[i + 1]);
-                Gizmos.DrawLine(worldPos1, worldPos2);
-            }
+        // Draw range legend
+        Vector3 legendPos = transform.position + Vector3.up * 3f;
+        Handles.Label(legendPos, $"Ranges:");
+        Handles.Label(legendPos + Vector3.down * 0.3f, $"Base: {range:F1} (Blue)");
+        Handles.Label(legendPos + Vector3.down * 0.6f, $"Melee: {meleeConfig.range:F1} (Yellow)");
+        Handles.Label(legendPos + Vector3.down * 0.9f, $"Projectile: {ProjectileRange:F1} (Red)");
+        Handles.Label(legendPos + Vector3.down * 1.2f, $"Detection: {(rangeCollider != null ? rangeCollider.radius : 0f):F1} (Green)");
 
-            if (firePoint != null)
-            {
-                Gizmos.color = Color.cyan;
-                Gizmos.DrawWireSphere(firePoint.position, 0.1f);
-            }
-        }
+        // Draw energy info
+        Vector3 energyPos = transform.position + Vector3.up * 1.5f;
+        Handles.Label(energyPos, $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
 
-        // Draw swipe arc preview
-        if (useTentacleTurret && Application.isPlaying && isSwipingMelee)
-        {
-            Gizmos.color = Color.magenta;
-            Vector3 tentacleBase = transform.position + (Vector3)tentacleAttachmentOffset;
-            float currentRotation = turretTransform.eulerAngles.z;
-
-            for (int i = 0; i <= 10; i++)
-            {
-                float t = i / 10f;
-                float arcAngle = Mathf.Lerp(-swipeArcDegrees / 2f, swipeArcDegrees / 2f, t);
-                float totalAngle = (currentRotation + arcAngle) * Mathf.Deg2Rad;
-                Vector3 arcPoint = tentacleBase + new Vector3(Mathf.Cos(totalAngle), Mathf.Sin(totalAngle)) * tentacleLength;
-
-                if (i > 0)
-                {
-                    float prevT = (i - 1) / 10f;
-                    float prevArcAngle = Mathf.Lerp(-swipeArcDegrees / 2f, swipeArcDegrees / 2f, prevT);
-                    float prevTotalAngle = (currentRotation + prevArcAngle) * Mathf.Deg2Rad;
-                    Vector3 prevArcPoint = tentacleBase + new Vector3(Mathf.Cos(prevTotalAngle), Mathf.Sin(prevTotalAngle)) * tentacleLength;
-
-                    Gizmos.DrawLine(prevArcPoint, arcPoint);
-                }
-            }
-        }
-
-        // Draw energy bar above tower
-        Vector3 energyBarPos = transform.position + Vector3.up * 1.5f;
-        float energyBarWidth = 1f;
-        float energyBarHeight = 0.1f;
-
-        // Background bar
-        Gizmos.color = Color.black;
-        Gizmos.DrawCube(energyBarPos, new Vector3(energyBarWidth, energyBarHeight, 0.1f));
-
-        // Energy bar
-        float energyPercentage = GetEnergyPercentage();
-        Color energyColor = EnergyManager.Instance.GetEnergyColor(this);
-
-        Gizmos.color = energyColor;
-        Vector3 energySize = new Vector3(energyBarWidth * energyPercentage, energyBarHeight * 0.8f, 0.1f);
-        Vector3 energyPos = energyBarPos + Vector3.left * (energyBarWidth * (1f - energyPercentage) * 0.5f);
-        Gizmos.DrawCube(energyPos, energySize);
-
-        // Energy text
-        UnityEditor.Handles.Label(energyBarPos + Vector3.up * 0.3f, $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+        // Draw damage info
+        Vector3 damagePos = transform.position + Vector3.up * 1.2f;
+        string damageStatus = isDisabledByDamage ? "DISABLED" : "ACTIVE";
+        Handles.Label(damagePos, $"Status: {damageStatus} | Armor: {armorReduction * 100f:F0}%");
     }
     #endregion
 #endif
+}
+
+// Interface for damageable objects
+public interface IDamageable
+{
+    bool TakeDamage(float damage, GameObject source = null);
+    bool CanTakeDamage();
+    float GetCurrentHealth();
+    float GetMaxHealth();
+    float GetHealthPercentage();
+    bool IsDestroyed();
 }

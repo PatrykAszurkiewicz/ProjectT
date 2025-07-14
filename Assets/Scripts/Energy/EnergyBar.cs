@@ -2,6 +2,7 @@ using UnityEngine;
 
 public class EnergyBar : MonoBehaviour
 {
+    #region Configuration
     [Header("Energy Bar Settings")]
     public bool showEnergyBar = true;
     public float energyBarHeight = 0.1f;
@@ -15,27 +16,23 @@ public class EnergyBar : MonoBehaviour
     public Color lowEnergyColor = Color.yellow;
     public Color criticalEnergyColor = Color.red;
     public Color depletedEnergyColor = Color.gray;
+    #endregion
 
+    #region Core Components
     private GameObject energyBarContainer;
     private SpriteRenderer energyBarBackground;
     private SpriteRenderer energyBarFill;
     private TextMesh energyText;
     private IEnergyConsumer energyConsumer;
     private SpriteRenderer parentSpriteRenderer;
+    #endregion
 
+    #region Initialization
     public void Initialize(IEnergyConsumer consumer, SpriteRenderer parentRenderer)
     {
         energyConsumer = consumer;
         parentSpriteRenderer = parentRenderer;
         CreateEnergyBar();
-    }
-
-    void Update()
-    {
-        if (energyConsumer != null && showEnergyBar)
-        {
-            UpdateEnergyBarVisuals();
-        }
     }
 
     void CreateEnergyBar()
@@ -47,10 +44,19 @@ public class EnergyBar : MonoBehaviour
         energyBarContainer.transform.SetParent(transform);
         energyBarContainer.transform.localPosition = Vector3.up * energyBarOffset;
 
-        // Create background bar
+        CreateBackgroundBar();
+        CreateFillBar();
+
+        if (showEnergyText)
+            CreateEnergyText();
+    }
+
+    void CreateBackgroundBar()
+    {
         GameObject backgroundObj = new GameObject("EnergyBarBackground");
         backgroundObj.transform.SetParent(energyBarContainer.transform);
         backgroundObj.transform.localPosition = Vector3.zero;
+
         energyBarBackground = backgroundObj.AddComponent<SpriteRenderer>();
         energyBarBackground.sprite = CreateColoredSprite(backgroundBarColor, (int)(energyBarWidth * 100), (int)(energyBarHeight * 100));
 
@@ -59,11 +65,14 @@ public class EnergyBar : MonoBehaviour
             energyBarBackground.sortingLayerName = parentSpriteRenderer.sortingLayerName;
             energyBarBackground.sortingOrder = parentSpriteRenderer.sortingOrder + 1;
         }
+    }
 
-        // Create energy fill bar
+    void CreateFillBar()
+    {
         GameObject fillObj = new GameObject("EnergyBarFill");
         fillObj.transform.SetParent(energyBarContainer.transform);
         fillObj.transform.localPosition = Vector3.zero;
+
         energyBarFill = fillObj.AddComponent<SpriteRenderer>();
         energyBarFill.sprite = CreateColoredSprite(normalEnergyColor, (int)(energyBarWidth * 100), (int)(energyBarHeight * 100));
 
@@ -72,27 +81,37 @@ public class EnergyBar : MonoBehaviour
             energyBarFill.sortingLayerName = parentSpriteRenderer.sortingLayerName;
             energyBarFill.sortingOrder = parentSpriteRenderer.sortingOrder + 2;
         }
+    }
 
-        // Create energy text
-        if (showEnergyText)
+    void CreateEnergyText()
+    {
+        GameObject textObj = new GameObject("EnergyText");
+        textObj.transform.SetParent(energyBarContainer.transform);
+        textObj.transform.localPosition = Vector3.up * 0.3f;
+
+        energyText = textObj.AddComponent<TextMesh>();
+        energyText.text = $"{energyConsumer.GetEnergy():F0}/{energyConsumer.GetMaxEnergy():F0}";
+        energyText.fontSize = 17;
+        energyText.characterSize = 0.14f;
+        energyText.anchor = TextAnchor.MiddleCenter;
+        energyText.color = normalEnergyColor;
+
+        // Set text sorting order
+        MeshRenderer textRenderer = textObj.GetComponent<MeshRenderer>();
+        if (textRenderer != null && parentSpriteRenderer != null)
         {
-            GameObject textObj = new GameObject("EnergyText");
-            textObj.transform.SetParent(energyBarContainer.transform);
-            textObj.transform.localPosition = Vector3.up * 0.3f;
-            energyText = textObj.AddComponent<TextMesh>();
-            energyText.text = $"{energyConsumer.GetEnergy():F0}/{energyConsumer.GetMaxEnergy():F0}";
-            energyText.fontSize = 17;
-            energyText.characterSize = 0.14f;
-            energyText.anchor = TextAnchor.MiddleCenter;
-            energyText.color = normalEnergyColor;
+            textRenderer.sortingLayerName = parentSpriteRenderer.sortingLayerName;
+            textRenderer.sortingOrder = parentSpriteRenderer.sortingOrder + 3;
+        }
+    }
+    #endregion
 
-            // Set text sorting order
-            MeshRenderer textRenderer = textObj.GetComponent<MeshRenderer>();
-            if (textRenderer != null && parentSpriteRenderer != null)
-            {
-                textRenderer.sortingLayerName = parentSpriteRenderer.sortingLayerName;
-                textRenderer.sortingOrder = parentSpriteRenderer.sortingOrder + 3;
-            }
+    #region Update Logic
+    void Update()
+    {
+        if (energyConsumer != null && showEnergyBar)
+        {
+            UpdateEnergyBarVisuals();
         }
     }
 
@@ -100,23 +119,21 @@ public class EnergyBar : MonoBehaviour
     {
         if (energyBarFill == null || energyBarBackground == null || energyConsumer == null) return;
         if (EnergyManager.Instance == null) return;
+
         float energyPercentage = energyConsumer.GetEnergyPercentage();
+
         // Determine energy bar color based on energy state
-        Color energyColor = normalEnergyColor;
-        if (energyConsumer.IsEnergyDepleted())
-            energyColor = depletedEnergyColor;
-        else if (energyConsumer.IsEnergyLow())
-            energyColor = Color.Lerp(criticalEnergyColor, lowEnergyColor, energyPercentage / EnergyManager.Instance.GetCriticalThreshold(energyConsumer));
-        else
-            energyColor = normalEnergyColor;
+        Color energyColor = GetEnergyColor(energyPercentage);
         energyBarFill.color = energyColor;
 
         // Update energy bar fill scale to represent energy percentage
         Vector3 fillScale = new Vector3(energyPercentage, 1f, 1f);
         energyBarFill.transform.localScale = fillScale;
+
         // Adjust fill position to align with background
         Vector3 fillPosition = Vector3.left * (energyBarWidth * (1f - energyPercentage) * 0.5f);
         energyBarFill.transform.localPosition = fillPosition;
+
         // Update energy text
         if (energyText != null && showEnergyText)
         {
@@ -125,19 +142,40 @@ public class EnergyBar : MonoBehaviour
         }
     }
 
+    Color GetEnergyColor(float energyPercentage)
+    {
+        if (energyConsumer.IsEnergyDepleted())
+            return depletedEnergyColor;
+
+        if (energyConsumer.IsEnergyLow())
+        {
+            float criticalThreshold = EnergyManager.Instance.GetCriticalThreshold(energyConsumer);
+            return Color.Lerp(criticalEnergyColor, lowEnergyColor, energyPercentage / criticalThreshold);
+        }
+
+        return normalEnergyColor;
+    }
+    #endregion
+
+    #region Utility Methods
     Sprite CreateColoredSprite(Color color, int width, int height)
     {
         Texture2D texture = new Texture2D(width, height);
         Color[] pixels = new Color[width * height];
+
         for (int i = 0; i < pixels.Length; i++)
         {
             pixels[i] = color;
         }
+
         texture.SetPixels(pixels);
         texture.Apply();
+
         return Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f);
     }
+    #endregion
 
+    #region Public Methods
     public void SetVisibility(bool visible)
     {
         showEnergyBar = visible;
@@ -154,7 +192,9 @@ public class EnergyBar : MonoBehaviour
         criticalEnergyColor = critical;
         depletedEnergyColor = depleted;
     }
+    #endregion
 
+    #region Cleanup
     void OnDestroy()
     {
         if (energyBarContainer != null)
@@ -162,4 +202,5 @@ public class EnergyBar : MonoBehaviour
             DestroyImmediate(energyBarContainer);
         }
     }
+    #endregion
 }
