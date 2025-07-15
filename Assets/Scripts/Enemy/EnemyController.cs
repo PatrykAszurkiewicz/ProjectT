@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class EnemyController : MonoBehaviour
 {
-    public Transform target;
+    private Transform target;
     private EnemyStats stats;
     private Rigidbody2D rb;
 
@@ -10,6 +10,16 @@ public class EnemyController : MonoBehaviour
     {
         stats = GetComponent<EnemyStats>();
         rb = GetComponent<Rigidbody2D>();
+
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null)
+        {
+            target = player.transform;
+        }
+        else
+        {
+            Debug.LogWarning("EnemyController: Nie znaleziono obiektu z tagiem 'Player'!");
+        }
     }
 
     private void FixedUpdate()

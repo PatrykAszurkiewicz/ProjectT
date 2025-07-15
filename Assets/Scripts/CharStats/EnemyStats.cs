@@ -44,6 +44,10 @@ public class EnemyStats : CharacterStats
         if (healthBar != null)
             Destroy(healthBar.gameObject);
 
+        WaveSpawner waveSpawner = FindObjectOfType<WaveSpawner>();
+        if (waveSpawner != null)
+            waveSpawner.OnEnemyDeath();
+
         base.Die();
     }
     public float Damage => enemyData?.damage ?? 0f;
