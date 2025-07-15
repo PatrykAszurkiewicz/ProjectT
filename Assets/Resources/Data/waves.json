@@ -2,7 +2,7 @@
   {
     "waveNumber": 1,
     "enemyPrefab": "Goblin",
-    "enemyCount": 1,
+    "enemyCount": 3,
     "spawnDelay": 1.5,
     "spawnDirection": "Top"
   },

@@ -5,7 +5,7 @@ using UnityEngine;
 
 public class WaveSpawner : MonoBehaviour
 {
-    public List<Transform> spawnPoints; // Top/Bottom/Left/Right jako nazwy
+    public List<Collider2D> spawnAreas; // Top/Bottom/Left/Right jako nazwy
     public float timeBetweenWaves = 5f;
     private float countdown;
 
@@ -40,7 +40,9 @@ public class WaveSpawner : MonoBehaviour
         for (int i = 0; i < wave.enemyCount; i++)
         {
             SpawnEnemy(wave);
-            yield return new WaitForSeconds(wave.spawnDelay);
+
+            float delay = UnityEngine.Random.Range(wave.minSpawnDelay, wave.maxSpawnDelay);
+            yield return new WaitForSeconds(delay);
         }
 
         currentWaveIndex++;
@@ -48,9 +50,9 @@ public class WaveSpawner : MonoBehaviour
 
     void SpawnEnemy(WaveData wave)
     {
-        Transform spawnPoint = GetSpawnPointByDirection(wave.spawnDirection);
+        Vector2 spawnPosition = GetRandomPositionInArea(wave.spawnDirection);
         GameObject enemyPrefab = Resources.Load<GameObject>("Enemies/" + wave.enemyPrefab);
-        Instantiate(enemyPrefab, spawnPoint.position, Quaternion.identity);
+        Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
         enemiesAlive++;
     }
 
@@ -65,13 +67,48 @@ public class WaveSpawner : MonoBehaviour
         waves = JsonUtilityWrapper.FromJsonList<WaveData>(json);
     }
 
-    Transform GetSpawnPointByDirection(string direction)
+    Collider2D GetSpawnAreaByDirection(string direction)
     {
-        return spawnPoints.Find(t => t.name.Equals(direction, StringComparison.OrdinalIgnoreCase));
+        return spawnAreas.Find(c => c.name.Equals(direction, StringComparison.OrdinalIgnoreCase));
     }
+
+    Vector2 GetRandomPositionInArea(string direction)
+    {
+        Collider2D area = spawnAreas.Find(c => c.name.Equals(direction, StringComparison.OrdinalIgnoreCase));
+
+        if (area == null)
+        {
+            Debug.LogWarning($"Brak obszaru spawnu dla kierunku: {direction}");
+            return Vector2.zero;
+        }
+
+        Bounds bounds = area.bounds;
+
+        float x = UnityEngine.Random.Range(bounds.min.x, bounds.max.x);
+        float y = UnityEngine.Random.Range(bounds.min.y, bounds.max.y);
+
+        return new Vector2(x, y);
+    }
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = Color.red;
+
+        if (spawnAreas == null) return;
+
+        foreach (var area in spawnAreas)
+        {
+            if (area != null)
+            {
+                var bounds = area.bounds;
+                Gizmos.DrawWireCube(bounds.center, bounds.size);
+            }
+        }
+    }
+
 
     void ShowWaveIndicator(string direction)
     {
         // np. wyświetlenie strzałki lub efektu
     }
+
 }
