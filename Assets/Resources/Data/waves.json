@@ -2,15 +2,17 @@
   {
     "waveNumber": 1,
     "enemyPrefab": "Goblin",
-    "enemyCount": 3,
-    "spawnDelay": 1.5,
+    "enemyCount": 5,
+    "minSpawnDelay": 0.3,
+    "maxSpawnDelay": 1.0,
     "spawnDirection": "Top"
   },
   {
     "waveNumber": 2,
     "enemyPrefab": "Goblin",
     "enemyCount": 2,
-    "spawnDelay": 3,
+    "minSpawnDelay": 0.3,
+    "maxSpawnDelay": 1.0,
     "spawnDirection": "Left"
   }
 ]
