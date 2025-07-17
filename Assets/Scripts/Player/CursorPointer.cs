@@ -5,7 +5,10 @@ public class CursorPointer : MonoBehaviour
 {
     public Transform player;     
     public float radius = 1.5f;   // promieñ orbity wskaŸnika
-
+    private void Start()
+    {
+        Cursor.visible = false;
+    }
     void Update()
     {
         if (Mouse.current == null) return;
