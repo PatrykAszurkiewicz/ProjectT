@@ -37,23 +37,28 @@ public class WaveSpawner : MonoBehaviour
         WaveData wave = waves[currentWaveIndex];
         ShowWaveIndicator(wave.spawnDirection); // 🔺 inicjator kierunku
 
-        for (int i = 0; i < wave.enemyCount; i++)
+        List<string> enemyPrefabsToSpawn = new List<string>();
+
+        foreach (var group in wave.enemies)
         {
-            SpawnEnemy(wave);
+            for (int i = 0; i < group.count; i++)
+            {
+                enemyPrefabsToSpawn.Add(group.enemyPrefab);
+            }
+        }
+
+        // opcjonalnie: tasowanie kolejności
+        Shuffle(enemyPrefabsToSpawn);
+
+        foreach (var prefabName in enemyPrefabsToSpawn)
+        {
+            SpawnEnemy(prefabName, wave.spawnDirection);
 
             float delay = UnityEngine.Random.Range(wave.minSpawnDelay, wave.maxSpawnDelay);
             yield return new WaitForSeconds(delay);
         }
 
         currentWaveIndex++;
-    }
-
-    void SpawnEnemy(WaveData wave)
-    {
-        Vector2 spawnPosition = GetRandomPositionInArea(wave.spawnDirection);
-        GameObject enemyPrefab = Resources.Load<GameObject>("Enemies/" + wave.enemyPrefab);
-        Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
-        enemiesAlive++;
     }
 
     public void OnEnemyDeath()
@@ -104,8 +109,21 @@ public class WaveSpawner : MonoBehaviour
             }
         }
     }
-
-
+    void SpawnEnemy(string prefabName, string direction)
+    {
+        Vector2 spawnPosition = GetRandomPositionInArea(direction);
+        GameObject enemyPrefab = Resources.Load<GameObject>("Enemies/" + prefabName);
+        Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
+        enemiesAlive++;
+    }
+    void Shuffle<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int k = UnityEngine.Random.Range(0, i + 1);
+            (list[i], list[k]) = (list[k], list[i]);
+        }
+    }
     void ShowWaveIndicator(string direction)
     {
         // np. wyświetlenie strzałki lub efektu

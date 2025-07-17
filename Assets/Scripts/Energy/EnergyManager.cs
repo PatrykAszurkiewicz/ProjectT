@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem; // Add this for Input System
 
 public class EnergyManager : MonoBehaviour
 {
@@ -132,7 +133,16 @@ public class EnergyManager : MonoBehaviour
     {
         if (player == null) return;
 
-        bool supplyInput = Input.GetMouseButton(0) || Input.GetKey(KeyCode.Space);
+        // NEW INPUT SYSTEM VERSION
+        bool supplyInput = false;
+
+        // Check mouse input
+        if (Mouse.current != null)
+            supplyInput = Mouse.current.leftButton.isPressed;
+
+        // Check keyboard input
+        if (Keyboard.current != null)
+            supplyInput |= Keyboard.current.spaceKey.isPressed;
 
         if (supplyInput)
         {
@@ -152,14 +162,16 @@ public class EnergyManager : MonoBehaviour
 
     Vector3 GetInputPosition()
     {
-        if (Input.GetMouseButton(0))
+        // Check mouse input first
+        if (Mouse.current != null && Mouse.current.leftButton.isPressed)
         {
-            Vector3 mousePos = mainCamera.ScreenToWorldPoint(Input.mousePosition);
+            Vector3 mousePos = mainCamera.ScreenToWorldPoint(Mouse.current.position.ReadValue());
             mousePos.z = 0;
             return mousePos;
         }
 
-        if (Input.GetKey(KeyCode.Space))
+        // Check keyboard input
+        if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
         {
             var closest = GetClosestEnergyConsumer(player.transform.position);
             return closest?.GetPosition() ?? Vector3.zero;

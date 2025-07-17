@@ -3,6 +3,7 @@ using Unity.VisualScripting.Antlr3.Runtime.Misc;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using FMOD.Studio;
 
 public class PlayerMovement : MonoBehaviour
 {
@@ -19,9 +20,13 @@ public class PlayerMovement : MonoBehaviour
     private float dashRegenTimer = 0f;
     public float dashStaminaCost = 1f;
 
+    private EventInstance footsteps;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        footsteps = AudioManager.instance.CreateInstance(FMODEvents.instance.footstepsSound);
+
         pstats = GetComponent<PlayerStats>();
         rb = GetComponent<Rigidbody2D>();
 
@@ -38,6 +43,7 @@ public class PlayerMovement : MonoBehaviour
     {
         if (isDashing)
         {
+
             rb.MovePosition(rb.position + dashDirection * pstats.dashSpeed * Time.fixedDeltaTime);
             dashTimer -= Time.fixedDeltaTime;
             if (dashTimer <= 0f)
@@ -65,6 +71,8 @@ public class PlayerMovement : MonoBehaviour
 
         Vector2 movement = move.normalized * currentSpeed * Time.fixedDeltaTime;
         rb.MovePosition(rb.position + movement);
+
+        UpdateSound();
     }
 
     public void Move(InputAction.CallbackContext context)
@@ -86,6 +94,7 @@ public class PlayerMovement : MonoBehaviour
     {
         if (!isDashing && pstats.dashesLeft > 0 && Time.time - lastDashTime >= pstats.dashCooldown)
         {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.dashSound, rb.position);
             dashDirection = move.normalized;
             if (dashDirection == Vector2.zero)
                 dashDirection = Vector2.up;
@@ -112,4 +121,25 @@ public class PlayerMovement : MonoBehaviour
             dashRegenTimer = 0f;
         }
     }
+
+    private void UpdateSound()
+    {
+        // Start footsteps when there is a movement magnitude
+        if (move.magnitude > 0.01f)
+        {
+            // Fetch the playback state
+            PLAYBACK_STATE playbackState;
+            footsteps.getPlaybackState(out playbackState);
+            if (playbackState.Equals(PLAYBACK_STATE.STOPPED))
+            {
+                footsteps.start();
+            }
+        }
+        // Stop the footsteps event
+        else
+        {
+            footsteps.stop(STOP_MODE.ALLOWFADEOUT);
+        }
+    }
+
 }

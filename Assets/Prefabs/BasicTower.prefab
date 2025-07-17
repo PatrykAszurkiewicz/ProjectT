@@ -45,6 +45,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f29c0ba85860ca4c8c8fc1f70afd795, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  shotSound:
+    Guid:
+      Data1: -68123187
+      Data2: 1314503669
+      Data3: -1327968887
+      Data4: -44403318
+    Path: event:/TowerShot
   towerName: Basic Tower
   damage: 10
   range: 3
@@ -53,8 +60,6 @@ MonoBehaviour:
   towerType: 0
   spriteResourcePath: Sprites/spritesheet_transparent
   spriteIndex: 0
-  spritesPerRow: 10
-  spriteSize: {x: 231, y: 185}
   spriteScale: 0.5
   enableAnimation: 1
   animationFrameCount: 43
@@ -63,57 +68,64 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   projectilePrefab: {fileID: 2844621228601224902, guid: 0e3a80326e5a3df4693f9aadb0191f35, type: 3}
-  firePoint: {fileID: 5068194430522686570}
   canUpgrade: 1
   upgradeTowerPrefab: {fileID: 0}
   upgradeLevel: 1
   maxUpgradeLevel: 3
   useTentacleTurret: 1
-  tentacleLength: 0.8
-  tentacleWidth: 0.3
-  tentacleSegments: 8
-  tentacleSwayAmount: 0.1
-  tentacleSwaySpeed: 2
-  tentacleColor: {r: 0.337, g: 0.176, b: 0.259, a: 0.8}
-  tentacleTipColor: {r: 0.8, g: 0.3, b: 0.3, a: 1}
-  tentacleAnimationSpeed: 1
-  tentacleAttachmentOffset: {x: 0, y: -0.3}
-  downwardShorteningFactor: 0.5
-  meleeRange: 1
-  meleeDamageMultiplier: 1.5
-  meleeAttackDuration: 0.3
-  projectileRange: 5
-  swipeArcDegrees: 60
-  swipeSpeed: 8
-  swipeReach: 0.4
-  swipeIntensity: 1.5
-  swipeCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
+  tentacleConfig:
+    length: 1.2
+    width: 0.3
+    segments: 8
+    swayAmount: 0.1
+    swaySpeed: 2
+    color: {r: 0.337, g: 0.176, b: 0.259, a: 0.8}
+    tipColor: {r: 0.8, g: 0.3, b: 0.3, a: 1}
+    animationSpeed: 1
+    attachmentOffset: {x: 0, y: -0.3}
+    downwardShorteningFactor: 0.5
+  meleeConfig:
+    range: 1.5
+    damageMultiplier: 1.5
+    attackDuration: 0.3
+    swipeArcDegrees: 60
+    swipeSpeed: 8
+    swipeReach: 0.4
+    swipeIntensity: 1.5
+    swipeCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
   rotationSpeed: 180
   smoothRotation: 1
-  turretTransform: {fileID: 0}
+  maxEnergy: 100
+  currentEnergy: 100
+  requiresEnergyToFunction: 1
+  showEnergyBar: 1
+  armorReduction: 0
+  immuneToEnemyDamage: 0
+  damageFlashDuration: 0.15
+  enableDamageEffects: 1
 --- !u!1 &3321510626698392789
 GameObject:
   m_ObjectHideFlags: 0

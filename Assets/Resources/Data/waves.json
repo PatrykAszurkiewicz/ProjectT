@@ -1,18 +1,24 @@
 [
   {
     "waveNumber": 1,
-    "enemyPrefab": "Goblin",
     "enemyCount": 5,
     "minSpawnDelay": 0.3,
     "maxSpawnDelay": 1.0,
-    "spawnDirection": "Top"
+    "spawnDirection": "Top",
+    "enemies": [
+      { "enemyPrefab": "Goblin", "count": 3 },
+      { "enemyPrefab": "Orc", "count": 2 }
+    ]
   },
   {
     "waveNumber": 2,
-    "enemyPrefab": "Goblin",
     "enemyCount": 2,
     "minSpawnDelay": 0.3,
     "maxSpawnDelay": 1.0,
-    "spawnDirection": "Left"
+    "spawnDirection": "Left",
+    "enemies": [
+      { "enemyPrefab": "Goblin", "count": 2 },
+      { "enemyPrefab": "Orc", "count": 3 }
+    ]
   }
 ]

@@ -1,6 +1,87 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-2879393285834546394
+--- !u!114 &-5856974683079393109
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Dash
+  m_EditorClassIdentifier: 
+  Path: event:/Dash
+  Guid:
+    Data1: 1332249077
+    Data2: 1167090174
+    Data3: 1051869860
+    Data4: 780888163
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-3723619638092549200
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Footsteps
+  m_EditorClassIdentifier: 
+  Path: event:/Footsteps
+  Guid:
+    Data1: -1543252814
+    Data2: 1297323241
+    Data3: 1614850454
+    Data4: -550565948
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 196
+--- !u!114 &-2371819548618659074
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/MultiShot
+  m_EditorClassIdentifier: 
+  Path: event:/MultiShot
+  Guid:
+    Data1: -179989327
+    Data2: 1131411702
+    Data3: -618425691
+    Data4: -230991054
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-89216244576792818
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -12,13 +93,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c18180ecb35941f4682ae60107b85b7c, type: 3}
   m_Name: bank:/Master.strings.bank
   m_EditorClassIdentifier: 
-  Path: ../../../Downloads/Tower Defense FMOD Project/Tower Defense FMOD/Build/Desktop/Master.strings.bank
+  Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638881220464563974
+  lastModified: 638883673103795018
   FileSizes:
   - Name: Desktop
-    Value: 724
+    Value: 942
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -33,18 +114,31 @@ MonoBehaviour:
   m_Name: FMODStudioCache
   m_EditorClassIdentifier: 
   EditorBanks:
-  - {fileID: -2879393285834546394}
-  - {fileID: 2531672972893669984}
-  EditorEvents: []
+  - {fileID: -89216244576792818}
+  - {fileID: 1320380482680642554}
+  - {fileID: 4485862351229570366}
+  EditorEvents:
+  - {fileID: -2371819548618659074}
+  - {fileID: 5293760198380736230}
+  - {fileID: -3723619638092549200}
+  - {fileID: -5856974683079393109}
   EditorParameters: []
   MasterBanks:
-  - {fileID: 2531672972893669984}
+  - {fileID: 1320380482680642554}
   StringsBanks:
-  - {fileID: -2879393285834546394}
+  - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638881220464563974
-  SerializableEventsDict: []
---- !u!114 &2531672972893669984
+  cacheTime: 638883673103795018
+  SerializableEventsDict:
+  - key: event:/MultiShot
+    index: 0
+  - key: event:/TowerShot
+    index: 1
+  - key: event:/Footsteps
+    index: 2
+  - key: event:/Dash
+    index: 3
+--- !u!114 &1320380482680642554
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -56,11 +150,58 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c18180ecb35941f4682ae60107b85b7c, type: 3}
   m_Name: bank:/Master.bank
   m_EditorClassIdentifier: 
-  Path: ../../../Downloads/Tower Defense FMOD Project/Tower Defense FMOD/Build/Desktop/Master.bank
+  Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.bank
   Name: Master
   StudioPath: bank:/Master
-  lastModified: 638881220464534062
+  lastModified: 638881963572186618
   FileSizes:
   - Name: Desktop
     Value: 1074
   Exists: 1
+--- !u!114 &4485862351229570366
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c18180ecb35941f4682ae60107b85b7c, type: 3}
+  m_Name: bank:/FX.bank
+  m_EditorClassIdentifier: 
+  Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
+  Name: FX
+  StudioPath: bank:/FX
+  lastModified: 638883673103775024
+  FileSizes:
+  - Name: Desktop
+    Value: 609792
+  Exists: 1
+--- !u!114 &5293760198380736230
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/TowerShot
+  m_EditorClassIdentifier: 
+  Path: event:/TowerShot
+  Guid:
+    Data1: -68123187
+    Data2: 1314503669
+    Data3: -1327968887
+    Data4: -44403318
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0

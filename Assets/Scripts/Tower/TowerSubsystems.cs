@@ -1,10 +1,13 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using FMODUnity;
 
 // ===== TOWER TARGETING SYSTEM =====
 public class TowerTargeting
 {
+
+
     private readonly Tower tower;
     private readonly List<GameObject> enemiesInRange = new List<GameObject>();
 
@@ -135,6 +138,7 @@ public class TowerTargeting
 // ===== TOWER COMBAT SYSTEM =====
 public class TowerCombat
 {
+    //[SerializeField] private EventReference shotSound;
     private readonly Tower tower;
 
     public TowerCombat(Tower tower)
@@ -151,7 +155,6 @@ public class TowerCombat
         }
         else if (target != null && !tower.CanFire)
         {
-            // Debug why we can't fire
             float timeUntilNextFire = tower.LastFireTime + (1f / tower.GetFireRate()) - Time.time;
             Debug.Log($"Tower {tower.towerName} can't fire yet. Next fire in: {timeUntilNextFire:F2}s");
         }
@@ -189,6 +192,9 @@ public class TowerCombat
 
     void FireProjectile(GameObject target)
     {
+        //AudioManager.instance.PlayOneShot(FMODEvents.instance.shotSound, tower.FirePoint.position);
+        AudioManager.instance.PlayOneShot(FMODEvents.instance.multiShotSound, tower.FirePoint.position);
+
         Vector3 spawnPosition = tower.FirePoint != null ? tower.FirePoint.position : tower.transform.position;
         Vector3 direction = (target.transform.position - spawnPosition).normalized;
         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -208,6 +214,8 @@ public class TowerCombat
             Debug.LogWarning($"Projectile prefab {tower.projectilePrefab.name} missing Projectile component!");
         }
     }
+
+
 
     void DealDirectDamage(GameObject target) => target?.GetComponent<Health>()?.TakeDamage(tower.damage);
 }
