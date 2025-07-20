@@ -64,6 +64,8 @@ public class Weapon : MonoBehaviour
                 }
             }
         }
+        Debug.Log($"Atak! Trafiono {hitEnemies.Count} przeciwników.");
+
     }
 
     private void OnTriggerEnter2D(Collider2D other)

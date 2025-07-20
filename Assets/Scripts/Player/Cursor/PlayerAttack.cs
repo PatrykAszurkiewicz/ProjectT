@@ -9,7 +9,7 @@ public class PlayerAttack : MonoBehaviour
     {
         if (context.performed && weapon != null)
         {
-            Debug.Log("ATAK");
+
             weapon.PerformAttack();
         }
     }

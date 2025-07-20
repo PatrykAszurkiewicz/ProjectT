@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enemyName: Orc
   maxHealth: 100
-  maxArmor: 50
+  maxArmor: 10
   moveSpeed: 2
   damage: 15

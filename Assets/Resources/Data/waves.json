@@ -1,12 +1,12 @@
 [
   {
     "waveNumber": 1,
-    "enemyCount": 5,
+    "enemyCount": 3,
     "minSpawnDelay": 0.3,
     "maxSpawnDelay": 1.0,
     "spawnDirection": "Top",
     "enemies": [
-      { "enemyPrefab": "Goblin", "count": 3 },
+      { "enemyPrefab": "Goblin", "count": 1 },
       { "enemyPrefab": "Orc", "count": 2 }
     ]
   },
