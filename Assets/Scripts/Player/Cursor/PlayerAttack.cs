@@ -3,12 +3,14 @@ using UnityEngine.InputSystem;
 
 public class PlayerAttack : MonoBehaviour
 {
+    [SerializeField] private Weapon weapon;
+
     public void OnAttack(InputAction.CallbackContext context)
     {
-        if (context.performed)
+        if (context.performed && weapon != null)
         {
-            Debug.Log("Atak wykonany!");
-            // Tutaj wywo³ujesz logikê ataku, np. currentWeapon.Attack();
+            Debug.Log("ATAK");
+            weapon.PerformAttack();
         }
     }
 }

@@ -5,6 +5,7 @@ TagManager:
   serializedVersion: 3
   tags:
   - CursorPointer
+  - Enemy
   layers:
   - Default
   - TransparentFX
