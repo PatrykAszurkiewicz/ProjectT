@@ -55,7 +55,7 @@ public class TowerPlacementManager : MonoBehaviour
             if (Keyboard.current[(Key)(Key.Digit1 + i - 1)].wasPressedThisFrame)
             {
                 selectedTowerIndex = i - 1;
-                Debug.Log($"Selected tower: {towerPrefabs[selectedTowerIndex].name}");
+                //Debug.Log($"Selected tower: {towerPrefabs[selectedTowerIndex].name}");
             }
         }
 
@@ -93,7 +93,7 @@ public class TowerPlacementManager : MonoBehaviour
         Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
         mouseWorldPos.z = 0f;
 
-        Debug.Log($"Handling slot click at world position: {mouseWorldPos}");
+        //Debug.Log($"Handling slot click at world position: {mouseWorldPos}");
 
         // Find the closest available slot to the click position
         TowerSlot closestSlot = null;
@@ -116,12 +116,12 @@ public class TowerPlacementManager : MonoBehaviour
 
         if (closestSlot != null)
         {
-            Debug.Log($"Found closest slot: Ring {closestSlot.ringIndex}, Slot {closestSlot.slotIndex}, Distance: {closestDistance}");
+            //Debug.Log($"Found closest slot: Ring {closestSlot.ringIndex}, Slot {closestSlot.slotIndex}, Distance: {closestDistance}");
             OnSlotClicked(closestSlot);
         }
         else
         {
-            Debug.Log("No slot found at click position");
+            //Debug.Log("No slot found at click position");
         }
     }
 
@@ -130,7 +130,7 @@ public class TowerPlacementManager : MonoBehaviour
         if (!allSlots.Contains(slot))
         {
             allSlots.Add(slot);
-            Debug.Log($"Registered slot: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
+            //Debug.Log($"Registered slot: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
         }
     }
 
@@ -139,14 +139,14 @@ public class TowerPlacementManager : MonoBehaviour
         if (allSlots.Contains(slot))
         {
             allSlots.Remove(slot);
-            Debug.Log($"Unregistered slot: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
+            //Debug.Log($"Unregistered slot: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
         }
     }
 
     public void TogglePlacementMode()
     {
         isPlacementMode = !isPlacementMode;
-        Debug.Log($"Placement mode: {(isPlacementMode ? "ON" : "OFF")}");
+        //Debug.Log($"Placement mode: {(isPlacementMode ? "ON" : "OFF")}");
 
         if (towerSelectionUI != null)
         {
@@ -156,14 +156,14 @@ public class TowerPlacementManager : MonoBehaviour
 
     public void OnSlotClicked(TowerSlot slot)
     {
-        Debug.Log($"OnSlotClicked called for slot at Ring {slot.ringIndex}, Slot {slot.slotIndex}");
-        Debug.Log($"Placement mode: {isPlacementMode}");
-        Debug.Log($"Selected tower index: {selectedTowerIndex}");
-        Debug.Log($"Tower prefabs count: {towerPrefabs.Count}");
+        //Debug.Log($"OnSlotClicked called for slot at Ring {slot.ringIndex}, Slot {slot.slotIndex}");
+        //Debug.Log($"Placement mode: {isPlacementMode}");
+        //Debug.Log($"Selected tower index: {selectedTowerIndex}");
+        //Debug.Log($"Tower prefabs count: {towerPrefabs.Count}");
 
         if (!isPlacementMode)
         {
-            Debug.Log("Not in placement mode");
+            //Debug.Log("Not in placement mode");
             return;
         }
 
@@ -172,16 +172,16 @@ public class TowerPlacementManager : MonoBehaviour
             bool success = slot.PlaceTower(towerPrefabs[selectedTowerIndex]);
             if (success)
             {
-                Debug.Log($"Successfully placed {towerPrefabs[selectedTowerIndex].name} at Ring {slot.ringIndex}, Slot {slot.slotIndex}");
+                //Debug.Log($"Successfully placed {towerPrefabs[selectedTowerIndex].name} at Ring {slot.ringIndex}, Slot {slot.slotIndex}");
             }
             else
             {
-                Debug.Log("Failed to place tower");
+                //Debug.Log("Failed to place tower");
             }
         }
         else
         {
-            Debug.Log("Invalid tower selection");
+            //Debug.Log("Invalid tower selection");
         }
     }
 
@@ -195,7 +195,7 @@ public class TowerPlacementManager : MonoBehaviour
             if (slot != null && slot.IsClickedAt(mouseWorldPos) && slot.IsOccupied)
             {
                 slot.RemoveTower();
-                Debug.Log($"Removed tower from Ring {slot.ringIndex}, Slot {slot.slotIndex}");
+                //Debug.Log($"Removed tower from Ring {slot.ringIndex}, Slot {slot.slotIndex}");
                 break; // Only remove one tower
             }
         }

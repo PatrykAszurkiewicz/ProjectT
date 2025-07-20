@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="ParameterPreset" id="{08c1b1bb-5f09-4219-98bb-65bf982f7541}">
+		<property name="name">
+			<value>MultiInstrumentSelection</value>
+		</property>
+		<relationship name="folder">
+			<destination>{fe6948a6-88d8-4a98-a689-316a1da83fe9}</destination>
+		</relationship>
+		<relationship name="parameter">
+			<destination>{ff5acf44-29b7-4270-94f2-2646a5e70b2b}</destination>
+		</relationship>
+	</object>
+	<object class="GameParameter" id="{ff5acf44-29b7-4270-94f2-2646a5e70b2b}">
+		<property name="maximum">
+			<value>6</value>
+		</property>
+		<property name="initialValue">
+			<value>0</value>
+		</property>
+	</object>
+</objects>

@@ -9,7 +9,7 @@ public class FMODEvents : MonoBehaviour
     //[field: SerializeField] public EventReference ambience { get; private set; }
 
     [field: Header("Music")]
-    //[field: SerializeField] public EventReference music { get; private set; }
+    [field: SerializeField] public EventReference music { get; private set; }
 
     //[field: Header("Player SFX")]
     [field: Header("Multi Shot SFX")]

@@ -80,11 +80,11 @@ public class TowerTargeting
         // Debug range issues more frequently
         if (!inRange && Time.frameCount % 30 == 0) // Every half second at 60fps
         {
-            Debug.Log($"Target {target.name} OUT OF RANGE: distance={distance:F2}, max range={tower.ProjectileRange:F2}");
+            //Debug.Log($"Target {target.name} OUT OF RANGE: distance={distance:F2}, max range={tower.ProjectileRange:F2}");
         }
         else if (inRange && Time.frameCount % 60 == 0) // Every second when in range
         {
-            Debug.Log($"Target {target.name} IN RANGE: distance={distance:F2}, max range={tower.ProjectileRange:F2}");
+            //Debug.Log($"Target {target.name} IN RANGE: distance={distance:F2}, max range={tower.ProjectileRange:F2}");
         }
 
         return inRange && validLayer;
@@ -120,7 +120,7 @@ public class TowerTargeting
         if (((1 << other.gameObject.layer) & tower.targetLayer) != 0)
         {
             enemiesInRange.Add(other.gameObject);
-            Debug.Log($"Enemy {other.gameObject.name} entered range. Total enemies: {enemiesInRange.Count}");
+            //Debug.Log($"Enemy {other.gameObject.name} entered range. Total enemies: {enemiesInRange.Count}");
         }
     }
 
@@ -128,7 +128,7 @@ public class TowerTargeting
     {
         if (enemiesInRange.Remove(other.gameObject))
         {
-            Debug.Log($"Enemy {other.gameObject.name} left range. Total enemies: {enemiesInRange.Count}");
+            //Debug.Log($"Enemy {other.gameObject.name} left range. Total enemies: {enemiesInRange.Count}");
             if (currentTarget == other.gameObject)
                 currentTarget = null;
         }
@@ -150,19 +150,19 @@ public class TowerCombat
     {
         if (target != null && tower.CanFire)
         {
-            Debug.Log($"Tower {tower.towerName} attempting to fire at {target.name}. CanFire: {tower.CanFire}");
+            //Debug.Log($"Tower {tower.towerName} attempting to fire at {target.name}. CanFire: {tower.CanFire}");
             tower.FireAtTarget(target);
         }
         else if (target != null && !tower.CanFire)
         {
             float timeUntilNextFire = tower.LastFireTime + (1f / tower.GetFireRate()) - Time.time;
-            Debug.Log($"Tower {tower.towerName} can't fire yet. Next fire in: {timeUntilNextFire:F2}s");
+            //Debug.Log($"Tower {tower.towerName} can't fire yet. Next fire in: {timeUntilNextFire:F2}s");
         }
     }
 
     public void PerformMeleeAttack(GameObject target)
     {
-        Debug.Log($"Tower {tower.towerName} performing melee attack on {target.name}");
+        //Debug.Log($"Tower {tower.towerName} performing melee attack on {target.name}");
         tower.TriggerMeleeAttack();
 
         var targetHealth = target?.GetComponent<Health>();
@@ -170,13 +170,13 @@ public class TowerCombat
         {
             float meleeDamage = tower.damage * tower.meleeConfig.damageMultiplier;
             targetHealth.TakeDamage(meleeDamage);
-            Debug.Log($"Melee attack dealt {meleeDamage} damage to {target.name}");
+            //Debug.Log($"Melee attack dealt {meleeDamage} damage to {target.name}");
         }
     }
 
     public void PerformProjectileAttack(GameObject target)
     {
-        Debug.Log($"Tower {tower.towerName} performing projectile attack on {target.name}");
+        //Debug.Log($"Tower {tower.towerName} performing projectile attack on {target.name}");
         tower.TriggerProjectileAttack();
 
         if (tower.projectilePrefab != null)
@@ -185,7 +185,7 @@ public class TowerCombat
         }
         else
         {
-            Debug.LogWarning($"Tower {tower.towerName} has no projectile prefab, using direct damage");
+            //Debug.LogWarning($"Tower {tower.towerName} has no projectile prefab, using direct damage");
             DealDirectDamage(target);
         }
     }
@@ -199,19 +199,19 @@ public class TowerCombat
         Vector3 direction = (target.transform.position - spawnPosition).normalized;
         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
 
-        Debug.Log($"Firing projectile from {spawnPosition} towards {target.transform.position}");
-        Debug.Log($"Fire point is {(tower.FirePoint != null ? "valid" : "NULL")}");
+        //Debug.Log($"Firing projectile from {spawnPosition} towards {target.transform.position}");
+        //Debug.Log($"Fire point is {(tower.FirePoint != null ? "valid" : "NULL")}");
 
         var projectile = Object.Instantiate(tower.projectilePrefab, spawnPosition, Quaternion.AngleAxis(angle, Vector3.forward));
         var projScript = projectile.GetComponent<Projectile>();
         if (projScript != null)
         {
             projScript.Initialize(target, tower.damage, tower.range);
-            Debug.Log($"Projectile initialized successfully");
+            //Debug.Log($"Projectile initialized successfully");
         }
         else
         {
-            Debug.LogWarning($"Projectile prefab {tower.projectilePrefab.name} missing Projectile component!");
+            //Debug.LogWarning($"Projectile prefab {tower.projectilePrefab.name} missing Projectile component!");
         }
     }
 
@@ -570,12 +570,12 @@ public class TowerTentacleSystem
             // Debug fire point position occasionally
             if (Time.frameCount % 120 == 0) // Every 2 seconds at 60fps
             {
-                Debug.Log($"Fire point world position: {worldTipPosition}, Local tip: {localTipPosition}");
+                //Debug.Log($"Fire point world position: {worldTipPosition}, Local tip: {localTipPosition}");
             }
         }
         else if (firePoint == null)
         {
-            Debug.LogWarning("TentacleSystem: Fire point is null!");
+            //Debug.LogWarning("TentacleSystem: Fire point is null!");
         }
     }
 

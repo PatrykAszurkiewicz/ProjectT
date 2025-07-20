@@ -116,7 +116,7 @@ public class TowerDefenseMap : MonoBehaviour
                 float desiredSize = mapRadius * 2f;
                 float scale = desiredSize / textureSize;
                 terrainObject.transform.localScale = Vector3.one * scale;
-                Debug.Log($"Background image loaded: {backgroundImagePath}, scaled to {scale}");
+                //Debug.Log($"Background image loaded: {backgroundImagePath}, scaled to {scale}");
             }
             else
             {
@@ -166,7 +166,7 @@ public class TowerDefenseMap : MonoBehaviour
         centralCore.OnEnergyChanged += OnCoreEnergyChanged;
         centralCore.OnEnergyDepleted += OnCoreEnergyDepleted;
 
-        Debug.Log($"Central core created with {coreStartingEnergy}/{coreMaxEnergy} energy");
+        //Debug.Log($"Central core created with {coreStartingEnergy}/{coreMaxEnergy} energy");
     }
 
     void CreateTowerSlots()

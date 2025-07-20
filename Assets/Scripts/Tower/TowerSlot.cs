@@ -56,15 +56,15 @@ public class TowerSlot : MonoBehaviour
 
     public void OnSlotClicked()
     {
-        Debug.Log($"Slot clicked: Ring {ringIndex}, Slot {slotIndex}, Available: {IsAvailable}");
+        //Debug.Log($"Slot clicked: Ring {ringIndex}, Slot {slotIndex}, Available: {IsAvailable}");
         if (IsAvailable)
         {
-            Debug.Log($"Notifying TowerPlacementManager...");
+            //Debug.Log($"Notifying TowerPlacementManager...");
             TowerPlacementManager.Instance?.OnSlotClicked(this);
         }
         else
         {
-            Debug.Log($"Slot is occupied, cannot place tower");
+            //Debug.Log($"Slot is occupied, cannot place tower");
         }
     }
 
@@ -72,16 +72,16 @@ public class TowerSlot : MonoBehaviour
     {
         if (isOccupied)
         {
-            Debug.Log("Cannot place tower - slot is occupied");
+            //Debug.Log("Cannot place tower - slot is occupied");
             return false;
         }
         //TODO Remove debug info after tests
-        Debug.Log($"Placing tower {towerPrefab.name} at Ring {ringIndex}, Slot {slotIndex}");
+        //Debug.Log($"Placing tower {towerPrefab.name} at Ring {ringIndex}, Slot {slotIndex}");
         currentTower = Instantiate(towerPrefab, transform.position, Quaternion.identity);
         currentTower.transform.parent = transform;
         isOccupied = true;
         UpdateVisuals();
-        Debug.Log($"Tower placed successfully at Ring {ringIndex}, Slot {slotIndex}");
+        //Debug.Log($"Tower placed successfully at Ring {ringIndex}, Slot {slotIndex}");
         return true;
     }
 
@@ -136,7 +136,7 @@ public class TowerSlot : MonoBehaviour
         spriteRenderer.color = targetColor;
 
         // Debug the color changes (remove this later)
-        Debug.Log($"Slot R{ringIndex}S{slotIndex}: isOccupied={isOccupied}, isHighlighted={isHighlighted}, color={targetColor}, visible={spriteRenderer.enabled}");
+        //Debug.Log($"Slot R{ringIndex}S{slotIndex}: isOccupied={isOccupied}, isHighlighted={isHighlighted}, color={targetColor}, visible={spriteRenderer.enabled}");
     }
 
     // Debug visualization

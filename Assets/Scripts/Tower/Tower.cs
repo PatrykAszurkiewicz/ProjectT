@@ -232,12 +232,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         visuals.LoadSprite();
         energy.SetupEnergyBar();
 
-        Debug.Log($"Tower {towerName} RANGES:");
-        Debug.Log($"  Base Range: {range}");
-        Debug.Log($"  Melee Range: {meleeConfig.range}");
-        Debug.Log($"  Projectile Range: {ProjectileRange}");
-        Debug.Log($"  Collider Radius: {rangeCollider.radius}");
-        Debug.Log($"  Tentacle Length: {tentacleConfig.length}");
+        //Debug.Log($"Tower {towerName} RANGES:");
+        //Debug.Log($"  Base Range: {range}");
+        //Debug.Log($"  Melee Range: {meleeConfig.range}");
+        //Debug.Log($"  Projectile Range: {ProjectileRange}");
+        //Debug.Log($"  Collider Radius: {rangeCollider.radius}");
+        //Debug.Log($"  Tentacle Length: {tentacleConfig.length}");
     }
 
     void RegisterWithEnergyManager() => EnergyManager.Instance?.RegisterEnergyConsumer(this);
@@ -262,7 +262,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         // Log damage
         string sourceName = damageSource != null ? damageSource.name : "Unknown";
-        Debug.Log($"Tower {towerName} took {actualDamage:F1} damage from {sourceName}. Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+        //Debug.Log($"Tower {towerName} took {actualDamage:F1} damage from {sourceName}. Energy: {currentEnergy:F1}/{maxEnergy:F1}");
 
         // Fire damage event
         OnDamageTaken?.Invoke(actualDamage, damageSource);
@@ -318,7 +318,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             spriteRenderer.color = disabledColor;
         }
 
-        Debug.Log($"Tower {towerName} has been disabled by damage!");
+        //Debug.Log($"Tower {towerName} has been disabled by damage!");
     }
 
     public void EnableTower()
@@ -336,7 +336,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             spriteRenderer.color = enabledColor;
         }
 
-        Debug.Log($"Tower {towerName} has been re-enabled!");
+        //Debug.Log($"Tower {towerName} has been re-enabled!");
     }
 
     private void StartDamageFlash()
@@ -402,25 +402,25 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         float distanceToTarget = Vector2.Distance(transform.position, target.transform.position);
         float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
 
-        Debug.Log($"FIRING DECISION for {towerName}:");
-        Debug.Log($"  Distance to target: {distanceToTarget:F2}");
-        Debug.Log($"  Tentacle reach: {tentacleReach:F2}");
-        Debug.Log($"  Melee range: {meleeConfig.range:F2}");
-        Debug.Log($"  Projectile range: {ProjectileRange:F2}");
+        //Debug.Log($"FIRING DECISION for {towerName}:");
+        //Debug.Log($"  Distance to target: {distanceToTarget:F2}");
+        //Debug.Log($"  Tentacle reach: {tentacleReach:F2}");
+        //Debug.Log($"  Melee range: {meleeConfig.range:F2}");
+        //Debug.Log($"  Projectile range: {ProjectileRange:F2}");
 
         if (distanceToTarget <= tentacleReach + 0.4f)
         {
-            Debug.Log($"  -> MELEE ATTACK (within tentacle reach)");
+            //Debug.Log($"  -> MELEE ATTACK (within tentacle reach)");
             combat.PerformMeleeAttack(target);
         }
         else if (distanceToTarget <= ProjectileRange)
         {
-            Debug.Log($"  -> PROJECTILE ATTACK (within projectile range)");
+            //Debug.Log($"  -> PROJECTILE ATTACK (within projectile range)");
             combat.PerformProjectileAttack(target);
         }
         else
         {
-            Debug.LogWarning($"  -> TARGET OUT OF RANGE! Distance: {distanceToTarget:F2}, Max range: {ProjectileRange:F2}");
+            //Debug.LogWarning($"  -> TARGET OUT OF RANGE! Distance: {distanceToTarget:F2}, Max range: {ProjectileRange:F2}");
         }
 
         lastFireTime = Time.time;

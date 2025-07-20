@@ -2,12 +2,14 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using FMODUnity;
 
 public class WaveSpawner : MonoBehaviour
 {
     public List<Collider2D> spawnAreas; // Top/Bottom/Left/Right jako nazwy
-    public float timeBetweenWaves = 5f;
+    public float timeBetweenWaves = 10f;
     private float countdown;
+    //public float initialWaveDelay = 5f;
 
     private int currentWaveIndex = 0;
     private List<WaveData> waves;
@@ -49,6 +51,7 @@ public class WaveSpawner : MonoBehaviour
 
         // opcjonalnie: tasowanie kolejności
         Shuffle(enemyPrefabsToSpawn);
+        AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
 
         foreach (var prefabName in enemyPrefabsToSpawn)
         {
@@ -64,6 +67,10 @@ public class WaveSpawner : MonoBehaviour
     public void OnEnemyDeath()
     {
         enemiesAlive--;
+        if (enemiesAlive <= 0)
+        {
+            AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
+        }
     }
 
     void LoadWaves()

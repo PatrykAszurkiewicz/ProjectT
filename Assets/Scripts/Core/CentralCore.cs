@@ -179,7 +179,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
         // Log damage
         string sourceName = damageSource != null ? damageSource.name : "Unknown";
-        Debug.Log($"Central Core took {actualDamage:F1} damage from {sourceName}. Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+        //Debug.Log($"Central Core took {actualDamage:F1} damage from {sourceName}. Energy: {currentEnergy:F1}/{maxEnergy:F1}");
 
         // Fire damage event
         OnDamageTaken?.Invoke(actualDamage, damageSource);
@@ -188,7 +188,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         if (!wasCritical && IsInCriticalState())
         {
             OnCoreEnteredCriticalState?.Invoke();
-            Debug.LogWarning("Central Core entered critical state!");
+            //Debug.LogWarning("Central Core entered critical state!");
         }
 
         // Check if core is destroyed
@@ -244,7 +244,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         // Trigger game over through energy manager
         EnergyManager.Instance?.TriggerGameOver();
 
-        Debug.LogError($"Central Core has been destroyed by {(damageSource != null ? damageSource.name : "unknown enemy")}!");
+        //Debug.LogError($"Central Core has been destroyed by {(damageSource != null ? damageSource.name : "unknown enemy")}!");
     }
 
     private void StartDamageFlash()
@@ -341,7 +341,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         if (wasCritical && !isCritical)
         {
             OnCoreExitedCriticalState?.Invoke();
-            Debug.Log("Central Core exited critical state.");
+            //Debug.Log("Central Core exited critical state.");
         }
     }
 
