@@ -16,6 +16,6 @@ MonoBehaviour:
   damage: 15
   attackDuration: 1
   armorBonus: 0
-  knocksBack: 1
-  knockBackForce: 5
+  knockBack: 1
+  knockBackForce: 10
   sprite: {fileID: -2371157847659589090, guid: 0eb724827d5f4704983f3dbdf4c75d29, type: 3}

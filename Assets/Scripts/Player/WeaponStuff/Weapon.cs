@@ -28,7 +28,6 @@ public class Weapon : MonoBehaviour
             sr.sprite = weaponData.sprite;
         }
 
-        // Domyślnie collider off
         attackCollider.enabled = false;
     }
 
@@ -46,26 +45,7 @@ public class Weapon : MonoBehaviour
 
         attackCollider.enabled = false;
 
-        foreach (EnemyStats enemy in hitEnemies)
-        {
-            if (enemy != null)
-            {
-                if (weaponData.damage > 0)
-                {
-                    enemy.TakeDamage(weaponData.damage);
-                }
-
-                if (weaponData.knocksBack)
-                {
-                    Vector2 dir = (enemy.transform.position - transform.position).normalized;
-                    Rigidbody2D rb = enemy.GetComponent<Rigidbody2D>();
-                    if (rb != null)
-                        rb.AddForce(dir * weaponData.knockBackForce, ForceMode2D.Impulse);
-                }
-            }
-        }
         Debug.Log($"Atak! Trafiono {hitEnemies.Count} przeciwników.");
-
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -78,6 +58,25 @@ public class Weapon : MonoBehaviour
             if (enemy != null && !hitEnemies.Contains(enemy))
             {
                 hitEnemies.Add(enemy);
+
+                // zadaj dmg
+                if (weaponData.damage > 0)
+                {
+                    enemy.TakeDamage(weaponData.damage);
+                }
+
+                //  knockback
+                if (weaponData.knockBack)
+                {
+                    Vector2 dir = (enemy.transform.position - transform.position).normalized;
+
+                    EnemyController enemyController = enemy.GetComponent<EnemyController>();
+                    if (enemyController != null)
+                    {
+                        enemyController.ApplyKnockback(dir, weaponData.knockBackForce);
+                    }
+                }
+
             }
         }
     }

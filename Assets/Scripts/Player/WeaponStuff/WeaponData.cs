@@ -7,7 +7,7 @@ public class WeaponData : ScriptableObject
     public float damage;
     public float attackDuration;
     public float armorBonus;
-    public bool knocksBack;
+    public bool knockBack;
     public float knockBackForce;
     public Sprite sprite;
 }

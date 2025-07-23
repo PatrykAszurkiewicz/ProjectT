@@ -2358,7 +2358,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   player: {fileID: 1527444834}
-  radius: 1.5
+  radius: 0.75
 --- !u!1 &1758658513
 GameObject:
   m_ObjectHideFlags: 0
