@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class Weapon : MonoBehaviour
 {
@@ -33,9 +34,27 @@ public class Weapon : MonoBehaviour
 
     public void PerformAttack()
     {
-        StartCoroutine(AttackRoutine());
+        if (weaponData.isRanged)
+        {
+            ShootProjectile();
+        }
+        else
+        {
+            StartCoroutine(AttackRoutine());
+        }
     }
+    private void ShootProjectile()
+    {
+        Vector2 direction = (Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue()) - transform.position).normalized;
 
+        GameObject proj = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
+        Projectile p = proj.GetComponent<Projectile>();
+
+        if (p != null)
+        {
+            p.Initialize(direction, weaponData.damage, weaponData.projectileSpeed);
+        }
+    }
     private IEnumerator AttackRoutine()
     {
         hitEnemies.Clear();

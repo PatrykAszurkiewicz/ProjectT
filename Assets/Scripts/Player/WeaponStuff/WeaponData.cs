@@ -10,4 +10,8 @@ public class WeaponData : ScriptableObject
     public bool knockBack;
     public float knockBackForce;
     public Sprite sprite;
+
+    public GameObject projectilePrefab;
+    public float projectileSpeed;
+    public bool isRanged;
 }
