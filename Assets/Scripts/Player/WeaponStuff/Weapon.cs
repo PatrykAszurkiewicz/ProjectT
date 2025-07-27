@@ -12,6 +12,8 @@ public class Weapon : MonoBehaviour
     private List<EnemyStats> hitEnemies = new List<EnemyStats>();
     private PlayerStats playerStats;
 
+    private bool isOnCooldown = false;
+
     private void Awake()
     {
         playerStats = GetComponentInParent<PlayerStats>();
@@ -34,25 +36,31 @@ public class Weapon : MonoBehaviour
 
     public void PerformAttack()
     {
+        if (isOnCooldown) return;
+
         if (weaponData.isRanged)
-        {
             ShootProjectile();
-        }
         else
-        {
             StartCoroutine(AttackRoutine());
-        }
+
+        StartCoroutine(CooldownRoutine());
+    }
+    private IEnumerator CooldownRoutine()
+    {
+        isOnCooldown = true;
+        yield return new WaitForSeconds(weaponData.attackCooldown);
+        isOnCooldown = false;
     }
     private void ShootProjectile()
     {
         Vector2 direction = (Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue()) - transform.position).normalized;
 
         GameObject proj = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
-        Projectile p = proj.GetComponent<Projectile>();
+        WeaponProjectile p = proj.GetComponent<WeaponProjectile>();
 
         if (p != null)
         {
-            p.Initialize(direction, weaponData.damage, weaponData.projectileSpeed);
+            p.Initialize(direction, weaponData.damage, weaponData.projectileSpeed, weaponData.knockBackForce);
         }
     }
     private IEnumerator AttackRoutine()
@@ -60,7 +68,7 @@ public class Weapon : MonoBehaviour
         hitEnemies.Clear();
         attackCollider.enabled = true;
 
-        yield return new WaitForSeconds(weaponData.attackDuration);
+        yield return new WaitForSeconds(weaponData.attackCooldown);
 
         attackCollider.enabled = false;
 

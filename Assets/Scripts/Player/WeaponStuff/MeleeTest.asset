@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: MeleeTest
   m_EditorClassIdentifier: 
   weaponName: SwordTest
+  sprite: {fileID: -2371157847659589090, guid: 0eb724827d5f4704983f3dbdf4c75d29, type: 3}
   damage: 15
-  attackDuration: 1
+  attackCooldown: 0.5
   armorBonus: 0
   knockBack: 1
-  knockBackForce: 10
-  sprite: {fileID: -2371157847659589090, guid: 0eb724827d5f4704983f3dbdf4c75d29, type: 3}
+  knockBackForce: 5
+  isRanged: 0
+  projectilePrefab: {fileID: 0}
+  projectileSpeed: 0

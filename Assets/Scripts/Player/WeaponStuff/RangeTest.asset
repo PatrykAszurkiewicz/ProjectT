@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9ac12f27d2b7d024d81962101468dd6e, type: 3}
   m_Name: RangeTest
   m_EditorClassIdentifier: 
-  weaponName: 
-  damage: 0
-  attackDuration: 0
+  weaponName: Pistol
+  sprite: {fileID: 7540940733441989435, guid: 518ccbc94adb4214ca4c78ebd509792e, type: 3}
+  damage: 12
+  attackCooldown: 0.2
   armorBonus: 0
-  knockBack: 0
-  knockBackForce: 0
-  sprite: {fileID: 0}
-  projectilePrefab: {fileID: 0}
-  projectileSpeed: 0
-  isRanged: 0
+  knockBack: 1
+  knockBackForce: 5
+  isRanged: 1
+  projectilePrefab: {fileID: 3232055685823593232, guid: 2ba789b52e493624b98470c3b775efe8, type: 3}
+  projectileSpeed: 10

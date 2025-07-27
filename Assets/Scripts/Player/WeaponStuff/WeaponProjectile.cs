@@ -5,12 +5,14 @@ public class WeaponProjectile : MonoBehaviour
     private float damage;
     private Vector2 direction;
     private float speed;
+    private float knockBackForce;
 
-    public void Initialize(Vector2 dir, float dmg, float spd)
+    public void Initialize(Vector2 dir, float dmg, float spd, float knockback)
     {
         direction = dir.normalized;
         damage = dmg;
         speed = spd;
+        knockBackForce = knockback;
     }
 
     private void Update()
@@ -26,9 +28,18 @@ public class WeaponProjectile : MonoBehaviour
             if (enemy != null)
             {
                 enemy.TakeDamage(damage);
+
+                // Knockback
+                EnemyController enemyController = enemy.GetComponent<EnemyController>();
+                if (enemyController != null)
+                {
+                    Vector2 dir = (enemy.transform.position - transform.position).normalized;
+                    enemyController.ApplyKnockback(dir, knockBackForce);
+                }
             }
         }
 
-        Destroy(gameObject); // znika po trafieniu
+        Destroy(gameObject);
     }
+
 }
