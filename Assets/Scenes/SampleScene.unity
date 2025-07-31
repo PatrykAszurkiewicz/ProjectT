@@ -2882,6 +2882,28 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   weapon: {fileID: 549341034}
   attackAnimationDuration: 0.3
+--- !u!95 &1922253150
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1922253136}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: a0fdc0ef1bc0cf14abd348c5c8b97eb0, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &2035540612
 GameObject:
   m_ObjectHideFlags: 0
@@ -3409,6 +3431,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       insertIndex: 4
       addedObject: {fileID: 1922253143}
+    - targetCorrespondingSourceObject: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1922253150}
   m_SourcePrefab: {fileID: 100100000, guid: da0818b169e996442afdafb8e400ed33, type: 3}
 --- !u!1001 &3297756461888399055
 PrefabInstance:
