@@ -1213,6 +1213,12 @@ MonoBehaviour:
   towerPrefabs:
   - {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
   selectedTowerIndex: 0
+  buildRange: 2
+  playerTransform: {fileID: 0}
+  requirePlayerProximity: 1
+  towerCreationSpritePath: Sprites/tower_creation_decay_spritesheet4
+  creationAnimationSpeed: 0.1
+  playCreationAnimation: 1
   towerSelectionUI: {fileID: 0}
 --- !u!4 &811930682
 Transform:
@@ -1930,13 +1936,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 87dffe49f1c323b4da4cd1b01752f573, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  <music>k__BackingField:
+  <musicAmbient>k__BackingField:
     Guid:
-      Data1: 636068961
-      Data2: 1163063478
-      Data3: 1942136723
-      Data4: -422838714
-    Path: event:/Music/MusicAmbientTransition
+      Data1: -495093861
+      Data2: 1282034939
+      Data3: -971311733
+      Data4: -695650098
+    Path: event:/Music/MusicAmbient
+  <musicElectronic>k__BackingField:
+    Guid:
+      Data1: -1145196637
+      Data2: 1292176083
+      Data3: -575498604
+      Data4: -293424600
+    Path: event:/Music/MusicElectronic
+  <musicPiano>k__BackingField:
+    Guid:
+      Data1: 1423163704
+      Data2: 1238510356
+      Data3: 311959207
+      Data4: 2053324099
+    Path: event:/Music/MusicPiano
   <multiShotSound>k__BackingField:
     Guid:
       Data1: -179989327
@@ -2639,6 +2659,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weapon: {fileID: 549341034}
+  attackAnimationDuration: 0.3
 --- !u!1 &2035540612
 GameObject:
   m_ObjectHideFlags: 0
@@ -3059,6 +3080,10 @@ PrefabInstance:
       value: Player
       objectReference: {fileID: 0}
     - target: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Layer
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_TagString
       value: Player
       objectReference: {fileID: 0}
@@ -3129,6 +3154,22 @@ PrefabInstance:
     - target: {fileID: 5163439972665029464, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_ActionEvents.Array.data[2].m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
       value: UnityEngine.Object, UnityEngine
+      objectReference: {fileID: 0}
+    - target: {fileID: 7663035579871565056, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Color.a
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7663035579871565056, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Color.b
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7663035579871565056, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Color.g
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7663035579871565056, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Color.r
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

@@ -1,0 +1,403 @@
+fileFormatVersion: 2
+guid: d8f95fcc384f64144b6e408ce68be492
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -6731548672275161767
+    second: tower_creation_decay_spritesheet5_0
+  - first:
+      213: -924958722520964496
+    second: tower_creation_decay_spritesheet5_1
+  - first:
+      213: 7342552308808122374
+    second: tower_creation_decay_spritesheet5_2
+  - first:
+      213: -6298443807705950616
+    second: tower_creation_decay_spritesheet5_3
+  - first:
+      213: 1544711467207095195
+    second: tower_creation_decay_spritesheet5_4
+  - first:
+      213: -119129356336049581
+    second: tower_creation_decay_spritesheet5_5
+  - first:
+      213: -6523682515749930528
+    second: tower_creation_decay_spritesheet5_6
+  - first:
+      213: 7592094636997701129
+    second: tower_creation_decay_spritesheet5_7
+  - first:
+      213: -8003207058860807957
+    second: tower_creation_decay_spritesheet5_8
+  - first:
+      213: 2465309293741738719
+    second: tower_creation_decay_spritesheet5_9
+  - first:
+      213: -4229083468046160341
+    second: tower_creation_decay_spritesheet5_10
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 205
+        width: 227
+        height: 179
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 95d59c8d52cb492a0800000000000000
+      internalID: -6731548672275161767
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_1
+      rect:
+        serializedVersion: 2
+        x: 248
+        y: 204
+        width: 192
+        height: 158
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0722d3841f2e923f0800000000000000
+      internalID: -924958722520964496
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_2
+      rect:
+        serializedVersion: 2
+        x: 479
+        y: 203
+        width: 186
+        height: 149
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6008b3f1c6cf5e560800000000000000
+      internalID: 7342552308808122374
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_3
+      rect:
+        serializedVersion: 2
+        x: 706
+        y: 203
+        width: 179
+        height: 143
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8669deb3abe6798a0800000000000000
+      internalID: -6298443807705950616
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_4
+      rect:
+        serializedVersion: 2
+        x: 938
+        y: 206
+        width: 165
+        height: 130
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b93f95b25eaef6510800000000000000
+      internalID: 1544711467207095195
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_5
+      rect:
+        serializedVersion: 2
+        x: 1166
+        y: 204
+        width: 138
+        height: 127
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 352d4494b74c85ef0800000000000000
+      internalID: -119129356336049581
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_6
+      rect:
+        serializedVersion: 2
+        x: 48
+        y: 14
+        width: 149
+        height: 127
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0e97c4dd0593775a0800000000000000
+      internalID: -6523682515749930528
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_7
+      rect:
+        serializedVersion: 2
+        x: 276
+        y: 17
+        width: 139
+        height: 113
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 90e656309d98c5960800000000000000
+      internalID: 7592094636997701129
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_8
+      rect:
+        serializedVersion: 2
+        x: 502
+        y: 25
+        width: 124
+        height: 94
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: be8e3b03595eee090800000000000000
+      internalID: -8003207058860807957
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_9
+      rect:
+        serializedVersion: 2
+        x: 732
+        y: 31
+        width: 96
+        height: 74
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fda02faadb9863220800000000000000
+      internalID: 2465309293741738719
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_creation_decay_spritesheet5_10
+      rect:
+        serializedVersion: 2
+        x: 956
+        y: 43
+        width: 73
+        height: 57
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b2ea1a11ef64f45c0800000000000000
+      internalID: -4229083468046160341
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      tower_creation_decay_spritesheet5_0: -6731548672275161767
+      tower_creation_decay_spritesheet5_1: -924958722520964496
+      tower_creation_decay_spritesheet5_10: -4229083468046160341
+      tower_creation_decay_spritesheet5_2: 7342552308808122374
+      tower_creation_decay_spritesheet5_3: -6298443807705950616
+      tower_creation_decay_spritesheet5_4: 1544711467207095195
+      tower_creation_decay_spritesheet5_5: -119129356336049581
+      tower_creation_decay_spritesheet5_6: -6523682515749930528
+      tower_creation_decay_spritesheet5_7: 7592094636997701129
+      tower_creation_decay_spritesheet5_8: -8003207058860807957
+      tower_creation_decay_spritesheet5_9: 2465309293741738719
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

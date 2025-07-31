@@ -4,10 +4,10 @@ using System.Collections.Generic;
 using FMODUnity;
 
 // ===== TOWER TARGETING SYSTEM =====
+// ===== UPDATED TOWER TARGETING SYSTEM =====
+// ===== UPDATED TOWER TARGETING SYSTEM =====
 public class TowerTargeting
 {
-
-
     private readonly Tower tower;
     private readonly List<GameObject> enemiesInRange = new List<GameObject>();
 
@@ -34,7 +34,6 @@ public class TowerTargeting
         if (hasValidTarget)
         {
             UpdateTargetAngle();
-            // Only update rotation if not using tentacles or tentacles are not swiping
             if (tower.smoothRotation && !IsSwipingMelee())
                 UpdateSmoothRotation();
         }
@@ -42,8 +41,6 @@ public class TowerTargeting
 
     bool IsSwipingMelee()
     {
-        // Check if tentacle system exists and is swiping
-        // We'll let the tentacle system handle its own rotation during swipe attacks
         return false; // For now, let tentacle system handle all rotation
     }
 
@@ -73,21 +70,56 @@ public class TowerTargeting
     bool IsTargetValid(GameObject target)
     {
         if (target == null) return false;
+
+        // CRITICAL: Check if target is an enemy AND not the player
+        if (!IsEnemy(target)) return false;
+
         float distance = Vector2.Distance(tower.transform.position, target.transform.position);
         bool inRange = distance <= tower.ProjectileRange;
         bool validLayer = ((1 << target.layer) & tower.targetLayer) != 0;
 
-        // Debug range issues more frequently
-        if (!inRange && Time.frameCount % 30 == 0) // Every half second at 60fps
+        return inRange && validLayer;
+    }
+
+    // NEW METHOD: Check if target is actually an enemy
+    bool IsEnemy(GameObject target)
+    {
+        // Method 1: Explicitly exclude player first
+        if (target.GetComponent<PlayerMovement>() != null)
+            return false;
+
+        // Method 2: Exclude player by tag if it exists
+        if (target.CompareTag("Player"))
+            return false;
+
+        // Method 3: Exclude towers (check by component, not tag)
+        if (target.GetComponent<Tower>() != null)
+            return false;
+
+        // Method 4: Check by layer
+        if (target.layer == LayerMask.NameToLayer("Enemy"))
+            return true;
+
+        // Method 5: Check by enemy tag if it exists
+        try
         {
-            //Debug.Log($"Target {target.name} OUT OF RANGE: distance={distance:F2}, max range={tower.ProjectileRange:F2}");
+            if (target.CompareTag("Enemy"))
+                return true;
         }
-        else if (inRange && Time.frameCount % 60 == 0) // Every second when in range
+        catch (UnityException)
         {
-            //Debug.Log($"Target {target.name} IN RANGE: distance={distance:F2}, max range={tower.ProjectileRange:F2}");
+            // Enemy tag doesn't exist, skip this check
         }
 
-        return inRange && validLayer;
+        // Method 6: If it has Health component and isn't a player/tower, likely an enemy
+        if (target.GetComponent<Health>() != null &&
+            target.GetComponent<PlayerMovement>() == null &&
+            target.GetComponent<Tower>() == null)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     void UpdateTargetAngle()
@@ -109,7 +141,6 @@ public class TowerTargeting
 
         currentAngle = Mathf.Repeat(currentAngle + 180f, 360f) - 180f;
 
-        // Apply rotation to tentacle system
         var tentacleTransform = tower.FirePoint?.parent;
         if (tentacleTransform != null)
             tentacleTransform.rotation = Quaternion.AngleAxis(currentAngle, Vector3.forward);
@@ -117,10 +148,15 @@ public class TowerTargeting
 
     public void OnTriggerEnter(Collider2D other)
     {
-        if (((1 << other.gameObject.layer) & tower.targetLayer) != 0)
+        // CRITICAL: Only add enemies to the list, never the player
+        if (IsEnemy(other.gameObject) && ((1 << other.gameObject.layer) & tower.targetLayer) != 0)
         {
             enemiesInRange.Add(other.gameObject);
             //Debug.Log($"Enemy {other.gameObject.name} entered range. Total enemies: {enemiesInRange.Count}");
+        }
+        else if (other.CompareTag("Player"))
+        {
+            //Debug.Log($"Player entered tower range but will be ignored");
         }
     }
 

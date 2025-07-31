@@ -1,5 +1,109 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-7811742797356613956
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/OLDMusicAmbient/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
+--- !u!114 &-7576298359550858565
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/MusicElectronic
+  m_EditorClassIdentifier: 
+  Path: event:/Music/MusicElectronic
+  Guid:
+    Data1: -1145196637
+    Data2: 1292176083
+    Data3: -575498604
+    Data4: -293424600
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: 4699882167230820914}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 121333
+--- !u!114 &-6643075125367941810
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/MusicPiano
+  m_EditorClassIdentifier: 
+  Path: event:/Music/MusicPiano
+  Guid:
+    Data1: 1423163704
+    Data2: 1238510356
+    Data3: 311959207
+    Data4: 2053324099
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: -6530155626446627163}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 175666
+--- !u!114 &-6530155626446627163
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/MusicPiano/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
 --- !u!114 &-5856974683079393109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -96,10 +200,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638885993774055824
+  lastModified: 638895597470690922
   FileSizes:
   - Name: Desktop
-    Value: 1226
+    Value: 1342
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -124,14 +228,18 @@ MonoBehaviour:
   - {fileID: -3723619638092549200}
   - {fileID: -5856974683079393109}
   - {fileID: 6045371974070151471}
-  - {fileID: 2681724415071257872}
+  - {fileID: 5056624467990409799}
+  - {fileID: -6643075125367941810}
+  - {fileID: 3748478789586696555}
+  - {fileID: 4878125545354185004}
+  - {fileID: -7576298359550858565}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638885993774055824
+  cacheTime: 638895597470790866
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -143,8 +251,16 @@ MonoBehaviour:
     index: 3
   - key: event:/Music/MusicAmbient
     index: 4
-  - key: event:/Music/MusicAmbientTransition
+  - key: event:/Music/OLDMusicAmbient
     index: 5
+  - key: event:/Music/MusicPiano
+    index: 6
+  - key: event:/Music/OLDMusicAmbientTransition
+    index: 7
+  - key: event:/Music/OLDMusicAmbient 2
+    index: 8
+  - key: event:/Music/MusicElectronic
+    index: 9
 --- !u!114 &1052223431168759608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -156,6 +272,30 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
   m_Name: parameter:/MusicAmbient/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
+--- !u!114 &1197225308460702449
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/OLDMusicAmbientTransition/MusicSection
   m_EditorClassIdentifier: 
   Name: MusicSection
   StudioPath: 
@@ -189,7 +329,7 @@ MonoBehaviour:
   - Name: Desktop
     Value: 1074
   Exists: 1
---- !u!114 &2681724415071257872
+--- !u!114 &3748478789586696555
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -199,9 +339,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Music/MusicAmbientTransition
+  m_Name: event:/Music/OLDMusicAmbientTransition
   m_EditorClassIdentifier: 
-  Path: event:/Music/MusicAmbientTransition
+  Path: event:/Music/OLDMusicAmbientTransition
   Guid:
     Data1: 636068961
     Data2: 1163063478
@@ -209,11 +349,11 @@ MonoBehaviour:
     Data4: -422838714
   Banks:
   - {fileID: 8434910682899568656}
-  IsStream: 1
+  IsStream: 0
   Is3D: 0
   IsOneShot: 0
   Parameters:
-  - {fileID: 5193514562907997025}
+  - {fileID: 1197225308460702449}
   MinDistance: 1
   MaxDistance: 20
   Length: 207666
@@ -237,7 +377,7 @@ MonoBehaviour:
   - Name: Desktop
     Value: 609792
   Exists: 1
---- !u!114 &5193514562907997025
+--- !u!114 &4699882167230820914
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -247,7 +387,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
-  m_Name: parameter:/MusicAmbientTransition/MusicSection
+  m_Name: parameter:/MusicElectronic/MusicSection
   m_EditorClassIdentifier: 
   Name: MusicSection
   StudioPath: 
@@ -261,6 +401,62 @@ MonoBehaviour:
   IsGlobal: 0
   Labels: []
   Exists: 1
+--- !u!114 &4878125545354185004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/OLDMusicAmbient 2
+  m_EditorClassIdentifier: 
+  Path: event:/Music/OLDMusicAmbient 2
+  Guid:
+    Data1: 1630351498
+    Data2: 1088801058
+    Data3: 1478809734
+    Data4: -1384734006
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: 7729493964428327597}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 202800
+--- !u!114 &5056624467990409799
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/OLDMusicAmbient
+  m_EditorClassIdentifier: 
+  Path: event:/Music/OLDMusicAmbient
+  Guid:
+    Data1: -303871223
+    Data2: 1086396090
+    Data3: -188790856
+    Data4: -913032655
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters:
+  - {fileID: -7811742797356613956}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &5293760198380736230
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -302,10 +498,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Path: event:/Music/MusicAmbient
   Guid:
-    Data1: -303871223
-    Data2: 1086396090
-    Data3: -188790856
-    Data4: -913032655
+    Data1: -495093861
+    Data2: 1282034939
+    Data3: -971311733
+    Data4: -695650098
   Banks:
   - {fileID: 8434910682899568656}
   IsStream: 1
@@ -315,7 +511,31 @@ MonoBehaviour:
   - {fileID: 1052223431168759608}
   MinDistance: 1
   MaxDistance: 20
-  Length: 0
+  Length: 175666
+--- !u!114 &7729493964428327597
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/OLDMusicAmbient 2/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
 --- !u!114 &8434910682899568656
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -331,8 +551,8 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/MusicAmbient.bank
   Name: MusicAmbient
   StudioPath: bank:/MusicAmbient
-  lastModified: 638885993755251455
+  lastModified: 638895597470790866
   FileSizes:
   - Name: Desktop
-    Value: 2045280
+    Value: 2086176
   Exists: 1

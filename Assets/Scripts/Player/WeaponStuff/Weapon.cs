@@ -14,17 +14,23 @@ public class Weapon : MonoBehaviour
 
     private bool isOnCooldown = false;
 
+    // Public method to access weapon data for animation system
+    public WeaponData GetWeaponData()
+    {
+        return weaponData;
+    }
+
     private void Awake()
     {
         playerStats = GetComponentInParent<PlayerStats>();
 
-        // Bonus armor np. dla tarczy
+        // Bonus armor (e.g. for shield)
         if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
         {
             playerStats.currentArmor += weaponData.armorBonus;
         }
 
-        // Ustaw sprite broni
+        // Set weapon sprite
         SpriteRenderer sr = visual.GetComponent<SpriteRenderer>();
         if (sr != null && weaponData.sprite != null)
         {
@@ -45,12 +51,14 @@ public class Weapon : MonoBehaviour
 
         StartCoroutine(CooldownRoutine());
     }
+
     private IEnumerator CooldownRoutine()
     {
         isOnCooldown = true;
         yield return new WaitForSeconds(weaponData.attackCooldown);
         isOnCooldown = false;
     }
+
     private void ShootProjectile()
     {
         Vector2 direction = (Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue()) - transform.position).normalized;
@@ -63,6 +71,7 @@ public class Weapon : MonoBehaviour
             p.Initialize(direction, weaponData.damage, weaponData.projectileSpeed, weaponData.knockBackForce);
         }
     }
+
     private IEnumerator AttackRoutine()
     {
         hitEnemies.Clear();
@@ -86,13 +95,13 @@ public class Weapon : MonoBehaviour
             {
                 hitEnemies.Add(enemy);
 
-                // zadaj dmg
+                // Apply Damage
                 if (weaponData.damage > 0)
                 {
                     enemy.TakeDamage(weaponData.damage);
                 }
 
-                //  knockback
+                //  Knockback
                 if (weaponData.knockBack)
                 {
                     Vector2 dir = (enemy.transform.position - transform.position).normalized;
@@ -103,7 +112,6 @@ public class Weapon : MonoBehaviour
                         enemyController.ApplyKnockback(dir, weaponData.knockBackForce);
                     }
                 }
-
             }
         }
     }

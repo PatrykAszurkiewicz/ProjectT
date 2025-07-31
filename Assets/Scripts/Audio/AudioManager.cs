@@ -59,7 +59,7 @@ public class AudioManager : MonoBehaviour
 
         if (musicEnabled)
         {
-            InitializeMusic(FMODEvents.instance.music);
+            InitializeMusic(FMODEvents.instance.musicAmbient);
             AudioManager.instance.SetMusicSection(MusicSection.Calm);
         }
     }
@@ -138,9 +138,9 @@ public class AudioManager : MonoBehaviour
         if (musicEnabled && !musicInitialized)
         {
             // Initialize music if it wasn't initialized before
-            if (FMODEvents.instance != null && FMODEvents.instance.music.IsNull == false)
+            if (FMODEvents.instance != null && FMODEvents.instance.musicAmbient.IsNull == false)
             {
-                InitializeMusic(FMODEvents.instance.music);
+                InitializeMusic(FMODEvents.instance.musicAmbient);
                 SetMusicSection(MusicSection.Calm);
             }
         }
