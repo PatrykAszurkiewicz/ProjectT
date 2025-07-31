@@ -784,7 +784,7 @@ PolygonCollider2D:
       - {x: 0.2136488, y: 0.879457}
       - {x: -0.16880918, y: 1.2312539}
       - {x: -0.531343, y: 1.0407465}
-      - {x: -0.021615505, y: -0.05062294}
+      - {x: -0.6738117, y: -0.0226717}
       - {x: -0.44003654, y: -1.0128614}
       - {x: -0.1037578, y: -1.2458416}
       - {x: 0.28382105, y: -0.8238187}
@@ -3310,6 +3310,10 @@ PrefabInstance:
     - target: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_TagString
       value: Player
+      objectReference: {fileID: 0}
+    - target: {fileID: 3159641362189597012, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Constraints
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 4301938296847241599, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_LocalPosition.x
