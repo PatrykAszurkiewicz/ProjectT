@@ -8,6 +8,8 @@ using UnityEditor;
 
 public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 {
+
+
     #region Tower Configuration
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
@@ -86,6 +88,33 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         public float swipeReach = 0.4f;
         public float swipeIntensity = 1.5f;
         public AnimationCurve swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+    }
+    #endregion
+
+    #region Currency Integration
+    /// <summary>
+    /// Get the cost to build this tower (for UI display purposes)
+    /// The actual cost enforcement is handled by EnergyManager
+    /// </summary>
+    public int GetBuildCost()
+    {
+        return EnergyManager.Instance?.GetTowerBuildCost() ?? cost;
+    }
+
+    /// <summary>
+    /// Check if this tower can be afforded by the player
+    /// </summary>
+    public bool CanAfford()
+    {
+        return EnergyManager.Instance?.CanAffordTower() ?? true;
+    }
+
+    /// <summary>
+    /// Calculate sell value (from EnergyManager settings)
+    /// </summary>
+    public int GetSellValue()
+    {
+        return EnergyManager.Instance?.GetTowerSellValue() ?? Mathf.RoundToInt(cost * 0.5f);
     }
     #endregion
 

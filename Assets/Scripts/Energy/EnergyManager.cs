@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem; // Add this for Input System
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
+using TMPro;
 
 public class EnergyManager : MonoBehaviour
 {
@@ -48,6 +50,17 @@ public class EnergyManager : MonoBehaviour
     public float coreCriticalEnergyThreshold = 0.3f;
     public float coreDeadEnergyThreshold = 0.1f;
 
+    [Header("Player Currency Settings")]
+    public int playerStartingEnergy = 300;
+    public int towerBuildCost = 100;
+    public float towerSellRefundPercentage = 0.5f; // TODO Consider Refund when selling Tower
+    public bool enableCurrencyEarnedFromEnemyKills = true;
+    public int energyPerEnemyKill = 25;
+
+    [Header("Player Currency UI")]
+    public TMPro.TextMeshProUGUI playerEnergyText;// Reference to Canvas -> Energy text
+    public string energyTextFormat = "Energy: {0}";
+
     [Header("Enemy Damage Settings")]
     public float defaultEnemyDamage = 10f;
     public float enemyDamageToTowers = 10f;
@@ -77,11 +90,19 @@ public class EnergyManager : MonoBehaviour
     private IEnergyConsumer currentSupplyTarget;
     private bool isSupplying;
 
+    private int currentPlayerEnergy;
+
     // Events
     public System.Action<float> OnGlobalEnergyChanged;
     public System.Action OnGameOver;
     public System.Action<IEnergyConsumer, float> OnEnergyConsumerDamaged;
     public System.Action<IEnergyConsumer> OnEnergyConsumerDestroyed;
+
+
+    public System.Action<int> OnPlayerEnergyChanged;
+    public System.Action<int> OnPlayerEnergySpent;
+    public System.Action<int> OnPlayerEnergyGained;
+    public System.Action OnInsufficientPlayerEnergy;
     #endregion
 
     #region Unity Lifecycle
@@ -110,6 +131,7 @@ public class EnergyManager : MonoBehaviour
     void InitializeManager()
     {
         FindReferences();
+        InitializePlayerEnergy(); // NEW
         StartEnergyDecay();
     }
 
@@ -117,6 +139,30 @@ public class EnergyManager : MonoBehaviour
     {
         player = GameObject.FindGameObjectWithTag("Player");
         mainCamera = Camera.main ?? FindFirstObjectByType<Camera>();
+        if (playerEnergyText == null)
+        {
+            var canvas = FindFirstObjectByType<Canvas>();
+            if (canvas != null)
+            {
+                var energyObject = canvas.transform.Find("Energy");
+                if (energyObject != null)
+                {
+                    playerEnergyText = energyObject.GetComponent<TextMeshProUGUI>();
+
+                    if (playerEnergyText != null)
+                    {
+                        Debug.Log("Found Energy text component automatically");
+                    }
+                }
+            }
+        }
+    }
+
+    void InitializePlayerEnergy()
+    {
+        currentPlayerEnergy = playerStartingEnergy;
+        UpdatePlayerEnergyUI();
+        Debug.Log($"Player starting with {currentPlayerEnergy} energy units");
     }
 
     void StartEnergyDecay() => StartCoroutine(EnergyDecayCoroutine());
@@ -133,14 +179,11 @@ public class EnergyManager : MonoBehaviour
     {
         if (player == null) return;
 
-        // NEW INPUT SYSTEM VERSION
         bool supplyInput = false;
 
-        // Check mouse input
         if (Mouse.current != null)
             supplyInput = Mouse.current.leftButton.isPressed;
 
-        // Check keyboard input
         if (Keyboard.current != null)
             supplyInput |= Keyboard.current.spaceKey.isPressed;
 
@@ -181,6 +224,120 @@ public class EnergyManager : MonoBehaviour
     }
     #endregion
 
+    #region NEW: Player Currency/Energy Management
+    /// <summary>
+    /// Get current player energy
+    /// </summary>
+    public int GetPlayerEnergy() => currentPlayerEnergy;
+
+    /// <summary>
+    /// Check if player can afford a specific amount
+    /// </summary>
+    public bool CanPlayerAfford(int amount) => currentPlayerEnergy >= amount;
+
+    /// <summary>
+    /// Check if player can afford to build a tower
+    /// </summary>
+    public bool CanAffordTower() => CanPlayerAfford(towerBuildCost);
+
+    /// <summary>
+    /// Get the cost to build a tower
+    /// </summary>
+    public int GetTowerBuildCost() => towerBuildCost;
+
+    /// <summary>
+    /// Get the refund amount for selling a tower
+    /// </summary>
+    public int GetTowerSellValue() => Mathf.RoundToInt(towerBuildCost * towerSellRefundPercentage);
+
+    /// <summary>
+    /// Attempt to spend player energy
+    /// </summary>
+    public bool TrySpendPlayerEnergy(int amount)
+    {
+        if (currentPlayerEnergy >= amount)
+        {
+            currentPlayerEnergy -= amount;
+            OnPlayerEnergySpent?.Invoke(amount);
+            OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);
+            UpdatePlayerEnergyUI();
+            Debug.Log($"Player spent {amount} energy. Remaining: {currentPlayerEnergy}");
+            return true;
+        }
+        else
+        {
+            Debug.Log($"Insufficient player energy! Need {amount}, have {currentPlayerEnergy}");
+            OnInsufficientPlayerEnergy?.Invoke();
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Try to buy a tower (spend tower build cost)
+    /// </summary>
+    public bool TryBuyTower()
+    {
+        return TrySpendPlayerEnergy(towerBuildCost);
+    }
+
+    /// <summary>
+    /// Add energy to player
+    /// </summary>
+    public void GivePlayerEnergy(int amount)
+    {
+        if (amount <= 0) return;
+
+        currentPlayerEnergy += amount;
+        OnPlayerEnergyGained?.Invoke(amount);
+        OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);
+        UpdatePlayerEnergyUI();
+        Debug.Log($"Player gained {amount} energy. Total: {currentPlayerEnergy}");
+    }
+
+    /// <summary>
+    /// Set player energy directly
+    /// </summary>
+    public void SetPlayerEnergy(int amount)
+    {
+        currentPlayerEnergy = Mathf.Max(0, amount);
+        OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);
+        UpdatePlayerEnergyUI();
+    }
+
+    /// <summary>
+    /// Called when an enemy is killed - gives energy reward
+    /// </summary>
+    public void OnEnemyKilled(GameObject enemy)
+    {
+        if (enableCurrencyEarnedFromEnemyKills)
+        {
+            GivePlayerEnergy(energyPerEnemyKill);
+            Debug.Log($"Enemy killed! Player gained {energyPerEnemyKill} energy");
+        }
+    }
+
+    /// <summary>
+    /// Update the player energy UI
+    /// </summary>
+    void UpdatePlayerEnergyUI()
+    {
+        if (playerEnergyText != null)
+        {
+            playerEnergyText.text = string.Format(energyTextFormat, currentPlayerEnergy);
+        }
+    }
+
+    /// <summary>
+    /// Set the UI text reference
+    /// </summary>
+    public void SetPlayerEnergyText(TextMeshProUGUI textComponent)
+
+    {
+        playerEnergyText = textComponent;
+        UpdatePlayerEnergyUI();
+    }
+    #endregion
+
     #region Enemy Damage System
     /// <summary>
     /// Damage any energy consumer by a specified amount
@@ -204,7 +361,7 @@ public class EnergyManager : MonoBehaviour
 
         // Log damage for debugging
         string sourceName = damageSource != null ? damageSource.name : "Unknown";
-        Debug.Log($"Enemy {sourceName} dealt {damage} damage to {GetConsumerName(consumer)}");
+        //Debug.Log($"Enemy {sourceName} dealt {damage} damage to {GetConsumerName(consumer)}");
 
         // Fire damage event
         OnEnergyConsumerDamaged?.Invoke(consumer, damage);
@@ -533,6 +690,26 @@ public class EnergyManager : MonoBehaviour
     }
     #endregion
 
+    #region Debug Methods
+    [ContextMenu("Add 100 Player Energy")]
+    void DebugAddPlayerEnergy()
+    {
+        GivePlayerEnergy(100);
+    }
+
+    [ContextMenu("Spend Tower Cost")]
+    void DebugSpendTowerCost()
+    {
+        TryBuyTower();
+    }
+
+    [ContextMenu("Reset Player Energy")]
+    void DebugResetPlayerEnergy()
+    {
+        SetPlayerEnergy(playerStartingEnergy);
+    }
+    #endregion
+
     #region Cleanup
     void CleanupEnergyManager()
     {
@@ -602,6 +779,19 @@ public class EnergyManager : MonoBehaviour
             if (consumer != null && IsPlayerInRange(consumer))
                 Gizmos.DrawLine(player.transform.position, consumer.GetPosition());
         }
+
+        // Player energy info
+        UnityEditor.Handles.Label(player.transform.position + Vector3.up * 2f,
+            $"Player Energy: {currentPlayerEnergy}");
+    }
+
+    void OnValidate()
+    {
+        // Ensure values are reasonable
+        playerStartingEnergy = Mathf.Max(0, playerStartingEnergy);
+        towerBuildCost = Mathf.Max(1, towerBuildCost);
+        towerSellRefundPercentage = Mathf.Clamp01(towerSellRefundPercentage);
+        energyPerEnemyKill = Mathf.Max(0, energyPerEnemyKill);
     }
 #endif
     #endregion
