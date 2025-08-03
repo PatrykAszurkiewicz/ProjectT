@@ -25,6 +25,12 @@ public class WaveSpawner : MonoBehaviour
     {
         if (enemiesAlive > 0) return;
 
+        if (currentWaveIndex >= waves.Count)
+        {
+            Debug.Log("End of waves");
+            return;
+        }
+
         countdown -= Time.deltaTime;
 
         if (countdown <= 0f)
@@ -37,6 +43,7 @@ public class WaveSpawner : MonoBehaviour
     IEnumerator SpawnWave()
     {
         WaveData wave = waves[currentWaveIndex];
+
         ShowWaveIndicator(wave.spawnDirection); // 🔺 inicjator kierunku
 
         List<string> enemyPrefabsToSpawn = new List<string>();
@@ -77,11 +84,6 @@ public class WaveSpawner : MonoBehaviour
     {
         string json = Resources.Load<TextAsset>("Data/waves").text;
         waves = JsonUtilityWrapper.FromJsonList<WaveData>(json);
-    }
-
-    Collider2D GetSpawnAreaByDirection(string direction)
-    {
-        return spawnAreas.Find(c => c.name.Equals(direction, StringComparison.OrdinalIgnoreCase));
     }
 
     Vector2 GetRandomPositionInArea(string direction)

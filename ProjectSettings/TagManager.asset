@@ -6,6 +6,8 @@ TagManager:
   tags:
   - CursorPointer
   - Enemy
+  - Tower
+  - Core
   layers:
   - Default
   - TransparentFX

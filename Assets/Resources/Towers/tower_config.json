@@ -1,0 +1,20 @@
+{
+  "Basic": {
+    "health": 100,
+    "damage": 20,
+    "fireRate": 2.0,
+    "range": 3.0
+  },
+  "Artillery": {
+    "health": 120,
+    "damage": 45,
+    "fireRate": 1.5,
+    "range": 5.0
+  },
+  "Poison": {
+    "health": 85,
+    "damage": 30,
+    "fireRate": 2.2,
+    "range": 3.0
+  }
+}

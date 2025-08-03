@@ -114,11 +114,11 @@ public class Projectile : MonoBehaviour
     {
         hasHit = true;
 
-        // Deal damage
-        Health targetHealth = hitTarget.GetComponent<Health>();
-        if (targetHealth != null)
+        // Deal damage - CHANGED: Look for EnemyStats instead of Health
+        EnemyStats targetStats = hitTarget.GetComponent<EnemyStats>();
+        if (targetStats != null)
         {
-            targetHealth.TakeDamage(damage);
+            targetStats.TakeDamage(damage);
         }
 
         // Spawn impact effect

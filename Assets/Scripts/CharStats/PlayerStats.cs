@@ -26,6 +26,17 @@ public class PlayerStats : CharacterStats
     public float staminaDrainRate = 1.5f;
     public float currentStamina = 5f;
 
+    [Header("Health Regen")]
+    public float healthRegenRate = 2f;     // ile HP/s
+    public float healthRegenDelay = 3f;    // po ilu sek od got dmg regen start
+
+    private float regenTimer = 0f;
+
+    public override void TakeDamage(float amount)
+    {
+        base.TakeDamage(amount);
+        regenTimer = 0f; // reset timer regen
+    }
     public void UseMana(float amount)
     {
         currentMana -= amount;
@@ -36,5 +47,17 @@ public class PlayerStats : CharacterStats
     {
         currentMana += amount;
         if (currentMana > maxMana) currentMana = maxMana;
+    }
+    private void Update()
+    {
+        if (currentHealth < maxHealth)
+        {
+            regenTimer += Time.deltaTime;
+
+            if (regenTimer >= healthRegenDelay)
+            {
+                Heal(healthRegenRate * Time.deltaTime);
+            }
+        }
     }
 }

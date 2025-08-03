@@ -81,6 +81,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     #region Initialization
     void InitializeComponents()
     {
+        gameObject.tag = "Core";
         // Ensure SpriteRenderer is properly added
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)

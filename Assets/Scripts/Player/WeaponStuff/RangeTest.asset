@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: RangeTest
   m_EditorClassIdentifier: 
   weaponName: Pistol
-  sprite: {fileID: 7540940733441989435, guid: 518ccbc94adb4214ca4c78ebd509792e, type: 3}
+  sprite: {fileID: -2371157847659589090, guid: 0eb724827d5f4704983f3dbdf4c75d29, type: 3}
   damage: 12
   attackCooldown: 0.2
   armorBonus: 0

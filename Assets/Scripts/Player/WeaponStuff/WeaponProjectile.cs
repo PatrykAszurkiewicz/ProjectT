@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class WeaponProjectile : MonoBehaviour
@@ -6,7 +7,7 @@ public class WeaponProjectile : MonoBehaviour
     private Vector2 direction;
     private float speed;
     private float knockBackForce;
-
+    [SerializeField] private float bulletDespawnTime = 5f;
     public void Initialize(Vector2 dir, float dmg, float spd, float knockback)
     {
         direction = dir.normalized;
@@ -14,7 +15,15 @@ public class WeaponProjectile : MonoBehaviour
         speed = spd;
         knockBackForce = knockback;
     }
-
+    private void Start()
+    {
+        StartCoroutine(DespawnAfterTime(bulletDespawnTime)); // despawn po 5 sekundach
+    }
+    private IEnumerator DespawnAfterTime(float time)
+    {
+        yield return new WaitForSeconds(time);
+        Destroy(gameObject);
+    }
     private void Update()
     {
         transform.Translate(direction * speed * Time.deltaTime);
