@@ -613,12 +613,66 @@ public class EnergyManager : MonoBehaviour
     #endregion
 
     #region Consumer Management
+
+    /// <summary>
+    /// Get all registered energy consumers (for repair functionality)
+    /// </summary>
+    public List<IEnergyConsumer> GetAllEnergyConsumers()
+    {
+        return new List<IEnergyConsumer>(energyConsumers);
+    }
+
+
+
     public void RegisterEnergyConsumer(IEnergyConsumer consumer)
     {
-        if (energyConsumers.Contains(consumer)) return;
+        if (consumer == null)
+        {
+            Debug.LogError("Tried to register null consumer!");
+            return;
+        }
+
+        if (energyConsumers.Contains(consumer))
+        {
+            Debug.Log($"Consumer already registered: {consumer.GetType().Name} at {consumer.GetPosition()}");
+            return;
+        }
 
         energyConsumers.Add(consumer);
         InitializeConsumerEnergy(consumer);
+
+        string consumerType = consumer.GetType().Name;
+        Debug.Log($"Successfully registered {consumerType} at position {consumer.GetPosition()}. Total consumers: {energyConsumers.Count}");
+
+        // Special logging for CentralCore
+        if (consumer is CentralCore)
+        {
+            Debug.Log("Central Core has been registered with EnergyManager - repair functionality should now work!");
+        }
+    }
+
+
+    [ContextMenu("Debug All Registered Consumers")]
+    void DebugAllRegisteredConsumers()
+    {
+        Debug.Log($"=== ENERGY MANAGER CONSUMER DEBUG ===");
+        Debug.Log($"Total registered consumers: {energyConsumers.Count}");
+
+        for (int i = 0; i < energyConsumers.Count; i++)
+        {
+            var consumer = energyConsumers[i];
+            if (consumer == null)
+            {
+                Debug.Log($"Consumer {i}: NULL (should be cleaned up)");
+            }
+            else
+            {
+                string type = consumer.GetType().Name;
+                Vector3 pos = consumer.GetPosition();
+                float energy = consumer.GetEnergyPercentage();
+                Debug.Log($"Consumer {i}: {type} at {pos}, Energy: {energy:F2}%");
+            }
+        }
     }
 
     public void UnregisterEnergyConsumer(IEnergyConsumer consumer) => energyConsumers.Remove(consumer);

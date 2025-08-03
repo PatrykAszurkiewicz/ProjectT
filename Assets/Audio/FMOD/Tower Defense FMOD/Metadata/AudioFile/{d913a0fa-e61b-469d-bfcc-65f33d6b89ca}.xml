@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{d913a0fa-e61b-469d-bfcc-65f33d6b89ca}">
 		<property name="assetPath">
-			<value>Music/MusicAmbient/Soundtrack Ambient Trumpet.wav</value>
+			<value>Music/OLDMusicAmbient/Soundtrack Ambient Trumpet.wav</value>
 		</property>
 		<property name="isStreaming">
 			<value>true</value>

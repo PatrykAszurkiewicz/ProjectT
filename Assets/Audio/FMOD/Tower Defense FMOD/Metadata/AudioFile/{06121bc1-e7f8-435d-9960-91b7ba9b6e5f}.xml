@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{06121bc1-e7f8-435d-9960-91b7ba9b6e5f}">
 		<property name="assetPath">
-			<value>Music/MusicAmbient/Soundtrack Ambient Calm Transition.wav</value>
+			<value>Music/OLDMusicAmbient/Soundtrack Ambient Calm Transition.wav</value>
 		</property>
 		<property name="frequencyInKHz">
 			<value>44.0999985</value>

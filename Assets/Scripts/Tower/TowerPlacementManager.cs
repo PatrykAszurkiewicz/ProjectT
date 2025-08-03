@@ -12,9 +12,9 @@ public class TowerPlacementManager : MonoBehaviour
     public int selectedTowerIndex = 0;
 
     [Header("Player Proximity Settings")]
-    public float buildRange = 0.5f; // How close the player needs to be to build
+    public float buildRange = 1.2f;
     public Transform playerTransform;
-    public bool requirePlayerProximity = true; // Toggle for proximity requirement
+    public bool requirePlayerProximity = true;
 
     [Header("Tower Creation Animation")]
     public string towerCreationSpritePath = "Sprites/tower_creation_decay_spritesheet4";
@@ -22,8 +22,8 @@ public class TowerPlacementManager : MonoBehaviour
     public bool playCreationAnimation = true;
 
     [Header("Energy Repair Settings")]
-    public int energyRepairAmount = 10; // How much energy to add per click
-    public float energyRepairCooldown = 0.2f; // Prevent spam clicking
+    public int energyRepairAmount = 10;
+    public float energyRepairCooldown = 0.2f;
 
     [Header("UI References")]
     public GameObject towerSelectionUI;
@@ -31,10 +31,9 @@ public class TowerPlacementManager : MonoBehaviour
     private TowerDefenseMap mapGenerator;
     private bool isPlacementMode = false;
     private List<TowerSlot> allSlots = new List<TowerSlot>();
-    private bool clickProcessed = false; // Prevent multiple clicks per frame
-    private TowerSlot currentHighlightedSlot = null; // Track currently highlighted slot
-
-    private IEnergyConsumer currentHighlightedConsumer = null; // Track highlighted energy consumer
+    private bool clickProcessed = false;
+    private TowerSlot currentHighlightedSlot = null;
+    private IEnergyConsumer currentHighlightedConsumer = null;
     private float lastRepairTime = -Mathf.Infinity;
 
     void Awake()
@@ -58,11 +57,9 @@ public class TowerPlacementManager : MonoBehaviour
             if (player != null)
             {
                 playerTransform = player.transform;
-                Debug.Log("Player found automatically for tower placement proximity");
             }
             else
             {
-                Debug.LogWarning("Player not found! Tower placement proximity will be disabled.");
                 requirePlayerProximity = false;
             }
         }
@@ -88,31 +85,29 @@ public class TowerPlacementManager : MonoBehaviour
             currentHighlightedConsumer = null;
         }
 
-        if (!requirePlayerProximity || playerTransform == null)
+        if (!requirePlayerProximity || playerTransform == null || EnergyManager.Instance == null)
             return;
 
-        // Find the closest energy consumer within range that needs energy
+        // Find closest energy consumer in range that needs energy
         IEnergyConsumer closestConsumer = null;
         float closestDistance = float.MaxValue;
 
-        // Check all registered energy consumers
-        if (EnergyManager.Instance != null)
+        var consumersInRange = EnergyManager.Instance.GetEnergyConsumersInRange(playerTransform.position, buildRange);
+
+        foreach (var consumer in consumersInRange)
         {
-            var consumersInRange = EnergyManager.Instance.GetEnergyConsumersInRange(playerTransform.position, buildRange);
+            if (consumer == null) continue;
 
-            foreach (var consumer in consumersInRange)
+            float distance = Vector3.Distance(playerTransform.position, consumer.GetPosition());
+            bool canRepair = consumer.GetEnergyPercentage() < 0.999f;
+            bool isCentralCore = consumer is CentralCore;
+
+            if (!canRepair && !isCentralCore) continue;
+
+            if (distance < closestDistance)
             {
-                if (consumer == null) continue;
-
-                // Only highlight if the consumer needs energy (not at full energy)
-                if (consumer.GetEnergyPercentage() >= 1f) continue;
-
-                float distance = Vector3.Distance(playerTransform.position, consumer.GetPosition());
-                if (distance < closestDistance)
-                {
-                    closestDistance = distance;
-                    closestConsumer = consumer;
-                }
+                closestDistance = distance;
+                closestConsumer = consumer;
             }
         }
 
@@ -123,26 +118,26 @@ public class TowerPlacementManager : MonoBehaviour
             currentHighlightedConsumer = closestConsumer;
         }
     }
+
     void SetConsumerHighlight(IEnergyConsumer consumer, bool highlight)
     {
-        if (consumer is MonoBehaviour mb)
+        if (consumer is CentralCore core)
+        {
+            core.SetHighlight(highlight);
+        }
+        else if (consumer is MonoBehaviour mb)
         {
             var spriteRenderer = mb.GetComponent<SpriteRenderer>();
             if (spriteRenderer != null)
             {
                 if (highlight)
                 {
-                    // Add a subtle glow effect or color change
                     Color currentColor = spriteRenderer.color;
                     spriteRenderer.color = Color.Lerp(currentColor, Color.cyan, 0.3f);
                 }
                 else
                 {
-                    // Reset to energy-based color
-                    if (EnergyManager.Instance != null)
-                    {
-                        EnergyManager.Instance.UpdateConsumerVisuals(consumer, spriteRenderer);
-                    }
+                    EnergyManager.Instance?.UpdateConsumerVisuals(consumer, spriteRenderer);
                 }
             }
         }
@@ -156,14 +151,9 @@ public class TowerPlacementManager : MonoBehaviour
             currentHighlightedSlot = null;
         }
 
-        if (!requirePlayerProximity || playerTransform == null)
-        {
-            return;
-        }
+        if (!requirePlayerProximity || playerTransform == null) return;
 
-        // Get cursor direction from the Player
         Vector2 cursorDirection = GetCursorDirectionFromPlayer();
-        // Find the closest available slot in the cursor direction
         TowerSlot closestSlotInDirection = null;
         float closestDistance = float.MaxValue;
 
@@ -174,10 +164,8 @@ public class TowerPlacementManager : MonoBehaviour
             Vector2 directionToSlot = (slot.transform.position - playerTransform.position).normalized;
             float distance = Vector2.Distance(playerTransform.position, slot.transform.position);
 
-            // Check if slot is within the build range
             if (distance > buildRange) continue;
 
-            // Check if slot is in the direction of the cursor 
             float dotProduct = Vector2.Dot(cursorDirection, directionToSlot);
             if (dotProduct > 0.1f && distance < closestDistance)
             {
@@ -186,7 +174,6 @@ public class TowerPlacementManager : MonoBehaviour
             }
         }
 
-        // Highlight the closest slot in cursor direction
         if (closestSlotInDirection != null)
         {
             closestSlotInDirection.SetHighlight(true);
@@ -208,41 +195,27 @@ public class TowerPlacementManager : MonoBehaviour
     bool IsPlayerInRange(Vector3 slotPosition)
     {
         if (!requirePlayerProximity || playerTransform == null) return true;
-
         float distance = Vector2.Distance(playerTransform.position, slotPosition);
         return distance <= buildRange;
     }
 
     void HandleInput()
     {
-        // Activate placement mode with spacebar
         if (Keyboard.current.spaceKey.wasPressedThisFrame)
         {
             TogglePlacementMode();
         }
 
-        // Debug: Log current state periodically
-        if (Time.frameCount % 300 == 0) // Every 5 seconds at 60fps
-        {
-            //Debug.Log($"=== PERIODIC STATE CHECK ===");
-            //Debug.Log($"Placement mode: {isPlacementMode}");
-            //Debug.Log($"Total slots: {allSlots.Count}");
-            //Debug.Log($"Available slots: {GetAvailableSlots().Count}");
-            //Debug.Log($"Selected tower index: {selectedTowerIndex}");
-            //Debug.Log($"Player position: {(playerTransform != null ? playerTransform.position.ToString() : "null")}");
-        }
-
-        // TODO REMOVE this optional feature, selecting tower types with number keys
+        // Tower selection with number keys
         for (int i = 1; i <= towerPrefabs.Count && i <= 9; i++)
         {
             if (Keyboard.current[(Key)(Key.Digit1 + i - 1)].wasPressedThisFrame)
             {
                 selectedTowerIndex = i - 1;
-                Debug.Log($"Selected tower: {towerPrefabs[selectedTowerIndex].name} (index {selectedTowerIndex})");
             }
         }
 
-        // TODO Remove this optional feature, right clicking to remove towers
+        // Right click to remove towers
         if (Mouse.current.rightButton.wasPressedThisFrame)
         {
             RemoveTowerAtMousePosition();
@@ -257,12 +230,11 @@ public class TowerPlacementManager : MonoBehaviour
 
             if (isPlacementMode)
             {
-                // NEW: Check if we should repair an energy consumer first
                 if (currentHighlightedConsumer != null && Time.time - lastRepairTime >= energyRepairCooldown)
                 {
                     TryRepairEnergyConsumer(currentHighlightedConsumer);
                 }
-                else
+                else if (currentHighlightedConsumer == null)
                 {
                     HandleSlotClick();
                 }
@@ -275,30 +247,16 @@ public class TowerPlacementManager : MonoBehaviour
     {
         if (consumer == null || EnergyManager.Instance == null) return;
 
-        // Check if player can afford the repair
-        if (!EnergyManager.Instance.CanPlayerAfford(energyRepairAmount))
-        {
-            Debug.Log($"Cannot afford energy repair! Need {energyRepairAmount}, have {EnergyManager.Instance.GetPlayerEnergy()}");
-            // Could show visual feedback here
-            return;
-        }
+        if (!EnergyManager.Instance.CanPlayerAfford(energyRepairAmount)) return;
 
-        // Check if consumer actually needs energy
-        if (consumer.GetEnergyPercentage() >= 1f)
-        {
-            Debug.Log("Energy consumer is already at full energy!");
-            return;
-        }
+        float energyPercent = consumer.GetEnergyPercentage();
 
-        // Spend player energy and repair the consumer
+        if (energyPercent >= 0.999f && !(consumer is CentralCore)) return;
+
         if (EnergyManager.Instance.TrySpendPlayerEnergy(energyRepairAmount))
         {
             consumer.SupplyEnergy(energyRepairAmount);
             lastRepairTime = Time.time;
-
-            string consumerName = GetConsumerDisplayName(consumer);
-            //Debug.Log($"Repaired {consumerName} with {energyRepairAmount} energy. Player energy: {EnergyManager.Instance.GetPlayerEnergy()}");
-            // TODO add audio and visual repairs
         }
     }
 
@@ -309,12 +267,12 @@ public class TowerPlacementManager : MonoBehaviour
         else if (consumer is CentralCore)
             return "Central Core";
         else
-            return "Energy Consumer";
+            return $"Unknown Consumer ({consumer.GetType().Name})";
     }
 
     System.Collections.IEnumerator ResetClickProcessing()
     {
-        yield return null; // Wait one frame
+        yield return null;
         clickProcessed = false;
     }
 
@@ -322,20 +280,14 @@ public class TowerPlacementManager : MonoBehaviour
     {
         if (currentHighlightedSlot != null && currentHighlightedSlot.IsAvailable)
         {
-            //Debug.Log($"Building tower at highlighted slot: Ring {currentHighlightedSlot.ringIndex}, Slot {currentHighlightedSlot.slotIndex}");
             OnSlotClicked(currentHighlightedSlot);
         }
         else
         {
-            Debug.Log("No highlighted slot available for building");
-
-            // Fallback: try to find a slot near cursor direction
             Vector2 cursorDirection = GetCursorDirectionFromPlayer();
             TowerSlot nearestSlot = FindNearestSlotInDirection(cursorDirection);
-
             if (nearestSlot != null)
             {
-                //Debug.Log($"Fallback: Building at nearest slot in cursor direction: Ring {nearestSlot.ringIndex}, Slot {nearestSlot.slotIndex}");
                 OnSlotClicked(nearestSlot);
             }
         }
@@ -354,9 +306,9 @@ public class TowerPlacementManager : MonoBehaviour
 
             Vector2 directionToSlot = (slot.transform.position - playerTransform.position).normalized;
             float distance = Vector2.Distance(playerTransform.position, slot.transform.position);
-            // Check if within build range
+
             if (distance > buildRange) continue;
-            // Check if the slot is in the cursor direction
+
             float dotProduct = Vector2.Dot(direction, directionToSlot);
             if (dotProduct > -0.5f && distance < nearestDistance)
             {
@@ -373,33 +325,18 @@ public class TowerPlacementManager : MonoBehaviour
         if (!allSlots.Contains(slot))
         {
             allSlots.Add(slot);
-            Debug.Log($"Registered slot: Ring {slot.ringIndex}, Slot {slot.slotIndex} (Total: {allSlots.Count})");
-        }
-        else
-        {
-            Debug.Log($"Slot already registered: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
         }
     }
 
     public void UnregisterSlot(TowerSlot slot)
     {
-        if (allSlots.Contains(slot))
-        {
-            allSlots.Remove(slot);
-            Debug.Log($"Unregistered slot: Ring {slot.ringIndex}, Slot {slot.slotIndex} (Total: {allSlots.Count})");
-        }
-        else
-        {
-            Debug.Log($"Tried to unregister non-existing slot: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
-        }
+        allSlots.Remove(slot);
     }
 
     public void TogglePlacementMode()
     {
         isPlacementMode = !isPlacementMode;
-        Debug.Log($"Placement mode: {(isPlacementMode ? "ON" : "OFF")}");
 
-        // Change cursor sprite when entering/exiting placement mode
         if (CursorManager.Instance != null)
         {
             if (isPlacementMode)
@@ -432,97 +369,47 @@ public class TowerPlacementManager : MonoBehaviour
             }
             foreach (TowerSlot slot in allSlots)
             {
-                if (slot != null)
-                {
-                    slot.SetHighlight(false);
-                }
+                slot?.SetHighlight(false);
             }
         }
     }
 
     public void OnSlotClicked(TowerSlot slot)
     {
-        //Debug.Log($"=== BUILDING TOWER ===");
-        //Debug.Log($"Slot: Ring {slot.ringIndex}, Slot {slot.slotIndex}");
-        //Debug.Log($"Placement mode: {isPlacementMode}");
-        //Debug.Log($"Slot available: {slot.IsAvailable}");
+        if (!isPlacementMode || !slot.IsAvailable) return;
 
-        if (!isPlacementMode)
-        {
-            Debug.Log("Not in placement mode");
-            return;
-        }
-
-        // Check if slot is available
-        if (!slot.IsAvailable)
-        {
-            Debug.Log($"Slot is occupied. Current tower: {slot.currentTower}");
-            return;
-        }
-
-        // Check player proximity
-        if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position))
-        {
-            float actualDistance = Vector2.Distance(playerTransform.position, slot.transform.position);
-            Debug.Log($"Player too far. Distance: {actualDistance:F2}, Required: {buildRange:F2}");
-            return;
-        }
+        if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) return;
 
         if (selectedTowerIndex >= 0 && selectedTowerIndex < towerPrefabs.Count)
         {
-            Debug.Log($"Placing {towerPrefabs[selectedTowerIndex].name}");
-
             bool success = slot.PlaceTower(towerPrefabs[selectedTowerIndex]);
 
             if (success)
             {
-                Debug.Log($"Tower placed successfully!");
                 if (currentHighlightedSlot == slot)
                 {
                     currentHighlightedSlot.SetHighlight(false);
                     currentHighlightedSlot = null;
                 }
-                // Play creation animation if enabled
+
                 if (playCreationAnimation && slot.currentTower != null)
                 {
                     StartCoroutine(PlayTowerCreationAnimation(slot.currentTower));
                 }
             }
-            else
-            {
-                Debug.Log("PlaceTower returned false");
-            }
-        }
-        else
-        {
-            Debug.Log($"Invalid tower selection. Index: {selectedTowerIndex}, Count: {towerPrefabs.Count}");
         }
     }
 
     IEnumerator PlayTowerCreationAnimation(GameObject tower)
     {
-        // Load the creation animation sprites
         Sprite[] creationSprites = Resources.LoadAll<Sprite>(towerCreationSpritePath);
-
-        if (creationSprites == null || creationSprites.Length == 0)
-        {
-            Debug.LogWarning($"No creation animation sprites found at path: {towerCreationSpritePath}");
-            yield break;
-        }
+        if (creationSprites == null || creationSprites.Length == 0) yield break;
 
         SpriteRenderer towerRenderer = tower.GetComponent<SpriteRenderer>();
-        if (towerRenderer == null)
-        {
-            Debug.LogWarning("Tower has no SpriteRenderer for creation animation");
-            yield break;
-        }
+        if (towerRenderer == null) yield break;
 
-        // Store the original sprite to restore later
         Sprite originalSprite = towerRenderer.sprite;
 
-        Debug.Log($"Playing tower creation animation with {creationSprites.Length} frames");
-
-        // Play animation manually for one cycle to avoid infinite loop
         for (int i = creationSprites.Length - 1; i >= 0; i--)
         {
             if (towerRenderer != null && creationSprites[i] != null)
@@ -532,13 +419,10 @@ public class TowerPlacementManager : MonoBehaviour
             }
         }
 
-        // Restore original sprite at the end
         if (towerRenderer != null && originalSprite != null)
         {
             towerRenderer.sprite = originalSprite;
         }
-
-        Debug.Log("Tower creation animation completed");
     }
 
     void RemoveTowerAtMousePosition()
@@ -550,16 +434,10 @@ public class TowerPlacementManager : MonoBehaviour
         {
             if (slot != null && slot.IsClickedAt(mouseWorldPos) && slot.IsOccupied)
             {
-                // Check player proximity for removal
-                if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position))
-                {
-                    Debug.Log($"Player is too far to remove tower! Distance: {Vector2.Distance(playerTransform.position, slot.transform.position):F2}");
-                    continue;
-                }
+                if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) continue;
 
                 slot.RemoveTower();
-                Debug.Log($"Removed tower from Ring {slot.ringIndex}, Slot {slot.slotIndex}");
-                break; // Only remove a single tower
+                break;
             }
         }
     }
@@ -581,10 +459,7 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 
-    public List<TowerSlot> GetAllSlots()
-    {
-        return new List<TowerSlot>(allSlots);
-    }
+    public List<TowerSlot> GetAllSlots() => new List<TowerSlot>(allSlots);
 
     public List<TowerSlot> GetAvailableSlots()
     {
@@ -599,12 +474,10 @@ public class TowerPlacementManager : MonoBehaviour
         return availableSlots;
     }
 
-    // TODO Remove later debug visualization
     void OnDrawGizmos()
     {
         if (requirePlayerProximity && playerTransform != null)
         {
-            // Draw Tower building range around player
             Gizmos.color = isPlacementMode ? Color.green : Color.gray;
             Gizmos.DrawWireSphere(playerTransform.position, buildRange);
         }

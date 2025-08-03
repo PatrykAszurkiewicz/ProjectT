@@ -3,6 +3,16 @@ using UnityEngine;
 
 public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 {
+    [Header("Collision Settings")]
+    public SpriteCollisionConfig collisionConfig = new SpriteCollisionConfig()
+    {
+        enableCollision = true,
+        isTrigger = false,
+        colliderType = SpriteCollisionConfig.ColliderType.Circle,
+        paddingPercent = 0.1f // 10% padding for Core
+    };
+    private Collider2D spriteCollider;
+
     #region Configuration
     [Header("Core Configuration")]
     public float maxEnergy = 100f;
@@ -26,7 +36,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     public EnergyBarSettings energyBarSettings = new EnergyBarSettings();
 
     [Header("Damage Settings")]
-    public float armorReduction = 0f; // 0-1 range, reduces incoming damage
+    public float armorReduction = 0f;
     public bool immuneToEnemyDamage = false;
     public float damageFlashDuration = 0.2f;
     public bool enableDamageEffects = true;
@@ -59,12 +69,15 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     private Coroutine damageFlashCoroutine;
     private Coroutine shakeCoroutine;
 
-    // Energy events
+    // Highlight system for repair functionality
+    private bool isHighlighted = false;
+    private Color highlightColor = Color.cyan;
+    private bool isRegisteredWithEnergyManager = false;
+
+    // Events
     public System.Action<float> OnEnergyChanged;
     public System.Action OnEnergyDepleted;
     public System.Action OnEnergyRestored;
-
-    // Damage events
     public System.Action<float, GameObject> OnDamageTaken;
     public System.Action<GameObject> OnCoreDestroyed;
     public System.Action OnCoreEnteredCriticalState;
@@ -82,7 +95,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     void InitializeComponents()
     {
         gameObject.tag = "Core";
-        // Ensure SpriteRenderer is properly added
+
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
         {
@@ -105,17 +118,46 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         RegisterWithEnergyManager();
         originalColor = spriteRenderer.color;
+        SetupSpriteCollision();
         SetupEnergyBar();
         UpdateVisualState();
+
+        // TODO - remove testing energy resupplying
+        //if (currentEnergy >= maxEnergy)
+        //{
+        //    currentEnergy = maxEnergy * 0.8f;
+        //}
+        if (transform.position.z != 0f)
+        {
+            Vector3 fixedPosition = new Vector3(transform.position.x, transform.position.y, 0f);
+            transform.position = fixedPosition;
+        }
     }
+    void SetupSpriteCollision()
+    {
+        if (spriteRenderer?.sprite != null)
+        {
+            spriteCollider = SpriteCollisionManager.SetupCollision(gameObject, collisionConfig);
+        }
+        else
+        {
+            // Delay setup if sprite is not ready
+            SpriteCollisionManager.SetupCollisionDelayed(this, collisionConfig);
+        }
+    }
+
+    // TODO remove the helper methods
+    //public Bounds GetSpriteBounds() => SpriteCollisionManager.GetSpriteBounds(gameObject);
+    //public bool IsPointWithinSprite(Vector3 worldPoint) => SpriteCollisionManager.IsPointWithinSprite(gameObject, worldPoint);
+    //public float GetCollisionRadius() => SpriteCollisionManager.GetCollisionRadius(gameObject);
+    //public void UpdateCollisionSettings() => spriteCollider = SpriteCollisionManager.UpdateCollisionSettings(gameObject, collisionConfig);
+
 
     void LoadCoreSprites()
     {
         coreSprites = Resources.LoadAll<Sprite>("Sprites/central_core_spritesheet2");
         if (coreSprites?.Length > 0)
             spriteRenderer.sprite = coreSprites[spriteStartIndex];
-        else
-            Debug.LogError("CentralCore: No sprites found!");
     }
 
     void StartAnimationIfEnabled()
@@ -124,7 +166,16 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             StartCoreAnimation();
     }
 
-    void RegisterWithEnergyManager() => EnergyManager.Instance?.RegisterEnergyConsumer(this);
+    void RegisterWithEnergyManager()
+    {
+        if (isRegisteredWithEnergyManager) return;
+
+        if (EnergyManager.Instance != null)
+        {
+            EnergyManager.Instance.RegisterEnergyConsumer(this);
+            isRegisteredWithEnergyManager = true;
+        }
+    }
 
     void SetupEnergyBar()
     {
@@ -137,7 +188,6 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         energyBar.energyBarOffset = energyBarSettings.offset;
         energyBar.showEnergyText = energyBarSettings.showText;
 
-        // Set colors based on EnergyManager settings
         if (EnergyManager.Instance != null)
         {
             energyBar.SetColors(
@@ -152,47 +202,62 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     }
     #endregion
 
+    #region Highlight System for Repair
+    public void SetHighlight(bool highlight)
+    {
+        if (isHighlighted == highlight) return;
+
+        isHighlighted = highlight;
+
+        if (highlight)
+        {
+            Color currentColor = spriteRenderer.color;
+            spriteRenderer.color = Color.Lerp(currentColor, highlightColor, 0.6f);
+        }
+        else
+        {
+            UpdateEnergyVisuals();
+        }
+    }
+
+    public bool IsHighlighted() => isHighlighted;
+
+    private Color GetCurrentEnergyColor()
+    {
+        if (EnergyManager.Instance != null)
+        {
+            return EnergyManager.Instance.GetEnergyColor(this);
+        }
+        return normalColor;
+    }
+    #endregion
+
     #region IDamageable Implementation
     public bool TakeDamage(float damageAmount, GameObject damageSource = null)
     {
         if (immuneToEnemyDamage || isDestroyed) return false;
 
-        // Apply armor reduction
         float actualDamage = damageAmount * (1f - armorReduction);
-
-        // Store previous state for event checking
         bool wasCritical = IsInCriticalState();
 
-        // Remove energy based on damage
         ConsumeEnergy(actualDamage);
 
-        // Trigger damage effects
         if (enableDamageEffects)
         {
             StartDamageFlash();
-
-            // Start shaking if in critical state
             if (IsInCriticalState())
             {
                 StartCriticalShake();
             }
         }
 
-        // Log damage
-        string sourceName = damageSource != null ? damageSource.name : "Unknown";
-        //Debug.Log($"Central Core took {actualDamage:F1} damage from {sourceName}. Energy: {currentEnergy:F1}/{maxEnergy:F1}");
-
-        // Fire damage event
         OnDamageTaken?.Invoke(actualDamage, damageSource);
 
-        // Check for critical state change
         if (!wasCritical && IsInCriticalState())
         {
             OnCoreEnteredCriticalState?.Invoke();
-            //Debug.LogWarning("Central Core entered critical state!");
         }
 
-        // Check if core is destroyed
         if (IsEnergyDepleted())
         {
             DestroyCore(damageSource);
@@ -202,35 +267,12 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         return false;
     }
 
-    public bool CanTakeDamage()
-    {
-        return !immuneToEnemyDamage && !isDestroyed;
-    }
-
-    public float GetCurrentHealth()
-    {
-        return currentEnergy;
-    }
-
-    public float GetMaxHealth()
-    {
-        return maxEnergy;
-    }
-
-    public float GetHealthPercentage()
-    {
-        return GetEnergyPercentage();
-    }
-
-    public bool IsDestroyed()
-    {
-        return isDestroyed;
-    }
-
-    public bool IsInCriticalState()
-    {
-        return IsEnergyLow() && !IsEnergyDepleted();
-    }
+    public bool CanTakeDamage() => !immuneToEnemyDamage && !isDestroyed;
+    public float GetCurrentHealth() => currentEnergy;
+    public float GetMaxHealth() => maxEnergy;
+    public float GetHealthPercentage() => GetEnergyPercentage();
+    public bool IsDestroyed() => isDestroyed;
+    public bool IsInCriticalState() => IsEnergyLow() && !IsEnergyDepleted();
 
     private void DestroyCore(GameObject damageSource)
     {
@@ -238,14 +280,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
         isDestroyed = true;
         OnCoreDestroyed?.Invoke(damageSource);
-
-        // Stop all effects
         StopAllEffects();
-
-        // Trigger game over through energy manager
         EnergyManager.Instance?.TriggerGameOver();
-
-        //Debug.LogError($"Central Core has been destroyed by {(damageSource != null ? damageSource.name : "unknown enemy")}!");
     }
 
     private void StartDamageFlash()
@@ -264,7 +300,6 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         Color originalColor = spriteRenderer.color;
         Color flashColor = EnergyManager.Instance?.damageFlashColor ?? Color.red;
 
-        // Flash effect
         spriteRenderer.color = flashColor;
         yield return new WaitForSeconds(damageFlashDuration);
         spriteRenderer.color = originalColor;
@@ -274,8 +309,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     private void StartCriticalShake()
     {
-        if (shakeCoroutine != null) return; // Already shaking
-
+        if (shakeCoroutine != null) return;
         shakeCoroutine = StartCoroutine(CriticalShakeCoroutine());
     }
 
@@ -283,14 +317,11 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         while (IsInCriticalState() && !isDestroyed)
         {
-            // Random shake offset
             Vector3 shakeOffset = Random.insideUnitCircle * criticalHealthShakeIntensity;
             transform.position = originalPosition + shakeOffset;
-
             yield return new WaitForSeconds(0.05f);
         }
 
-        // Return to original position
         transform.position = originalPosition;
         shakeCoroutine = null;
     }
@@ -309,7 +340,6 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             shakeCoroutine = null;
         }
 
-        // Return to original position
         transform.position = originalPosition;
     }
     #endregion
@@ -318,6 +348,12 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     void UpdateCoreState()
     {
         if (isDestroyed) return;
+
+        if (!isRegisteredWithEnergyManager)
+        {
+            RegisterWithEnergyManager();
+            if (!isRegisteredWithEnergyManager) return;
+        }
 
         UpdateEnergyState();
 
@@ -337,12 +373,10 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         if (isEnergyDepleted != wasEnergyDepleted || isEnergyLow != wasEnergyLow)
             UpdateEnergyDependentSystems();
 
-        // Handle critical state changes
         bool isCritical = IsInCriticalState();
         if (wasCritical && !isCritical)
         {
             OnCoreExitedCriticalState?.Invoke();
-            //Debug.Log("Central Core exited critical state.");
         }
     }
 
@@ -373,8 +407,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void ProcessCoreOperations()
     {
-        // Core-specific operations when energy is sufficient
-        // TODO: Add core functionality here
+        // TODO Add Core-specific operations when energy is sufficient
     }
 
     bool CanOperate() => !requiresEnergyToFunction || !isEnergyDepleted;
@@ -430,6 +463,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void UpdateEnergyVisuals()
     {
+        if (isHighlighted) return;
+
         if (spriteRenderer != null && EnergyManager.Instance != null)
             EnergyManager.Instance.UpdateConsumerVisuals(this, spriteRenderer);
     }
@@ -515,7 +550,6 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     #region Public Methods
     public void RestoreEnergy(float amount) => SupplyEnergy(amount);
     public bool HasEnergy() => currentEnergy > 0f;
-
     public void SetArmor(float newArmor) => armorReduction = Mathf.Clamp01(newArmor);
     public float GetArmor() => armorReduction;
     #endregion
@@ -531,65 +565,23 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     #endregion
 
 #if UNITY_EDITOR
-    #region Editor Gizmos
-    void OnDrawGizmosSelected()
+    #region Test Methods
+    [ContextMenu("Test Set Energy to 50%")]
+    void TestSetEnergyTo50Percent()
     {
-        DrawEnergyVisualization();
-        DrawStatusInfo();
+        SetEnergy(maxEnergy * 0.5f);
     }
 
-    void DrawEnergyVisualization()
+    [ContextMenu("Test Highlight On")]
+    void TestHighlightOn()
     {
-        Vector3 energyBarPos = transform.position + Vector3.up * 2.5f;
-        float energyBarWidth = 2f;
-        float energyBarHeight = 0.2f;
-
-        // Background
-        UnityEditor.Handles.color = Color.black;
-        DrawRectangle(energyBarPos, energyBarWidth, energyBarHeight, Color.black, Color.white);
-
-        // Energy bar
-        float energyPercentage = GetEnergyPercentage();
-        Color energyColor = EnergyManager.Instance?.GetEnergyColor(this) ?? Color.blue;
-        float energyWidth = energyBarWidth * energyPercentage;
-        Vector3 energyPos = energyBarPos + Vector3.left * (energyBarWidth * (1f - energyPercentage) * 0.5f);
-
-        DrawRectangle(energyPos, energyWidth, energyBarHeight * 0.8f, energyColor, energyColor);
-
-        // Energy text
-        UnityEditor.Handles.Label(energyBarPos + Vector3.up * 0.5f,
-            $"Core Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+        SetHighlight(true);
     }
 
-    void DrawStatusInfo()
+    [ContextMenu("Test Highlight Off")]
+    void TestHighlightOff()
     {
-        string status = GetStatusText();
-        UnityEditor.Handles.Label(transform.position + Vector3.down * 2f, $"Status: {status}");
-
-        // Damage info
-        Vector3 damagePos = transform.position + Vector3.down * 2.3f;
-        string damageStatus = isDestroyed ? "DESTROYED" : "OPERATIONAL";
-        UnityEditor.Handles.Label(damagePos, $"Damage Status: {damageStatus} | Armor: {armorReduction * 100f:F0}%");
-    }
-
-    string GetStatusText()
-    {
-        if (isDestroyed) return "DESTROYED";
-        if (IsEnergyDepleted()) return "CRITICAL - DEPLETED";
-        if (IsEnergyLow()) return "WARNING - LOW ENERGY";
-        return "OPERATIONAL";
-    }
-
-    void DrawRectangle(Vector3 center, float width, float height, Color fill, Color outline)
-    {
-        Vector3[] points = {
-            center + new Vector3(-width/2, -height/2),
-            center + new Vector3(width/2, -height/2),
-            center + new Vector3(width/2, height/2),
-            center + new Vector3(-width/2, height/2)
-        };
-
-        UnityEditor.Handles.DrawSolidRectangleWithOutline(points, fill, outline);
+        SetHighlight(false);
     }
     #endregion
 #endif

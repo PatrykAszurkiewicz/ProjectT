@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{d6f359a5-7421-4e7b-a03d-270d61b7fc6d}">
 		<property name="assetPath">
-			<value>Music/MusicAmbient/Soundtrack Ambient Calm Piano Ending.wav</value>
+			<value>Music/OLDMusicAmbient/Soundtrack Ambient Calm Piano Ending.wav</value>
 		</property>
 		<property name="isStreaming">
 			<value>true</value>

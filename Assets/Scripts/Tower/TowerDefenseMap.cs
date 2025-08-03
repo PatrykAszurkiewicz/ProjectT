@@ -147,6 +147,7 @@ public class TowerDefenseMap : MonoBehaviour
         terrainObject.transform.localScale = Vector3.one * scale;
     }
 
+
     void CreateCentralCore()
     {
         if (!enableCentralCore) return;
@@ -154,7 +155,14 @@ public class TowerDefenseMap : MonoBehaviour
         // Create central core GameObject
         GameObject coreObject = new GameObject("CentralCore");
         coreObject.transform.parent = transform;
+
+        // FIX: Force the Central Core to be at exactly (0,0,0) in world space
+        coreObject.transform.position = Vector3.zero;
         coreObject.transform.localPosition = Vector3.zero;
+
+        // Double-check the position is correct
+        Debug.Log($"Central Core created at world position: {coreObject.transform.position}");
+        Debug.Log($"Central Core local position: {coreObject.transform.localPosition}");
 
         // Add CentralCore component
         centralCore = coreObject.AddComponent<CentralCore>();
@@ -166,7 +174,40 @@ public class TowerDefenseMap : MonoBehaviour
         centralCore.OnEnergyChanged += OnCoreEnergyChanged;
         centralCore.OnEnergyDepleted += OnCoreEnergyDepleted;
 
-        //Debug.Log($"Central core created with {coreStartingEnergy}/{coreMaxEnergy} energy");
+        // Verify position after component setup
+        Debug.Log($"Final Central Core position after setup: {coreObject.transform.position}");
+    }
+    [ContextMenu("Fix Central Core Position")]
+    public void FixCentralCorePosition()
+    {
+        if (centralCore != null)
+        {
+            Debug.Log($"Before fix - Central Core position: {centralCore.transform.position}");
+            centralCore.transform.position = Vector3.zero;
+            centralCore.transform.localPosition = Vector3.zero;
+            Debug.Log($"After fix - Central Core position: {centralCore.transform.position}");
+        }
+        else
+        {
+            Debug.LogError("Central Core not found!");
+        }
+    }
+    // Add this new coroutine to TowerDefenseMap.cs:
+    private System.Collections.IEnumerator ForceRegisterCore()
+    {
+        // Wait a bit to ensure EnergyManager is ready
+        yield return new WaitForSeconds(0.5f);
+
+        if (centralCore != null && EnergyManager.Instance != null)
+        {
+            Debug.Log("FORCE REGISTERING Central Core with EnergyManager");
+            EnergyManager.Instance.RegisterEnergyConsumer(centralCore);
+
+            // Verify registration
+            var consumers = EnergyManager.Instance.GetAllEnergyConsumers();
+            bool found = consumers.Contains(centralCore);
+            Debug.Log($"Central Core registration verified: {found}");
+        }
     }
 
     void CreateTowerSlots()

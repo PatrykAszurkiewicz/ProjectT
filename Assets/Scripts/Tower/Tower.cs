@@ -8,6 +8,17 @@ using UnityEditor;
 
 public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 {
+
+    [Header("Collision Settings")]
+    public SpriteCollisionConfig collisionConfig = new SpriteCollisionConfig()
+    {
+        enableCollision = true,
+        isTrigger = false,
+        colliderType = SpriteCollisionConfig.ColliderType.Box,
+        paddingPercent = 0.05f // 5% padding for towers
+    };
+    private Collider2D spriteCollider;
+
     [System.Serializable]
     public class TentacleConfig
     {
@@ -240,14 +251,31 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     void SetupTower()
     {
         parentSlot = GetComponentInParent<TowerSlot>();
-
         float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
         ProjectileRange = Mathf.Max(range * 2f, tentacleReach * 3.5f, 6f);
         rangeCollider.radius = ProjectileRange + 0.5f;
-
         LoadSprite();
+        SetupSpriteCollision();
         SetupEnergyBar();
     }
+
+    void SetupSpriteCollision()
+    {
+        if (spriteRenderer?.sprite != null)
+        {
+            spriteCollider = SpriteCollisionManager.SetupCollision(gameObject, collisionConfig);
+        }
+        else
+        {
+            // Delay setup if sprite is not ready
+            SpriteCollisionManager.SetupCollisionDelayed(this, collisionConfig);
+        }
+    }
+
+    // TODO remove the helper methods
+    //public Bounds GetSpriteBounds() => SpriteCollisionManager.GetSpriteBounds(gameObject);
+    //public bool IsPointWithinSprite(Vector3 worldPoint) => SpriteCollisionManager.IsPointWithinSprite(gameObject, worldPoint);
+    //public void UpdateCollisionSettings() => spriteCollider = SpriteCollisionManager.UpdateCollisionSettings(gameObject, collisionConfig);
 
     void LoadSprite()
     {

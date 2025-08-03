@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{e4d8d790-343b-4c27-b629-2c79ab6f2493}">
 		<property name="assetPath">
-			<value>Music/MusicPiano/Soundtrack Pumping Intro.wav</value>
+			<value>Music/OLDMusicPiano/Soundtrack Pumping Intro.wav</value>
 		</property>
 		<property name="frequencyInKHz">
 			<value>44.0999985</value>

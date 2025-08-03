@@ -52,6 +52,30 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 121333
+--- !u!114 &-6915338866723983408
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/OLDMusicPiano 2/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
 --- !u!114 &-6643075125367941810
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -200,10 +224,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638895597470690922
+  lastModified: 638898438174386014
   FileSizes:
   - Name: Desktop
-    Value: 1342
+    Value: 1532
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -233,13 +257,15 @@ MonoBehaviour:
   - {fileID: 3748478789586696555}
   - {fileID: 4878125545354185004}
   - {fileID: -7576298359550858565}
+  - {fileID: 7812522369849875838}
+  - {fileID: 7043781551158048209}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638895597470790866
+  cacheTime: 638898438174545915
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -261,6 +287,10 @@ MonoBehaviour:
     index: 8
   - key: event:/Music/MusicElectronic
     index: 9
+  - key: event:/Music/OLDMusicAmbient2
+    index: 10
+  - key: event:/Music/OLDMusicPiano 2
+    index: 11
 --- !u!114 &1052223431168759608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -324,10 +354,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.bank
   Name: Master
   StudioPath: bank:/Master
-  lastModified: 638881963572186618
+  lastModified: 638898438174316050
   FileSizes:
   - Name: Desktop
-    Value: 1074
+    Value: 1982
   Exists: 1
 --- !u!114 &3748478789586696555
 MonoBehaviour:
@@ -372,7 +402,7 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 638885993774035835
+  lastModified: 638898438174366018
   FileSizes:
   - Name: Desktop
     Value: 609792
@@ -511,6 +541,58 @@ MonoBehaviour:
   - {fileID: 1052223431168759608}
   MinDistance: 1
   MaxDistance: 20
+  Length: 171135
+--- !u!114 &6112901616673511526
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/OLDMusicAmbient2/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
+--- !u!114 &7043781551158048209
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/OLDMusicPiano 2
+  m_EditorClassIdentifier: 
+  Path: event:/Music/OLDMusicPiano 2
+  Guid:
+    Data1: -1177859412
+    Data2: 1270687480
+    Data3: 1057360816
+    Data4: -271800353
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: -6915338866723983408}
+  MinDistance: 1
+  MaxDistance: 20
   Length: 175666
 --- !u!114 &7729493964428327597
 MonoBehaviour:
@@ -536,6 +618,34 @@ MonoBehaviour:
   IsGlobal: 0
   Labels: []
   Exists: 1
+--- !u!114 &7812522369849875838
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/OLDMusicAmbient2
+  m_EditorClassIdentifier: 
+  Path: event:/Music/OLDMusicAmbient2
+  Guid:
+    Data1: 1023081344
+    Data2: 1244326282
+    Data3: 1942578613
+    Data4: -2099529089
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: 6112901616673511526}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 175666
 --- !u!114 &8434910682899568656
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -551,8 +661,8 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/MusicAmbient.bank
   Name: MusicAmbient
   StudioPath: bank:/MusicAmbient
-  lastModified: 638895597470790866
+  lastModified: 638898438174545915
   FileSizes:
   - Name: Desktop
-    Value: 2086176
+    Value: 3420960
   Exists: 1

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="DataFile" id="{7be220d5-ef9a-4d79-ba4b-a9a57c5b4bce}">
+		<property name="assetPath">
+			<value>Music/OLDMusicPiano/Soundtrack Pumping Calm Verse Increase Intensity.wav.meta</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{df2ccf63-2592-47b6-b348-eab208991016}</destination>
+		</relationship>
+	</object>
+</objects>

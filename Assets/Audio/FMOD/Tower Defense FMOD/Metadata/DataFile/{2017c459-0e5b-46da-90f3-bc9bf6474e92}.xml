@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="DataFile" id="{2017c459-0e5b-46da-90f3-bc9bf6474e92}">
+		<property name="assetPath">
+			<value>Music/OLDMusicAmbient/Soundtrack Ambient Intense Chorus.wav.meta</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{df2ccf63-2592-47b6-b348-eab208991016}</destination>
+		</relationship>
+	</object>
+</objects>

@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{49172e65-efec-4000-853c-fbb36eb6f984}">
 		<property name="assetPath">
-			<value>Music/MusicPiano/Soundtrack Pumping Calm Verse Increase Intensity.wav</value>
+			<value>Music/OLDMusicPiano/Soundtrack Pumping Calm Verse Increase Intensity.wav</value>
 		</property>
 		<property name="isStreaming">
 			<value>true</value>

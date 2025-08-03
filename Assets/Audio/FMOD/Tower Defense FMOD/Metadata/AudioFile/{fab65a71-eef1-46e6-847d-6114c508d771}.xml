@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{fab65a71-eef1-46e6-847d-6114c508d771}">
 		<property name="assetPath">
-			<value>Music/MusicPiano/Soundtrack Pumping Calm Verse.wav</value>
+			<value>Music/OLDMusicPiano/Soundtrack Pumping Calm Verse.wav</value>
 		</property>
 		<property name="isStreaming">
 			<value>true</value>

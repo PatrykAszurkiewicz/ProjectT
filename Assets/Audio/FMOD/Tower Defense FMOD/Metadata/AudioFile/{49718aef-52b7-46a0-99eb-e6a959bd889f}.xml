@@ -2,7 +2,7 @@
 <objects serializationModel="Studio.02.03.00">
 	<object class="AudioFile" id="{49718aef-52b7-46a0-99eb-e6a959bd889f}">
 		<property name="assetPath">
-			<value>Music/MusicAmbient/Soundtrack Ambient Intense Chorus.wav</value>
+			<value>Music/OLDMusicAmbient/Soundtrack Ambient Intense Chorus.wav</value>
 		</property>
 		<property name="isStreaming">
 			<value>true</value>

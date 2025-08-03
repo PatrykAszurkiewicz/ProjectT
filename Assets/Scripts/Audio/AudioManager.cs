@@ -45,10 +45,11 @@ public class AudioManager : MonoBehaviour
         eventInstances = new List<EventInstance>();
         eventEmitters = new List<StudioEventEmitter>();
 
-        //masterBus = RuntimeManager.GetBus("bus:/");
-        //musicBus = RuntimeManager.GetBus("bus:/Music");
-        //ambienceBus = RuntimeManager.GetBus("bus:/Ambience");
-        //sfxBus = RuntimeManager.GetBus("bus:/SFX");
+        // UNCOMMENTED: Initialize the buses
+        masterBus = RuntimeManager.GetBus("bus:/");
+        musicBus = RuntimeManager.GetBus("bus:/Music");
+        ambienceBus = RuntimeManager.GetBus("bus:/Ambience");
+        sfxBus = RuntimeManager.GetBus("bus:/SFX");
     }
 
     private void Start()
@@ -66,10 +67,15 @@ public class AudioManager : MonoBehaviour
 
     private void Update()
     {
-        masterBus.setVolume(masterVolume);
-        musicBus.setVolume(musicVolume);
-        ambienceBus.setVolume(ambienceVolume);
-        sfxBus.setVolume(SFXVolume);
+        // Check if buses are valid before setting volume
+        if (masterBus.isValid())
+            masterBus.setVolume(masterVolume);
+        if (musicBus.isValid())
+            musicBus.setVolume(musicVolume);
+        if (ambienceBus.isValid())
+            ambienceBus.setVolume(ambienceVolume);
+        if (sfxBus.isValid())
+            sfxBus.setVolume(SFXVolume);
 
         // Check for music enabled changes during runtime
         if (previousMusicEnabled != musicEnabled)
@@ -161,10 +167,11 @@ public class AudioManager : MonoBehaviour
         ambienceEventInstance.setParameterByName(parameterName, parameterValue);
     }
 
-    //public void SetMusicArea(MusicArea area)
-    //{
-    //    musicEventInstance.setParameterByName("area", (float)area);
-    //}
+    // ADDED: Method to play SFX sounds through the SFX bus
+    public void PlaySFX(EventReference sound, Vector3 worldPos = default(Vector3))
+    {
+        RuntimeManager.PlayOneShot(sound, worldPos);
+    }
 
     public void PlayOneShot(EventReference sound, Vector3 worldPos)
     {

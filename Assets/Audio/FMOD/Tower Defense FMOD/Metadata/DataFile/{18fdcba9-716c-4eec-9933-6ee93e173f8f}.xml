@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="DataFile" id="{18fdcba9-716c-4eec-9933-6ee93e173f8f}">
+		<property name="assetPath">
+			<value>Music/OLDMusicPiano/Soundtrack Pumping Intro.wav.meta</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{df2ccf63-2592-47b6-b348-eab208991016}</destination>
+		</relationship>
+	</object>
+</objects>

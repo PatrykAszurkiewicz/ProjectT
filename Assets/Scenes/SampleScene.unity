@@ -1292,12 +1292,14 @@ MonoBehaviour:
   towerPrefabs:
   - {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
   selectedTowerIndex: 0
-  buildRange: 2
+  buildRange: 1.2
   playerTransform: {fileID: 0}
   requirePlayerProximity: 1
   towerCreationSpritePath: Sprites/tower_creation_decay_spritesheet4
   creationAnimationSpeed: 0.1
   playCreationAnimation: 1
+  energyRepairAmount: 10
+  energyRepairCooldown: 0.2
   towerSelectionUI: {fileID: 0}
 --- !u!4 &811930682
 Transform:
@@ -1718,6 +1720,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1027311100}
   m_CullTransparentMesh: 1
+--- !u!1 &1033624015
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1033624017}
+  m_Layer: 0
+  m_Name: TestTarget
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1033624017
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1033624015}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 894.9113, y: 880.6634, z: -6.79419}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1085857084
 GameObject:
   m_ObjectHideFlags: 0
@@ -3382,6 +3415,10 @@ PrefabInstance:
       propertyPath: m_TagString
       value: Player
       objectReference: {fileID: 0}
+    - target: {fileID: 3159641362189597012, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Constraints
+      value: 4
+      objectReference: {fileID: 0}
     - target: {fileID: 4301938296847241599, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_LocalPosition.x
       value: 4.12
@@ -3587,3 +3624,4 @@ SceneRoots:
   - {fileID: 958974586}
   - {fileID: 1357493429}
   - {fileID: 237018745}
+  - {fileID: 1033624017}

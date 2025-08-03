@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="DataFile" id="{0c0ee63c-2d66-4c90-a7a4-d7936911051e}">
+		<property name="assetPath">
+			<value>Music/OLDMusicAmbient/Soundtrack Ambient Calm Solo Piano.wav.meta</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{df2ccf63-2592-47b6-b348-eab208991016}</destination>
+		</relationship>
+	</object>
+</objects>
