@@ -9,11 +9,12 @@ public class EnemyController : MonoBehaviour
     private float knockbackTimer = 0f;
     //Target finder
     [SerializeField] private float detectRange = 5f;
-
     private Transform coreTarget;
     private Transform currentTarget;
     //Attack
     [SerializeField] private float attackRange = 1.5f;
+    [SerializeField] private float attackCooldown = 1f;
+    private float attackTimer = 0f;
 
     private void Start()
     {
@@ -30,7 +31,7 @@ public class EnemyController : MonoBehaviour
     }
     private void UpdateTarget()
     {
-        Debug.Log($"Nowy cel: {currentTarget.name}");
+        //Debug.Log($"Nowy cel: {currentTarget.name}");
         //Find Player
         GameObject player = GameObject.FindGameObjectWithTag("Player");
         if (player && Vector2.Distance(transform.position, player.transform.position) < detectRange)
@@ -78,8 +79,34 @@ public class EnemyController : MonoBehaviour
                 isKnockedBack = false;
             }
         }
-    }
+        if (currentTarget != null)
+        {
+            float distance = Vector2.Distance(transform.position, currentTarget.position);
+            if (distance <= attackRange)
+            {
+                attackTimer -= Time.deltaTime;
+                rb.linearVelocity = Vector2.zero; // zatrzymanie
 
+                if (attackTimer <= 0f)
+                {
+                    Attack(currentTarget);
+                    attackTimer = attackCooldown;
+                }
+
+                return; // nie poruszaj się dalej
+            }
+        }
+        attackTimer = 0f;
+    }
+    private void Attack(Transform target)
+    {
+        IDamageable damageable = target.GetComponent<IDamageable>();
+        if (damageable != null)
+        {
+            damageable.TakeDamage(stats.Damage);
+            // opcjonalnie animacja, dźwięk itp.
+        }
+    }
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.2f)
     {
         isKnockedBack = true;
@@ -95,4 +122,6 @@ public class EnemyController : MonoBehaviour
         //Gizmos.color = Color.red;
         //Gizmos.DrawWireSphere(transform.position, attackRange);
     }
+
+
 }
