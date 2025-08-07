@@ -85,7 +85,7 @@ public class EnemyController : MonoBehaviour
             if (distance <= attackRange)
             {
                 attackTimer -= Time.deltaTime;
-                rb.linearVelocity = Vector2.zero; // zatrzymanie
+                rb.linearVelocity = Vector2.zero;
 
                 if (attackTimer <= 0f)
                 {
@@ -93,18 +93,25 @@ public class EnemyController : MonoBehaviour
                     attackTimer = attackCooldown;
                 }
 
-                return; // nie poruszaj się dalej
+                return;
             }
         }
         attackTimer = 0f;
     }
     private void Attack(Transform target)
     {
-        IDamageable damageable = target.GetComponent<IDamageable>();
-        if (damageable != null)
+        var stats = target.GetComponent<CharacterStats>();
+        if (stats != null)
         {
-            damageable.TakeDamage(stats.Damage);
-            // opcjonalnie animacja, dźwięk itp.
+            stats.TakeDamage(this.stats.Damage);
+            return;
+        }
+
+        var consumer = target.GetComponent<IEnergyConsumer>();
+        if (consumer != null)
+        {
+            GameObject consumerGO = ((MonoBehaviour)consumer).gameObject;
+            EnemyDamageSystem.Instance.DamageEnergyConsumer(consumerGO, this.stats.Damage, gameObject);
         }
     }
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.2f)
@@ -119,8 +126,8 @@ public class EnemyController : MonoBehaviour
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, detectRange);
 
-        //Gizmos.color = Color.red;
-        //Gizmos.DrawWireSphere(transform.position, attackRange);
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, attackRange);
     }
 
 
