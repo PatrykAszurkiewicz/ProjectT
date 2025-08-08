@@ -108,10 +108,9 @@ public class EnemyController : MonoBehaviour
         }
 
         var consumer = target.GetComponent<IEnergyConsumer>();
-        if (consumer != null)
+        if (consumer != null && EnergyManager.Instance != null)
         {
-            GameObject consumerGO = ((MonoBehaviour)consumer).gameObject;
-            EnemyDamageSystem.Instance.DamageEnergyConsumer(consumerGO, this.stats.Damage, gameObject);
+            EnergyManager.Instance.DamageEnergyConsumer(consumer, this.stats.Damage, gameObject);
         }
     }
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.2f)
