@@ -698,7 +698,7 @@ Transform:
   m_GameObject: {fileID: 519420028}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.00000023841858, y: 1, z: -8.5}
+  m_LocalPosition: {x: 0.00000059604645, y: 1, z: -8.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -779,7 +779,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.75, y: 0.75, z: 0.75}
+  m_LocalScale: {x: 1.25, y: 1.25, z: 1.25}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1615493544}
@@ -902,10 +902,10 @@ PolygonCollider2D:
     m_Paths:
     - - {x: 0.39375353, y: 0.5440948}
       - {x: 0.2136488, y: 0.879457}
-      - {x: -0.16880918, y: 1.2312539}
-      - {x: -0.531343, y: 1.0407465}
-      - {x: -0.021615505, y: -0.05062294}
-      - {x: -0.44003654, y: -1.0128614}
+      - {x: -0.2229839, y: 1.3009071}
+      - {x: -0.64805377, y: 1.1933684}
+      - {x: -1.7313422, y: -0.0077170553}
+      - {x: -0.61061376, y: -1.1834388}
       - {x: -0.1037578, y: -1.2458416}
       - {x: 0.28382105, y: -0.8238187}
       - {x: 0.45960426, y: -0.40187097}
@@ -2903,7 +2903,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   player: {fileID: 1527444834}
-  radius: 0.75
+  radius: 0.8
 --- !u!1 &1672614355
 GameObject:
   m_ObjectHideFlags: 0
@@ -3524,7 +3524,7 @@ Transform:
   m_GameObject: {fileID: 1898314636}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.00000023841858, y: 1, z: -8.5}
+  m_LocalPosition: {x: 0.00000059604645, y: 1, z: -8.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -4003,6 +4003,10 @@ PrefabInstance:
     - target: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_TagString
       value: Player
+      objectReference: {fileID: 0}
+    - target: {fileID: 2845798086413134017, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: m_Radius
+      value: 1.35
       objectReference: {fileID: 0}
     - target: {fileID: 3159641362189597012, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_Constraints
