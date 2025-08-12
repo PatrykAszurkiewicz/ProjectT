@@ -5,7 +5,8 @@ public class TowerDefenseMap : MonoBehaviour
 {
     [Header("Map Configuration")]
     public float mapRadius = 10f;
-    public string backgroundImagePath = "Backgrounds/Background3"; // Path relative to Resources folder
+    public GameObject backgroundGameObject; // Manual background GameObject reference
+    public string backgroundImagePath = "Backgrounds/Background3"; // Fallback for generated terrain
     public bool useBackgroundImage = true;
     public Material terrainMaterial;
     public Color terrainColor = Color.green;
@@ -68,16 +69,20 @@ public class TowerDefenseMap : MonoBehaviour
     {
         // Clear existing slots
         allTowerSlots.Clear();
-        // Destroy existing terrain
-        if (terrainObject != null)
+
+        // Destroy existing terrain, but preserve manually assigned background
+        if (terrainObject != null && terrainObject != backgroundGameObject)
         {
             DestroyImmediate(terrainObject);
         }
+        terrainObject = null;
+
         // Destroy existing slots container
         if (slotsContainer != null)
         {
             DestroyImmediate(slotsContainer);
         }
+
         // Destroy existing central core
         if (centralCore != null)
         {
@@ -88,83 +93,99 @@ public class TowerDefenseMap : MonoBehaviour
 
     void CreateTerrain()
     {
-        // Create terrain object
-        terrainObject = new GameObject("Terrain");
-        terrainObject.transform.parent = transform;
-        terrainObject.transform.localPosition = Vector3.zero;
-        // Add sprite renderer
-        var renderer = terrainObject.AddComponent<SpriteRenderer>();
-        renderer.sortingOrder = -1;
-        if (useBackgroundImage && !string.IsNullOrEmpty(backgroundImagePath))
+        if (backgroundGameObject != null)
         {
-            // Load background image from Resources
-            Texture2D backgroundTexture = Resources.Load<Texture2D>(backgroundImagePath);
-            if (backgroundTexture != null)
-            {
-                // Create sprite from the loaded texture
-                Sprite backgroundSprite = Sprite.Create(
-                    backgroundTexture,
-                    new Rect(0, 0, backgroundTexture.width, backgroundTexture.height),
-                    Vector2.one * 0.5f,
-                    100f // pixels per unit
-                );
+            // Use manually assigned background GameObject
+            terrainObject = backgroundGameObject;
 
-                renderer.sprite = backgroundSprite;
-                renderer.color = Color.white;
-                // Scale the background to fit the desired map radius
-                float textureSize = Mathf.Min(backgroundTexture.width, backgroundTexture.height) / 100f; // Convert to world units
-                float desiredSize = mapRadius * 2f;
-                float scale = desiredSize / textureSize;
-                terrainObject.transform.localScale = Vector3.one * scale;
-                //Debug.Log($"Background image loaded: {backgroundImagePath}, scaled to {scale}");
-            }
-            else
+            // Ensure proper parenting
+            if (terrainObject.transform.parent != transform)
             {
-                Debug.LogWarning($"Background image not found at path: {backgroundImagePath}. Using fallback circle.");
-                CreateFallbackTerrain(renderer);
+                terrainObject.transform.SetParent(transform);
             }
+
+            // Ensure SpriteRenderer exists
+            var renderer = terrainObject.GetComponent<SpriteRenderer>();
+            if (renderer == null)
+            {
+                renderer = terrainObject.AddComponent<SpriteRenderer>();
+            }
+            renderer.sortingOrder = -1;
         }
         else
         {
-            // Fallback to pattern
-            CreateFallbackTerrain(renderer);
+            // Generate terrain procedurally
+            terrainObject = new GameObject("Terrain");
+            terrainObject.transform.parent = transform;
+            terrainObject.transform.localPosition = Vector3.zero;
+
+            var renderer = terrainObject.AddComponent<SpriteRenderer>();
+            renderer.sortingOrder = -1;
+
+            if (useBackgroundImage && !string.IsNullOrEmpty(backgroundImagePath))
+            {
+                // Load background image from Resources
+                Texture2D backgroundTexture = Resources.Load<Texture2D>(backgroundImagePath);
+                if (backgroundTexture != null)
+                {
+                    Sprite backgroundSprite = Sprite.Create(
+                        backgroundTexture,
+                        new Rect(0, 0, backgroundTexture.width, backgroundTexture.height),
+                        Vector2.one * 0.5f,
+                        100f
+                    );
+
+                    renderer.sprite = backgroundSprite;
+                    renderer.color = Color.white;
+
+                    // Scale to fit map radius
+                    float textureSize = Mathf.Min(backgroundTexture.width, backgroundTexture.height) / 100f;
+                    float desiredSize = mapRadius * 2f;
+                    float scale = desiredSize / textureSize;
+                    terrainObject.transform.localScale = Vector3.one * scale;
+                }
+                else
+                {
+                    Debug.LogWarning($"Background image not found: {backgroundImagePath}. Using fallback.");
+                    CreateFallbackTerrain(renderer);
+                }
+            }
+            else
+            {
+                CreateFallbackTerrain(renderer);
+            }
         }
-        // TODO fix collider for boundaries
-        var collider = terrainObject.AddComponent<CircleCollider2D>();
+
+        // Add boundary collider
+        var collider = terrainObject.GetComponent<CircleCollider2D>();
+        if (collider == null)
+        {
+            collider = terrainObject.AddComponent<CircleCollider2D>();
+        }
         collider.radius = mapRadius;
         collider.isTrigger = true;
     }
 
     void CreateFallbackTerrain(SpriteRenderer renderer)
     {
-        // Create the simple circle sprite as fallback
         renderer.sprite = CreateSimpleCircleSprite();
         renderer.color = terrainColor;
-        // Scale the terrain to the desired size
+
+        // Scale to desired map size
         float desiredDiameter = mapRadius * 2f;
-        float currentSize = 0.64f; // Our sprite size in world units
+        float currentSize = 0.64f; // Default sprite size
         float scale = desiredDiameter / currentSize;
         terrainObject.transform.localScale = Vector3.one * scale;
     }
-
 
     void CreateCentralCore()
     {
         if (!enableCentralCore) return;
 
-        // Create central core GameObject
         GameObject coreObject = new GameObject("CentralCore");
         coreObject.transform.parent = transform;
-
-        // FIX: Force the Central Core to be at exactly (0,0,0) in world space
         coreObject.transform.position = Vector3.zero;
-        coreObject.transform.localPosition = Vector3.zero;
 
-        // Double-check the position is correct
-        Debug.Log($"Central Core created at world position: {coreObject.transform.position}");
-        Debug.Log($"Central Core local position: {coreObject.transform.localPosition}");
-
-        // Add CentralCore component
         centralCore = coreObject.AddComponent<CentralCore>();
         centralCore.maxEnergy = coreMaxEnergy;
         centralCore.currentEnergy = coreStartingEnergy;
@@ -173,41 +194,6 @@ public class TowerDefenseMap : MonoBehaviour
         // Subscribe to core events
         centralCore.OnEnergyChanged += OnCoreEnergyChanged;
         centralCore.OnEnergyDepleted += OnCoreEnergyDepleted;
-
-        // Verify position after component setup
-        Debug.Log($"Final Central Core position after setup: {coreObject.transform.position}");
-    }
-    [ContextMenu("Fix Central Core Position")]
-    public void FixCentralCorePosition()
-    {
-        if (centralCore != null)
-        {
-            Debug.Log($"Before fix - Central Core position: {centralCore.transform.position}");
-            centralCore.transform.position = Vector3.zero;
-            centralCore.transform.localPosition = Vector3.zero;
-            Debug.Log($"After fix - Central Core position: {centralCore.transform.position}");
-        }
-        else
-        {
-            Debug.LogError("Central Core not found!");
-        }
-    }
-    // Add this new coroutine to TowerDefenseMap.cs:
-    private System.Collections.IEnumerator ForceRegisterCore()
-    {
-        // Wait a bit to ensure EnergyManager is ready
-        yield return new WaitForSeconds(0.5f);
-
-        if (centralCore != null && EnergyManager.Instance != null)
-        {
-            Debug.Log("FORCE REGISTERING Central Core with EnergyManager");
-            EnergyManager.Instance.RegisterEnergyConsumer(centralCore);
-
-            // Verify registration
-            var consumers = EnergyManager.Instance.GetAllEnergyConsumers();
-            bool found = consumers.Contains(centralCore);
-            Debug.Log($"Central Core registration verified: {found}");
-        }
     }
 
     void CreateTowerSlots()
@@ -215,6 +201,7 @@ public class TowerDefenseMap : MonoBehaviour
         slotsContainer = new GameObject("Tower Slots");
         slotsContainer.transform.parent = transform;
         slotsContainer.transform.localPosition = Vector3.zero;
+
         foreach (var ring in rings)
         {
             if (!ring.enabled) continue;
@@ -238,6 +225,7 @@ public class TowerDefenseMap : MonoBehaviour
                 Mathf.Sin(angle) * ring.radius,
                 0f
             );
+
             GameObject slotObj = CreateTowerSlot(position, ring.slotSize, i);
             slotObj.transform.parent = ringContainer.transform;
             slotObj.name = $"Slot_{i}";
@@ -253,46 +241,49 @@ public class TowerDefenseMap : MonoBehaviour
     GameObject CreateTowerSlot(Vector3 position, float size, int index)
     {
         GameObject slot;
+
         if (towerSlotPrefab != null)
         {
             slot = Instantiate(towerSlotPrefab, position, Quaternion.identity);
 
+            // Scale prefab to match desired size
             var sr = slot.GetComponent<SpriteRenderer>();
             if (sr != null)
             {
-                // Get current diameter in world units (x-size of the sprite)
                 float currentDiameter = sr.bounds.size.x;
                 float desiredDiameter = size * 0.3f;
                 float scaleFactor = desiredDiameter / currentDiameter;
                 slot.transform.localScale = Vector3.one * scaleFactor;
             }
+
             var col = slot.GetComponent<CircleCollider2D>();
             if (col != null)
             {
                 col.radius = size * 0.5f;
             }
-
         }
         else
         {
             // Create default slot
             slot = new GameObject("TowerSlot");
             slot.transform.position = position;
-            // Add visual representation
+
             var renderer = slot.AddComponent<SpriteRenderer>();
             renderer.sprite = CreateSimpleCircleSprite();
             renderer.color = new Color(1f, 1f, 1f, 0.5f);
             renderer.sortingOrder = 1;
-            // Scale the slot to the desired size
+
+            // Scale to desired size
             float desiredDiameter = size;
-            float currentSize = 0.64f; // Our sprite size in world units
+            float currentSize = 0.64f;
             float scale = desiredDiameter / currentSize;
             slot.transform.localScale = Vector3.one * scale;
-            // Add collider
+
             var collider = slot.AddComponent<CircleCollider2D>();
             collider.radius = size * 0.5f;
             collider.isTrigger = true;
         }
+
         // Ensure TowerSlot component exists
         if (slot.GetComponent<TowerSlot>() == null)
         {
@@ -304,11 +295,12 @@ public class TowerDefenseMap : MonoBehaviour
 
     Sprite CreateSimpleCircleSprite()
     {
-        int size = 64; // Small, fixed size
+        int size = 64;
         Texture2D texture = new Texture2D(size, size);
         Color[] colors = new Color[size * size];
         Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
-        float radius = size * 0.4f; // Leave some border
+        float radius = size * 0.4f;
+
         for (int x = 0; x < size; x++)
         {
             for (int y = 0; y < size; y++)
@@ -317,10 +309,9 @@ public class TowerDefenseMap : MonoBehaviour
                 colors[y * size + x] = distance <= radius ? Color.white : Color.clear;
             }
         }
+
         texture.SetPixels(colors);
         texture.Apply();
-
-        // Create sprite with 100 pixels per unit for consistent scaling
         return Sprite.Create(texture, new Rect(0, 0, size, size), Vector2.one * 0.5f, 100f);
     }
 
@@ -329,9 +320,11 @@ public class TowerDefenseMap : MonoBehaviour
         foreach (var ring in rings)
         {
             if (!ring.enabled) continue;
+
             GameObject debugCircle = new GameObject($"Debug_Ring_{ring.radius}");
             debugCircle.transform.parent = transform;
             debugCircle.transform.localPosition = Vector3.zero;
+
             LineRenderer lr = debugCircle.AddComponent<LineRenderer>();
             Material lineMaterial = new Material(Shader.Find("Sprites/Default"));
             lineMaterial.color = debugCircleColor;
@@ -340,6 +333,7 @@ public class TowerDefenseMap : MonoBehaviour
             lr.endWidth = debugCircleWidth;
             lr.useWorldSpace = false;
             lr.sortingOrder = 2;
+
             int segments = 64;
             lr.positionCount = segments + 1;
 
@@ -359,16 +353,16 @@ public class TowerDefenseMap : MonoBehaviour
     // Central Core event handlers
     private void OnCoreEnergyChanged(float newEnergy)
     {
-        //Debug.Log($"Core energy changed: {newEnergy}/{coreMaxEnergy}");
+        // Handle core energy changes if needed
     }
 
     private void OnCoreEnergyDepleted()
     {
         Debug.Log("Core energy depleted! Game Over?");
-        // TODO Handle Game Over in Orchestrator
+        // TODO: Handle Game Over in Orchestrator
     }
 
-    // Public methods for runtime modifications
+    // Public API for runtime modifications
     public void AddRing(float radius, int slotCount, float slotSize = 1f, float rotationOffset = 0f)
     {
         RingConfiguration newRing = new RingConfiguration
@@ -380,8 +374,7 @@ public class TowerDefenseMap : MonoBehaviour
             enabled = true
         };
         rings.Add(newRing);
-        // TODO How to handle regeneration after ring addition after Augment
-        // GenerateMap();
+        // TODO: Handle regeneration after augmentation
     }
 
     public void RemoveRing(int ringIndex)
@@ -414,7 +407,6 @@ public class TowerDefenseMap : MonoBehaviour
         return allTowerSlots.FindAll(slot => !slot.IsOccupied);
     }
 
-    // Central Core access methods
     public CentralCore GetCentralCore()
     {
         return centralCore;
@@ -425,12 +417,11 @@ public class TowerDefenseMap : MonoBehaviour
         return centralCore != null;
     }
 
-    // Method to change background image at runtime
+    // Runtime background switching methods
     public void SetBackgroundImage(string imagePath)
     {
         backgroundImagePath = imagePath;
         useBackgroundImage = true;
-        // Regenerate only the terrain part
         if (terrainObject != null)
         {
             DestroyImmediate(terrainObject);
@@ -438,16 +429,47 @@ public class TowerDefenseMap : MonoBehaviour
         CreateTerrain();
     }
 
-    // Method to switch back to generated circle terrain
     public void UseGeneratedTerrain()
     {
         useBackgroundImage = false;
-        // Regenerate only the terrain part
         if (terrainObject != null)
         {
             DestroyImmediate(terrainObject);
         }
         CreateTerrain();
+    }
+
+    // Utility methods
+    [ContextMenu("Scale Background to Map Radius")]
+    public void ScaleBackgroundToMapRadius()
+    {
+        if (backgroundGameObject != null)
+        {
+            var renderer = backgroundGameObject.GetComponent<SpriteRenderer>();
+            if (renderer != null && renderer.sprite != null)
+            {
+                float spriteSize = Mathf.Min(renderer.sprite.bounds.size.x, renderer.sprite.bounds.size.y);
+                float desiredSize = mapRadius * 2f;
+                float scale = desiredSize / spriteSize;
+                backgroundGameObject.transform.localScale = Vector3.one * scale;
+                Debug.Log($"Scaled background to {scale} to fit map radius {mapRadius}");
+            }
+        }
+    }
+
+    [ContextMenu("Fix Central Core Position")]
+    public void FixCentralCorePosition()
+    {
+        if (centralCore != null)
+        {
+            centralCore.transform.position = Vector3.zero;
+            centralCore.transform.localPosition = Vector3.zero;
+            Debug.Log("Central Core position fixed to (0,0,0)");
+        }
+        else
+        {
+            Debug.LogError("Central Core not found!");
+        }
     }
 
     void OnDestroy()
