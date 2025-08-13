@@ -281,7 +281,12 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         isDestroyed = true;
         OnCoreDestroyed?.Invoke(damageSource);
         StopAllEffects();
-        EnergyManager.Instance?.TriggerGameOver();
+
+        // Only trigger game over if not already triggered
+        if (EnergyManager.Instance != null && !EnergyManager.Instance.IsGameOver())
+        {
+            EnergyManager.Instance.TriggerGameOver();
+        }
     }
 
     private void StartDamageFlash()

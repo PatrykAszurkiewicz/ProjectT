@@ -725,7 +725,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
 public interface IDamageable
 {
-    bool TakeDamage(float damage, GameObject source = null);
+    bool TakeDamage(float damageAmount, GameObject damageSource = null);
     bool CanTakeDamage();
     float GetCurrentHealth();
     float GetMaxHealth();

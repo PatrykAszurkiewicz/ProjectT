@@ -10,6 +10,11 @@ public class EnergyManager : MonoBehaviour
     #region Singleton Management
     private static bool isApplicationQuitting = false;
     private static EnergyManager instance;
+    private bool isGameOver = false;
+
+    public bool IsGameOver() => isGameOver;
+    private HashSet<IEnergyConsumer> destroyedConsumers = new HashSet<IEnergyConsumer>();
+
 
     public static EnergyManager Instance
     {
@@ -350,7 +355,16 @@ public class EnergyManager : MonoBehaviour
     {
         if (consumer == null || damage <= 0) return false;
 
-        // Apply damage
+        // Check if consumer is already destroyed
+        if (destroyedConsumers.Contains(consumer)) return false;
+
+        // For CentralCore and other IDamageable objects, use their TakeDamage method
+        if (consumer is IDamageable damageable)
+        {
+            return damageable.TakeDamage(damage, damageSource);
+        }
+
+        // Fallback for non-IDamageable consumers
         consumer.ConsumeEnergy(damage);
 
         // Trigger visual/audio effects if enabled
@@ -359,15 +373,11 @@ public class EnergyManager : MonoBehaviour
             StartCoroutine(DamageFlashEffect(consumer));
         }
 
-        // Log damage for debugging
-        string sourceName = damageSource != null ? damageSource.name : "Unknown";
-        //Debug.Log($"Enemy {sourceName} dealt {damage} damage to {GetConsumerName(consumer)}");
-
         // Fire damage event
         OnEnergyConsumerDamaged?.Invoke(consumer, damage);
 
         // Check if this damage caused destruction
-        if (consumer.IsEnergyDepleted())
+        if (consumer.IsEnergyDepleted() && !destroyedConsumers.Contains(consumer))
         {
             HandleEnergyConsumerDestroyed(consumer);
         }
@@ -453,6 +463,11 @@ public class EnergyManager : MonoBehaviour
     /// </summary>
     private void HandleEnergyConsumerDestroyed(IEnergyConsumer consumer)
     {
+        // Prevent multiple destruction handling for the same consumer
+        if (destroyedConsumers.Contains(consumer)) return;
+
+        destroyedConsumers.Add(consumer);
+
         string consumerName = GetConsumerName(consumer);
         Debug.Log($"{consumerName} was destroyed by enemy damage!");
 
@@ -607,9 +622,12 @@ public class EnergyManager : MonoBehaviour
 
     void CheckGameOverCondition(IEnergyConsumer consumer)
     {
-        if (consumer is CentralCore && consumer.GetEnergyPercentage() <= coreDeadEnergyThreshold)
+        if (!isGameOver && consumer is CentralCore && consumer.GetEnergyPercentage() <= coreDeadEnergyThreshold)
+        {
             TriggerGameOver();
+        }
     }
+
     #endregion
 
     #region Consumer Management
@@ -675,7 +693,11 @@ public class EnergyManager : MonoBehaviour
         }
     }
 
-    public void UnregisterEnergyConsumer(IEnergyConsumer consumer) => energyConsumers.Remove(consumer);
+    public void UnregisterEnergyConsumer(IEnergyConsumer consumer)
+    {
+        energyConsumers.Remove(consumer);
+        destroyedConsumers.Remove(consumer); // Clean up destroyed tracking
+    }
 
     void InitializeConsumerEnergy(IEnergyConsumer consumer)
     {
@@ -737,12 +759,26 @@ public class EnergyManager : MonoBehaviour
     #endregion
 
     #region Game Management
+
     public void TriggerGameOver()
     {
+        if (isGameOver) return; // Prevent multiple calls
+
+        isGameOver = true;
         OnGameOver?.Invoke();
         Debug.Log("Game Over - Central Core energy depleted!");
+
+        StopAllCoroutines();
     }
     #endregion
+
+
+
+    public bool IsConsumerDestroyed(IEnergyConsumer consumer)
+    {
+        return destroyedConsumers.Contains(consumer);
+    }
+
 
     #region Debug Methods
     [ContextMenu("Add 100 Player Energy")]
@@ -769,6 +805,7 @@ public class EnergyManager : MonoBehaviour
     {
         StopAllCoroutines();
         energyConsumers?.Clear();
+        destroyedConsumers?.Clear(); // Clear destroyed tracking
         supplyBeam?.Cleanup();
 
         if (instance == this)

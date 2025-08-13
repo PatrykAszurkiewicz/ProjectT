@@ -43,7 +43,7 @@ public class ObstacleGenerator : MonoBehaviour
 
             // sprawdzenie czy w pobli¿u nie ma innej przeszkody
             Collider2D hit = Physics2D.OverlapCircle(randomPos, minDistanceBetweenObstacles);
-            if (hit != null && hit.CompareTag("Obstacle") && hit.CompareTag("Player"))
+            if (hit != null && (hit.CompareTag("Obstacle") || hit.CompareTag("Player")))
             {
                 continue;
             }
@@ -75,6 +75,15 @@ public class ObstacleGenerator : MonoBehaviour
             // promieñ maksymalny mapRange
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(coreTransform.position, mapRange);
+        }
+
+        Gizmos.color = Color.cyan;
+
+        // Zak³adamy, ¿e wszystkie przeszkody s¹ w warstwie "Obstacles"
+        GameObject[] allObstacles = GameObject.FindGameObjectsWithTag("Obstacle");
+        foreach (var obstacle in allObstacles)
+        {
+            Gizmos.DrawWireSphere(obstacle.transform.position, minDistanceBetweenObstacles);
         }
     }
 }

@@ -7,8 +7,17 @@ public class TowerPlacementManager : MonoBehaviour
 {
     public static TowerPlacementManager Instance;
 
-    [Header("Tower Prefabs")]
-    public List<GameObject> towerPrefabs = new List<GameObject>();
+    [Header("Tower Prefabs - Assign Individual Towers")]
+    public GameObject towerPrefab1;
+    public GameObject towerPrefab2;
+    public GameObject towerPrefab3;
+    public GameObject towerPrefab4;
+    public GameObject towerPrefab5;
+    public GameObject towerPrefab6;
+
+    [System.NonSerialized]
+    private List<GameObject> towerPrefabs = new List<GameObject>();
+
     public int selectedTowerIndex = 0;
 
     [Header("Player Proximity Settings")]
@@ -30,10 +39,17 @@ public class TowerPlacementManager : MonoBehaviour
 
     private TowerDefenseMap mapGenerator;
     private bool isPlacementMode = false;
+
+    [System.NonSerialized]
     private List<TowerSlot> allSlots = new List<TowerSlot>();
-    private bool clickProcessed = false;
+    [System.NonSerialized]
     private TowerSlot currentHighlightedSlot = null;
+    [System.NonSerialized]
     private IEnergyConsumer currentHighlightedConsumer = null;
+    [System.NonSerialized]
+    private TowerSelectionWheel selectionWheel;
+
+    private bool clickProcessed = false;
     private float lastRepairTime = -Mathf.Infinity;
 
     void Awake()
@@ -46,6 +62,10 @@ public class TowerPlacementManager : MonoBehaviour
         {
             Destroy(gameObject);
         }
+
+        // Initialize the Non-Serialized fields
+        allSlots = new List<TowerSlot>();
+        towerPrefabs = new List<GameObject>();
     }
 
     void Start()
@@ -63,6 +83,31 @@ public class TowerPlacementManager : MonoBehaviour
                 requirePlayerProximity = false;
             }
         }
+
+        // Build tower list from individual prefab fields
+        BuildTowerList();
+
+        // Create selection wheel
+        CreateSelectionWheel();
+    }
+
+    void BuildTowerList()
+    {
+        towerPrefabs = new List<GameObject>();
+
+        if (towerPrefab1 != null) towerPrefabs.Add(towerPrefab1);
+        if (towerPrefab2 != null) towerPrefabs.Add(towerPrefab2);
+        if (towerPrefab3 != null) towerPrefabs.Add(towerPrefab3);
+        if (towerPrefab4 != null) towerPrefabs.Add(towerPrefab4);
+        if (towerPrefab5 != null) towerPrefabs.Add(towerPrefab5);
+        if (towerPrefab6 != null) towerPrefabs.Add(towerPrefab6);
+    }
+
+    void CreateSelectionWheel()
+    {
+        GameObject wheelObj = new GameObject("TowerSelectionWheel");
+        selectionWheel = wheelObj.AddComponent<TowerSelectionWheel>();
+        wheelObj.SetActive(false);
     }
 
     void Update()
@@ -207,11 +252,14 @@ public class TowerPlacementManager : MonoBehaviour
         }
 
         // Tower selection with number keys
-        for (int i = 1; i <= towerPrefabs.Count && i <= 9; i++)
+        if (towerPrefabs != null)
         {
-            if (Keyboard.current[(Key)(Key.Digit1 + i - 1)].wasPressedThisFrame)
+            for (int i = 1; i <= towerPrefabs.Count && i <= 9; i++)
             {
-                selectedTowerIndex = i - 1;
+                if (Keyboard.current[(Key)(Key.Digit1 + i - 1)].wasPressedThisFrame)
+                {
+                    selectedTowerIndex = i - 1;
+                }
             }
         }
 
@@ -322,7 +370,8 @@ public class TowerPlacementManager : MonoBehaviour
 
     public void RegisterSlot(TowerSlot slot)
     {
-        if (!allSlots.Contains(slot))
+        if (allSlots == null) allSlots = new List<TowerSlot>();
+        if (slot != null && !allSlots.Contains(slot))
         {
             allSlots.Add(slot);
         }
@@ -330,7 +379,10 @@ public class TowerPlacementManager : MonoBehaviour
 
     public void UnregisterSlot(TowerSlot slot)
     {
-        allSlots.Remove(slot);
+        if (allSlots != null)
+        {
+            allSlots.Remove(slot);
+        }
     }
 
     public void TogglePlacementMode()
@@ -367,9 +419,18 @@ public class TowerPlacementManager : MonoBehaviour
                 SetConsumerHighlight(currentHighlightedConsumer, false);
                 currentHighlightedConsumer = null;
             }
-            foreach (TowerSlot slot in allSlots)
+            if (allSlots != null)
             {
-                slot?.SetHighlight(false);
+                foreach (TowerSlot slot in allSlots)
+                {
+                    slot?.SetHighlight(false);
+                }
+            }
+
+            // Hide wheel if visible
+            if (selectionWheel != null)
+            {
+                selectionWheel.CloseWheel();
             }
         }
     }
@@ -377,25 +438,45 @@ public class TowerPlacementManager : MonoBehaviour
     public void OnSlotClicked(TowerSlot slot)
     {
         if (!isPlacementMode || !slot.IsAvailable) return;
+        if (towerPrefabs == null || towerPrefabs.Count == 0) return;
 
         if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) return;
 
-        if (selectedTowerIndex >= 0 && selectedTowerIndex < towerPrefabs.Count)
+        // Show wheel if we have multiple tower types, otherwise place directly
+        if (towerPrefabs.Count > 1 && selectionWheel != null)
         {
-            bool success = slot.PlaceTower(towerPrefabs[selectedTowerIndex]);
+            selectionWheel.OpenWheel(towerPrefabs.ToArray(), slot);
+        }
+        else if (towerPrefabs.Count > 0)
+        {
+            PlaceTowerDirectly(slot, selectedTowerIndex);
+        }
+    }
 
-            if (success)
+    // Called by the wheel when a tower is selected
+    public void PlaceTowerFromWheel(int towerIndex, GameObject towerPrefab, TowerSlot slot)
+    {
+        PlaceTowerDirectly(slot, towerIndex);
+    }
+
+    // Helper method to place tower directly
+    private void PlaceTowerDirectly(TowerSlot slot, int towerIndex)
+    {
+        if (towerPrefabs == null || towerIndex < 0 || towerIndex >= towerPrefabs.Count) return;
+
+        bool success = slot.PlaceTower(towerPrefabs[towerIndex]);
+
+        if (success)
+        {
+            if (currentHighlightedSlot == slot)
             {
-                if (currentHighlightedSlot == slot)
-                {
-                    currentHighlightedSlot.SetHighlight(false);
-                    currentHighlightedSlot = null;
-                }
+                currentHighlightedSlot.SetHighlight(false);
+                currentHighlightedSlot = null;
+            }
 
-                if (playCreationAnimation && slot.currentTower != null)
-                {
-                    StartCoroutine(PlayTowerCreationAnimation(slot.currentTower));
-                }
+            if (playCreationAnimation && slot.currentTower != null)
+            {
+                StartCoroutine(PlayTowerCreationAnimation(slot.currentTower));
             }
         }
     }
@@ -430,21 +511,24 @@ public class TowerPlacementManager : MonoBehaviour
         Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
         mouseWorldPos.z = 0f;
 
-        foreach (TowerSlot slot in allSlots)
+        if (allSlots != null)
         {
-            if (slot != null && slot.IsClickedAt(mouseWorldPos) && slot.IsOccupied)
+            foreach (TowerSlot slot in allSlots)
             {
-                if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) continue;
+                if (slot != null && slot.IsClickedAt(mouseWorldPos) && slot.IsOccupied)
+                {
+                    if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) continue;
 
-                slot.RemoveTower();
-                break;
+                    slot.RemoveTower();
+                    break;
+                }
             }
         }
     }
 
     public void SelectTower(int index)
     {
-        if (index >= 0 && index < towerPrefabs.Count)
+        if (towerPrefabs != null && index >= 0 && index < towerPrefabs.Count)
         {
             selectedTowerIndex = index;
         }
@@ -459,19 +543,41 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 
-    public List<TowerSlot> GetAllSlots() => new List<TowerSlot>(allSlots);
+    public List<TowerSlot> GetAllSlots() => allSlots != null ? new List<TowerSlot>(allSlots) : new List<TowerSlot>();
 
     public List<TowerSlot> GetAvailableSlots()
     {
         List<TowerSlot> availableSlots = new List<TowerSlot>();
-        foreach (TowerSlot slot in allSlots)
+        if (allSlots != null)
         {
-            if (slot != null && slot.IsAvailable)
+            foreach (TowerSlot slot in allSlots)
             {
-                availableSlots.Add(slot);
+                if (slot != null && slot.IsAvailable)
+                {
+                    availableSlots.Add(slot);
+                }
             }
         }
         return availableSlots;
+    }
+
+    // Utility method to get tower count
+    public int GetTowerTypeCount()
+    {
+        return towerPrefabs != null ? towerPrefabs.Count : 0;
+    }
+
+    // Debug method to rebuild tower list manually if needed
+    [ContextMenu("Rebuild Tower List")]
+    public void RebuildTowerList()
+    {
+        BuildTowerList();
+        Debug.Log($"Tower list rebuilt with {GetTowerTypeCount()} towers");
+    }
+
+    void OnDestroy()
+    {
+        // Cleanup if needed
     }
 
     void OnDrawGizmos()
