@@ -110,6 +110,12 @@ public class TowerPlacementManager : MonoBehaviour
         wheelObj.SetActive(false);
     }
 
+    // ADDED: Public method to expose placement mode state for EnergyManager
+    public bool IsInPlacementMode()
+    {
+        return isPlacementMode;
+    }
+
     void Update()
     {
         HandleInput();

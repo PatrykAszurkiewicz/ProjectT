@@ -1,0 +1,481 @@
+fileFormatVersion: 2
+guid: ae8fc6b07f59e5f46afae68b135913c5
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -8223404743813470344
+    second: tower_generator_sprite1_cropv2OLD_0
+  - first:
+      213: 8047571036985469389
+    second: tower_generator_sprite1_cropv2OLD_1
+  - first:
+      213: 8047547751711408002
+    second: tower_generator_sprite1_cropv2OLD_2
+  - first:
+      213: 2926849124550630164
+    second: tower_generator_sprite1_cropv2OLD_3
+  - first:
+      213: 8423386182240763937
+    second: tower_generator_sprite1_cropv2OLD_4
+  - first:
+      213: -539115542144996980
+    second: tower_generator_sprite1_cropv2OLD_5
+  - first:
+      213: -109197630104409567
+    second: tower_generator_sprite1_cropv2OLD_6
+  - first:
+      213: 4290595532009941005
+    second: tower_generator_sprite1_cropv2OLD_7
+  - first:
+      213: -7758636513115943531
+    second: tower_generator_sprite1_cropv2OLD_8
+  - first:
+      213: -9018599939128153796
+    second: tower_generator_sprite1_cropv2OLD_9
+  - first:
+      213: 3413687495712583837
+    second: tower_generator_sprite1_cropv2OLD_10
+  - first:
+      213: -9029387744411212533
+    second: tower_generator_sprite1_cropv2OLD_11
+  - first:
+      213: 4342420700408556607
+    second: tower_generator_sprite1_cropv2OLD_12
+  - first:
+      213: 9191898970206446691
+    second: tower_generator_sprite1_cropv2OLD_13
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_0
+      rect:
+        serializedVersion: 2
+        x: 64
+        y: 769
+        width: 298
+        height: 251
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8776cb874f890ed80800000000000000
+      internalID: -8223404743813470344
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_1
+      rect:
+        serializedVersion: 2
+        x: 441
+        y: 768
+        width: 295
+        height: 255
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dc9ad346837beaf60800000000000000
+      internalID: 8047571036985469389
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_2
+      rect:
+        serializedVersion: 2
+        x: 807
+        y: 768
+        width: 296
+        height: 255
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 28f70cdda02aeaf60800000000000000
+      internalID: 8047547751711408002
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_3
+      rect:
+        serializedVersion: 2
+        x: 1173
+        y: 768
+        width: 300
+        height: 255
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 41bd00c85c14e9820800000000000000
+      internalID: 2926849124550630164
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_4
+      rect:
+        serializedVersion: 2
+        x: 62
+        y: 512
+        width: 299
+        height: 253
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 120056e8a11e5e470800000000000000
+      internalID: 8423386182240763937
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_5
+      rect:
+        serializedVersion: 2
+        x: 437
+        y: 512
+        width: 298
+        height: 254
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c892e81554da488f0800000000000000
+      internalID: -539115542144996980
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_6
+      rect:
+        serializedVersion: 2
+        x: 805
+        y: 512
+        width: 298
+        height: 255
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 12aef4f755d0c7ef0800000000000000
+      internalID: -109197630104409567
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_7
+      rect:
+        serializedVersion: 2
+        x: 1173
+        y: 511
+        width: 300
+        height: 255
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d08a45067e14b8b30800000000000000
+      internalID: 4290595532009941005
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_8
+      rect:
+        serializedVersion: 2
+        x: 63
+        y: 256
+        width: 299
+        height: 253
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 59d4956c239c35490800000000000000
+      internalID: -7758636513115943531
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_9
+      rect:
+        serializedVersion: 2
+        x: 436
+        y: 256
+        width: 299
+        height: 253
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c3928e0532f77d280800000000000000
+      internalID: -9018599939128153796
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_10
+      rect:
+        serializedVersion: 2
+        x: 804
+        y: 256
+        width: 300
+        height: 253
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d90342cd0badf5f20800000000000000
+      internalID: 3413687495712583837
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_11
+      rect:
+        serializedVersion: 2
+        x: 1173
+        y: 256
+        width: 300
+        height: 253
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b05aa1bafab21b280800000000000000
+      internalID: -9029387744411212533
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_12
+      rect:
+        serializedVersion: 2
+        x: 62
+        y: 1
+        width: 299
+        height: 253
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f3ca721be90634c30800000000000000
+      internalID: 4342420700408556607
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: tower_generator_sprite1_cropv2OLD_13
+      rect:
+        serializedVersion: 2
+        x: 436
+        y: 1
+        width: 301
+        height: 251
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3642f62a96f209f70800000000000000
+      internalID: 9191898970206446691
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      tower_generator_sprite1_cropv2OLD_0: -8223404743813470344
+      tower_generator_sprite1_cropv2OLD_1: 8047571036985469389
+      tower_generator_sprite1_cropv2OLD_10: 3413687495712583837
+      tower_generator_sprite1_cropv2OLD_11: -9029387744411212533
+      tower_generator_sprite1_cropv2OLD_12: 4342420700408556607
+      tower_generator_sprite1_cropv2OLD_13: 9191898970206446691
+      tower_generator_sprite1_cropv2OLD_2: 8047547751711408002
+      tower_generator_sprite1_cropv2OLD_3: 2926849124550630164
+      tower_generator_sprite1_cropv2OLD_4: 8423386182240763937
+      tower_generator_sprite1_cropv2OLD_5: -539115542144996980
+      tower_generator_sprite1_cropv2OLD_6: -109197630104409567
+      tower_generator_sprite1_cropv2OLD_7: 4290595532009941005
+      tower_generator_sprite1_cropv2OLD_8: -7758636513115943531
+      tower_generator_sprite1_cropv2OLD_9: -9018599939128153796
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

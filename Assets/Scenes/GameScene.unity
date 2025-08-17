@@ -1547,7 +1547,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   towerPrefab1: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
-  towerPrefab2: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
+  towerPrefab2: {fileID: 2138885173737701668, guid: 69f067ed8c00ee44ca4dd256c6692099, type: 3}
   towerPrefab3: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
   towerPrefab4: {fileID: 0}
   towerPrefab5: {fileID: 0}
@@ -2440,6 +2440,10 @@ MonoBehaviour:
   supplyRange: 2
   supplyRate: 10
   maxSupplyDistance: 0.5
+  repairCostPerEnergyUnit: 1
+  repairRate: 5
+  enableRepairCostLogging: 1
+  onlyAllowRepairInPlacementMode: 1
   towerMaxEnergy: 100
   towerEnergyDecayRate: 0.7
   towerCriticalEnergyThreshold: 0.2
@@ -2465,10 +2469,12 @@ MonoBehaviour:
   depletedEnergyColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   damageFlashColor: {r: 1, g: 0, b: 0, a: 1}
   supplyBeamColor: {r: 0, g: 1, b: 1, a: 1}
+  repairBeamColor: {r: 0, g: 1, b: 0, a: 1}
   supplyBeamWidth: 0.1
   supplyTargetMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  enableDebugLogging: 1
 --- !u!4 &1213227522
 Transform:
   m_ObjectHideFlags: 0

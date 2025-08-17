@@ -1,0 +1,157 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2138885173737701668
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 102932535406297956}
+  - component: {fileID: 1385252472349385194}
+  m_Layer: 9
+  m_Name: GeneratorTower
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &102932535406297956
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138885173737701668}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -4.45, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 5068194430522686570}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1385252472349385194
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138885173737701668}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f29c0ba85860ca4c8c8fc1f70afd795, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  isEnergyGenerator: 1
+  energyGenerationRate: 1
+  generationRange: 4
+  generationInterval: 3
+  showGenerationEffects: 1
+  generationEffectColor: {r: 0.2, g: 0.6, b: 1, a: 0.39215687}
+  collisionConfig:
+    enableCollision: 1
+    isTrigger: 0
+    colliderType: 0
+    paddingPercent: 0.05
+  towerName: Energy Generator
+  damage: 0
+  range: 0
+  fireRate: 0
+  cost: 100
+  towerType: 5
+  spriteResourcePath: Sprites/TowerGeneratorSprites/tower_generator_sprite1_cropv2
+  spriteIndex: 0
+  spriteScale: 0.4
+  enableAnimation: 1
+  animationFrameCount: 43
+  animationSpeed: 0.25
+  targetLayer:
+    serializedVersion: 2
+    m_Bits: 0
+  projectilePrefab: {fileID: 2844621228601224902, guid: 0e3a80326e5a3df4693f9aadb0191f35, type: 3}
+  canUpgrade: 1
+  upgradeTowerPrefab: {fileID: 0}
+  upgradeLevel: 1
+  maxUpgradeLevel: 3
+  useTentacleTurret: 0
+  tentacleConfig:
+    length: 1.2
+    width: 0.3
+    segments: 8
+    swayAmount: 0.1
+    swaySpeed: 2
+    color: {r: 0.337, g: 0.176, b: 0.259, a: 0.8}
+    tipColor: {r: 0.8, g: 0.3, b: 0.3, a: 1}
+    attachmentOffset: {x: 0, y: -0.3}
+  meleeConfig:
+    damageMultiplier: 1.5
+    attackDuration: 0.3
+    swipeArcDegrees: 60
+    swipeSpeed: 8
+    swipeCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+  rotationSpeed: 180
+  smoothRotation: 1
+  maxEnergy: 100
+  currentEnergy: 100
+  requiresEnergyToFunction: 1
+  showEnergyBar: 1
+  armorReduction: 0
+  immuneToEnemyDamage: 0
+  damageFlashDuration: 0.15
+--- !u!1 &3321510626698392789
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5068194430522686570}
+  m_Layer: 9
+  m_Name: FirePoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5068194430522686570
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3321510626698392789}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1.11, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 102932535406297956}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

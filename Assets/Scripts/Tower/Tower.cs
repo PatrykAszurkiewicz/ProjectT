@@ -9,6 +9,20 @@ using UnityEditor;
 public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 {
 
+    [Header("Energy Generator Settings")]
+    public bool isEnergyGenerator = false; // Should be set to true for Generator towers
+    public float energyGenerationRate = 1f; // Energy units per second
+    public float generationRange = 4f; // Range to show generation effect
+    public float generationInterval = 0.25f; // How often to generate Energy (in seconds)
+    public bool showGenerationEffects = true; // Visual effects for generation
+    public Color generationEffectColor = new Color(0.3f, 0.7f, 1f, 0.5f); // Light blue with transparency
+    private float lastGenerationTime;
+    private GameObject auraObject;
+    private SpriteRenderer auraRenderer;
+
+
+
+
     [Header("Collision Settings")]
     public SpriteCollisionConfig collisionConfig = new SpriteCollisionConfig()
     {
@@ -42,7 +56,8 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         public AnimationCurve swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
     }
 
-    public enum TowerType { Basic, Artillery, Laser, Ice, Poison }
+    public enum TowerType { Basic, Artillery, Laser, Ice, Poison, Generator }
+
 
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
@@ -139,11 +154,152 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     void Update()
     {
         if (IsEnergyDepleted() || isDisabledByDamage) return;
-
-        UpdateTargeting();
-        UpdateTentacles();
-        TryFire();
+        // Branch logic based on tower type
+        if (isEnergyGenerator || towerType == TowerType.Generator)
+        {
+            UpdateEnergyGeneration();
+        }
+        else
+        {
+            UpdateTargeting();
+            UpdateTentacles();
+            TryFire();
+        }
     }
+
+
+    #region Energy Generation System
+    void UpdateEnergyGeneration()
+    {
+        // Generate energy at specified intervals
+        if (Time.time >= lastGenerationTime + generationInterval)
+        {
+            GenerateEnergy();
+            lastGenerationTime = Time.time;
+        }
+
+        // Update visual effects
+        if (showGenerationEffects)
+        {
+            UpdateGenerationEffects();
+        }
+    }
+
+    void GenerateEnergy()
+    {
+        if (EnergyManager.Instance == null) return;
+
+        if (IsEnergyDepleted() || isDisabledByDamage) return;
+
+        // Calculate energy to generate based on rate and interval
+        float energyToGenerate = energyGenerationRate * generationInterval;
+
+        // Convert to integer for player currency
+        int energyAmount = Mathf.RoundToInt(energyToGenerate);
+
+        // Give energy to the player
+        EnergyManager.Instance.GivePlayerEnergy(energyAmount);
+
+        // Energy cost for energy generation
+        float selfEnergyCost = energyToGenerate * 0.1f; // 10% of generated energy
+        ConsumeEnergy(selfEnergyCost);
+        // Visual feedback
+        if (showGenerationEffects)
+        {
+            CreateGenerationPulse();
+        }
+
+        Debug.Log($"Energy Generator '{towerName}' generated {energyAmount} energy for player!");
+    }
+
+    void UpdateGenerationEffects()
+    {
+        if (auraRenderer == null) return;
+        if (IsEnergyDepleted() || isDisabledByDamage)
+        {
+            auraRenderer.color = Color.clear; // Make aura invisible
+            return;
+        }
+        // Create pulsating effect
+        float time = Time.time * 0.5f; // Pulse speed
+        float pulse = Mathf.Sin(time) * 0.5f + 0.5f;
+
+        // Pulsate the aura color
+        Color auraColor = generationEffectColor;
+        auraColor.a = generationEffectColor.a * (0.3f + pulse * 0.7f); // Pulse opacity
+        auraRenderer.color = auraColor;
+
+        // Pulsate the aura size slightly
+        float baseScale = spriteScale * 2.5f;
+        float scaleMultiplier = 1f + (pulse * 0.2f); // Pulse between 100% and 120% size
+        auraObject.transform.localScale = Vector3.one * baseScale * scaleMultiplier;
+        auraObject.transform.Rotate(0, 0, 30f * Time.deltaTime);
+    }
+
+    void CreateGenerationPulse()
+    {
+        StartCoroutine(GenerationPulseEffect());
+        StartCoroutine(AuraBurstEffect());
+    }
+
+    System.Collections.IEnumerator AuraBurstEffect()
+    {
+        if (auraRenderer == null) yield break;
+
+        float duration = 0.5f;
+        float elapsed = 0f;
+        float startScale = spriteScale * 2.5f;
+        float burstScale = startScale * 1.5f; // Burst to 150% size
+
+        Color startColor = generationEffectColor;
+        Color burstColor = new Color(startColor.r, startColor.g, startColor.b, startColor.a * 2f);
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+
+            // Scale burst
+            float scaleCurve = Mathf.Sin(t * Mathf.PI);
+            float currentScale = Mathf.Lerp(startScale, burstScale, scaleCurve);
+            auraObject.transform.localScale = Vector3.one * currentScale;
+
+            // Color burst
+            Color currentColor = Color.Lerp(startColor, burstColor, scaleCurve);
+            auraRenderer.color = currentColor;
+
+            yield return null;
+        }
+
+        // Reset to normal
+        auraObject.transform.localScale = Vector3.one * startScale;
+        auraRenderer.color = startColor;
+    }
+
+    System.Collections.IEnumerator GenerationPulseEffect()
+    {
+        if (spriteRenderer == null) yield break;
+
+        Color originalColor = spriteRenderer.color;
+        Color pulseColor = Color.Lerp(originalColor, generationEffectColor, 0.5f);
+
+        // Pulse effect
+        float duration = 0.3f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Sin((elapsed / duration) * Mathf.PI);
+            spriteRenderer.color = Color.Lerp(originalColor, pulseColor, t);
+            yield return null;
+        }
+
+        spriteRenderer.color = originalColor;
+    }
+    #endregion
+
+
 
     void OnDestroy() => Cleanup();
 
@@ -194,6 +350,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         gameObject.tag = "Tower";
 
+        // Auto-detect if this is a generator based on tower type
+        if (towerType == TowerType.Generator)
+        {
+            isEnergyGenerator = true;
+            useTentacleTurret = false; // Generators don't need combat tentacles
+        }
+
         // Ensure SpriteRenderer exists and is properly initialized
         spriteRenderer = GetComponent<SpriteRenderer>();
         if (spriteRenderer == null)
@@ -201,7 +364,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
         }
 
-        // Wait for component to be fully initialized before setting properties
         if (spriteRenderer != null)
         {
             spriteRenderer.sortingOrder = 20;
@@ -218,7 +380,72 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         rangeCollider.isTrigger = true;
 
-        if (useTentacleTurret) InitializeTentacles();
+        // Only initialize tentacles for combat towers
+        if (useTentacleTurret && !isEnergyGenerator)
+        {
+            InitializeTentacles();
+        }
+
+        // Initialize generation effects for generators
+        if (isEnergyGenerator && showGenerationEffects)
+        {
+            InitializeGenerationEffects();
+        }
+    }
+
+    void InitializeGenerationEffects()
+    {
+        // Create a circular aura effect around the tower
+        auraObject = new GameObject("GenerationAura");
+        auraObject.transform.SetParent(transform);
+        //auraObject.transform.localPosition = Vector3.zero;
+        // Shifting the pulsating aura effect to right and top to align with Tower Generator sprite
+        auraObject.transform.localPosition = new Vector3(0.1f, 0.1f, 0f);
+
+
+        auraRenderer = auraObject.AddComponent<SpriteRenderer>();
+        auraRenderer.sprite = CreateCircleSprite();
+        auraRenderer.color = generationEffectColor;
+        auraRenderer.sortingOrder = spriteRenderer.sortingOrder + 1; // IN FRONT of the tower
+
+        float auraScale = spriteScale * 4f;
+        auraObject.transform.localScale = Vector3.one * auraScale;
+    }
+
+
+    Sprite CreateCircleSprite()
+    {
+        int size = 128;
+        Texture2D texture = new Texture2D(size, size);
+        Color[] colors = new Color[size * size];
+        Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
+        float outerRadius = size * 0.4f;
+        float innerRadius = size * 0.25f; // Create a ring effect
+
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                Vector2 pos = new Vector2(x, y);
+                float distance = Vector2.Distance(pos, center);
+
+                if (distance <= outerRadius && distance >= innerRadius)
+                {
+                    // Create a smooth falloff
+                    float alpha = 1f - Mathf.Abs(distance - (innerRadius + outerRadius) * 0.5f) / ((outerRadius - innerRadius) * 0.5f);
+                    alpha = Mathf.Clamp01(alpha);
+                    colors[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                }
+                else
+                {
+                    colors[y * size + x] = Color.clear;
+                }
+            }
+        }
+
+        texture.SetPixels(colors);
+        texture.Apply();
+        return Sprite.Create(texture, new Rect(0, 0, size, size), Vector2.one * 0.5f, 100f);
     }
 
     void InitializeTentacles()
@@ -251,13 +478,30 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     void SetupTower()
     {
         parentSlot = GetComponentInParent<TowerSlot>();
-        float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
-        ProjectileRange = Mathf.Max(range * 2f, tentacleReach * 3.5f, 6f);
-        rangeCollider.radius = ProjectileRange + 0.5f;
+
+        if (isEnergyGenerator)
+        {
+            // Generators use generation range instead of projectile range
+            ProjectileRange = generationRange;
+            rangeCollider.radius = generationRange;
+        }
+        else
+        {
+            float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
+            ProjectileRange = Mathf.Max(range * 2f, tentacleReach * 3.5f, 6f);
+            rangeCollider.radius = ProjectileRange + 0.5f;
+        }
+
         LoadSprite();
         SetupSpriteCollision();
         SetupEnergyBar();
     }
+
+    public bool IsGenerator() => isEnergyGenerator || towerType == TowerType.Generator;
+    public float GetGenerationRate() => energyGenerationRate;
+    public void SetGenerationRate(float rate) => energyGenerationRate = Mathf.Max(0f, rate);
+
+
 
     void SetupSpriteCollision()
     {
@@ -337,7 +581,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                     targetAngle : currentAngle + Mathf.Sign(angleDifference) * rotationStep;
 
                 currentAngle = Mathf.Repeat(currentAngle + 180f, 360f) - 180f;
-
                 // Apply rotation to tentacle container for better aiming
                 if (tentacleContainer != null)
                     tentacleContainer.transform.rotation = Quaternion.AngleAxis(currentAngle, Vector3.forward);
@@ -698,27 +941,44 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         EnergyManager.Instance?.UnregisterEnergyConsumer(this);
         if (tentacleContainer != null) DestroyImmediate(tentacleContainer);
+        if (auraObject != null) DestroyImmediate(auraObject); // Changed from generationBeam
         if (energyBar != null) Destroy(energyBar);
         if (damageFlashCoroutine != null) StopCoroutine(damageFlashCoroutine);
     }
-
 #if UNITY_EDITOR
     void OnDrawGizmosSelected()
     {
-        Handles.color = Color.blue; Handles.DrawWireDisc(transform.position, Vector3.forward, range);
-        Handles.color = Color.red; Handles.DrawWireDisc(transform.position, Vector3.forward, ProjectileRange);
-        Handles.color = Color.green; Handles.DrawWireDisc(transform.position, Vector3.forward, rangeCollider?.radius ?? 0f);
-
-        if (currentTarget != null)
+        if (isEnergyGenerator)
         {
-            float dist = Vector2.Distance(transform.position, currentTarget.transform.position);
-            Handles.color = dist <= ProjectileRange ? Color.red : Color.gray;
-            Handles.DrawLine(transform.position, currentTarget.transform.position);
-            Handles.Label((transform.position + currentTarget.transform.position) / 2f, $"Dist: {dist:F1}");
+            // Show generation range for generators
+            UnityEditor.Handles.color = generationEffectColor;
+            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, generationRange);
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
+                $"Generator: {energyGenerationRate}/sec");
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.7f,
+                $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
         }
+        else
+        {
+            // Original combat tower gizmos
+            UnityEditor.Handles.color = Color.blue;
+            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, range);
+            UnityEditor.Handles.color = Color.red;
+            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, ProjectileRange);
+            UnityEditor.Handles.color = Color.green;
+            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, rangeCollider?.radius ?? 0f);
 
-        Handles.Label(transform.position + Vector3.up * 1.5f, $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
-        Handles.Label(transform.position + Vector3.up * 1.2f, $"Status: {(isDisabledByDamage ? "DISABLED" : "ACTIVE")}");
+            if (currentTarget != null)
+            {
+                float dist = Vector2.Distance(transform.position, currentTarget.transform.position);
+                UnityEditor.Handles.color = dist <= ProjectileRange ? Color.red : Color.gray;
+                UnityEditor.Handles.DrawLine(transform.position, currentTarget.transform.position);
+                UnityEditor.Handles.Label((transform.position + currentTarget.transform.position) / 2f, $"Dist: {dist:F1}");
+            }
+
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.5f, $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.2f, $"Status: {(isDisabledByDamage ? "DISABLED" : "ACTIVE")}");
+        }
     }
 #endif
 }

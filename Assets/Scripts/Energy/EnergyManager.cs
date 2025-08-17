@@ -15,7 +15,6 @@ public class EnergyManager : MonoBehaviour
     public bool IsGameOver() => isGameOver;
     private HashSet<IEnergyConsumer> destroyedConsumers = new HashSet<IEnergyConsumer>();
 
-
     public static EnergyManager Instance
     {
         get
@@ -43,6 +42,12 @@ public class EnergyManager : MonoBehaviour
     public float supplyRate = 10f;
     public float maxSupplyDistance = 0.5f;
 
+    [Header("Repair System Settings")]
+    public int repairEnergyPerClick = 10;
+    public int repairCostPerClick = 10;
+    public float repairCooldown = 0.5f;
+    public bool onlyAllowRepairInPlacementMode = true;
+
     [Header("Tower Energy Settings")]
     public float towerMaxEnergy = 100f;
     public float towerEnergyDecayRate = 0.7f;
@@ -58,12 +63,12 @@ public class EnergyManager : MonoBehaviour
     [Header("Player Currency Settings")]
     public int playerStartingEnergy = 300;
     public int towerBuildCost = 100;
-    public float towerSellRefundPercentage = 0.5f; // TODO Consider Refund when selling Tower
+    public float towerSellRefundPercentage = 0.5f;
     public bool enableCurrencyEarnedFromEnemyKills = true;
     public int energyPerEnemyKill = 25;
 
     [Header("Player Currency UI")]
-    public TMPro.TextMeshProUGUI playerEnergyText;// Reference to Canvas -> Energy text
+    public TMPro.TextMeshProUGUI playerEnergyText;
     public string energyTextFormat = "Energy: {0}";
 
     [Header("Enemy Damage Settings")]
@@ -81,6 +86,7 @@ public class EnergyManager : MonoBehaviour
 
     [Header("Supply Beam")]
     public Color supplyBeamColor = Color.cyan;
+    public Color repairBeamColor = Color.green;
     public float supplyBeamWidth = 0.1f;
     public LayerMask supplyTargetMask = -1;
     #endregion
@@ -94,6 +100,7 @@ public class EnergyManager : MonoBehaviour
     private SupplyBeamController supplyBeam;
     private IEnergyConsumer currentSupplyTarget;
     private bool isSupplying;
+    private float lastRepairTime = 0f;
 
     private int currentPlayerEnergy;
 
@@ -102,7 +109,6 @@ public class EnergyManager : MonoBehaviour
     public System.Action OnGameOver;
     public System.Action<IEnergyConsumer, float> OnEnergyConsumerDamaged;
     public System.Action<IEnergyConsumer> OnEnergyConsumerDestroyed;
-
 
     public System.Action<int> OnPlayerEnergyChanged;
     public System.Action<int> OnPlayerEnergySpent;
@@ -136,7 +142,7 @@ public class EnergyManager : MonoBehaviour
     void InitializeManager()
     {
         FindReferences();
-        InitializePlayerEnergy(); // NEW
+        InitializePlayerEnergy();
         StartEnergyDecay();
     }
 
@@ -144,6 +150,7 @@ public class EnergyManager : MonoBehaviour
     {
         player = GameObject.FindGameObjectWithTag("Player");
         mainCamera = Camera.main ?? FindFirstObjectByType<Camera>();
+
         if (playerEnergyText == null)
         {
             var canvas = FindFirstObjectByType<Canvas>();
@@ -153,11 +160,6 @@ public class EnergyManager : MonoBehaviour
                 if (energyObject != null)
                 {
                     playerEnergyText = energyObject.GetComponent<TextMeshProUGUI>();
-
-                    if (playerEnergyText != null)
-                    {
-                        Debug.Log("Found Energy text component automatically");
-                    }
                 }
             }
         }
@@ -167,7 +169,6 @@ public class EnergyManager : MonoBehaviour
     {
         currentPlayerEnergy = playerStartingEnergy;
         UpdatePlayerEnergyUI();
-        Debug.Log($"Player starting with {currentPlayerEnergy} energy units");
     }
 
     void StartEnergyDecay() => StartCoroutine(EnergyDecayCoroutine());
@@ -184,23 +185,34 @@ public class EnergyManager : MonoBehaviour
     {
         if (player == null) return;
 
-        bool supplyInput = false;
+        // Check if we're in placement mode
+        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
 
-        if (Mouse.current != null)
-            supplyInput = Mouse.current.leftButton.isPressed;
+        // Check for input
+        bool hasInput = (Mouse.current != null && Mouse.current.leftButton.isPressed) ||
+                       (Keyboard.current != null && Keyboard.current.spaceKey.isPressed);
 
-        if (Keyboard.current != null)
-            supplyInput |= Keyboard.current.spaceKey.isPressed;
+        // Only allow supply/repair in placement mode
+        if (onlyAllowRepairInPlacementMode && !inPlacementMode)
+        {
+            StopSupplying();
+            return;
+        }
 
-        if (supplyInput)
+        // Process input
+        if (hasInput)
         {
             Vector3 inputPosition = GetInputPosition();
             IEnergyConsumer target = GetSupplyTarget(inputPosition);
 
             if (target != null && IsPlayerInRange(target))
+            {
                 StartSupplying(target);
+            }
             else
+            {
                 StopSupplying();
+            }
         }
         else
         {
@@ -229,35 +241,13 @@ public class EnergyManager : MonoBehaviour
     }
     #endregion
 
-    #region NEW: Player Currency/Energy Management
-    /// <summary>
-    /// Get current player energy
-    /// </summary>
+    #region Player Currency/Energy Management
     public int GetPlayerEnergy() => currentPlayerEnergy;
-
-    /// <summary>
-    /// Check if player can afford a specific amount
-    /// </summary>
     public bool CanPlayerAfford(int amount) => currentPlayerEnergy >= amount;
-
-    /// <summary>
-    /// Check if player can afford to build a tower
-    /// </summary>
     public bool CanAffordTower() => CanPlayerAfford(towerBuildCost);
-
-    /// <summary>
-    /// Get the cost to build a tower
-    /// </summary>
     public int GetTowerBuildCost() => towerBuildCost;
-
-    /// <summary>
-    /// Get the refund amount for selling a tower
-    /// </summary>
     public int GetTowerSellValue() => Mathf.RoundToInt(towerBuildCost * towerSellRefundPercentage);
 
-    /// <summary>
-    /// Attempt to spend player energy
-    /// </summary>
     public bool TrySpendPlayerEnergy(int amount)
     {
         if (currentPlayerEnergy >= amount)
@@ -266,28 +256,20 @@ public class EnergyManager : MonoBehaviour
             OnPlayerEnergySpent?.Invoke(amount);
             OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);
             UpdatePlayerEnergyUI();
-            Debug.Log($"Player spent {amount} energy. Remaining: {currentPlayerEnergy}");
             return true;
         }
         else
         {
-            Debug.Log($"Insufficient player energy! Need {amount}, have {currentPlayerEnergy}");
             OnInsufficientPlayerEnergy?.Invoke();
             return false;
         }
     }
 
-    /// <summary>
-    /// Try to buy a tower (spend tower build cost)
-    /// </summary>
     public bool TryBuyTower()
     {
         return TrySpendPlayerEnergy(towerBuildCost);
     }
 
-    /// <summary>
-    /// Add energy to player
-    /// </summary>
     public void GivePlayerEnergy(int amount)
     {
         if (amount <= 0) return;
@@ -296,12 +278,8 @@ public class EnergyManager : MonoBehaviour
         OnPlayerEnergyGained?.Invoke(amount);
         OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);
         UpdatePlayerEnergyUI();
-        Debug.Log($"Player gained {amount} energy. Total: {currentPlayerEnergy}");
     }
 
-    /// <summary>
-    /// Set player energy directly
-    /// </summary>
     public void SetPlayerEnergy(int amount)
     {
         currentPlayerEnergy = Mathf.Max(0, amount);
@@ -309,21 +287,14 @@ public class EnergyManager : MonoBehaviour
         UpdatePlayerEnergyUI();
     }
 
-    /// <summary>
-    /// Called when an enemy is killed - gives energy reward
-    /// </summary>
     public void OnEnemyKilled(GameObject enemy)
     {
         if (enableCurrencyEarnedFromEnemyKills)
         {
             GivePlayerEnergy(energyPerEnemyKill);
-            Debug.Log($"Enemy killed! Player gained {energyPerEnemyKill} energy");
         }
     }
 
-    /// <summary>
-    /// Update the player energy UI
-    /// </summary>
     void UpdatePlayerEnergyUI()
     {
         if (playerEnergyText != null)
@@ -332,51 +303,103 @@ public class EnergyManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Set the UI text reference
-    /// </summary>
     public void SetPlayerEnergyText(TextMeshProUGUI textComponent)
-
     {
         playerEnergyText = textComponent;
         UpdatePlayerEnergyUI();
     }
     #endregion
 
+    #region Repair System
+    public int CalculateRepairCost(IEnergyConsumer target)
+    {
+        if (target == null || target.GetEnergyPercentage() >= 1f) return 0;
+        return repairCostPerClick;
+    }
+
+    public int CalculateFullRepairCost(IEnergyConsumer target)
+    {
+        if (target == null) return 0;
+
+        float energyNeeded = target.GetMaxEnergy() - target.GetEnergy();
+        int repairClicks = Mathf.CeilToInt(energyNeeded / repairEnergyPerClick);
+        return repairClicks * repairCostPerClick;
+    }
+
+    public bool CanAffordRepair(IEnergyConsumer target)
+    {
+        int cost = CalculateRepairCost(target);
+        return CanPlayerAfford(cost);
+    }
+
+    public bool CanAffordFullRepair(IEnergyConsumer target)
+    {
+        int cost = CalculateFullRepairCost(target);
+        return CanPlayerAfford(cost);
+    }
+
+    public bool TryRepairTarget(IEnergyConsumer target)
+    {
+        if (target == null) return false;
+
+        // Check cooldown
+        if (Time.time - lastRepairTime < repairCooldown)
+        {
+            return false;
+        }
+
+        // Check if target needs energy
+        if (target.GetEnergyPercentage() >= 1f)
+        {
+            return false;
+        }
+
+        // Check if player can afford the repair
+        if (!CanAffordRepair(target))
+        {
+            OnInsufficientPlayerEnergy?.Invoke();
+            return false;
+        }
+
+        // Calculate actual energy to give (don't exceed max)
+        float energyToGive = Mathf.Min(repairEnergyPerClick, target.GetMaxEnergy() - target.GetEnergy());
+
+        if (energyToGive <= 0) return false;
+
+        // Spend player energy
+        if (TrySpendPlayerEnergy(repairCostPerClick))
+        {
+            // Supply energy to target
+            target.SupplyEnergy(energyToGive);
+            lastRepairTime = Time.time;
+            return true;
+        }
+
+        return false;
+    }
+    #endregion
+
     #region Enemy Damage System
-    /// <summary>
-    /// Damage any energy consumer by a specified amount
-    /// </summary>
-    /// <param name="consumer">The energy consumer to damage</param>
-    /// <param name="damage">Amount of energy to remove</param>
-    /// <param name="damageSource">Optional source of damage for logging</param>
-    /// <returns>True if damage was applied, false if target was invalid</returns>
     public bool DamageEnergyConsumer(IEnergyConsumer consumer, float damage, GameObject damageSource = null)
     {
         if (consumer == null || damage <= 0) return false;
 
-        // Check if consumer is already destroyed
         if (destroyedConsumers.Contains(consumer)) return false;
 
-        // For CentralCore and other IDamageable objects, use their TakeDamage method
         if (consumer is IDamageable damageable)
         {
             return damageable.TakeDamage(damage, damageSource);
         }
 
-        // Fallback for non-IDamageable consumers
         consumer.ConsumeEnergy(damage);
 
-        // Trigger visual/audio effects if enabled
         if (enableEnemyDamageEffects)
         {
             StartCoroutine(DamageFlashEffect(consumer));
         }
 
-        // Fire damage event
         OnEnergyConsumerDamaged?.Invoke(consumer, damage);
 
-        // Check if this damage caused destruction
         if (consumer.IsEnergyDepleted() && !destroyedConsumers.Contains(consumer))
         {
             HandleEnergyConsumerDestroyed(consumer);
@@ -385,25 +408,16 @@ public class EnergyManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// Damage a tower by default tower damage amount
-    /// </summary>
     public bool DamageTower(Tower tower, GameObject damageSource = null)
     {
         return DamageEnergyConsumer(tower, enemyDamageToTowers, damageSource);
     }
 
-    /// <summary>
-    /// Damage the central core by default core damage amount
-    /// </summary>
     public bool DamageCore(CentralCore core, GameObject damageSource = null)
     {
         return DamageEnergyConsumer(core, enemyDamageToCore, damageSource);
     }
 
-    /// <summary>
-    /// Find and damage the nearest energy consumer to a position
-    /// </summary>
     public bool DamageNearestConsumer(Vector3 position, float damage, float maxRange = 2f, GameObject damageSource = null)
     {
         IEnergyConsumer nearest = GetNearestEnergyConsumer(position, maxRange);
@@ -414,9 +428,6 @@ public class EnergyManager : MonoBehaviour
         return false;
     }
 
-    /// <summary>
-    /// Find the nearest energy consumer within range
-    /// </summary>
     public IEnergyConsumer GetNearestEnergyConsumer(Vector3 position, float maxRange = float.MaxValue)
     {
         IEnergyConsumer nearest = null;
@@ -437,9 +448,6 @@ public class EnergyManager : MonoBehaviour
         return nearest;
     }
 
-    /// <summary>
-    /// Get all energy consumers within a certain range
-    /// </summary>
     public List<IEnergyConsumer> GetEnergyConsumersInRange(Vector3 position, float range)
     {
         List<IEnergyConsumer> consumersInRange = new List<IEnergyConsumer>();
@@ -458,33 +466,19 @@ public class EnergyManager : MonoBehaviour
         return consumersInRange;
     }
 
-    /// <summary>
-    /// Handle when an energy consumer is destroyed by damage
-    /// </summary>
     private void HandleEnergyConsumerDestroyed(IEnergyConsumer consumer)
     {
-        // Prevent multiple destruction handling for the same consumer
         if (destroyedConsumers.Contains(consumer)) return;
 
         destroyedConsumers.Add(consumer);
-
-        string consumerName = GetConsumerName(consumer);
-        Debug.Log($"{consumerName} was destroyed by enemy damage!");
-
-        // Fire destruction event
         OnEnergyConsumerDestroyed?.Invoke(consumer);
 
-        // Special handling for core destruction
         if (consumer is CentralCore)
         {
-            Debug.Log("Central Core destroyed by enemy attack!");
             TriggerGameOver();
         }
     }
 
-    /// <summary>
-    /// Get a display name for an energy consumer
-    /// </summary>
     private string GetConsumerName(IEnergyConsumer consumer)
     {
         if (consumer is Tower tower)
@@ -495,12 +489,8 @@ public class EnergyManager : MonoBehaviour
             return "Unknown Consumer";
     }
 
-    /// <summary>
-    /// Visual effect for when a consumer takes damage
-    /// </summary>
     private IEnumerator DamageFlashEffect(IEnergyConsumer consumer)
     {
-        // Try to get the SpriteRenderer to flash
         SpriteRenderer spriteRenderer = null;
 
         if (consumer is MonoBehaviour mb)
@@ -512,7 +502,6 @@ public class EnergyManager : MonoBehaviour
         {
             Color originalColor = spriteRenderer.color;
 
-            // Flash red briefly
             spriteRenderer.color = damageFlashColor;
             yield return new WaitForSeconds(0.1f);
 
@@ -583,7 +572,30 @@ public class EnergyManager : MonoBehaviour
         return distance <= supplyRange;
     }
 
-    public void SupplyEnergyToTarget(IEnergyConsumer target, float amount) => target.SupplyEnergy(amount);
+    public void SupplyEnergyToTarget(IEnergyConsumer target, float amount)
+    {
+        if (target == null) return;
+
+        // Check if we're in placement mode (repair mode)
+        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+
+        if (inPlacementMode)
+        {
+            // Repair mode
+            TryRepairTarget(target);
+        }
+        else
+        {
+            if (onlyAllowRepairInPlacementMode)
+            {
+                return;
+            }
+
+            // Original free energy behavior for backwards compatibility
+            // TODO review if it should be refactored
+            target.SupplyEnergy(amount);
+        }
+    }
     #endregion
 
     #region Energy Decay System
@@ -627,20 +639,13 @@ public class EnergyManager : MonoBehaviour
             TriggerGameOver();
         }
     }
-
     #endregion
 
     #region Consumer Management
-
-    /// <summary>
-    /// Get all registered energy consumers (for repair functionality)
-    /// </summary>
     public List<IEnergyConsumer> GetAllEnergyConsumers()
     {
         return new List<IEnergyConsumer>(energyConsumers);
     }
-
-
 
     public void RegisterEnergyConsumer(IEnergyConsumer consumer)
     {
@@ -652,51 +657,17 @@ public class EnergyManager : MonoBehaviour
 
         if (energyConsumers.Contains(consumer))
         {
-            Debug.Log($"Consumer already registered: {consumer.GetType().Name} at {consumer.GetPosition()}");
             return;
         }
 
         energyConsumers.Add(consumer);
         InitializeConsumerEnergy(consumer);
-
-        string consumerType = consumer.GetType().Name;
-        Debug.Log($"Successfully registered {consumerType} at position {consumer.GetPosition()}. Total consumers: {energyConsumers.Count}");
-
-        // Special logging for CentralCore
-        if (consumer is CentralCore)
-        {
-            Debug.Log("Central Core has been registered with EnergyManager - repair functionality should now work!");
-        }
-    }
-
-
-    [ContextMenu("Debug All Registered Consumers")]
-    void DebugAllRegisteredConsumers()
-    {
-        Debug.Log($"=== ENERGY MANAGER CONSUMER DEBUG ===");
-        Debug.Log($"Total registered consumers: {energyConsumers.Count}");
-
-        for (int i = 0; i < energyConsumers.Count; i++)
-        {
-            var consumer = energyConsumers[i];
-            if (consumer == null)
-            {
-                Debug.Log($"Consumer {i}: NULL (should be cleaned up)");
-            }
-            else
-            {
-                string type = consumer.GetType().Name;
-                Vector3 pos = consumer.GetPosition();
-                float energy = consumer.GetEnergyPercentage();
-                Debug.Log($"Consumer {i}: {type} at {pos}, Energy: {energy:F2}%");
-            }
-        }
     }
 
     public void UnregisterEnergyConsumer(IEnergyConsumer consumer)
     {
         energyConsumers.Remove(consumer);
-        destroyedConsumers.Remove(consumer); // Clean up destroyed tracking
+        destroyedConsumers.Remove(consumer);
     }
 
     void InitializeConsumerEnergy(IEnergyConsumer consumer)
@@ -752,60 +723,33 @@ public class EnergyManager : MonoBehaviour
         return consumer is CentralCore ? coreDeadEnergyThreshold : towerDeadEnergyThreshold;
     }
 
-    // Getters for enemy damage values
     public float GetEnemyDamageToTowers() => enemyDamageToTowers;
     public float GetEnemyDamageToCore() => enemyDamageToCore;
     public float GetDefaultEnemyDamage() => defaultEnemyDamage;
     #endregion
 
     #region Game Management
-
     public void TriggerGameOver()
     {
-        if (isGameOver) return; // Prevent multiple calls
+        if (isGameOver) return;
 
         isGameOver = true;
         OnGameOver?.Invoke();
-        Debug.Log("Game Over - Central Core energy depleted!");
-
         StopAllCoroutines();
     }
     #endregion
-
-
 
     public bool IsConsumerDestroyed(IEnergyConsumer consumer)
     {
         return destroyedConsumers.Contains(consumer);
     }
 
-
-    #region Debug Methods
-    [ContextMenu("Add 100 Player Energy")]
-    void DebugAddPlayerEnergy()
-    {
-        GivePlayerEnergy(100);
-    }
-
-    [ContextMenu("Spend Tower Cost")]
-    void DebugSpendTowerCost()
-    {
-        TryBuyTower();
-    }
-
-    [ContextMenu("Reset Player Energy")]
-    void DebugResetPlayerEnergy()
-    {
-        SetPlayerEnergy(playerStartingEnergy);
-    }
-    #endregion
-
     #region Cleanup
     void CleanupEnergyManager()
     {
         StopAllCoroutines();
         energyConsumers?.Clear();
-        destroyedConsumers?.Clear(); // Clear destroyed tracking
+        destroyedConsumers?.Clear();
         supplyBeam?.Cleanup();
 
         if (instance == this)
@@ -855,15 +799,12 @@ public class EnergyManager : MonoBehaviour
     {
         if (player == null) return;
 
-        // Supply range
         Gizmos.color = Color.green;
         Gizmos.DrawWireSphere(player.transform.position, supplyRange);
 
-        // Max supply distance
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(player.transform.position, maxSupplyDistance);
 
-        // Supply connections
         Gizmos.color = Color.cyan;
         foreach (var consumer in energyConsumers)
         {
@@ -871,18 +812,19 @@ public class EnergyManager : MonoBehaviour
                 Gizmos.DrawLine(player.transform.position, consumer.GetPosition());
         }
 
-        // Player energy info
         UnityEditor.Handles.Label(player.transform.position + Vector3.up * 2f,
             $"Player Energy: {currentPlayerEnergy}");
     }
 
     void OnValidate()
     {
-        // Ensure values are reasonable
         playerStartingEnergy = Mathf.Max(0, playerStartingEnergy);
         towerBuildCost = Mathf.Max(1, towerBuildCost);
         towerSellRefundPercentage = Mathf.Clamp01(towerSellRefundPercentage);
         energyPerEnemyKill = Mathf.Max(0, energyPerEnemyKill);
+        repairEnergyPerClick = Mathf.Max(1, repairEnergyPerClick);
+        repairCostPerClick = Mathf.Max(1, repairCostPerClick);
+        repairCooldown = Mathf.Max(0.1f, repairCooldown);
     }
 #endif
     #endregion
@@ -925,11 +867,15 @@ public class SupplyBeamController
 
     void SetupGradient()
     {
+        // Check if we're in placement mode to choose beam color
+        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+        Color beamColor = inPlacementMode ? energyManager.repairBeamColor : energyManager.supplyBeamColor;
+
         var gradient = new Gradient();
         gradient.SetKeys(
             new GradientColorKey[] {
-                new GradientColorKey(energyManager.supplyBeamColor, 0f),
-                new GradientColorKey(energyManager.supplyBeamColor, 1f)
+                new GradientColorKey(beamColor, 0f),
+                new GradientColorKey(beamColor, 1f)
             },
             new GradientAlphaKey[] {
                 new GradientAlphaKey(1f, 0f),
@@ -960,14 +906,30 @@ public class SupplyBeamController
 
     void SupplyEnergy(IEnergyConsumer target)
     {
-        float energyToSupply = energyManager.supplyRate * Time.deltaTime;
-        energyManager.SupplyEnergyToTarget(target, energyToSupply);
+        // Check if we're in placement mode for different supply behavior
+        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+
+        if (inPlacementMode)
+        {
+            // Repair mode
+            energyManager.SupplyEnergyToTarget(target, 0);
+        }
+        else
+        {
+            // TODO consider if we can remove combat mode energy supply?
+            float energyToSupply = energyManager.supplyRate * Time.deltaTime;
+            energyManager.SupplyEnergyToTarget(target, energyToSupply);
+        }
     }
 
     void UpdateVisualEffects()
     {
+        // Update beam color based on mode
+        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+        Color baseColor = inPlacementMode ? energyManager.repairBeamColor : energyManager.supplyBeamColor;
+
         float pulse = Mathf.Sin(Time.time * 10f) * 0.3f + 0.7f;
-        Color beamColor = energyManager.supplyBeamColor;
+        Color beamColor = baseColor;
         beamColor.a = pulse;
 
         var gradient = new Gradient();
@@ -992,7 +954,6 @@ public class SupplyBeamController
 #endregion
 
 #region Supporting Components
-// Interface for energy consumers
 public interface IEnergyConsumer
 {
     void ConsumeEnergy(float amount);
@@ -1007,7 +968,6 @@ public interface IEnergyConsumer
     Vector3 GetPosition();
 }
 
-// Energy UI Component
 public class EnergyUI : MonoBehaviour
 {
     [Header("UI References")]

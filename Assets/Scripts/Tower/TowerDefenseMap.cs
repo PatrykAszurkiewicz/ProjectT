@@ -47,7 +47,7 @@ public class TowerDefenseMap : MonoBehaviour
         if (rings.Count == 0)
         {
             rings.Add(new RingConfiguration { radius = 2.3f, slotCount = 6, slotSize = 1.9f });
-            rings.Add(new RingConfiguration { radius = 3.8f, slotCount = 8, slotSize = 1.9f });
+            rings.Add(new RingConfiguration { radius = 3.8f, slotCount = 6, slotSize = 1.9f });
         }
         GenerateMap();
     }
@@ -202,9 +202,21 @@ public class TowerDefenseMap : MonoBehaviour
         slotsContainer.transform.parent = transform;
         slotsContainer.transform.localPosition = Vector3.zero;
 
-        foreach (var ring in rings)
+        for (int ringIndex = 0; ringIndex < rings.Count; ringIndex++)
         {
+            var ring = rings[ringIndex];
             if (!ring.enabled) continue;
+            // Auto-apply alternating offset for better slot distribution
+            if (ringIndex % 2 == 1) // Every second ring
+            {
+                float angleStep = 360f / ring.slotCount;
+                ring.rotationOffset = angleStep / 2f;
+            }
+            else
+            {
+                ring.rotationOffset = 0f;
+            }
+
             CreateRingSlots(ring);
         }
     }
