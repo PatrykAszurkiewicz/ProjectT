@@ -35,6 +35,7 @@ public class PlayerStats : CharacterStats
     public override void TakeDamage(float amount)
     {
         base.TakeDamage(amount);
+        Debug.Log(currentHealth);
         regenTimer = 0f; // reset timer regen
     }
     public void UseMana(float amount)

@@ -95,7 +95,7 @@ public class Health : MonoBehaviour
         return Sprite.Create(texture, new Rect(0, 0, 32, 4), new Vector2(0.5f, 0.5f), 100f);
     }
 
-    public void TakeDamage(float damage)
+    public void  TakeDamage(float damage)
     {
         if (IsDead) return;
 
@@ -103,11 +103,15 @@ public class Health : MonoBehaviour
         currentHealth = Mathf.Max(0f, currentHealth);
 
         OnHealthChanged?.Invoke();
-        UpdateHealthBar();
-
+        
         if (IsDead)
         {
+            UpdateHealthBar();
             Die();
+        }
+        else
+        {
+            UpdateHealthBar();
         }
     }
 
@@ -127,7 +131,7 @@ public class Health : MonoBehaviour
         currentHealth = Mathf.Clamp(newHealth, 0f, maxHealth);
         OnHealthChanged?.Invoke();
         UpdateHealthBar();
-
+        
         if (IsDead)
         {
             Die();
@@ -158,7 +162,7 @@ public class Health : MonoBehaviour
 
         if (destroyOnDeath)
         {
-            Destroy(gameObject);
+            Destroy(gameObject, 0.05f);
         }
     }
 

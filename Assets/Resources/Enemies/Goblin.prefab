@@ -184,8 +184,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  detectRange: 1.65
-  detectionLayerMask:
-    serializedVersion: 2
-    m_Bits: 0
+  detectRange: 3
   attackRange: 1.5
+  attackCooldown: 1

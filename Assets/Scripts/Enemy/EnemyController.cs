@@ -104,6 +104,11 @@ public class EnemyController : MonoBehaviour
         if (stats != null)
         {
             stats.TakeDamage(this.stats.Damage);
+
+            if (stats.IsDead())
+            {
+                currentTarget = coreTarget;
+            }
             return;
         }
 
@@ -111,6 +116,11 @@ public class EnemyController : MonoBehaviour
         if (consumer != null && EnergyManager.Instance != null)
         {
             EnergyManager.Instance.DamageEnergyConsumer(consumer, this.stats.Damage, gameObject);
+
+            if (target == null)
+            {
+                currentTarget = coreTarget;
+            }
         }
     }
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.2f)

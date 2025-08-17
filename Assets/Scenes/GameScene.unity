@@ -2440,9 +2440,9 @@ MonoBehaviour:
   supplyRange: 2
   supplyRate: 10
   maxSupplyDistance: 0.5
-  repairCostPerEnergyUnit: 1
-  repairRate: 5
-  enableRepairCostLogging: 1
+  repairEnergyPerClick: 10
+  repairCostPerClick: 10
+  repairCooldown: 0.5
   onlyAllowRepairInPlacementMode: 1
   towerMaxEnergy: 100
   towerEnergyDecayRate: 0.7
@@ -2474,7 +2474,6 @@ MonoBehaviour:
   supplyTargetMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  enableDebugLogging: 1
 --- !u!4 &1213227522
 Transform:
   m_ObjectHideFlags: 0
