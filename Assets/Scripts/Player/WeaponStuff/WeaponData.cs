@@ -17,4 +17,6 @@ public class WeaponData : ScriptableObject
     public bool isRanged;
     public GameObject projectilePrefab;
     public float projectileSpeed;
+    [Header("Weapon Size Settings")]
+    public Vector2 size = Vector2.one;
 }

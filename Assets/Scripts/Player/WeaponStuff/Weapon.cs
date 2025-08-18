@@ -22,24 +22,33 @@ public class Weapon : MonoBehaviour
 
     private void Awake()
     {
-        playerStats = GetComponentInParent<PlayerStats>();
-
-        // Bonus armor (e.g. for shield)
-        if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
+        if (weaponData != null)
         {
-            playerStats.currentArmor += weaponData.armorBonus;
-        }
+            playerStats = GetComponentInParent<PlayerStats>();
 
-        // Set weapon sprite
-        SpriteRenderer sr = visual.GetComponent<SpriteRenderer>();
-        if (sr != null && weaponData.sprite != null)
-        {
-            sr.sprite = weaponData.sprite;
-        }
+            // Bonus armor (e.g. for shield)
+            if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
+            {
+                playerStats.currentArmor += weaponData.armorBonus;
+            }
 
+            // Set weapon sprite
+            SpriteRenderer sr = visual.GetComponent<SpriteRenderer>();
+            if (sr != null && weaponData.sprite != null)
+            {
+                sr.sprite = weaponData.sprite;
+            }
+            ResizeCollider();
+        }
         attackCollider.enabled = false;
     }
+    private void ResizeCollider()
+    {
+        if (attackCollider == null) return;
 
+        // Skalowanie razem z bronią
+        attackCollider.transform.localScale = weaponData.size;
+    }
     public void PerformAttack()
     {
         if (isOnCooldown) return;
@@ -84,7 +93,7 @@ public class Weapon : MonoBehaviour
         Debug.Log($"Atak! Trafiono {hitEnemies.Count} przeciwników.");
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerStay2D(Collider2D other)
     {
         if (!attackCollider.enabled) return;
 
@@ -104,7 +113,19 @@ public class Weapon : MonoBehaviour
                 //  Knockback
                 if (weaponData.knockBack)
                 {
-                    Vector2 dir = (enemy.transform.position - transform.position).normalized;
+                    Vector2 dir = (enemy.transform.position - playerStats.transform.position).normalized;
+
+                    if (dir.sqrMagnitude < 1e-4f)
+                    {
+                        dir = (enemy.transform.position - transform.position).normalized;
+                        if (dir.sqrMagnitude < 1e-4f)
+                            dir = Random.insideUnitCircle.normalized;
+                    }
+                    EnemyController ec = enemy.GetComponent<EnemyController>();
+                    if (ec != null)
+                    {
+                        ec.ApplyKnockback(dir, weaponData.knockBackForce);
+                    }
 
                     EnemyController enemyController = enemy.GetComponent<EnemyController>();
                     if (enemyController != null)

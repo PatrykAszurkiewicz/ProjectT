@@ -65,6 +65,13 @@ public class EnemyController : MonoBehaviour
     {
         if (currentTarget == null || isKnockedBack) return;
 
+        float distance = Vector2.Distance(transform.position, currentTarget.position);
+
+        if (distance <= attackRange)
+        {
+            rb.linearVelocity = Vector2.zero; // zatrzymaj się tylko tutaj, poza knockbackiem
+            return;
+        }
         Vector2 direction = (currentTarget.position - transform.position).normalized;
         rb.linearVelocity = direction * stats.MoveSpeed;
     }
@@ -128,7 +135,7 @@ public class EnemyController : MonoBehaviour
         isKnockedBack = true;
         knockbackTimer = duration;
 
-        rb.linearVelocity = direction * force;
+        rb.AddForce(direction.normalized * force, ForceMode2D.Impulse);
     }
     private void OnDrawGizmosSelected()
     {
