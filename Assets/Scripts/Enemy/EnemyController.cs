@@ -29,9 +29,9 @@ public class EnemyController : MonoBehaviour
 
         InvokeRepeating(nameof(UpdateTarget), 0f, 0.5f);
     }
+
     private void UpdateTarget()
     {
-        //Debug.Log($"Nowy cel: {currentTarget.name}");
         //Find Player
         GameObject player = GameObject.FindGameObjectWithTag("Player");
         if (player && Vector2.Distance(transform.position, player.transform.position) < detectRange)
@@ -61,23 +61,32 @@ public class EnemyController : MonoBehaviour
         //Default target (core)
         currentTarget = coreTarget;
     }
+
     private void FixedUpdate()
     {
+        // WAŻNE: Nie ruszaj velocity podczas knockbacka!
         if (currentTarget == null || isKnockedBack) return;
 
         float distance = Vector2.Distance(transform.position, currentTarget.position);
 
         if (distance <= attackRange)
         {
-            rb.linearVelocity = Vector2.zero; // zatrzymaj się tylko tutaj, poza knockbackiem
+            // Zatrzymaj się tylko jeśli nie ma knockbacka
+            if (!isKnockedBack)
+            {
+                rb.linearVelocity = Vector2.zero;
+            }
             return;
         }
+
+        // Poruszaj się tylko jeśli nie ma knockbacka
         Vector2 direction = (currentTarget.position - transform.position).normalized;
         rb.linearVelocity = direction * stats.MoveSpeed;
     }
 
     private void Update()
     {
+        // Obsługa knockback timera
         if (isKnockedBack)
         {
             knockbackTimer -= Time.deltaTime;
@@ -86,13 +95,17 @@ public class EnemyController : MonoBehaviour
                 isKnockedBack = false;
             }
         }
+
+        // Obsługa ataku
         if (currentTarget != null)
         {
             float distance = Vector2.Distance(transform.position, currentTarget.position);
             if (distance <= attackRange)
             {
                 attackTimer -= Time.deltaTime;
-                rb.linearVelocity = Vector2.zero;
+                
+                // NIE zeruj velocity tutaj - to przeszkadza w knockbacku!
+                // rb.linearVelocity = Vector2.zero; // ← USUNIĘTE
 
                 if (attackTimer <= 0f)
                 {
@@ -105,6 +118,7 @@ public class EnemyController : MonoBehaviour
         }
         attackTimer = 0f;
     }
+
     private void Attack(Transform target)
     {
         var stats = target.GetComponent<CharacterStats>();
@@ -130,6 +144,7 @@ public class EnemyController : MonoBehaviour
             }
         }
     }
+
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.2f)
     {
         isKnockedBack = true;
@@ -137,6 +152,7 @@ public class EnemyController : MonoBehaviour
 
         rb.AddForce(direction.normalized * force, ForceMode2D.Impulse);
     }
+
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.yellow;
@@ -145,6 +161,4 @@ public class EnemyController : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, attackRange);
     }
-
-
 }
