@@ -187,3 +187,7 @@ MonoBehaviour:
   detectRange: 3
   attackRange: 1.5
   attackCooldown: 1
+  avoidDistance: 1
+  obstacleLayer:
+    serializedVersion: 2
+    m_Bits: 8192

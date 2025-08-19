@@ -22,24 +22,26 @@ public class Weapon : MonoBehaviour
 
     private void Awake()
     {
+        // get choosen weapon
+        if (weaponData == null && WeaponSelectionManager.Instance != null)
+        {
+            weaponData = WeaponSelectionManager.Instance.GetChosenWeapon();
+        }
+
         if (weaponData != null)
         {
             playerStats = GetComponentInParent<PlayerStats>();
 
-            // Bonus armor (e.g. for shield)
-            if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
-            {
+            if (weaponData.armorBonus > 0 && playerStats != null)
                 playerStats.currentArmor += weaponData.armorBonus;
-            }
 
-            // Set weapon sprite
             SpriteRenderer sr = visual.GetComponent<SpriteRenderer>();
             if (sr != null && weaponData.sprite != null)
-            {
                 sr.sprite = weaponData.sprite;
-            }
+
             ResizeCollider();
         }
+
         attackCollider.enabled = false;
     }
     private void ResizeCollider()

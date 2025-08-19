@@ -52,14 +52,14 @@ public class EnergyManager : MonoBehaviour
     public float towerMaxEnergy = 100f;
     public float towerEnergyDecayRate = 0.7f;
     public float towerCriticalEnergyThreshold = 0.2f;
-    public float towerDeadEnergyThreshold = 0.05f;
-
+    //public float towerDeadEnergyThreshold = 0.05f;
+    public float towerDeadEnergyThreshold = 0.0f;
     [Header("Central Core Energy Settings")]
     public float coreMaxEnergy = 100f;
     public float coreEnergyDecayRate = 0.7f;
     public float coreCriticalEnergyThreshold = 0.3f;
-    public float coreDeadEnergyThreshold = 0.1f;
-
+    //public float coreDeadEnergyThreshold = 0.1f;
+    public float coreDeadEnergyThreshold = 0.0f;
     [Header("Player Currency Settings")]
     public int playerStartingEnergy = 300;
     public int towerBuildCost = 100;
