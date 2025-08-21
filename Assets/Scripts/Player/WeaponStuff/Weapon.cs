@@ -13,6 +13,7 @@ public class Weapon : MonoBehaviour
     private PlayerStats playerStats;
 
     private bool isOnCooldown = false;
+    public WeaponData defaultWeapon;
 
     // Public method to access weapon data for animation system
     public WeaponData GetWeaponData()
@@ -26,6 +27,11 @@ public class Weapon : MonoBehaviour
         if (weaponData == null && WeaponSelectionManager.Instance != null)
         {
             weaponData = WeaponSelectionManager.Instance.GetChosenWeapon();
+        }
+
+        if (weaponData == null)
+        {
+            weaponData = defaultWeapon;
         }
 
         if (weaponData != null)

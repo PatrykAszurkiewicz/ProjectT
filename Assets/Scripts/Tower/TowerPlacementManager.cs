@@ -34,6 +34,9 @@ public class TowerPlacementManager : MonoBehaviour
     public int energyRepairAmount = 10;
     public float energyRepairCooldown = 0.2f;
 
+    [Header("Continuous Supply Settings")]
+    public bool useContinuousSupply = true; // Toggle between old and new behavior
+
     [Header("UI References")]
     public GameObject towerSelectionUI;
 
@@ -51,6 +54,10 @@ public class TowerPlacementManager : MonoBehaviour
 
     private bool clickProcessed = false;
     private float lastRepairTime = -Mathf.Infinity;
+
+    // Continuous supply system
+    private bool isCurrentlySupplying = false;
+    private IEnergyConsumer currentSupplyTarget = null;
 
     void Awake()
     {
@@ -110,7 +117,7 @@ public class TowerPlacementManager : MonoBehaviour
         wheelObj.SetActive(false);
     }
 
-    // ADDED: Public method to expose placement mode state for EnergyManager
+    // Public method to expose placement mode state for EnergyManager
     public bool IsInPlacementMode()
     {
         return isPlacementMode;
@@ -284,9 +291,21 @@ public class TowerPlacementManager : MonoBehaviour
 
             if (isPlacementMode)
             {
-                if (currentHighlightedConsumer != null && Time.time - lastRepairTime >= energyRepairCooldown)
+                if (currentHighlightedConsumer != null)
                 {
-                    TryRepairEnergyConsumer(currentHighlightedConsumer);
+                    if (useContinuousSupply)
+                    {
+                        // Start continuous supply
+                        StartContinuousSupplyToConsumer(currentHighlightedConsumer);
+                    }
+                    else
+                    {
+                        // Old discrete repair with cooldown
+                        if (Time.time - lastRepairTime >= energyRepairCooldown)
+                        {
+                            TryRepairEnergyConsumer(currentHighlightedConsumer);
+                        }
+                    }
                 }
                 else if (currentHighlightedConsumer == null)
                 {
@@ -295,8 +314,57 @@ public class TowerPlacementManager : MonoBehaviour
             }
             StartCoroutine(ResetClickProcessing());
         }
+
+        // Handle mouse button release
+        if (Mouse.current.leftButton.wasReleasedThisFrame)
+        {
+            StopContinuousSupply();
+        }
+
+        // Continue supplying while button is held
+        if (Mouse.current.leftButton.isPressed && isCurrentlySupplying && currentSupplyTarget != null)
+        {
+            ContinuouslySupplyEnergy();
+        }
     }
 
+    // Continuous supply methods
+    private void StartContinuousSupplyToConsumer(IEnergyConsumer consumer)
+    {
+        if (consumer == null || EnergyManager.Instance == null) return;
+
+        isCurrentlySupplying = true;
+        currentSupplyTarget = consumer;
+
+        // Tell EnergyManager to start continuous supply
+        EnergyManager.Instance.StartContinuousSupply(consumer);
+
+        // Immediate first supply
+        ContinuouslySupplyEnergy();
+    }
+
+    private void ContinuouslySupplyEnergy()
+    {
+        if (currentSupplyTarget == null || EnergyManager.Instance == null) return;
+
+        // Check if target still needs energy
+        if (currentSupplyTarget.GetEnergyPercentage() >= 0.999f && !(currentSupplyTarget is CentralCore))
+        {
+            StopContinuousSupply();
+            return;
+        }
+
+        // Use EnergyManager's continuous supply system
+        EnergyManager.Instance.SupplyEnergyToTarget(currentSupplyTarget, 0);
+    }
+
+    private void StopContinuousSupply()
+    {
+        isCurrentlySupplying = false;
+        currentSupplyTarget = null;
+    }
+
+    // Keep the original TryRepairEnergyConsumer for discrete repairs when useContinuousSupply is false
     void TryRepairEnergyConsumer(IEnergyConsumer consumer)
     {
         if (consumer == null || EnergyManager.Instance == null) return;
@@ -415,6 +483,9 @@ public class TowerPlacementManager : MonoBehaviour
         // Clear highlights when exiting placement mode
         if (!isPlacementMode)
         {
+            // Stop continuous supply when exiting placement mode
+            StopContinuousSupply();
+
             if (currentHighlightedSlot != null)
             {
                 currentHighlightedSlot.SetHighlight(false);

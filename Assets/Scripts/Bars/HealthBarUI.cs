@@ -1,21 +1,26 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 public class HealthBarUI : MonoBehaviour
 {
-    PlayerStats stats;
-    public ResourceBarUI healthBarUI;
+    [SerializeField] private ResourceBarUI healthBarUI;
+
+    private PlayerStats stats;
+
     private void Start()
     {
         stats = FindAnyObjectByType<PlayerStats>();
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
         if (stats != null && healthBarUI != null)
         {
             healthBarUI.SetValue(stats.currentHealth, stats.maxHealth);
+
+            stats.OnHealthChanged += healthBarUI.SetValue;
+        }
+    }
+    private void OnDestroy()
+    {
+        if (stats != null)
+        {
+            stats.OnHealthChanged -= healthBarUI.SetValue;
         }
     }
 }

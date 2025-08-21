@@ -3,7 +3,6 @@ using UnityEngine;
 public class PlayerStats : CharacterStats
 {
     [Header("Mana")]
-
     public float maxMana = 50f;
     public float currentMana = 50f;
 
@@ -27,31 +26,18 @@ public class PlayerStats : CharacterStats
     public float currentStamina = 5f;
 
     [Header("Health Regen")]
-    public float healthRegenRate = 2f;     // ile HP/s
-    public float healthRegenDelay = 3f;    // po ilu sek od got dmg regen start
-
+    public float healthRegenRate = 2f;
+    public float healthRegenDelay = 3f;
     private float regenTimer = 0f;
 
     public override void TakeDamage(float amount)
     {
         base.TakeDamage(amount);
-        Debug.Log(currentHealth);
-        regenTimer = 0f; // reset timer regen
-    }
-    public void UseMana(float amount)
-    {
-        currentMana -= amount;
-        if (currentMana < 0) currentMana = 0;
-    }
-
-    public void RegenerateMana(float amount)
-    {
-        currentMana += amount;
-        if (currentMana > maxMana) currentMana = maxMana;
+        regenTimer = 0f;
     }
     private void Update()
     {
-        if (currentHealth < maxHealth)
+        if (!IsDead() && currentHealth < maxHealth)
         {
             regenTimer += Time.deltaTime;
 
@@ -60,5 +46,15 @@ public class PlayerStats : CharacterStats
                 Heal(healthRegenRate * Time.deltaTime);
             }
         }
+    }
+    public void UseMana(float amount)
+    {
+        currentMana -= amount;
+        if (currentMana < 0) currentMana = 0;
+    }
+    public void RegenerateMana(float amount)
+    {
+        currentMana += amount;
+        if (currentMana > maxMana) currentMana = maxMana;
     }
 }

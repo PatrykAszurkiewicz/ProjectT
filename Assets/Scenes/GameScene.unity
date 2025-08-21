@@ -854,6 +854,7 @@ MonoBehaviour:
   weaponData: {fileID: 0}
   attackCollider: {fileID: 549341035}
   visual: {fileID: 549341031}
+  defaultWeapon: {fileID: 11400000, guid: 3799f3ab7bf295b4583830c434bb1d2d, type: 2}
 --- !u!60 &549341035
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -1561,6 +1562,7 @@ MonoBehaviour:
   playCreationAnimation: 1
   energyRepairAmount: 10
   energyRepairCooldown: 0.2
+  useContinuousSupply: 1
   towerSelectionUI: {fileID: 0}
 --- !u!4 &811930682
 Transform:
@@ -2444,14 +2446,17 @@ MonoBehaviour:
   repairCostPerClick: 10
   repairCooldown: 0.5
   onlyAllowRepairInPlacementMode: 1
+  continuousSupplyRate: 3
+  continuousSupplyCost: 3
+  minSupplyInterval: 0.1
   towerMaxEnergy: 100
   towerEnergyDecayRate: 0.7
   towerCriticalEnergyThreshold: 0.2
-  towerDeadEnergyThreshold: 0.05
+  towerDeadEnergyThreshold: 0
   coreMaxEnergy: 100
   coreEnergyDecayRate: 0.7
   coreCriticalEnergyThreshold: 0.3
-  coreDeadEnergyThreshold: 0.1
+  coreDeadEnergyThreshold: 0
   playerStartingEnergy: 300
   towerBuildCost: 100
   towerSellRefundPercentage: 0.5
@@ -2468,12 +2473,42 @@ MonoBehaviour:
   criticalEnergyColor: {r: 1, g: 0, b: 0, a: 1}
   depletedEnergyColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   damageFlashColor: {r: 1, g: 0, b: 0, a: 1}
-  supplyBeamColor: {r: 0, g: 1, b: 1, a: 1}
-  repairBeamColor: {r: 0, g: 1, b: 0, a: 1}
-  supplyBeamWidth: 0.1
+  supplyBeamColor: {r: 0.2, g: 0.7, b: 1, a: 0.3}
+  repairBeamColor: {r: 0.3, g: 0.9, b: 1, a: 0.3}
+  beamGlowColor: {r: 0.6, g: 0.8, b: 1, a: 0.3}
+  supplyBeamWidth: 0.3
   supplyTargetMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  beamPulseSpeed: 4
+  beamPulseIntensity: 0.6
+  beamFlowSpeed: 8
+  enableBeamGlow: 1
+  beamPulseCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  isContinuouslySupplying: 0
 --- !u!4 &1213227522
 Transform:
   m_ObjectHideFlags: 0
@@ -4015,11 +4050,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: maxHealth
-      value: 500
+      value: 100
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: currentHealth
-      value: 500
+      value: 100
       objectReference: {fileID: 0}
     - target: {fileID: 2845798086413134017, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_Radius
