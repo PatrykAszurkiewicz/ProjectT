@@ -278,9 +278,16 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (isDestroyed) return;
 
+        Debug.Log("CentralCore: Destroying core");
         isDestroyed = true;
-        OnCoreDestroyed?.Invoke(damageSource);
+
+        // Stop all updates
         StopAllEffects();
+
+        // Clean up energy values to prevent NaN issues
+        currentEnergy = 0f;
+
+        OnCoreDestroyed?.Invoke(damageSource);
 
         // Only trigger game over if not already triggered
         if (EnergyManager.Instance != null && !EnergyManager.Instance.IsGameOver())
@@ -288,7 +295,6 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             EnergyManager.Instance.TriggerGameOver();
         }
     }
-
     private void StartDamageFlash()
     {
         if (damageFlashCoroutine != null)
@@ -360,10 +366,24 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             if (!isRegisteredWithEnergyManager) return;
         }
 
-        UpdateEnergyState();
+        // Add safety check before updating energy state
+        try
+        {
+            UpdateEnergyState();
 
-        if (CanOperate())
-            ProcessCoreOperations();
+            if (CanOperate())
+                ProcessCoreOperations();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"CentralCore: Error in UpdateCoreState: {e.Message}");
+            // Prevent further updates if we're in a bad state
+            if (float.IsNaN(currentEnergy) || float.IsNaN(maxEnergy))
+            {
+                Debug.LogError("CentralCore: Detected corrupted energy values, destroying core");
+                DestroyCore(null);
+            }
+        }
     }
 
     void UpdateEnergyState()
@@ -476,15 +496,59 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void UpdateScaleEffect()
     {
+        // Add NaN protection and validation
+        if (isDestroyed) return;
+
         if (isEnergyDepleted)
         {
             float energyPercentage = GetEnergyPercentage();
             float deadThreshold = EnergyManager.Instance?.GetCoreDeadThreshold() ?? 0.1f;
-            float scaleMultiplier = Mathf.Lerp(0.8f, 1f, energyPercentage / deadThreshold);
-            transform.localScale = originalScale * scaleMultiplier;
+
+            // Validate all values to prevent NaN
+            if (float.IsNaN(energyPercentage) || float.IsInfinity(energyPercentage))
+            {
+                Debug.LogWarning($"CentralCore: Invalid energyPercentage detected: {energyPercentage}, resetting to 0");
+                energyPercentage = 0f;
+            }
+
+            if (float.IsNaN(deadThreshold) || float.IsInfinity(deadThreshold) || deadThreshold <= 0f)
+            {
+                Debug.LogWarning($"CentralCore: Invalid deadThreshold detected: {deadThreshold}, using fallback 0.1f");
+                deadThreshold = 0.1f;
+            }
+
+            // Safe division with bounds checking
+            float ratio = deadThreshold > 0f ? Mathf.Clamp01(energyPercentage / deadThreshold) : 0f;
+            float scaleMultiplier = Mathf.Lerp(0.8f, 1f, ratio);
+
+            // Final NaN check before applying scale
+            if (float.IsNaN(scaleMultiplier) || float.IsInfinity(scaleMultiplier))
+            {
+                Debug.LogWarning($"CentralCore: Invalid scaleMultiplier calculated: {scaleMultiplier}, using default 0.8f");
+                scaleMultiplier = 0.8f;
+            }
+
+            Vector3 newScale = originalScale * scaleMultiplier;
+
+            // Validate the final scale vector
+            if (float.IsNaN(newScale.x) || float.IsNaN(newScale.y) || float.IsNaN(newScale.z) ||
+                float.IsInfinity(newScale.x) || float.IsInfinity(newScale.y) || float.IsInfinity(newScale.z))
+            {
+                Debug.LogWarning($"CentralCore: Invalid newScale calculated: {newScale}, using originalScale: {originalScale}");
+                newScale = originalScale;
+            }
+
+            transform.localScale = newScale;
         }
         else
         {
+            // Validate originalScale before using it
+            if (float.IsNaN(originalScale.x) || float.IsNaN(originalScale.y) || float.IsNaN(originalScale.z))
+            {
+                Debug.LogWarning($"CentralCore: originalScale is invalid: {originalScale}, resetting to default");
+                originalScale = Vector3.one * coreSize;
+            }
+
             transform.localScale = originalScale;
         }
     }
@@ -493,8 +557,27 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     #region IEnergyConsumer Implementation
     public void ConsumeEnergy(float amount)
     {
+        if (float.IsNaN(amount) || float.IsInfinity(amount))
+        {
+            Debug.LogWarning($"CentralCore: Trying to consume invalid energy amount: {amount}, ignoring");
+            return;
+        }
+
+        if (isDestroyed)
+        {
+            Debug.LogWarning("CentralCore: Trying to consume energy on destroyed core, ignoring");
+            return;
+        }
+
         float previousEnergy = currentEnergy;
         currentEnergy = Mathf.Max(0f, currentEnergy - amount);
+
+        // Validate result
+        if (float.IsNaN(currentEnergy) || float.IsInfinity(currentEnergy))
+        {
+            Debug.LogWarning($"CentralCore: Energy became invalid after consumption, resetting to 0");
+            currentEnergy = 0f;
+        }
 
         if (currentEnergy != previousEnergy)
         {
@@ -508,8 +591,27 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public void SupplyEnergy(float amount)
     {
+        if (float.IsNaN(amount) || float.IsInfinity(amount))
+        {
+            Debug.LogWarning($"CentralCore: Trying to supply invalid energy amount: {amount}, ignoring");
+            return;
+        }
+
+        if (isDestroyed)
+        {
+            Debug.LogWarning("CentralCore: Trying to supply energy to destroyed core, ignoring");
+            return;
+        }
+
         float previousEnergy = currentEnergy;
         currentEnergy = Mathf.Min(maxEnergy, currentEnergy + amount);
+
+        // Validate result
+        if (float.IsNaN(currentEnergy) || float.IsInfinity(currentEnergy))
+        {
+            Debug.LogWarning($"CentralCore: Energy became invalid after supply, clamping to valid range");
+            currentEnergy = Mathf.Clamp(previousEnergy, 0f, maxEnergy);
+        }
 
         if (currentEnergy != previousEnergy)
         {
@@ -542,7 +644,24 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public float GetEnergy() => currentEnergy;
     public float GetMaxEnergy() => maxEnergy;
-    public float GetEnergyPercentage() => maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
+    public float GetEnergyPercentage()
+    {
+        // Add validation to prevent NaN
+        if (float.IsNaN(currentEnergy) || float.IsInfinity(currentEnergy))
+        {
+            Debug.LogWarning($"CentralCore: currentEnergy is invalid: {currentEnergy}, resetting to 0");
+            currentEnergy = 0f;
+        }
+
+        if (float.IsNaN(maxEnergy) || float.IsInfinity(maxEnergy) || maxEnergy <= 0f)
+        {
+            Debug.LogWarning($"CentralCore: maxEnergy is invalid: {maxEnergy}, resetting to default");
+            maxEnergy = 100f;
+            currentEnergy = Mathf.Min(currentEnergy, maxEnergy);
+        }
+
+        return maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
+    }
     public Vector3 GetPosition() => transform.position;
 
     public bool IsEnergyDepleted() =>

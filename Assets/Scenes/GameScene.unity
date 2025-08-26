@@ -854,7 +854,7 @@ MonoBehaviour:
   weaponData: {fileID: 0}
   attackCollider: {fileID: 549341035}
   visual: {fileID: 549341031}
-  defaultWeapon: {fileID: 11400000, guid: 3799f3ab7bf295b4583830c434bb1d2d, type: 2}
+  defaultWeapon: {fileID: 11400000, guid: e55ebc9d834ec5441ad8430220fe403b, type: 2}
 --- !u!60 &549341035
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -1908,6 +1908,8 @@ MonoBehaviour:
   repairCursorPath: Sprites/cursor_spritesheet_repair3
   shieldCursorPath: Sprites/cursor_spritesheet_shield
   meleeCursorPath: Sprites/cursor_spritesheet_melee
+  hookCursorPath: Sprites/cursor_spritesheet_hook2
+  hookHighlightCursorPath: Sprites/cursor_spritesheet_hook_highlight
 --- !u!1 &1027311100
 GameObject:
   m_ObjectHideFlags: 0
@@ -2409,6 +2411,13 @@ MonoBehaviour:
       Data3: 1051869860
       Data4: 780888163
     Path: event:/Dash
+  <towerMeleeHit>k__BackingField:
+    Guid:
+      Data1: 408426898
+      Data2: 1144333112
+      Data3: -465909833
+      Data4: 783982419
+    Path: event:/TowerMeleeHit
 --- !u!1 &1213227520
 GameObject:
   m_ObjectHideFlags: 0
@@ -2439,9 +2448,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   globalEnergyDecayRate: 1
-  supplyRange: 2
+  supplyRange: 2.2
   supplyRate: 10
-  maxSupplyDistance: 0.5
+  maxSupplyDistance: 2.2
   repairEnergyPerClick: 10
   repairCostPerClick: 10
   repairCooldown: 0.5
@@ -4050,11 +4059,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: maxHealth
-      value: 100
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: currentHealth
-      value: 100
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 2845798086413134017, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_Radius

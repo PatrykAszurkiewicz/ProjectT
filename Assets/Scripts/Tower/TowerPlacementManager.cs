@@ -146,36 +146,73 @@ public class TowerPlacementManager : MonoBehaviour
         if (!requirePlayerProximity || playerTransform == null || EnergyManager.Instance == null)
             return;
 
-        // Find closest energy consumer in range that needs energy
-        IEnergyConsumer closestConsumer = null;
-        float closestDistance = float.MaxValue;
+        // Get sprite cursor position
+        CursorPointer cursorPointer = FindFirstObjectByType<CursorPointer>();
+        if (cursorPointer == null) return;
 
-        var consumersInRange = EnergyManager.Instance.GetEnergyConsumersInRange(playerTransform.position, buildRange);
+        Vector3 spritePosition = cursorPointer.transform.position;
 
-        foreach (var consumer in consumersInRange)
+        var allConsumers = EnergyManager.Instance.GetAllEnergyConsumers();
+        //Debug.Log($"[TowerPlacement] Found {allConsumers.Count} energy consumers. Cursor at: {spritePosition}");
+
+        foreach (var consumer in allConsumers)
         {
-            if (consumer == null) continue;
-
-            float distance = Vector3.Distance(playerTransform.position, consumer.GetPosition());
-            bool canRepair = consumer.GetEnergyPercentage() < 0.999f;
-            bool isCentralCore = consumer is CentralCore;
-
-            if (!canRepair && !isCentralCore) continue;
-
-            if (distance < closestDistance)
+            if (consumer != null)
             {
-                closestDistance = distance;
-                closestConsumer = consumer;
+                string consumerType = consumer.GetType().Name;
+                Vector3 pos = consumer.GetPosition();
+                float distance = Vector3.Distance(spritePosition, pos);
+                //Debug.Log($"[TowerPlacement] {consumerType} at {pos}, distance: {distance:F2} (maxSupplyDistance: {EnergyManager.Instance.maxSupplyDistance})");
             }
         }
 
-        // Highlight the closest consumer
-        if (closestConsumer != null)
+        IEnergyConsumer target = GetSupplyTarget(spritePosition);
+
+        if (target != null)
         {
-            SetConsumerHighlight(closestConsumer, true);
-            currentHighlightedConsumer = closestConsumer;
+            //Debug.Log($"[TowerPlacement] Target found: {target.GetType().Name}");
+            bool inPlayerRange = IsPlayerInRange(target);
+            //Debug.Log($"[TowerPlacement] Player in range: {inPlayerRange} (supplyRange: {EnergyManager.Instance.supplyRange})");
+
+            if (inPlayerRange)
+            {
+                SetConsumerHighlight(target, true);
+                currentHighlightedConsumer = target;
+                //Debug.Log($"[TowerPlacement] Highlighting target: {target.GetType().Name}");
+            }
+        }
+        else
+        {
+            //Debug.Log("[TowerPlacement] No target found");
         }
     }
+
+    IEnergyConsumer GetSupplyTarget(Vector3 position)
+    {
+        if (EnergyManager.Instance == null) return null;
+
+        var allConsumers = EnergyManager.Instance.GetAllEnergyConsumers();
+        IEnergyConsumer closest = null;
+        float closestDistance = EnergyManager.Instance.maxSupplyDistance;
+
+        foreach (var consumer in allConsumers)
+        {
+            if (consumer == null) continue;
+
+            float distance = Vector3.Distance(position, consumer.GetPosition());
+            //Debug.Log($"[GetSupplyTarget] Checking {consumer.GetType().Name}: distance {distance:F2} vs maxSupplyDistance {closestDistance:F2}");
+
+            if (distance < closestDistance)
+            {
+                closest = consumer;
+                closestDistance = distance;
+                //Debug.Log($"[GetSupplyTarget] New closest: {consumer.GetType().Name} at {distance:F2}");
+            }
+        }
+
+        return closest;
+    }
+
 
     void SetConsumerHighlight(IEnergyConsumer consumer, bool highlight)
     {
@@ -241,20 +278,33 @@ public class TowerPlacementManager : MonoBehaviour
 
     Vector2 GetCursorDirectionFromPlayer()
     {
-        if (Mouse.current == null || playerTransform == null) return Vector2.right;
+        if (playerTransform == null) return Vector2.right;
 
-        Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
-        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(mouseScreenPos);
-        mouseWorldPos.z = 0;
-        Vector3 direction = (mouseWorldPos - playerTransform.position).normalized;
-        return new Vector2(direction.x, direction.y);
+        // Find the CursorPointer component to get the sprite cursor direction
+        CursorPointer cursorPointer = FindFirstObjectByType<CursorPointer>();
+        if (cursorPointer != null)
+        {
+            Vector3 direction = (cursorPointer.transform.position - playerTransform.position).normalized;
+            return new Vector2(direction.x, direction.y);
+        }
+
+        // Fallback to right direction if no cursor pointer found
+        return Vector2.right;
     }
 
-    bool IsPlayerInRange(Vector3 slotPosition)
+    bool IsPlayerInRange(IEnergyConsumer consumer)
     {
-        if (!requirePlayerProximity || playerTransform == null) return true;
-        float distance = Vector2.Distance(playerTransform.position, slotPosition);
-        return distance <= buildRange;
+        if (consumer == null || EnergyManager.Instance == null) return false;
+        return IsPlayerInRange(consumer.GetPosition());
+    }
+
+    bool IsPlayerInRange(Vector3 targetPosition)
+    {
+        if (!requirePlayerProximity || playerTransform == null || EnergyManager.Instance == null) return true;
+        float distance = Vector2.Distance(playerTransform.position, targetPosition);
+        bool inRange = distance <= EnergyManager.Instance.supplyRange;
+        //Debug.Log($"[IsPlayerInRange] Player distance: {distance:F2} vs supplyRange: {EnergyManager.Instance.supplyRange}, inRange: {inRange}");
+        return inRange;
     }
 
     void HandleInput()
@@ -293,23 +343,54 @@ public class TowerPlacementManager : MonoBehaviour
             {
                 if (currentHighlightedConsumer != null)
                 {
+                    //Debug.Log($"[TowerPlacement] Mouse clicked on highlighted consumer: {GetConsumerDisplayName(currentHighlightedConsumer)}");
+
                     if (useContinuousSupply)
                     {
-                        // Start continuous supply
                         StartContinuousSupplyToConsumer(currentHighlightedConsumer);
                     }
                     else
                     {
-                        // Old discrete repair with cooldown
                         if (Time.time - lastRepairTime >= energyRepairCooldown)
                         {
                             TryRepairEnergyConsumer(currentHighlightedConsumer);
                         }
                     }
                 }
-                else if (currentHighlightedConsumer == null)
+                else
                 {
-                    HandleSlotClick();
+                    CursorPointer cursorPointer = FindFirstObjectByType<CursorPointer>();
+                    if (cursorPointer != null)
+                    {
+                        Vector3 spritePosition = cursorPointer.transform.position;
+                        IEnergyConsumer target = GetSupplyTarget(spritePosition);
+
+                        if (target != null && IsPlayerInRange(target))
+                        {
+                            //Debug.Log($"[TowerPlacement] Fallback detection found consumer: {GetConsumerDisplayName(target)}");
+
+                            if (useContinuousSupply)
+                            {
+                                StartContinuousSupplyToConsumer(target);
+                            }
+                            else
+                            {
+                                if (Time.time - lastRepairTime >= energyRepairCooldown)
+                                {
+                                    TryRepairEnergyConsumer(target);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            //Debug.Log("[TowerPlacement] No valid consumer found for click, handling slot click");
+                            HandleSlotClick();
+                        }
+                    }
+                    else
+                    {
+                        HandleSlotClick();
+                    }
                 }
             }
             StartCoroutine(ResetClickProcessing());
@@ -318,6 +399,10 @@ public class TowerPlacementManager : MonoBehaviour
         // Handle mouse button release
         if (Mouse.current.leftButton.wasReleasedThisFrame)
         {
+            if (isCurrentlySupplying)
+            {
+                //Debug.Log("[TowerPlacement] Mouse released, stopping continuous supply");
+            }
             StopContinuousSupply();
         }
 
@@ -333,11 +418,14 @@ public class TowerPlacementManager : MonoBehaviour
     {
         if (consumer == null || EnergyManager.Instance == null) return;
 
+        //Debug.Log($"[TowerPlacement] Starting continuous supply to {GetConsumerDisplayName(consumer)}");
+
         isCurrentlySupplying = true;
         currentSupplyTarget = consumer;
 
-        // Tell EnergyManager to start continuous supply
         EnergyManager.Instance.StartContinuousSupply(consumer);
+
+        EnergyManager.Instance.SupplyEnergyToTarget(consumer, 0);
 
         // Immediate first supply
         ContinuouslySupplyEnergy();
@@ -347,21 +435,30 @@ public class TowerPlacementManager : MonoBehaviour
     {
         if (currentSupplyTarget == null || EnergyManager.Instance == null) return;
 
-        // Check if target still needs energy
+        // Check if target still needs energy (allow Central Core to always receive energy)
         if (currentSupplyTarget.GetEnergyPercentage() >= 0.999f && !(currentSupplyTarget is CentralCore))
         {
+            //Debug.Log($"[TowerPlacement] Target {GetConsumerDisplayName(currentSupplyTarget)} is full, stopping supply");
             StopContinuousSupply();
             return;
         }
 
-        // Use EnergyManager's continuous supply system
         EnergyManager.Instance.SupplyEnergyToTarget(currentSupplyTarget, 0);
+        //Debug.Log($"[TowerPlacement] Continuously supplying energy to {GetConsumerDisplayName(currentSupplyTarget)}");
     }
-
     private void StopContinuousSupply()
     {
+        if (isCurrentlySupplying)
+        {
+            //Debug.Log($"[TowerPlacement] Stopping continuous supply to {GetConsumerDisplayName(currentSupplyTarget)}");
+        }
+
         isCurrentlySupplying = false;
         currentSupplyTarget = null;
+        if (EnergyManager.Instance != null)
+        {
+            EnergyManager.Instance.StopSupplying();
+        }
     }
 
     // Keep the original TryRepairEnergyConsumer for discrete repairs when useContinuousSupply is false
@@ -384,6 +481,7 @@ public class TowerPlacementManager : MonoBehaviour
 
     string GetConsumerDisplayName(IEnergyConsumer consumer)
     {
+        if (consumer == null) return "null";
         if (consumer is Tower tower)
             return $"Tower ({tower.towerName})";
         else if (consumer is CentralCore)
@@ -408,9 +506,22 @@ public class TowerPlacementManager : MonoBehaviour
         {
             Vector2 cursorDirection = GetCursorDirectionFromPlayer();
             TowerSlot nearestSlot = FindNearestSlotInDirection(cursorDirection);
+
+            //  Only use the nearby slot if cursor is close to it
             if (nearestSlot != null)
             {
-                OnSlotClicked(nearestSlot);
+                // Get cursor position
+                CursorPointer cursorPointer = FindFirstObjectByType<CursorPointer>();
+                if (cursorPointer != null)
+                {
+                    float distanceToCursor = Vector2.Distance(cursorPointer.transform.position, nearestSlot.transform.position);
+
+                    // Only auto-select slots that are very close to cursor (within 0.8 units)
+                    if (distanceToCursor <= 0.8f)
+                    {
+                        OnSlotClicked(nearestSlot);
+                    }
+                }
             }
         }
     }
@@ -483,8 +594,14 @@ public class TowerPlacementManager : MonoBehaviour
         // Clear highlights when exiting placement mode
         if (!isPlacementMode)
         {
-            // Stop continuous supply when exiting placement mode
+            // FIXED: Properly stop continuous supply and visual effects when exiting placement mode
             StopContinuousSupply();
+
+            // Also stop the EnergyManager's supply system
+            if (EnergyManager.Instance != null)
+            {
+                EnergyManager.Instance.StopSupplying(); // Need to add this method
+            }
 
             if (currentHighlightedSlot != null)
             {
@@ -509,6 +626,12 @@ public class TowerPlacementManager : MonoBehaviour
             {
                 selectionWheel.CloseWheel();
             }
+
+            //Debug.Log("[PLACEMENT] Exited placement mode, stopped all supply operations");
+        }
+        else
+        {
+            //Debug.Log("[PLACEMENT] Entered placement mode");
         }
     }
 
@@ -649,7 +772,7 @@ public class TowerPlacementManager : MonoBehaviour
     public void RebuildTowerList()
     {
         BuildTowerList();
-        Debug.Log($"Tower list rebuilt with {GetTowerTypeCount()} towers");
+        //Debug.Log($"Tower list rebuilt with {GetTowerTypeCount()} towers");
     }
 
     void OnDestroy()

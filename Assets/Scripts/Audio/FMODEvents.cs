@@ -26,6 +26,8 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Dash SFX")]
     [field: SerializeField] public EventReference dashSound { get; private set; }
 
+    [field: Header("Tower Melee SFX")]
+    [field: SerializeField] public EventReference towerMeleeHit { get; private set; }
 
     public static FMODEvents instance { get; private set; }
 

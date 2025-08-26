@@ -121,7 +121,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     private TowerSlot parentSlot;
     private EnergyBar energyBar;
 
-    // Targeting & Combat
+    // Targeting and Combat
     private List<GameObject> enemiesInRange = new List<GameObject>();
     private GameObject currentTarget;
     private float lastFireTime;
@@ -137,6 +137,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     // State
     private bool isDisabledByDamage;
+    private bool isDestroyed = false;
     private Coroutine damageFlashCoroutine;
 
     void Awake()
@@ -153,17 +154,35 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void Update()
     {
-        if (IsEnergyDepleted() || isDisabledByDamage) return;
-        // Branch logic based on tower type
-        if (isEnergyGenerator || towerType == TowerType.Generator)
+        if (isDestroyed) return;
+
+        // Add safety check and exception handling
+        try
         {
-            UpdateEnergyGeneration();
+            if (IsEnergyDepleted() || isDisabledByDamage) return;
+
+            // Branch logic based on tower type
+            if (isEnergyGenerator || towerType == TowerType.Generator)
+            {
+                UpdateEnergyGeneration();
+            }
+            else
+            {
+                UpdateTargeting();
+                UpdateTentacles();
+                TryFire();
+            }
         }
-        else
+        catch (System.Exception e)
         {
-            UpdateTargeting();
-            UpdateTentacles();
-            TryFire();
+            Debug.LogError($"Tower '{towerName}': Error in Update: {e.Message}");
+            // Prevent further updates if we're in a bad state
+            if (float.IsNaN(currentEnergy) || float.IsNaN(maxEnergy))
+            {
+                Debug.LogError($"Tower '{towerName}': Detected corrupted energy values, disabling tower");
+                DisableTower();
+                isDestroyed = true;
+            }
         }
     }
 
@@ -171,6 +190,19 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     #region Energy Generation System
     void UpdateEnergyGeneration()
     {
+        // Validate generation rate before using it
+        if (float.IsNaN(energyGenerationRate) || float.IsInfinity(energyGenerationRate))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid energyGenerationRate: {energyGenerationRate}, resetting to 1.0");
+            energyGenerationRate = 1f;
+        }
+
+        if (float.IsNaN(generationInterval) || float.IsInfinity(generationInterval) || generationInterval <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid generationInterval: {generationInterval}, resetting to 0.25");
+            generationInterval = 0.25f;
+        }
+
         // Generate energy at specified intervals
         if (Time.time >= lastGenerationTime + generationInterval)
         {
@@ -189,10 +221,30 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (EnergyManager.Instance == null) return;
 
-        if (IsEnergyDepleted() || isDisabledByDamage) return;
+        if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
+
+        // Validate input values
+        if (float.IsNaN(energyGenerationRate) || float.IsInfinity(energyGenerationRate))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Cannot generate energy - invalid generation rate");
+            return;
+        }
+
+        if (float.IsNaN(generationInterval) || float.IsInfinity(generationInterval) || generationInterval <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Cannot generate energy - invalid generation interval");
+            return;
+        }
 
         // Calculate energy to generate based on rate and interval
         float energyToGenerate = energyGenerationRate * generationInterval;
+
+        // Validate the calculated energy
+        if (float.IsNaN(energyToGenerate) || float.IsInfinity(energyToGenerate))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid energyToGenerate calculated: {energyToGenerate}, skipping generation");
+            return;
+        }
 
         // Convert to integer for player currency
         int energyAmount = Mathf.RoundToInt(energyToGenerate);
@@ -202,7 +254,16 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         // Energy cost for energy generation
         float selfEnergyCost = energyToGenerate * 0.1f; // 10% of generated energy
+
+        // Validate self energy cost
+        if (float.IsNaN(selfEnergyCost) || float.IsInfinity(selfEnergyCost))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid selfEnergyCost: {selfEnergyCost}, using fallback cost");
+            selfEnergyCost = energyAmount * 0.1f;
+        }
+
         ConsumeEnergy(selfEnergyCost);
+
         // Visual feedback
         if (showGenerationEffects)
         {
@@ -215,7 +276,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     void UpdateGenerationEffects()
     {
         if (auraRenderer == null) return;
-        if (IsEnergyDepleted() || isDisabledByDamage)
+        if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed)
         {
             auraRenderer.color = Color.clear; // Make aura invisible
             return;
@@ -223,6 +284,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // Create pulsating effect
         float time = Time.time * 0.5f; // Pulse speed
         float pulse = Mathf.Sin(time) * 0.5f + 0.5f;
+
+        // Validate pulse value
+        if (float.IsNaN(pulse) || float.IsInfinity(pulse))
+        {
+            pulse = 0.5f;
+        }
 
         // Pulsate the aura color
         Color auraColor = generationEffectColor;
@@ -232,7 +299,28 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // Pulsate the aura size slightly
         float baseScale = spriteScale * 2.5f;
         float scaleMultiplier = 1f + (pulse * 0.2f); // Pulse between 100% and 120% size
-        auraObject.transform.localScale = Vector3.one * baseScale * scaleMultiplier;
+
+        // Validate scale values
+        if (float.IsNaN(baseScale) || float.IsInfinity(baseScale))
+        {
+            baseScale = 1.25f; // Fallback value
+        }
+
+        if (float.IsNaN(scaleMultiplier) || float.IsInfinity(scaleMultiplier))
+        {
+            scaleMultiplier = 1f;
+        }
+
+        Vector3 newScale = Vector3.one * baseScale * scaleMultiplier;
+
+        // Final validation of the scale vector
+        if (float.IsNaN(newScale.x) || float.IsNaN(newScale.y) || float.IsNaN(newScale.z) ||
+            float.IsInfinity(newScale.x) || float.IsInfinity(newScale.y) || float.IsInfinity(newScale.z))
+        {
+            newScale = Vector3.one * 1.25f; // Safe fallback
+        }
+
+        auraObject.transform.localScale = newScale;
         auraObject.transform.Rotate(0, 0, 30f * Time.deltaTime);
     }
 
@@ -251,6 +339,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         float startScale = spriteScale * 2.5f;
         float burstScale = startScale * 1.5f; // Burst to 150% size
 
+        // Validate scale values
+        if (float.IsNaN(startScale) || float.IsInfinity(startScale))
+        {
+            startScale = 1.25f;
+            burstScale = 1.875f;
+        }
+
         Color startColor = generationEffectColor;
         Color burstColor = new Color(startColor.r, startColor.g, startColor.b, startColor.a * 2f);
 
@@ -262,7 +357,20 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             // Scale burst
             float scaleCurve = Mathf.Sin(t * Mathf.PI);
             float currentScale = Mathf.Lerp(startScale, burstScale, scaleCurve);
-            auraObject.transform.localScale = Vector3.one * currentScale;
+
+            // Validate current scale
+            if (float.IsNaN(currentScale) || float.IsInfinity(currentScale))
+            {
+                currentScale = startScale;
+            }
+
+            Vector3 scaleVector = Vector3.one * currentScale;
+            if (float.IsNaN(scaleVector.x) || float.IsNaN(scaleVector.y) || float.IsNaN(scaleVector.z))
+            {
+                scaleVector = Vector3.one * startScale;
+            }
+
+            auraObject.transform.localScale = scaleVector;
 
             // Color burst
             Color currentColor = Color.Lerp(startColor, burstColor, scaleCurve);
@@ -291,6 +399,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Sin((elapsed / duration) * Mathf.PI);
+
+            // Validate t value
+            if (float.IsNaN(t) || float.IsInfinity(t))
+            {
+                t = 0.5f;
+            }
+
             spriteRenderer.color = Color.Lerp(originalColor, pulseColor, t);
             yield return null;
         }
@@ -370,6 +485,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             spriteRenderer.sortingLayerName = "Default";
         }
 
+        // Validate spriteScale before using it
+        if (float.IsNaN(spriteScale) || float.IsInfinity(spriteScale) || spriteScale <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid spriteScale: {spriteScale}, resetting to 0.5");
+            spriteScale = 0.5f;
+        }
+
         transform.localScale = Vector3.one * spriteScale;
 
         // Setup collider
@@ -400,6 +522,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         auraObject.transform.SetParent(transform);
         //auraObject.transform.localPosition = Vector3.zero;
         // Shifting the pulsating aura effect to right and top to align with Tower Generator sprite
+        // TODO adjust when we have new Generator sprites
         auraObject.transform.localPosition = new Vector3(0.1f, 0.1f, 0f);
 
 
@@ -409,6 +532,14 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         auraRenderer.sortingOrder = spriteRenderer.sortingOrder + 1; // IN FRONT of the tower
 
         float auraScale = spriteScale * 4f;
+
+        // Validate aura scale
+        if (float.IsNaN(auraScale) || float.IsInfinity(auraScale) || auraScale <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid auraScale: {auraScale}, using fallback");
+            auraScale = 2f;
+        }
+
         auraObject.transform.localScale = Vector3.one * auraScale;
     }
 
@@ -499,7 +630,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public bool IsGenerator() => isEnergyGenerator || towerType == TowerType.Generator;
     public float GetGenerationRate() => energyGenerationRate;
-    public void SetGenerationRate(float rate) => energyGenerationRate = Mathf.Max(0f, rate);
+    public void SetGenerationRate(float rate)
+    {
+        if (float.IsNaN(rate) || float.IsInfinity(rate) || rate < 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid generation rate: {rate}, ignoring");
+            return;
+        }
+        energyGenerationRate = rate;
+    }
 
 
 
@@ -572,15 +711,39 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
             targetAngle = Mathf.Repeat(targetAngle + 180f, 360f) - 180f;
 
+            // Validate angles to prevent NaN
+            if (float.IsNaN(targetAngle) || float.IsInfinity(targetAngle))
+            {
+                targetAngle = 0f;
+            }
+
             if (smoothRotation && !isSwipingMelee)
             {
                 float angleDifference = Mathf.DeltaAngle(currentAngle, targetAngle);
                 float rotationStep = rotationSpeed * Time.deltaTime;
 
+                // Validate rotation values
+                if (float.IsNaN(angleDifference) || float.IsInfinity(angleDifference))
+                {
+                    angleDifference = 0f;
+                }
+
+                if (float.IsNaN(rotationStep) || float.IsInfinity(rotationStep))
+                {
+                    rotationStep = 1f; // Fallback rotation step
+                }
+
                 currentAngle = Mathf.Abs(angleDifference) <= rotationStep ?
                     targetAngle : currentAngle + Mathf.Sign(angleDifference) * rotationStep;
 
                 currentAngle = Mathf.Repeat(currentAngle + 180f, 360f) - 180f;
+
+                // Validate current angle
+                if (float.IsNaN(currentAngle) || float.IsInfinity(currentAngle))
+                {
+                    currentAngle = 0f;
+                }
+
                 // Apply rotation to tentacle container for better aiming
                 if (tentacleContainer != null)
                     tentacleContainer.transform.rotation = Quaternion.AngleAxis(currentAngle, Vector3.forward);
@@ -623,9 +786,16 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public void FireAtTarget(GameObject target)
     {
-        if (target == null || IsEnergyDepleted() || isDisabledByDamage) return;
+        if (target == null || IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
 
         float energyCost = damage * 0.1f;
+
+        // Validate energy cost
+        if (float.IsNaN(energyCost) || float.IsInfinity(energyCost))
+        {
+            energyCost = 1f; // Fallback energy cost
+        }
+
         if (currentEnergy < energyCost) return;
 
         ConsumeEnergy(energyCost);
@@ -642,7 +812,18 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             meleeAnimTimer = 0f;
             swipeTimer = 0f;
             var stats = target.GetComponent<EnemyStats>();
-            stats?.TakeDamage(damage * meleeConfig.damageMultiplier);
+
+            float meleeDamage = damage * meleeConfig.damageMultiplier;
+
+            // Validate melee damage
+            if (float.IsNaN(meleeDamage) || float.IsInfinity(meleeDamage))
+            {
+                meleeDamage = damage; // Fallback to base damage
+            }
+
+            stats?.TakeDamage(meleeDamage);
+            AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, FirePoint?.position ?? transform.position);
+
         }
         else if (dist <= ProjectileRange)
         {
@@ -656,6 +837,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 Vector3 spawn = FirePoint?.position ?? transform.position;
                 Vector3 dir = (target.transform.position - spawn).normalized;
                 float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+                // Validate angle
+                if (float.IsNaN(angle) || float.IsInfinity(angle))
+                {
+                    angle = 0f;
+                }
 
                 var proj = Instantiate(projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
                 proj.GetComponent<Projectile>()?.Initialize(target, damage, range);
@@ -674,6 +861,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (!useTentacleTurret || tentacleRenderer == null) return;
 
         swayTimer += Time.deltaTime * tentacleConfig.swaySpeed;
+
+        // Validate sway timer
+        if (float.IsNaN(swayTimer) || float.IsInfinity(swayTimer))
+        {
+            swayTimer = 0f;
+        }
 
         // Update animation timers
         if (isFiring)
@@ -701,12 +894,26 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             Vector3 pos = Vector3.right * (tentacleConfig.length * t);
 
             // Apply sway animation
-            pos.y += Mathf.Sin(swayTimer + t * Mathf.PI) * tentacleConfig.swayAmount * t;
+            float swayValue = Mathf.Sin(swayTimer + t * Mathf.PI) * tentacleConfig.swayAmount * t;
+
+            // Validate sway value
+            if (float.IsNaN(swayValue) || float.IsInfinity(swayValue))
+            {
+                swayValue = 0f;
+            }
+
+            pos.y += swayValue;
 
             // Apply firing animation
             if (isFiring)
             {
                 float fireAnim = Mathf.Sin(fireAnimTimer * Mathf.PI);
+
+                if (float.IsNaN(fireAnim) || float.IsInfinity(fireAnim))
+                {
+                    fireAnim = 0f;
+                }
+
                 pos.x += fireAnim * 0.3f * t;
                 pos.y *= (1f - fireAnim * 0.5f);
             }
@@ -715,8 +922,20 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             if (isMeleeAttacking)
             {
                 float meleeAnim = Mathf.Sin((meleeAnimTimer / meleeConfig.attackDuration) * Mathf.PI);
+
+                if (float.IsNaN(meleeAnim) || float.IsInfinity(meleeAnim))
+                {
+                    meleeAnim = 0f;
+                }
+
                 pos.x += meleeAnim * 0.5f * t;
                 float whip = Mathf.Sin(meleeAnim * Mathf.PI * 2f) * 0.3f * t;
+
+                if (float.IsNaN(whip) || float.IsInfinity(whip))
+                {
+                    whip = 0f;
+                }
+
                 pos.y += whip;
             }
 
@@ -724,9 +943,27 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             if (isSwipingMelee)
             {
                 float swipeProgress = meleeConfig.swipeCurve.Evaluate(swipeTimer);
+
+                if (float.IsNaN(swipeProgress) || float.IsInfinity(swipeProgress))
+                {
+                    swipeProgress = 0f;
+                }
+
                 float swipeAngle = Mathf.Lerp(-meleeConfig.swipeArcDegrees / 2f, meleeConfig.swipeArcDegrees / 2f, swipeProgress);
                 float swipeAngleRad = swipeAngle * Mathf.Deg2Rad;
                 float swipeExtension = Mathf.Sin(swipeProgress * Mathf.PI) * 0.4f;
+
+                // Validate swipe values
+                if (float.IsNaN(swipeAngle) || float.IsInfinity(swipeAngle))
+                {
+                    swipeAngle = 0f;
+                    swipeAngleRad = 0f;
+                }
+
+                if (float.IsNaN(swipeExtension) || float.IsInfinity(swipeExtension))
+                {
+                    swipeExtension = 0f;
+                }
 
                 pos.x += swipeExtension * t;
 
@@ -734,18 +971,45 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 float currentAngleRad = Mathf.Atan2(pos.y, pos.x);
                 float newAngleRad = currentAngleRad + (swipeAngleRad * 1.5f * t);
 
+                // Validate angle calculations
+                if (float.IsNaN(newAngleRad) || float.IsInfinity(newAngleRad))
+                {
+                    newAngleRad = currentAngleRad;
+                }
+
                 pos.x = Mathf.Cos(newAngleRad) * radius;
                 pos.y = Mathf.Sin(newAngleRad) * radius;
 
                 float whipEffect = Mathf.Sin(swipeProgress * Mathf.PI * 2f) * 0.2f * t;
+
+                if (float.IsNaN(whipEffect) || float.IsInfinity(whipEffect))
+                {
+                    whipEffect = 0f;
+                }
+
                 pos.y += whipEffect;
             }
 
-            // Apply target tracking (allow tracking during firing, but not during melee swipes)
+            // Apply target tracking, allowing tracking during firing, but not during melee swipes
             if (currentTarget != null && !isSwipingMelee)
             {
                 Vector3 targetDir = transform.InverseTransformDirection((currentTarget.transform.position - transform.position).normalized);
+
+                // Validate target direction
+                if (float.IsNaN(targetDir.x) || float.IsNaN(targetDir.y) || float.IsNaN(targetDir.z) ||
+                    float.IsInfinity(targetDir.x) || float.IsInfinity(targetDir.y) || float.IsInfinity(targetDir.z))
+                {
+                    targetDir = Vector3.right; // Default direction
+                }
+
                 pos += targetDir * (t * 0.2f);
+            }
+
+            // Validation of tentacle position
+            if (float.IsNaN(pos.x) || float.IsNaN(pos.y) || float.IsNaN(pos.z) ||
+                float.IsInfinity(pos.x) || float.IsInfinity(pos.y) || float.IsInfinity(pos.z))
+            {
+                pos = Vector3.right * (tentacleConfig.length * t); // Reset to base position
             }
 
             tentaclePoints[i] = pos;
@@ -778,8 +1042,28 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     #region IEnergyConsumer Implementation
     public void ConsumeEnergy(float amount)
     {
+        if (float.IsNaN(amount) || float.IsInfinity(amount))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Trying to consume invalid energy amount: {amount}, ignoring");
+            return;
+        }
+
+        if (isDestroyed)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Trying to consume energy on destroyed tower, ignoring");
+            return;
+        }
+
         float prev = currentEnergy;
         currentEnergy = Mathf.Max(0f, currentEnergy - amount);
+
+        // Validate result
+        if (float.IsNaN(currentEnergy) || float.IsInfinity(currentEnergy))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Energy became invalid after consumption, resetting to 0");
+            currentEnergy = 0f;
+        }
+
         if (currentEnergy != prev)
         {
             OnEnergyChanged?.Invoke(currentEnergy);
@@ -790,8 +1074,28 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public void SupplyEnergy(float amount)
     {
+        if (float.IsNaN(amount) || float.IsInfinity(amount))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Trying to supply invalid energy amount: {amount}, ignoring");
+            return;
+        }
+
+        if (isDestroyed)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Trying to supply energy to destroyed tower, ignoring");
+            return;
+        }
+
         float prev = currentEnergy;
         currentEnergy = Mathf.Min(maxEnergy, currentEnergy + amount);
+
+        // Validate result
+        if (float.IsNaN(currentEnergy) || float.IsInfinity(currentEnergy))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Energy became invalid after supply, clamping to valid range");
+            currentEnergy = Mathf.Clamp(prev, 0f, maxEnergy);
+        }
+
         if (currentEnergy != prev)
         {
             OnEnergyChanged?.Invoke(currentEnergy);
@@ -803,15 +1107,50 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public void SetEnergy(float amount)
     {
+        if (float.IsNaN(amount) || float.IsInfinity(amount))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Trying to set invalid energy amount: {amount}, ignoring");
+            return;
+        }
+
         float prev = currentEnergy;
         currentEnergy = Mathf.Clamp(amount, 0f, maxEnergy);
         if (currentEnergy != prev) { OnEnergyChanged?.Invoke(currentEnergy); UpdateVisuals(); }
     }
 
-    public void SetMaxEnergy(float amount) { maxEnergy = amount; currentEnergy = Mathf.Min(currentEnergy, maxEnergy); UpdateVisuals(); }
+    public void SetMaxEnergy(float amount)
+    {
+        if (float.IsNaN(amount) || float.IsInfinity(amount) || amount <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Trying to set invalid max energy: {amount}, ignoring");
+            return;
+        }
+
+        maxEnergy = amount;
+        currentEnergy = Mathf.Min(currentEnergy, maxEnergy);
+        UpdateVisuals();
+    }
+
     public float GetEnergy() => currentEnergy;
     public float GetMaxEnergy() => maxEnergy;
-    public float GetEnergyPercentage() => maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
+    public float GetEnergyPercentage()
+    {
+        // Added validation to prevent NaN
+        if (float.IsNaN(currentEnergy) || float.IsInfinity(currentEnergy))
+        {
+            Debug.LogWarning($"Tower '{towerName}': currentEnergy is invalid: {currentEnergy}, resetting to 0");
+            currentEnergy = 0f;
+        }
+
+        if (float.IsNaN(maxEnergy) || float.IsInfinity(maxEnergy) || maxEnergy <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': maxEnergy is invalid: {maxEnergy}, resetting to default");
+            maxEnergy = 100f;
+            currentEnergy = Mathf.Min(currentEnergy, maxEnergy);
+        }
+
+        return maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
+    }
     public Vector3 GetPosition() => transform.position;
     public bool IsEnergyDepleted() => EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetTowerDeadThreshold();
     public bool IsEnergyLow() => EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetTowerCriticalThreshold();
@@ -834,9 +1173,23 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     #region IDamageable Implementation
     public bool TakeDamage(float damageAmount, GameObject damageSource = null)
     {
-        if (immuneToEnemyDamage || isDisabledByDamage) return false;
+        if (immuneToEnemyDamage || isDisabledByDamage || isDestroyed) return false;
+
+        if (float.IsNaN(damageAmount) || float.IsInfinity(damageAmount))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Received invalid damage amount: {damageAmount}, ignoring");
+            return false;
+        }
 
         float actualDamage = damageAmount * (1f - armorReduction);
+
+        // Validate actual damage
+        if (float.IsNaN(actualDamage) || float.IsInfinity(actualDamage))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Calculated invalid actual damage: {actualDamage}, using original amount");
+            actualDamage = damageAmount;
+        }
+
         ConsumeEnergy(actualDamage);
 
         StartDamageFlash();
@@ -851,11 +1204,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         return false;
     }
 
-    public bool CanTakeDamage() => !immuneToEnemyDamage && !isDisabledByDamage;
+    public bool CanTakeDamage() => !immuneToEnemyDamage && !isDisabledByDamage && !isDestroyed;
     public float GetCurrentHealth() => currentEnergy;
     public float GetMaxHealth() => maxEnergy;
     public float GetHealthPercentage() => GetEnergyPercentage();
-    public bool IsDestroyed() => isDisabledByDamage || IsEnergyDepleted();
+    public bool IsDestroyed() => isDisabledByDamage || isDestroyed || IsEnergyDepleted();
 
     public void DisableTower()
     {
@@ -903,7 +1256,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public bool IsTargetInMeleeRange(GameObject target) => target != null && Vector2.Distance(transform.position, target.transform.position) <= tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude + 0.4f;
     public bool IsTargetInProjectileRange(GameObject target) => target != null && Vector2.Distance(transform.position, target.transform.position) <= ProjectileRange;
-    public bool IsOperational() => !IsEnergyDepleted() && !isDisabledByDamage;
+    public bool IsOperational() => !IsEnergyDepleted() && !isDisabledByDamage && !isDestroyed;
 
     public void UpgradeTower()
     {
@@ -923,10 +1276,44 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public int GetBuildCost() => EnergyManager.Instance?.GetTowerBuildCost() ?? cost;
     public bool CanAfford() => EnergyManager.Instance?.CanAffordTower() ?? true;
     public int GetSellValue() => EnergyManager.Instance?.GetTowerSellValue() ?? Mathf.RoundToInt(cost * 0.5f);
-    public void SetDamage(float newDamage) => damage = newDamage;
-    public void SetRange(float newRange) { range = newRange; rangeCollider.radius = Mathf.Max(range, ProjectileRange); }
-    public void SetFireRate(float newFireRate) => fireRate = newFireRate;
-    public void SetArmor(float newArmor) => armorReduction = Mathf.Clamp01(newArmor);
+    public void SetDamage(float newDamage)
+    {
+        if (float.IsNaN(newDamage) || float.IsInfinity(newDamage) || newDamage < 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid damage value: {newDamage}, ignoring");
+            return;
+        }
+        damage = newDamage;
+    }
+    public void SetRange(float newRange)
+    {
+        if (float.IsNaN(newRange) || float.IsInfinity(newRange) || newRange <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid range value: {newRange}, ignoring");
+            return;
+        }
+
+        range = newRange;
+        rangeCollider.radius = Mathf.Max(range, ProjectileRange);
+    }
+    public void SetFireRate(float newFireRate)
+    {
+        if (float.IsNaN(newFireRate) || float.IsInfinity(newFireRate) || newFireRate <= 0f)
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid fire rate: {newFireRate}, ignoring");
+            return;
+        }
+        fireRate = newFireRate;
+    }
+    public void SetArmor(float newArmor)
+    {
+        if (float.IsNaN(newArmor) || float.IsInfinity(newArmor))
+        {
+            Debug.LogWarning($"Tower '{towerName}': Invalid armor value: {newArmor}, ignoring");
+            return;
+        }
+        armorReduction = Mathf.Clamp01(newArmor);
+    }
     public void SetUpgradeLevel(int level) => upgradeLevel = level;
     public float GetDamage() => damage;
     public float GetRange() => range;
@@ -939,9 +1326,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void Cleanup()
     {
+        // Mark as destroyed to prevent further operations
+        isDestroyed = true;
+
         EnergyManager.Instance?.UnregisterEnergyConsumer(this);
         if (tentacleContainer != null) DestroyImmediate(tentacleContainer);
-        if (auraObject != null) DestroyImmediate(auraObject); // Changed from generationBeam
+        if (auraObject != null) DestroyImmediate(auraObject);
         if (energyBar != null) Destroy(energyBar);
         if (damageFlashCoroutine != null) StopCoroutine(damageFlashCoroutine);
     }
@@ -950,7 +1340,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (isEnergyGenerator)
         {
-            // Show generation range for generators
+            // Generation range for generators
             UnityEditor.Handles.color = generationEffectColor;
             UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, generationRange);
             UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
@@ -960,7 +1350,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         else
         {
-            // Original combat tower gizmos
+            // Original combat tower
             UnityEditor.Handles.color = Color.blue;
             UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, range);
             UnityEditor.Handles.color = Color.red;
