@@ -155,7 +155,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void LoadCoreSprites()
     {
-        coreSprites = Resources.LoadAll<Sprite>("Sprites/central_core_spritesheet2");
+        coreSprites = Resources.LoadAll<Sprite>("Sprites/Buildings/central_core_spritesheet2");
         if (coreSprites?.Length > 0)
             spriteRenderer.sprite = coreSprites[spriteStartIndex];
     }

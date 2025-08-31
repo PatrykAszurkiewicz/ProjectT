@@ -42,11 +42,11 @@ public class GrapplingHookSystem
     private void LoadHookSprite()
     {
         // Try loading the sprite from Resources
-        hookSprite = Resources.Load<Sprite>("Sprites/Hook");
+        hookSprite = Resources.Load<Sprite>("Sprites/Cursors/Hook");
 
         if (hookSprite == null)
         {
-            var sprites = Resources.LoadAll<Sprite>("Sprites/Hook");
+            var sprites = Resources.LoadAll<Sprite>("Sprites/Cursors/Hook");
             if (sprites?.Length > 0)
                 hookSprite = sprites[0];
         }
@@ -54,7 +54,8 @@ public class GrapplingHookSystem
         // Try alternative paths if still null
         if (hookSprite == null)
         {
-            string[] paths = { "Hook", "Sprites/hook", "UI/Hook", "Icons/Hook" };
+            string[] paths = { "Sprites/Cursors/Hook", "Sprites/hook" };
+            //string[] paths = { "Sprites/Cursors/Hook", "Sprites/hook", "UI/Hook", "Icons/Hook" };
             foreach (string path in paths)
             {
                 hookSprite = Resources.Load<Sprite>(path);

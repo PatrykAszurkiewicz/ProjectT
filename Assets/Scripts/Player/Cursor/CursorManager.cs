@@ -9,11 +9,11 @@ public class CursorManager : MonoBehaviour
 
     [Header("Cursor Sprite Paths")]
     public string defaultCursorPath = "";
-    public string repairCursorPath = "Sprites/cursor_spritesheet_repair3";
-    public string shieldCursorPath = "Sprites/cursor_spritesheet_shield";
-    public string meleeCursorPath = "Sprites/cursor_spritesheet_melee";
-    public string hookCursorPath = "Sprites/cursor_spritesheet_hook2";
-    public string hookHighlightCursorPath = "Sprites/cursor_spritesheet_hook_highlight";
+    public string repairCursorPath = "Sprites/Cursors/cursor_spritesheet_repair3";
+    public string shieldCursorPath = "Sprites/Cursors/cursor_spritesheet_shield";
+    public string meleeCursorPath = "Sprites/Cursors/cursor_spritesheet_melee";
+    public string hookCursorPath = "Sprites/Cursors/cursor_spritesheet_hook2";
+    public string hookHighlightCursorPath = "Sprites/Cursors/cursor_spritesheet_hook_highlight";
 
     private Sprite defaultCursorSprite;
     private Sprite repairCursorSprite;

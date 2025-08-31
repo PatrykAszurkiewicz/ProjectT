@@ -92,7 +92,7 @@ public class PlayerMovement : MonoBehaviour
         }
 
         //TODO move the sprite paths to the Battle Orchestrator when ready
-        Sprite[] loadedSprites = Resources.LoadAll<Sprite>("Sprites/player_character_spritesheet4");
+        Sprite[] loadedSprites = Resources.LoadAll<Sprite>("Sprites/player/player_character_spritesheet4");
 
         if (loadedSprites != null && loadedSprites.Length >= 12)
         {
@@ -107,7 +107,7 @@ public class PlayerMovement : MonoBehaviour
         else
         {
             Debug.LogError($"Failed to load player sprites. Found {(loadedSprites?.Length ?? 0)} sprites, expected at least 12.");
-            Texture2D spritesheet = Resources.Load<Texture2D>("Sprites/player_character_spritesheet4");
+            Texture2D spritesheet = Resources.Load<Texture2D>("Sprites/player/player_character_spritesheet4");
             if (spritesheet != null)
             {
                 Debug.LogWarning("Found texture but not sprites. Make sure the texture is set to 'Sprite (2D and UI)' and sliced properly.");
