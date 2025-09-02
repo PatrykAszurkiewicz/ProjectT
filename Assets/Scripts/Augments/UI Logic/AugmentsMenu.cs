@@ -19,6 +19,7 @@ public class AugmentsMenu : MonoBehaviour
     [SerializeField] private TextMeshProUGUI[] nameTexts;
     [SerializeField] private TextMeshProUGUI[] descriptionTexts;
     [SerializeField] private TextMeshProUGUI[] rerollNumberText;
+    [SerializeField] private Button[] rerollButtons;
 
     private static Sprite[] allSprites;
     private static Dictionary<int, AugmentData> augmentDatabase = new Dictionary<int, AugmentData>();
@@ -302,7 +303,7 @@ public class AugmentsMenu : MonoBehaviour
         Debug.Log($"Rolled augment: {data.Name} with rarity: {selectedRarity} - {data.Description}");
     }
 
-    // Overload dla kompatybilnoœci wstecznej
+    // Overload
     private void AssignAugmentToImage(Image target, int augmentId)
     {
         string selectedRarity = GetRandomRarityForAugment(augmentId);
@@ -359,11 +360,17 @@ public class AugmentsMenu : MonoBehaviour
         rerollsleft[slotIndex]--;
         UpdateRerollText(slotIndex);
     }
+
     private void UpdateRerollText(int slotIndex)
     {
         if (rerollNumberText != null && slotIndex < rerollNumberText.Length && rerollNumberText[slotIndex] != null)
         {
             rerollNumberText[slotIndex].text = $"{rerollsleft[slotIndex]}";
+        }
+
+        if (rerollButtons != null && slotIndex < rerollButtons.Length && rerollButtons[slotIndex] != null)
+        {
+            rerollButtons[slotIndex].interactable = rerollsleft[slotIndex] > 0;
         }
     }
     public void ResetRerolls() //for Later
