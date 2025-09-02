@@ -20,6 +20,10 @@ public class GrapplingHookSystem
     private GrapplingHookTargetIndicator currentIndicator;
     private Sprite hookSprite;
 
+    // Line disintegration effect
+    private bool isDisintegrating = false;
+    private Coroutine disintegrationCoroutine;
+
     // State
     private enum HookState { Idle, Shooting, Connected, Retracting }
     private HookState currentState = HookState.Idle;
@@ -55,7 +59,6 @@ public class GrapplingHookSystem
         if (hookSprite == null)
         {
             string[] paths = { "Sprites/Cursors/Hook", "Sprites/hook" };
-            //string[] paths = { "Sprites/Cursors/Hook", "Sprites/hook", "UI/Hook", "Icons/Hook" };
             foreach (string path in paths)
             {
                 hookSprite = Resources.Load<Sprite>(path);
@@ -124,7 +127,15 @@ public class GrapplingHookSystem
         {
             ClearCurrentTarget();
             HideIndicator();
-            if (lineRenderer != null) lineRenderer.enabled = false;
+
+            // Stop any disintegration effect and hide line
+            StopLineDisintegration();
+            if (lineRenderer != null)
+            {
+                lineRenderer.enabled = false;
+                ResetLineRenderer();
+            }
+
             originalColors.Clear();
         }
     }
@@ -146,6 +157,17 @@ public class GrapplingHookSystem
             lineRenderer.sortingOrder = 100;
             lineRenderer.enabled = false;
         }
+    }
+
+    private void ResetLineRenderer()
+    {
+        if (lineRenderer == null) return;
+
+        // Reset all line renderer properties
+        lineRenderer.material.color = weaponData.hookLineColor;
+        lineRenderer.startWidth = weaponData.lineWidth;
+        lineRenderer.endWidth = weaponData.lineWidth * 0.5f;
+        lineRenderer.positionCount = 2;
     }
 
     private void RefreshTargets()
@@ -206,11 +228,18 @@ public class GrapplingHookSystem
         if (currentState == HookState.Idle)
             UpdateTargeting();
 
-        // Update line renderer when connected
-        if (currentState == HookState.Connected && currentTarget != null && IsTargetValid(currentTarget))
+        // Update line renderer when shooting or connected
+        if ((currentState == HookState.Shooting || currentState == HookState.Connected) &&
+            currentTarget != null && IsTargetValid(currentTarget) && !isDisintegrating && lineRenderer.enabled)
         {
+            // Always update the start position to follow the player
             lineRenderer.SetPosition(0, playerTransform.position);
-            lineRenderer.SetPosition(1, currentTarget.GetGrapplePoint());
+
+            // Only update end position during connected state (shooting animation handles its own end position)
+            if (currentState == HookState.Connected)
+            {
+                lineRenderer.SetPosition(1, currentTarget.GetGrapplePoint());
+            }
         }
     }
 
@@ -227,7 +256,8 @@ public class GrapplingHookSystem
 
         if (currentState == HookState.Shooting || currentState == HookState.Connected)
         {
-            if (lineRenderer != null) lineRenderer.enabled = false;
+            // Start disintegration effect instead of immediately disabling
+            StartLineDisintegration();
         }
         else
         {
@@ -391,6 +421,9 @@ public class GrapplingHookSystem
             return;
         }
 
+        // Stop any ongoing disintegration effect
+        StopLineDisintegration();
+
         weapon.StartCoroutine(GrappleSequence());
     }
 
@@ -446,6 +479,7 @@ public class GrapplingHookSystem
     {
         float pullDuration = 1.5f;
         float elapsed = 0f;
+        Vector3 lastPlayerPosition = playerTransform.position;
 
         while (elapsed < pullDuration && IsTargetValid(grappleTarget))
         {
@@ -459,6 +493,17 @@ public class GrapplingHookSystem
             float dist = Vector3.Distance(playerTransform.position, grappleTarget.GetGrapplePoint());
             if (dist < 2.0f) break;
 
+            // Check if player moved significantly after being close to target - early release
+            if (dist < 3.0f)
+            {
+                float playerMovement = Vector3.Distance(playerTransform.position, lastPlayerPosition);
+                if (playerMovement > 1.5f)
+                {
+                    break; // Player is actively moving away - release early
+                }
+            }
+
+            lastPlayerPosition = playerTransform.position;
             yield return null;
         }
     }
@@ -466,19 +511,116 @@ public class GrapplingHookSystem
     private void EndGrappleSequence()
     {
         currentState = HookState.Retracting;
+
+        // Start disintegration
+        StartLineDisintegration();
+
         weapon.StartCoroutine(EndGrappleSequenceCoroutine());
     }
 
     private IEnumerator EndGrappleSequenceCoroutine()
     {
-        yield return new WaitForSeconds(0.2f);
-        lineRenderer.enabled = false;
-
         currentTarget?.OnGrappleRelease();
         currentTarget = null;
         currentState = HookState.Idle;
 
         weapon.StartCoroutine(CooldownCoroutine());
+        yield break;
+    }
+
+    // Line Disintegration Methods
+    private void StartLineDisintegration()
+    {
+        if (lineRenderer == null || !lineRenderer.enabled) return;
+
+        // Stop any existing disintegration
+        StopLineDisintegration();
+
+        isDisintegrating = true;
+        disintegrationCoroutine = weapon.StartCoroutine(DisintegrationEffect());
+    }
+
+    private void StopLineDisintegration()
+    {
+        if (disintegrationCoroutine != null)
+        {
+            weapon.StopCoroutine(disintegrationCoroutine);
+            disintegrationCoroutine = null;
+        }
+        isDisintegrating = false;
+    }
+
+    private IEnumerator DisintegrationEffect()
+    {
+        const float disintegrationDuration = 0.8f;
+        const int segmentCount = 10; // Number of segments to break the line into
+
+        if (lineRenderer == null)
+        {
+            isDisintegrating = false;
+            yield break;
+        }
+
+        // Store original positions
+        Vector3 startPos = lineRenderer.GetPosition(0);
+        Vector3 endPos = lineRenderer.GetPosition(1);
+
+        // Create multiple segments for the disintegration effect
+        lineRenderer.positionCount = segmentCount;
+
+        // Initialize segments
+        for (int i = 0; i < segmentCount; i++)
+        {
+            float t = (float)i / (segmentCount - 1);
+            Vector3 segmentPos = Vector3.Lerp(startPos, endPos, t);
+            lineRenderer.SetPosition(i, segmentPos);
+        }
+
+        float elapsed = 0f;
+        Color originalColor = lineRenderer.material.color;
+
+        while (elapsed < disintegrationDuration)
+        {
+            elapsed += Time.deltaTime;
+            float progress = elapsed / disintegrationDuration;
+
+            // Fade out effect
+            float alpha = Mathf.Lerp(1f, 0f, progress * progress); // Quadratic fade for smoother effect
+            lineRenderer.material.color = new Color(originalColor.r, originalColor.g, originalColor.b, alpha);
+
+            // Shrink width effect
+            float widthMultiplier = Mathf.Lerp(1f, 0.1f, progress);
+            lineRenderer.startWidth = weaponData.lineWidth * widthMultiplier;
+            lineRenderer.endWidth = weaponData.lineWidth * 0.5f * widthMultiplier;
+
+            // Break apart effect
+            float breakApartIntensity = Mathf.Lerp(0f, 2f, progress * progress);
+            for (int i = 1; i < segmentCount - 1; i++) // Skip first and last segment
+            {
+                float segmentT = (float)i / (segmentCount - 1);
+                Vector3 originalSegmentPos = Vector3.Lerp(startPos, endPos, segmentT);
+
+                // Add random drift to middle segments
+                Vector3 randomOffset = new Vector3(
+                    Random.Range(-breakApartIntensity, breakApartIntensity),
+                    Random.Range(-breakApartIntensity, breakApartIntensity),
+                    0f
+                );
+
+                lineRenderer.SetPosition(i, originalSegmentPos + randomOffset);
+            }
+
+            yield return null;
+        }
+
+        // Disable the line renderer
+        lineRenderer.enabled = false;
+
+        // Reset properties for next use
+        ResetLineRenderer();
+
+        isDisintegrating = false;
+        disintegrationCoroutine = null;
     }
 
     private void PullPlayer(Vector3 targetPoint)
@@ -514,10 +656,17 @@ public class GrapplingHookSystem
     public void Cleanup()
     {
         HideIndicator();
+        StopLineDisintegration();
+
+        if (lineRenderer != null)
+        {
+            lineRenderer.enabled = false;
+            ResetLineRenderer();
+        }
     }
 }
 
-// Grappling Target Interface & Component
+// Grappling Target Interface
 public interface IGrapplingTarget
 {
     bool CanBeGrappled();

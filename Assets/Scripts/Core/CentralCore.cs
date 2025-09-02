@@ -242,6 +242,12 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
         ConsumeEnergy(actualDamage);
 
+        // Play damage sound
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerDamage, transform.position);
+        }
+
         if (enableDamageEffects)
         {
             StartDamageFlash();

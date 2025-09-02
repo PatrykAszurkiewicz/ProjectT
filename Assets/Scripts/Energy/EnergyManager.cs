@@ -653,7 +653,7 @@ public class EnergyManager : MonoBehaviour
     {
         if (supplyBeam == null)
         {
-            Debug.LogWarning("[EnergyManager] Supply beam was null, reinitializing...");
+            //Debug.LogWarning("[EnergyManager] Supply beam was null, reinitializing...");
             try
             {
                 supplyBeam = new SupplyBeamController(this);

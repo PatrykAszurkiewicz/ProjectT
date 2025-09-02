@@ -6,6 +6,7 @@ using FMODUnity;
 public class FMODEvents : MonoBehaviour
 {
     [field: Header("Ambience")]
+    // TODO add map ambience
     //[field: SerializeField] public EventReference ambience { get; private set; }
 
     [field: Header("Music")]
@@ -13,7 +14,6 @@ public class FMODEvents : MonoBehaviour
     [field: SerializeField] public EventReference musicElectronic { get; private set; }
     [field: SerializeField] public EventReference musicPiano { get; private set; }
 
-    //[field: Header("Player SFX")]
     [field: Header("Multi Shot SFX")]
     [field: SerializeField] public EventReference multiShotSound { get; private set; }
 
@@ -28,6 +28,12 @@ public class FMODEvents : MonoBehaviour
 
     [field: Header("Tower Melee SFX")]
     [field: SerializeField] public EventReference towerMeleeHit { get; private set; }
+
+    [field: Header("Tower Damage SFX")]
+    [field: SerializeField] public EventReference towerDamage { get; private set; }
+
+    [field: Header("Tower Repair SFX")]
+    [field: SerializeField] public EventReference towerRepair { get; private set; }
 
     public static FMODEvents instance { get; private set; }
 

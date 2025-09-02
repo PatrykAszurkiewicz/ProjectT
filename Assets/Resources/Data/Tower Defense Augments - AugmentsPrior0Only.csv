@@ -1,0 +1,80 @@
+ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description
+1,0,Melee attack increase and defense decrease,Player,"Common, Epic","{player_attack: 0.1, player_physical_defense: -0.1}",Perk increases melee attack by 10% and decreases physical damage defense by 10%
+2,0,Unlocked melee,Player,Epic,NULL,Unlocked melee attack
+3,0,Obstacles generation,Map,Epic,NULL,Unlocked obstacles generation
+4,0,More obstacles,Map,"Epic, Rare",NULL,Unlocked more obstacles
+5,0,Even More Obstacles,Map,"Rare, Epic",NULL,Unlocked even more obstacles
+6,0,Tower melee damage increase,Tower,"Common, Rare, Epic",{tower_attack: 0.1},Increased tower attack
+7,0,Berserker's Fury,Player,Legendary,{player_attack_stack: 0.02},Player attack increases by 2% for each enemy killed resets on taking damage
+8,0,Rapid Fire,Player,Epic,"{player_attack_speed: 0.4, player_attack: -0.15}",Increases player attack speed by 40% decreases damage by 15%
+9,0,Lifesteal,Player,Epic,{player_health: 0.15*player_attack},Player heals for 15% of damage dealt
+10,0,Armor Plating,Player,Common,{player_damage_reduction: 0.2},Reduces all incoming damage by 20%
+11,0,Regeneration,Player,Epic,{player_health_regen_per_second: 0.02},Slowly heal 2% max health per second when not taking damage
+12,0,Immunity Phases,Player,Legendary,NULL,Become immune to damage for 2 seconds after taking a hit (15s cooldown)
+13,0,Damage Reflection,Player,Rare,{player_damage_reflection: 0.3},Reflect 30% of received damage back to attackers
+14,0,Armor upgrade,Player,Epic,{player_armor: 1.25},Player gets more armor
+15,0,Speed Boost,Player,Common,{player_movement_speed: 0.3},+30% movement speed permanently
+16,0,Magnetic Field,Player,Epic,{player_resource_collection_radius: 0.5},Automatically collect resources within larger radius
+17,0,Freeze Ray,Tower,Epic,{tower_freeze_chance: 0.2},20% chance to freeze enemies for 2 seconds
+18,0,Tower Healing,Tower,Rare,{tower_health_regen: 0.01},Towers slowly regenerate health over time
+19,0,Overcharge,Tower,Epic,"{tower_attack: 0.5, tower_energy_cost: 1}",Towers deal +50% damage but consume energy to fire
+20,0,Rough Terrain,Map,Rare,"{enemy_movement_speed: -0.2, tower_cost: 0.3}",Enemies move slower but towers cost more
+21,0,Resource Abundance,Map,Common,{resource_generation: 0.25},+25% resource generation from all sources
+22,0,Scavenger's Paradise,Map,Rare,{enemy_kill_resources: 0.4},Defeating enemies yields extra resources
+23,0,Economic Crisis,Map,Epic,"{all_costs: 0.3, all_rewards: 1.0}",All costs increased by 30% but rewards doubled
+24,0,Recycling Plant,Map,Common,{tower_destroy_refund: 0.5},Destroyed towers return 50% of their cost
+25,0,Symbiosis,Synergy,Legendary,{player_tower_damage_sharing: 0.25},Player and towers share 25% of their damage bonuses
+26,0,Tower Commander,Synergy,Rare,{player_tower_proximity_boost: 0.2},Player presence near towers boosts their effectiveness
+27,2,Environmental Mastery,Synergy,Epic,NULL,Player can activate map effects manually
+28,0,Escalation,Stack,Common,{damage_per_wave: 0.02},Each wave cleared increases all damage by 2% (stacks infinitely)
+29,0,Momentum,Stack,Rare,"{player_health: 0.03, player_attack: 0.03}",Consecutive kills without taking damage increase health and attack by 3%
+30,0,Friendly Fire,Special,Epic,{enemy_infighting_chance: 0.1},Enemies occasionally attack each other with 10% chance
+31,0,God Mode,Special,Legendary,"{temporary_invincibility: 1, max_health_reduction: -0.2}",Temporary invincibility for 60 seconds but permanently reduces max health afterward by 20%
+32,0,Player damage boost,Player,"Common, Rare, Epic, Legendary",{player_attack: 0.15},Increases player attack damage by 5%
+33,0,Player health increase,Player,"Common, Rare, Epic",{player_max_health: 0.25},Increases player maximum health by 15%
+34,0,Faster movement,Player,"Common, Rare, Epic",{player_movement_speed: 0.20},Increases player movement speed by 20%
+35,0,Health on kill,Player,Epic,{player_health_per_kill: 5},Restore 5 health points for each enemy killed
+36,0,Damage resistance,Player,Rare,{player_damage_resistance: 0.15},Reduces incoming damage by 15%
+37,0,Resource finder,Player,Rare,{player_resource_drop_chance: 0.30},30% chance enemies drop extra resources when killed
+38,0,Quick revive,Player,Legendary,NULL,Instantly revive with 50% health when killed (once per wave)
+39,0,Stamina boost,Player,"Common, Rare, Epic",{player_stamina: 0.20},Increases stamina capacity by 20%
+40,0,Tower damage increase,Tower,"Common, Rare",{tower_damage: 0.20},Increases all tower damage by 20%
+41,0,Tower range boost,Tower,Common,{tower_range: 0.25},Increases all tower range by 25%
+42,0,Faster tower firing,Tower,Rare,{tower_fire_rate: 0.35},Increases tower firing speed by 35%
+43,0,Tower health boost,Tower,Common,{tower_max_health: 0.30},Increases tower maximum health by 30%
+44,0,Cheaper tower construction,Tower,Rare,{tower_build_cost: -0.25},Reduces tower construction costs by 25%
+45,0,Tower repair efficiency,Tower,Rare,{tower_repair_cost: -0.40},Tower repairs cost 40% less resources
+46,0,Tower targeting priority,Tower,Common,NULL,Towers automatically target closest enemies first
+47,0,Reinforced towers,Tower,Rare,{tower_armor: 0.25},Towers take 25% less damage from enemy attacks
+48,0,Tower energy efficiency,Tower,Epic,{tower_energy_consumption: -0.30},Towers consume 30% less energy
+49,0,Basic energy boost,Energy,Common,{energy_generation_rate: 0.30},Increases base energy generation by 30%
+50,0,Energy cost reduction,Energy,Rare,{all_energy_costs: -0.20},All energy-consuming actions cost 20% less
+51,0,Overclocked generators,Energy,Epic,"{energy_generation_rate: 0.70, generator_wear_rate: 0.50}",Generators produce 70% more energy but wear out 50% faster
+52,2,Smart energy management,Energy,Rare,NULL,Automatically optimizes energy distribution to most critical systems
+53,0,Enemy slowdown,Enemy,Common,{enemy_movement_speed: -0.15},All enemies move 15% slower
+54,0,Weaker enemy spawns,Enemy,Rare,{enemy_damage: -0.20},All enemies deal 20% less damage
+55,0,Reduced enemy health,Enemy,Common,{enemy_max_health: -0.25},All enemies have 25% less maximum health
+56,0,Delayed enemy waves,Enemy,Rare,{wave_spawn_delay: 5},Each wave starts 5 seconds later
+57,0,Enemy supply shortage,Enemy,Common,{enemy_spawn_count: -0.10},10% fewer enemies spawn per wave
+58,0,Resource deposits,Map,Common,{map_resource_nodes: 3},Adds 3 additional resource collection points to the map
+59,0,Favorable terrain,Map,Rare,{tower_placement_options: +1},Additional outer ring for tower placement
+60,0,Tower synergy boost,Synergy,Rare,{adjacent_tower_bonus: 0.15},Towers get 15% damage bonus when built near each other
+61,0,Player tower coordination,Synergy,Epic,{player_near_tower_bonus: 0.25},Player and nearby towers both get 25% effectiveness boost
+62,0,Energy tower efficiency,Synergy,Common,{tower_near_generator_bonus: 0.20},Towers near energy generators consume 20% less power
+63,0,Starting resource boost,Economy,Common,{starting_resources: 0.50},Begin next wave with 50% more starting resources
+64,0,Cost reduction,Economy,Rare,{all_purchase_costs: -0.15},All purchases cost 15% less
+65,0,Auto-collect resources,Utility,Rare,NULL,Automatically collects nearby resources without manual interaction
+66,0,Unlocked grappling hook,Player,Rare,NULL,Unlocked grappling hook weapon
+67,0,Unlocked ranged weapon,Player,Rare,NULL,Unlocked ranged weapon
+68,0,Adrenaline Rush,Player,Rare,"{player_attack_speed: 0.80, player_movement_speed: 0.60}",When health drops below 30% gain massive speed and attack rate for 15 seconds
+69,0,Berserker Mode,Player,Epic,"{player_damage_per_missing_health: 0.02, player_defense: -0.25}",Gain 2% damage for every 1% health missing but lose 25% defense
+70,0,Combat Medic,Player,Epic,{player_healing_others_bonus: 2.0},Player can heal damaged towers and allied units at double efficiency
+71,0,Scrap Collector,Player,Common,{scrap_metal_collection: 0.40},Collect 40% more scrap materials from destroyed enemies and structures
+72,0,Energy Vampire Touch,Player,Epic,{player_energy_drain_on_hit: 10},Drain 10 energy from enemies on successful melee attacks
+73,0,Energy Scavenging,Energy,Rare,{energy_from_destroyed_enemies: 5},Gain 5 energy units for each enemy destroyed near generators
+74,0,Core Shield Matrix,Central Core,Epic,{core_shield_strength: 500},Provide energy-based shield with 500 hit points protecting the core
+75,0,Core Repair Systems,Central Core,Rare,{core_self_repair_rate: 0.05},Core slowly repairs damage at 5% per minute when not under attack
+76,0,Core Energy Siphon,Central Core,Rare,{core_energy_from_attacks: 0.20},Core gains energy from enemy attacks converting 20% of damage to power
+77,0,Pheromone Control,Player,Epic,{player_enemy_confusion_aura: 0.25},Nearby enemies have 25% chance to ignore you or attack each other
+78,0,Grappling Hook Damage,Player,"Rare, Epic, Legendary",{player_attack: 15},Grappling Hook deals damage when shot at the enemy
+79,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",{player_damage: -0.15},Reduce incoming damage to the Player by 15%

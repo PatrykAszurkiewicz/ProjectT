@@ -251,10 +251,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638918156515341467
+  lastModified: 638924249660167017
   FileSizes:
   - Name: Desktop
-    Value: 1584
+    Value: 1658
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -287,13 +287,15 @@ MonoBehaviour:
   - {fileID: 7812522369849875838}
   - {fileID: 7043781551158048209}
   - {fileID: -2308969310433941878}
+  - {fileID: 8111230708531817370}
+  - {fileID: 2632449698367640323}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638918156515341467
+  cacheTime: 638924249660167017
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -321,6 +323,10 @@ MonoBehaviour:
     index: 11
   - key: event:/TowerMeleeHit
     index: 12
+  - key: event:/TowerDamage
+    index: 13
+  - key: event:/TowerRepair
+    index: 14
 --- !u!114 &1052223431168759608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -389,6 +395,33 @@ MonoBehaviour:
   - Name: Desktop
     Value: 1982
   Exists: 1
+--- !u!114 &2632449698367640323
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/TowerRepair
+  m_EditorClassIdentifier: 
+  Path: event:/TowerRepair
+  Guid:
+    Data1: -421588614
+    Data2: 1162664735
+    Data3: 1915452055
+    Data4: 1023146114
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 2200
 --- !u!114 &3748478789586696555
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -432,10 +465,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 638918156515331475
+  lastModified: 638924249660157023
   FileSizes:
   - Name: Desktop
-    Value: 653248
+    Value: 799616
   Exists: 1
 --- !u!114 &4699882167230820914
 MonoBehaviour:
@@ -676,6 +709,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 175666
+--- !u!114 &8111230708531817370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/TowerDamage
+  m_EditorClassIdentifier: 
+  Path: event:/TowerDamage
+  Guid:
+    Data1: -789180875
+    Data2: 1312010199
+    Data3: 515574411
+    Data4: 1177008866
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &8434910682899568656
 MonoBehaviour:
   m_ObjectHideFlags: 0

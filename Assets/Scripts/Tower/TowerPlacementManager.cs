@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
 using System.Collections;
+using FMOD.Studio;
 
 public class TowerPlacementManager : MonoBehaviour
 {
@@ -59,6 +60,10 @@ public class TowerPlacementManager : MonoBehaviour
     private bool isCurrentlySupplying = false;
     private IEnergyConsumer currentSupplyTarget = null;
 
+    // REPAIR SOUND SYSTEM
+    private EventInstance repairSound;
+    private bool isRepairSoundInitialized = false;
+
     void Awake()
     {
         if (Instance == null)
@@ -96,6 +101,91 @@ public class TowerPlacementManager : MonoBehaviour
 
         // Create selection wheel
         CreateSelectionWheel();
+
+        // Initialize repair sound
+        InitializeRepairSound();
+    }
+
+    private void InitializeRepairSound()
+    {
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            try
+            {
+                repairSound = AudioManager.instance.CreateInstance(FMODEvents.instance.towerRepair);
+                isRepairSoundInitialized = true;
+                //Debug.Log("[TowerPlacement] Repair sound initialized successfully");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[TowerPlacement] Failed to initialize repair sound: {e.Message}");
+                isRepairSoundInitialized = false;
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[TowerPlacement] AudioManager or FMODEvents not available for repair sound initialization");
+            // Try again later
+            StartCoroutine(RetryRepairSoundInitialization());
+        }
+    }
+
+    private IEnumerator RetryRepairSoundInitialization()
+    {
+        float retryInterval = 1f;
+        int maxRetries = 5;
+        int retryCount = 0;
+
+        while (!isRepairSoundInitialized && retryCount < maxRetries)
+        {
+            yield return new WaitForSeconds(retryInterval);
+
+            if (AudioManager.instance != null && FMODEvents.instance != null)
+            {
+                try
+                {
+                    repairSound = AudioManager.instance.CreateInstance(FMODEvents.instance.towerRepair);
+                    isRepairSoundInitialized = true;
+                    //Debug.Log("[TowerPlacement] Repair sound initialized successfully on retry");
+                    break;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[TowerPlacement] Repair sound initialization retry {retryCount + 1} failed: {e.Message}");
+                }
+            }
+
+            retryCount++;
+        }
+
+        if (!isRepairSoundInitialized)
+        {
+            Debug.LogError("[TowerPlacement] Failed to initialize repair sound after multiple retries");
+        }
+    }
+
+    private void UpdateRepairSound()
+    {
+        if (!isRepairSoundInitialized) return;
+
+        if (isCurrentlySupplying && currentSupplyTarget != null)
+        {
+            // Check if repair sound should be playing
+            PLAYBACK_STATE playbackState;
+            repairSound.getPlaybackState(out playbackState);
+
+            if (playbackState.Equals(PLAYBACK_STATE.STOPPED))
+            {
+                repairSound.start();
+                //Debug.Log("[TowerPlacement] Started repair sound");
+            }
+        }
+        else
+        {
+            // Stop repair sound
+            repairSound.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            //Debug.Log("[TowerPlacement] Stopped repair sound");
+        }
     }
 
     void BuildTowerList()
@@ -127,6 +217,9 @@ public class TowerPlacementManager : MonoBehaviour
     {
         HandleInput();
         HandleMouseClicks();
+
+        UpdateRepairSound();
+
         if (isPlacementMode && requirePlayerProximity && playerTransform != null && Time.frameCount % 5 == 0)
         {
             UpdateSlotHighlights();
@@ -212,7 +305,6 @@ public class TowerPlacementManager : MonoBehaviour
 
         return closest;
     }
-
 
     void SetConsumerHighlight(IEnergyConsumer consumer, bool highlight)
     {
@@ -326,7 +418,7 @@ public class TowerPlacementManager : MonoBehaviour
             }
         }
 
-        // Right click to remove towers
+        // TODO add tower disassembly mechanics 
         if (Mouse.current.rightButton.wasPressedThisFrame)
         {
             RemoveTowerAtMousePosition();
@@ -413,7 +505,6 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 
-    // Continuous supply methods
     private void StartContinuousSupplyToConsumer(IEnergyConsumer consumer)
     {
         if (consumer == null || EnergyManager.Instance == null) return;
@@ -424,18 +515,19 @@ public class TowerPlacementManager : MonoBehaviour
         currentSupplyTarget = consumer;
 
         EnergyManager.Instance.StartContinuousSupply(consumer);
-
         EnergyManager.Instance.SupplyEnergyToTarget(consumer, 0);
 
         // Immediate first supply
         ContinuouslySupplyEnergy();
+
+        // Sound will be started by UpdateRepairSound() in the next frame
     }
 
     private void ContinuouslySupplyEnergy()
     {
         if (currentSupplyTarget == null || EnergyManager.Instance == null) return;
 
-        // Check if target still needs energy (allow Central Core to always receive energy)
+        // Check if target still needs energy - allow Central Core to always receive energy
         if (currentSupplyTarget.GetEnergyPercentage() >= 0.999f && !(currentSupplyTarget is CentralCore))
         {
             //Debug.Log($"[TowerPlacement] Target {GetConsumerDisplayName(currentSupplyTarget)} is full, stopping supply");
@@ -446,6 +538,7 @@ public class TowerPlacementManager : MonoBehaviour
         EnergyManager.Instance.SupplyEnergyToTarget(currentSupplyTarget, 0);
         //Debug.Log($"[TowerPlacement] Continuously supplying energy to {GetConsumerDisplayName(currentSupplyTarget)}");
     }
+
     private void StopContinuousSupply()
     {
         if (isCurrentlySupplying)
@@ -455,6 +548,7 @@ public class TowerPlacementManager : MonoBehaviour
 
         isCurrentlySupplying = false;
         currentSupplyTarget = null;
+
         if (EnergyManager.Instance != null)
         {
             EnergyManager.Instance.StopSupplying();
@@ -476,6 +570,12 @@ public class TowerPlacementManager : MonoBehaviour
         {
             consumer.SupplyEnergy(energyRepairAmount);
             lastRepairTime = Time.time;
+
+            // Play a one-shot repair sound for discrete repairs
+            if (AudioManager.instance != null && FMODEvents.instance != null)
+            {
+                AudioManager.instance.PlayOneShot(FMODEvents.instance.towerRepair, consumer.GetPosition());
+            }
         }
     }
 
@@ -594,13 +694,13 @@ public class TowerPlacementManager : MonoBehaviour
         // Clear highlights when exiting placement mode
         if (!isPlacementMode)
         {
-            // FIXED: Properly stop continuous supply and visual effects when exiting placement mode
+            // Stop continuous supply and visual effects when exiting placement mode
             StopContinuousSupply();
 
             // Also stop the EnergyManager's supply system
             if (EnergyManager.Instance != null)
             {
-                EnergyManager.Instance.StopSupplying(); // Need to add this method
+                EnergyManager.Instance.StopSupplying();
             }
 
             if (currentHighlightedSlot != null)
@@ -777,7 +877,11 @@ public class TowerPlacementManager : MonoBehaviour
 
     void OnDestroy()
     {
-        // Cleanup if needed
+        if (isRepairSoundInitialized)
+        {
+            repairSound.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
+            repairSound.release();
+        }
     }
 
     void OnDrawGizmos()

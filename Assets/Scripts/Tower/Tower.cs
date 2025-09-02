@@ -1192,6 +1192,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         ConsumeEnergy(actualDamage);
 
+        // Play Tower damage sound
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerDamage, transform.position);
+        }
+
         StartDamageFlash();
         OnDamageTaken?.Invoke(actualDamage, damageSource);
 
@@ -1203,7 +1209,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         return false;
     }
-
     public bool CanTakeDamage() => !immuneToEnemyDamage && !isDisabledByDamage && !isDestroyed;
     public float GetCurrentHealth() => currentEnergy;
     public float GetMaxHealth() => maxEnergy;
