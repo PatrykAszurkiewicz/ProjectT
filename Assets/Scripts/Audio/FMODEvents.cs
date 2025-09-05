@@ -26,6 +26,9 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Dash SFX")]
     [field: SerializeField] public EventReference dashSound { get; private set; }
 
+    [field: Header("Grappling Hook SFX")]
+    [field: SerializeField] public EventReference grapplingHookShoot { get; private set; }
+
     [field: Header("Tower Melee SFX")]
     [field: SerializeField] public EventReference towerMeleeHit { get; private set; }
 
@@ -34,6 +37,12 @@ public class FMODEvents : MonoBehaviour
 
     [field: Header("Tower Repair SFX")]
     [field: SerializeField] public EventReference towerRepair { get; private set; }
+
+    [field: Header("Tower Creation SFX")]
+    [field: SerializeField] public EventReference towerCreation { get; private set; }
+
+    [field: Header("Resource Collection SFX")]
+    [field: SerializeField] public EventReference resourceDropCollection { get; private set; }
 
     public static FMODEvents instance { get; private set; }
 

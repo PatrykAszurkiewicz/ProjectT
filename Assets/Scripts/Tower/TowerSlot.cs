@@ -101,7 +101,6 @@ public class TowerSlot : MonoBehaviour
             //Debug.Log($"Slot is occupied, cannot place tower");
         }
     }
-
     public bool PlaceTower(GameObject towerPrefab)
     {
         if (isOccupied)
@@ -123,6 +122,12 @@ public class TowerSlot : MonoBehaviour
         {
             //Debug.Log("Failed to spend energy for tower");
             return false;
+        }
+
+        // Play tower creation sound
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerCreation, transform.position);
         }
 
         //Debug.Log($"Placing tower {towerPrefab.name} at Ring {ringIndex}, Slot {slotIndex}");

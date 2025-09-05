@@ -4131,6 +4131,13 @@ MonoBehaviour:
       Data3: 1051869860
       Data4: 780888163
     Path: event:/Dash
+  <grapplingHookShoot>k__BackingField:
+    Guid:
+      Data1: -1767756259
+      Data2: 1129299038
+      Data3: 67473555
+      Data4: 1521336119
+    Path: event:/GrapplingHookShoot
   <towerMeleeHit>k__BackingField:
     Guid:
       Data1: 408426898
@@ -4147,11 +4154,25 @@ MonoBehaviour:
     Path: event:/TowerDamage
   <towerRepair>k__BackingField:
     Guid:
-      Data1: 0
-      Data2: 0
-      Data3: 0
-      Data4: 0
-    Path: 
+      Data1: -421588614
+      Data2: 1162664735
+      Data3: 1915452055
+      Data4: 1023146114
+    Path: event:/TowerRepair
+  <towerCreation>k__BackingField:
+    Guid:
+      Data1: -1816564035
+      Data2: 1211921992
+      Data3: 1808483507
+      Data4: -1877119790
+    Path: event:/TowerCreation
+  <resourceDropCollection>k__BackingField:
+    Guid:
+      Data1: 1847399950
+      Data2: 1295397836
+      Data3: -738862183
+      Data4: -396342993
+    Path: event:/ResourceDropCollection
 --- !u!1 &1213227520
 GameObject:
   m_ObjectHideFlags: 0
@@ -5267,6 +5288,55 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1473231151
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1473231152}
+  - component: {fileID: 1473231153}
+  m_Layer: 0
+  m_Name: EnergyDropManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1473231152
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1473231151}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1839242373}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1473231153
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1473231151}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e93e70a77195e57458ecd6911b7fa4f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  globalDropChance: 1
+  defaultEnergyValue: 10
+  dropLifetime: 30
+  spawnForce: 1.5
+  spawnRadius: 0.3
 --- !u!1 &1485476108
 GameObject:
   m_ObjectHideFlags: 0
@@ -6584,6 +6654,7 @@ Transform:
   - {fileID: 1357493429}
   - {fileID: 1325897544}
   - {fileID: 1338708042}
+  - {fileID: 1473231152}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1873184832

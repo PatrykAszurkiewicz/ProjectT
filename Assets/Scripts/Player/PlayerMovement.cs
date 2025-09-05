@@ -222,7 +222,6 @@ public class PlayerMovement : MonoBehaviour
         ));
     }
 
-    // New methods for different attack types
     public void StartMeleeAttack()
     {
         isMeleeAttacking = true;
@@ -243,17 +242,15 @@ public class PlayerMovement : MonoBehaviour
         isRangedAttacking = false;
     }
 
-    // Legacy methods for backward compatibility
+    // TODO Review and remove legacy methods for backward compatibility
     public void StartAttack()
     {
-        // This will be called by PlayerAttack script, which will determine the type
-        // We'll handle this in PlayerAttack script instead
+        // Handled in PlayerAttack script
     }
 
     public void EndAttack()
     {
-        // This will be called by PlayerAttack script
-        // We'll handle this in PlayerAttack script instead
+        // Handled PlayerAttack script
     }
 
     private void FixedUpdate()

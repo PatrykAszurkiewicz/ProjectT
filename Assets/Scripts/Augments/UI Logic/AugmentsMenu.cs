@@ -13,7 +13,7 @@ public class AugmentsMenu : MonoBehaviour
     public int maxRerolls = 2;
     private int[] rerollsleft;
 
-    [Header("UI - 3 sloty augmentów")]
+    [Header("UI - 3 sloty augmentï¿½w")]
     [SerializeField] private Image[] augmentImages;
     [SerializeField] private Image[] rarityImages;
     [SerializeField] private TextMeshProUGUI[] nameTexts;
@@ -21,13 +21,16 @@ public class AugmentsMenu : MonoBehaviour
     [SerializeField] private TextMeshProUGUI[] rerollNumberText;
     [SerializeField] private Button[] rerollButtons;
 
+    // ----------- SCRIPTABLE OBJECTS AUGMENTS LIST -----------------
+    [SerializeField] private List<AugmentEffect> augmentEffects;
+
     private static Sprite[] allSprites;
     private static Dictionary<int, AugmentData> augmentDatabase = new Dictionary<int, AugmentData>();
 
     private int[] currentAugmentIDs;
-    private string[] currentSelectedRarities; // Przechowuje wylosowane rarity dla ka¿dego slotu
+    private string[] currentSelectedRarities; // Przechowuje wylosowane rarity dla kaï¿½dego slotu
 
-    
+
     private void Awake()
     {
         //LOAD csv info
@@ -132,14 +135,14 @@ public class AugmentsMenu : MonoBehaviour
 
             string[] values = line.Split(',');
 
-            // SprawdŸ czy s¹ wystarczaj¹ce dane
+            // Sprawdï¿½ czy sï¿½ wystarczajï¿½ce dane
             if (values.Length >= 7)
             {
                 AugmentData augment = new AugmentData
                 {
                     ID = int.Parse(values[0]),
                     Name = values[2],
-                    Rarity = values[4], // To bêdzie zawieraæ wszystkie mo¿liwe rarity (np. "Common, Epic")
+                    Rarity = values[4], // To bï¿½dzie zawieraï¿½ wszystkie moï¿½liwe rarity (np. "Common, Epic")
                     Description = values[6]
                 };
 
@@ -182,10 +185,10 @@ public class AugmentsMenu : MonoBehaviour
 
         string rarityString = augmentDatabase[augmentId].Rarity;
 
-        // Usuñ cudzys³owy jeœli s¹ obecne
+        // Usuï¿½ cudzysï¿½owy jeï¿½li sï¿½ obecne
         rarityString = rarityString.Trim('"');
 
-        // Podziel po przecinkach i wyczyœæ ka¿dy element
+        // Podziel po przecinkach i wyczyï¿½ï¿½ kaï¿½dy element
         string[] rarities = rarityString.Split(',');
         List<string> cleanRarities = new List<string>();
 
@@ -196,22 +199,22 @@ public class AugmentsMenu : MonoBehaviour
                 cleanRarities.Add(cleanRarity);
         }
 
-        // Jeœli nie ma ¿adnych rarity, zwróæ domyœln¹
+        // Jeï¿½li nie ma ï¿½adnych rarity, zwrï¿½ï¿½ domyï¿½lnï¿½
         if (cleanRarities.Count == 0)
             return "Common";
 
-        // Jeœli jest tylko jedna rarity, zwróæ j¹
+        // Jeï¿½li jest tylko jedna rarity, zwrï¿½ï¿½ jï¿½
         if (cleanRarities.Count == 1)
             return cleanRarities[0];
 
-        // Wylosuj z wagami - zbierz tylko wagi dla dostêpnych rarity
+        // Wylosuj z wagami - zbierz tylko wagi dla dostï¿½pnych rarity
         List<float> weights = new List<float>();
         foreach (string rarity in cleanRarities)
         {
             if (rarityWeights.ContainsKey(rarity))
                 weights.Add(rarityWeights[rarity]);
             else
-                weights.Add(10f); // domyœlna waga jeœli rarity nie jest w s³owniku
+                weights.Add(10f); // domyï¿½lna waga jeï¿½li rarity nie jest w sï¿½owniku
         }
 
         // Weighted random selection
@@ -229,7 +232,7 @@ public class AugmentsMenu : MonoBehaviour
                 return cleanRarities[i];
         }
 
-        // Fallback - zwróæ pierwszy element
+        // Fallback - zwrï¿½ï¿½ pierwszy element
         return cleanRarities[0];
     }
     //---------------------- AUGMENT NAME ----------------------
@@ -237,7 +240,7 @@ public class AugmentsMenu : MonoBehaviour
     {
         if (nameTexts == null || slotIndex < 0 || slotIndex >= nameTexts.Length)
         {
-            Debug.LogWarning($"NameTexts array nie jest ustawiona lub nieprawid³owy slotIndex: {slotIndex}");
+            Debug.LogWarning($"NameTexts array nie jest ustawiona lub nieprawidï¿½owy slotIndex: {slotIndex}");
             return;
         }
 
@@ -257,14 +260,14 @@ public class AugmentsMenu : MonoBehaviour
         string augmentName = augmentDatabase[augmentId].Name;
         nameTexts[slotIndex].text = augmentName;
 
-        Debug.Log($"Ustawiono nazwê '{augmentName}' dla slotu {slotIndex}");
+        Debug.Log($"Ustawiono nazwï¿½ '{augmentName}' dla slotu {slotIndex}");
     }
     // ---------------- AUGMENT DESCRIPTION ----------------
     private void SetAugmentDescription(int slotIndex, int augmentId)
     {
         if (descriptionTexts == null || slotIndex < 0 || slotIndex >= descriptionTexts.Length)
         {
-            Debug.LogWarning($"DescriptionTexts array nie jest ustawiona lub nieprawid³owy slotIndex: {slotIndex}");
+            Debug.LogWarning($"DescriptionTexts array nie jest ustawiona lub nieprawidï¿½owy slotIndex: {slotIndex}");
             return;
         }
 
@@ -322,7 +325,7 @@ public class AugmentsMenu : MonoBehaviour
 
         return available[Random.Range(0, available.Count)];
     }
-    
+
     // ================= Reroll =================
     public void Reroll(int slotIndex)
     {
@@ -345,7 +348,7 @@ public class AugmentsMenu : MonoBehaviour
         int newId = GetUniqueRandomId(keys, alreadyUsed);
         currentAugmentIDs[slotIndex] = newId;
 
-        // Wylosuj now¹ rarity dla tego augmentu
+        // Wylosuj nowï¿½ rarity dla tego augmentu
         string newRarity = GetRandomRarityForAugment(newId);
         currentSelectedRarities[slotIndex] = newRarity;
 
@@ -381,7 +384,7 @@ public class AugmentsMenu : MonoBehaviour
         }
         //EnableRerollButtons();
 
-        // Aktualizuj wszystkie teksty rerollów
+        // Aktualizuj wszystkie teksty rerollï¿½w
         for (int i = 0; i < rerollNumberText.Length; i++)
         {
             UpdateRerollText(i);

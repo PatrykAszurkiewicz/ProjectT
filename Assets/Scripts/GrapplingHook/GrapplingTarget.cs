@@ -30,6 +30,11 @@ public class GrapplingHookSystem
     private bool isOnCooldown = false;
     private bool isActive = true;
 
+    // Mass-based grappling constants
+    private const float HEAVY_ENEMY_THRESHOLD = 100f; // kg - above this, player is pulled to enemy
+    private const float LIGHT_ENEMY_THRESHOLD = 20f;  // kg - below this, enemy is pulled very fast
+    private const float MASS_SPEED_FACTOR = 0.02f;    // How much mass affects pull speed
+
     public GrapplingHookSystem(Weapon weapon, WeaponData data)
     {
         this.weapon = weapon;
@@ -55,7 +60,7 @@ public class GrapplingHookSystem
                 hookSprite = sprites[0];
         }
 
-        // Try alternative paths if still null
+        // TODO remove alternative sprites for hook 
         if (hookSprite == null)
         {
             string[] paths = { "Sprites/Cursors/Hook", "Sprites/hook" };
@@ -432,6 +437,12 @@ public class GrapplingHookSystem
         currentState = HookState.Shooting;
         HideIndicator();
 
+        // Play grappling hook shoot sound effect
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.grapplingHookShoot, playerTransform.position);
+        }
+
         var grappleTarget = currentTarget;
         if (!IsTargetValid(grappleTarget))
         {
@@ -475,20 +486,24 @@ public class GrapplingHookSystem
         }
     }
 
+    // Mass-based pull sequence
     private IEnumerator ExecutePullSequence(IGrapplingTarget grappleTarget)
     {
         float pullDuration = 1.5f;
         float elapsed = 0f;
         Vector3 lastPlayerPosition = playerTransform.position;
 
+        // Determine pull behavior based on target type and mass
+        bool shouldPullPlayer = ShouldPullPlayer(grappleTarget);
+
         while (elapsed < pullDuration && IsTargetValid(grappleTarget))
         {
             elapsed += Time.deltaTime;
 
-            if (grappleTarget.IsSolidTarget())
-                PullPlayer(grappleTarget.GetGrapplePoint());
+            if (shouldPullPlayer)
+                PullPlayerTowardsTarget(grappleTarget.GetGrapplePoint(), grappleTarget);
             else
-                PullTarget(grappleTarget, playerTransform.position);
+                PullTargetTowardsPlayer(grappleTarget, playerTransform.position);
 
             float dist = Vector3.Distance(playerTransform.position, grappleTarget.GetGrapplePoint());
             if (dist < 2.0f) break;
@@ -506,6 +521,111 @@ public class GrapplingHookSystem
             lastPlayerPosition = playerTransform.position;
             yield return null;
         }
+    }
+
+    // Determine if player should be pulled based on target type and mass
+    private bool ShouldPullPlayer(IGrapplingTarget target)
+    {
+        // For non-enemies (towers, obstacles, core), use original solid target logic
+        if (target.IsSolidTarget())
+            return true;
+
+        // For enemies, check mass to determine pull direction
+        var enemyMass = GetTargetMass(target);
+        if (enemyMass >= HEAVY_ENEMY_THRESHOLD)
+        {
+            // Heavy enemies are immovable - pull player to them
+            return true;
+        }
+
+        // Light and medium enemies are pulled to player
+        return false;
+    }
+
+    // Get mass from target if it's an enemy
+    private float GetTargetMass(IGrapplingTarget target)
+    {
+        var targetTransform = target.GetTransform();
+        if (targetTransform != null)
+        {
+            var enemyStats = targetTransform.GetComponent<EnemyStats>();
+            if (enemyStats != null)
+            {
+                return enemyStats.Mass;
+            }
+        }
+        return 0f; // Non-enemies have no mass consideration
+    }
+
+    // Mass-aware player pulling
+    private void PullPlayerTowardsTarget(Vector3 targetPoint, IGrapplingTarget target)
+    {
+        if (playerRigidbody == null) return;
+
+        Vector3 direction = (targetPoint - playerTransform.position).normalized;
+        float distance = Vector3.Distance(playerTransform.position, targetPoint);
+        float forceMagnitude = weaponData.pullForce * Mathf.Clamp01(distance / 5f);
+
+        // Apply mass-based force adjustment for heavy enemies
+        var enemyMass = GetTargetMass(target);
+        if (enemyMass >= HEAVY_ENEMY_THRESHOLD)
+        {
+            // Heavy enemies provide stronger pull
+            float massMultiplier = Mathf.Clamp(enemyMass / HEAVY_ENEMY_THRESHOLD, 1f, 2f);
+            forceMagnitude *= massMultiplier;
+        }
+
+        playerRigidbody.AddForce(direction * forceMagnitude * 16f);
+
+        Vector3 pullVelocity = direction * (weaponData.pullForce * 0.08f);
+        playerRigidbody.linearVelocity = Vector3.Lerp(playerRigidbody.linearVelocity, pullVelocity, Time.deltaTime * 1.05f);
+    }
+
+    // Mass-aware target pulling  
+    private void PullTargetTowardsPlayer(IGrapplingTarget target, Vector3 playerPosition)
+    {
+        if (target is GrapplingTarget grapplingTarget)
+        {
+            Vector3 direction = (playerPosition - target.GetGrapplePoint()).normalized;
+
+            // Calculate mass-based pull force
+            var enemyMass = GetTargetMass(target);
+            float massBasedForce = CalculateMassBasedPullForce(enemyMass);
+
+            grapplingTarget.ApplyGrapplePull(direction, weaponData.pullForce * Time.deltaTime * 143f * massBasedForce);
+        }
+    }
+
+    // Calculate pull force multiplier based on enemy mass
+    private float CalculateMassBasedPullForce(float mass)
+    {
+        if (mass <= 0f) return 1f; // Non-enemies use default force
+
+        if (mass <= LIGHT_ENEMY_THRESHOLD)
+        {
+            // Light enemies: 1.5x to 2x force
+            return 1.5f + (LIGHT_ENEMY_THRESHOLD - mass) / LIGHT_ENEMY_THRESHOLD * 0.5f;
+        }
+        else if (mass < HEAVY_ENEMY_THRESHOLD)
+        {
+            // Medium enemies: Force inversely proportional to mass
+            float normalizedMass = (mass - LIGHT_ENEMY_THRESHOLD) / (HEAVY_ENEMY_THRESHOLD - LIGHT_ENEMY_THRESHOLD);
+            return Mathf.Lerp(1.5f, 0.3f, normalizedMass); // From 1.5x down to 0.3x force
+        }
+
+        // Heavy enemies should not reach this function
+        return 0.1f;
+    }
+
+    // TODO remove legacy methods
+    private void PullPlayer(Vector3 targetPoint)
+    {
+        PullPlayerTowardsTarget(targetPoint, null);
+    }
+
+    private void PullTarget(IGrapplingTarget target, Vector3 playerPosition)
+    {
+        PullTargetTowardsPlayer(target, playerPosition);
     }
 
     private void EndGrappleSequence()
@@ -623,29 +743,6 @@ public class GrapplingHookSystem
         disintegrationCoroutine = null;
     }
 
-    private void PullPlayer(Vector3 targetPoint)
-    {
-        if (playerRigidbody == null) return;
-
-        Vector3 direction = (targetPoint - playerTransform.position).normalized;
-        float distance = Vector3.Distance(playerTransform.position, targetPoint);
-        float forceMagnitude = weaponData.pullForce * Mathf.Clamp01(distance / 5f);
-
-        playerRigidbody.AddForce(direction * forceMagnitude * 16f);
-
-        Vector3 pullVelocity = direction * (weaponData.pullForce * 0.08f);
-        playerRigidbody.linearVelocity = Vector3.Lerp(playerRigidbody.linearVelocity, pullVelocity, Time.deltaTime * 1.05f);
-    }
-
-    private void PullTarget(IGrapplingTarget target, Vector3 playerPosition)
-    {
-        if (target is GrapplingTarget grapplingTarget)
-        {
-            Vector3 direction = (playerPosition - target.GetGrapplePoint()).normalized;
-            grapplingTarget.ApplyGrapplePull(direction, weaponData.pullForce * Time.deltaTime * 143f);
-        }
-    }
-
     private IEnumerator CooldownCoroutine()
     {
         isOnCooldown = true;
@@ -666,7 +763,7 @@ public class GrapplingHookSystem
     }
 }
 
-// Grappling Target Interface
+// Grappling Target Interface - UNCHANGED
 public interface IGrapplingTarget
 {
     bool CanBeGrappled();
