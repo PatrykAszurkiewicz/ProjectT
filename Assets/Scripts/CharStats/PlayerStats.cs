@@ -37,6 +37,7 @@ public class PlayerStats : CharacterStats
     }
     private void Update()
     {
+
         if (!IsDead() && currentHealth < maxHealth)
         {
             regenTimer += Time.deltaTime;

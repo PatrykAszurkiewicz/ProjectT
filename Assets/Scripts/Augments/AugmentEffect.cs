@@ -2,14 +2,13 @@ using UnityEngine;
 
 public abstract class AugmentEffect : ScriptableObject
 {
-    public int ID; //take ID from CSV
-    public string augmentName;
-    public string description;
-    public Sprite icon;
+    [Header("Augment Info")]
+    public int ID;
+    public string augmentName; //maybe needed idk
+    //public Sprite icon; // same maybe
 
-    // Apply methods
-    public virtual void ApplyToPlayer(PlayerStats player) { }
-    public virtual void ApplyToEnemy(EnemyStats enemy) { }
-    public abstract void Apply();
-    //public virtual void ApplyToGame(GameManager game) { }
+    // Apply stuff
+    public abstract void ApplyPlayer(PlayerStats playerStats);
+    public abstract void ApplyEnemy(EnemyStats enemyStats);
+    //public abstract void Apply();
 }

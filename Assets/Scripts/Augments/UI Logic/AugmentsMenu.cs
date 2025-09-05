@@ -103,16 +103,37 @@ public class AugmentsMenu : MonoBehaviour
             hideShow.SetActive(true);
         }
     }
-
-    public void ChooseAugment()
+    // -------------- choose augment logic -------------------
+    public void ChooseAugment(int slotIndex)
     {
-        //logic
+        Debug.Log("ChooseAugment called, slotIndex=" + slotIndex);
 
-        //----- hide menu, unpause game -----
+        if (slotIndex < 0 || slotIndex >= currentAugmentIDs.Length) return;
+
+        int chosenId = currentAugmentIDs[slotIndex];
+        Debug.Log("Chosen augment ID: " + chosenId);
+        // Szukamy odpowiadający ScriptableObject
+        AugmentEffect effect = augmentEffects.Find(a => a.ID == chosenId);
+        if (effect != null)
+        {
+            PlayerStats player = FindAnyObjectByType<PlayerStats>();
+            if (player != null)
+            {
+                effect.ApplyPlayer(player);
+                Debug.Log($"Applied augment: {effect.augmentName}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"No ScriptableObject found for augment ID {chosenId}");
+        }
+
         augmentsMenu.SetActive(false);
         Cursor.visible = false;
         Time.timeScale = 1f;
     }
+
+
 
     // ================= CSV Loader =================
     private void LoadAugmentsFromCSV()

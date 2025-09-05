@@ -424,11 +424,11 @@ MonoBehaviour:
       - m_Target: {fileID: 448482443}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: ChooseAugment
-        m_Mode: 1
+        m_Mode: 3
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
+          m_IntArgument: 1
           m_FloatArgument: 0
           m_StringArgument: 
           m_BoolArgument: 0
@@ -1379,7 +1379,7 @@ MonoBehaviour:
       - m_Target: {fileID: 448482443}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: ChooseAugment
-        m_Mode: 1
+        m_Mode: 3
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
@@ -1477,7 +1477,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   augmentsMenu: {fileID: 792493574}
   hideShow: {fileID: 408487161}
-  maxRerolls: 2
+  maxRerolls: 999
   augmentImages:
   - {fileID: 1313581511}
   - {fileID: 1771229493}
@@ -1502,6 +1502,8 @@ MonoBehaviour:
   - {fileID: 1817133657}
   - {fileID: 1720956566}
   - {fileID: 1329624271}
+  augmentEffects:
+  - {fileID: 11400000, guid: cf7fe56ec5ae1c04891a27f846bdca9d, type: 2}
 --- !u!1 &453391371 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
@@ -7322,11 +7324,11 @@ MonoBehaviour:
       - m_Target: {fileID: 448482443}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: ChooseAugment
-        m_Mode: 1
+        m_Mode: 3
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
+          m_IntArgument: 2
           m_FloatArgument: 0
           m_StringArgument: 
           m_BoolArgument: 0
