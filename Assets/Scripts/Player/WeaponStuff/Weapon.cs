@@ -91,7 +91,6 @@ public class Weapon : MonoBehaviour
                 grapplingSystem.FireHook();
                 StartCoroutine(CooldownRoutine());
             }
-            // If grappling hook can't fire, do nothing (don't fall through to projectile)
         }
         else if (weaponData.isRanged)
         {

@@ -50,9 +50,12 @@ public class WaveSpawner : MonoBehaviour
 
         foreach (var group in wave.enemies)
         {
-            for (int i = 0; i < group.count; i++)
+            if (group != null && !string.IsNullOrEmpty(group.enemyPrefab))
             {
-                enemyPrefabsToSpawn.Add(group.enemyPrefab);
+                for (int i = 0; i < group.count; i++)
+                {
+                    enemyPrefabsToSpawn.Add(group.enemyPrefab);
+                }
             }
         }
 

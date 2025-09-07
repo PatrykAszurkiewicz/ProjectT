@@ -421,7 +421,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 448482443}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: ChooseAugment
         m_Mode: 3
@@ -1376,7 +1376,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 448482443}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: ChooseAugment
         m_Mode: 3
@@ -1436,6 +1436,7 @@ GameObject:
   m_Component:
   - component: {fileID: 448482442}
   - component: {fileID: 448482443}
+  - component: {fileID: 448482444}
   m_Layer: 5
   m_Name: Augments
   m_TagString: Untagged
@@ -1472,12 +1473,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 448482441}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8d2bb9802f17a924594cb81e940b16b5, type: 3}
+  m_Script: {fileID: 11500000, guid: 90459374db9508446ad2b7f5ed6b1212, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   augmentsMenu: {fileID: 792493574}
   hideShow: {fileID: 408487161}
-  maxRerolls: 999
   augmentImages:
   - {fileID: 1313581511}
   - {fileID: 1771229493}
@@ -1502,8 +1502,27 @@ MonoBehaviour:
   - {fileID: 1817133657}
   - {fileID: 1720956566}
   - {fileID: 1329624271}
-  augmentEffects:
-  - {fileID: 11400000, guid: cf7fe56ec5ae1c04891a27f846bdca9d, type: 2}
+  selectButtons:
+  - {fileID: 439589996}
+  - {fileID: 229318904}
+  - {fileID: 2110909284}
+  maxRerolls: 99
+  debugMode: 0
+--- !u!114 &448482444
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 448482441}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 992c01cd7e4b0a84687a96ab9c99919a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  csvResourcePath: Data/Augments
+  spriteBasePath: Sprites/Augments/
+  debugMode: 0
 --- !u!1 &453391371 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
@@ -4774,7 +4793,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 448482443}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: Reroll
         m_Mode: 3
@@ -6013,7 +6032,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 448482443}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: Reroll
         m_Mode: 3
@@ -6494,7 +6513,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 448482443}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: Reroll
         m_Mode: 3
@@ -6657,6 +6676,7 @@ Transform:
   - {fileID: 1325897544}
   - {fileID: 1338708042}
   - {fileID: 1473231152}
+  - {fileID: 1920969494}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1873184832
@@ -6977,6 +6997,53 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1920969493
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1920969494}
+  - component: {fileID: 1920969495}
+  m_Layer: 0
+  m_Name: GremlinSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1920969494
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1920969493}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1839242373}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1920969495
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1920969493}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35badafb7b52fbf4b81bf965c5a0720e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  spawnInterval: 10
+  maxGremlinsOnMap: 1
+  spawnDistance: 8
 --- !u!1 &1922253136 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
@@ -7321,7 +7388,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 448482443}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: AugmentsMenu, Assembly-CSharp
         m_MethodName: ChooseAugment
         m_Mode: 3

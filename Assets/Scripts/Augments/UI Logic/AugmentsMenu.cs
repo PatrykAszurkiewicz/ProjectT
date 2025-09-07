@@ -2,214 +2,440 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using TMPro;
+using System.Linq;
+using System.Collections; // DODANE dla IEnumerator
 
 public class AugmentsMenu : MonoBehaviour
 {
+    [Header("UI References")]
     public GameObject augmentsMenu;
     public GameObject hideShow;
-    private bool hide = false;
-    private bool augments = false;
 
-    public int maxRerolls = 2;
-    private int[] rerollsleft;
-
-    [Header("UI - 3 sloty augment�w")]
+    [Header("Augment Slots")]
     [SerializeField] private Image[] augmentImages;
     [SerializeField] private Image[] rarityImages;
     [SerializeField] private TextMeshProUGUI[] nameTexts;
     [SerializeField] private TextMeshProUGUI[] descriptionTexts;
     [SerializeField] private TextMeshProUGUI[] rerollNumberText;
     [SerializeField] private Button[] rerollButtons;
+    [SerializeField] private Button[] selectButtons;
 
-    // ----------- SCRIPTABLE OBJECTS AUGMENTS LIST -----------------
-    [SerializeField] private List<AugmentEffect> augmentEffects;
+    [Header("Settings")]
+    public int maxRerolls = 2;
 
-    private static Sprite[] allSprites;
-    private static Dictionary<int, AugmentData> augmentDatabase = new Dictionary<int, AugmentData>();
+    [Header("Debug")]
+    public bool debugMode = true;
 
+    // State variables
+    private bool isHidden = false;
+    private bool isMenuActive = false;
+    private int[] rerollsLeft;
     private int[] currentAugmentIDs;
-    private string[] currentSelectedRarities; // Przechowuje wylosowane rarity dla ka�dego slotu
+    private string[] currentSelectedRarities;
 
+    // Data sources
+    private static Sprite[] allSprites;
 
-    private void Awake()
+    // Rarity system
+    private Dictionary<string, float> rarityWeights = new Dictionary<string, float>
     {
-        //LOAD csv info
-        LoadAugmentsFromCSV();
-        // load all sprites once (cache)
-        if (allSprites == null)
-            allSprites = Resources.LoadAll<Sprite>("Sprites/Augments");
+        {"Common", 50f},
+        {"Rare", 30f},
+        {"Epic", 15f},
+        {"Legendary", 5f}
+    };
 
-        currentAugmentIDs = new int[augmentImages.Length];
-        currentSelectedRarities = new string[augmentImages.Length];
-        rerollsleft = new int[augmentImages.Length];
+    private Dictionary<string, Color> rarityColors = new Dictionary<string, Color>
+    {
+        {"Common", Color.green},
+        {"Rare", Color.blue},
+        {"Epic", new Color(0.8f, 0f, 1f)},
+        {"Legendary", new Color(1f, 0.6f, 0f)}
+    };
 
-        for (int i = 0; i < rerollsleft.Length; i++)
-        {
-            rerollsleft[i] = maxRerolls;
-        }
+    void Awake()
+    {
+        if (debugMode) Debug.Log("AugmentsMenu: Awake started");
 
-        // random augments to slots
-        if (augmentImages != null && augmentImages.Length > 0)
-        {
-            List<int> keys = new List<int>(augmentDatabase.Keys);
+        InitializeArrays();
+        LoadSprites();
+        SetupUI();
 
-            for (int i = 0; i < augmentImages.Length; i++)
-            {
-                int randomId = GetUniqueRandomId(keys, new List<int>(currentAugmentIDs));
-                currentAugmentIDs[i] = randomId;
-
-                // Wylosuj rarity dla tego augmentu
-                string selectedRarity = GetRandomRarityForAugment(randomId);
-                currentSelectedRarities[i] = selectedRarity;
-
-                AssignAugmentToImage(augmentImages[i], randomId, selectedRarity);
-
-                SetRarityColor(i, selectedRarity);
-
-                SetAugmentName(i, randomId);
-
-                SetAugmentDescription(i, randomId);
-
-                UpdateRerollText(i);
-            }
-        }
+        if (debugMode) Debug.Log("AugmentsMenu: Awake completed");
     }
 
     void Start()
     {
+        if (debugMode) Debug.Log("AugmentsMenu: Start called");
+
         augmentsMenu.SetActive(false);
+
+        // Wait for AugmentRegistry to be ready
+        StartCoroutine(WaitForRegistryAndGenerate());
     }
 
+    private void InitializeArrays()
+    {
+        if (augmentImages == null || augmentImages.Length == 0)
+        {
+            Debug.LogError("AugmentsMenu: augmentImages array is null or empty!");
+            return;
+        }
+
+        int slotCount = augmentImages.Length;
+        rerollsLeft = new int[slotCount];
+        currentAugmentIDs = new int[slotCount];
+        currentSelectedRarities = new string[slotCount];
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            rerollsLeft[i] = maxRerolls;
+            currentAugmentIDs[i] = -1; // Initialize with invalid ID
+            currentSelectedRarities[i] = "Common";
+        }
+
+        if (debugMode) Debug.Log($"AugmentsMenu: Initialized {slotCount} slots with {maxRerolls} rerolls each");
+    }
+
+    private void LoadSprites()
+    {
+        if (allSprites == null)
+        {
+            allSprites = Resources.LoadAll<Sprite>("Sprites/Augments");
+            if (debugMode) Debug.Log($"AugmentsMenu: Loaded {allSprites.Length} sprites from Resources/Sprites/Augments");
+        }
+    }
+
+    private void SetupUI()
+    {
+        // Setup reroll buttons
+        if (rerollButtons != null)
+        {
+            for (int i = 0; i < rerollButtons.Length; i++)
+            {
+                if (rerollButtons[i] != null)
+                {
+                    int slotIndex = i;
+                    rerollButtons[i].onClick.RemoveAllListeners(); // Clear existing listeners
+                    rerollButtons[i].onClick.AddListener(() => Reroll(slotIndex));
+                }
+            }
+        }
+
+        // Setup select buttons
+        if (selectButtons != null)
+        {
+            for (int i = 0; i < selectButtons.Length; i++)
+            {
+                if (selectButtons[i] != null)
+                {
+                    int slotIndex = i;
+                    selectButtons[i].onClick.RemoveAllListeners(); // Clear existing listeners
+                    selectButtons[i].onClick.AddListener(() => ChooseAugment(slotIndex));
+                }
+            }
+        }
+
+        if (debugMode) Debug.Log("AugmentsMenu: UI setup completed");
+    }
+
+    private IEnumerator WaitForRegistryAndGenerate()
+    {
+        if (debugMode) Debug.Log("AugmentsMenu: Waiting for AugmentRegistry...");
+
+        // Wait for AugmentRegistry to be available and loaded
+        yield return new WaitUntil(() => AugmentRegistry.Instance != null);
+        yield return new WaitUntil(() => AugmentRegistry.Instance.GetAllAugments().Count > 0);
+
+        // Small delay to ensure everything is fully initialized
+        yield return new WaitForSeconds(0.1f);
+
+        if (debugMode) Debug.Log($"AugmentsMenu: AugmentRegistry ready with {AugmentRegistry.Instance.GetAllAugments().Count} augments");
+
+        GenerateInitialAugments();
+    }
+
+    private void GenerateInitialAugments()
+    {
+        if (debugMode) Debug.Log("AugmentsMenu: Generating initial augments...");
+
+        if (augmentImages == null)
+        {
+            Debug.LogError("AugmentsMenu: augmentImages is null!");
+            return;
+        }
+
+        for (int i = 0; i < augmentImages.Length; i++)
+        {
+            var augment = GenerateRandomAugment(GetExcludedIDs());
+            if (augment != null)
+            {
+                currentAugmentIDs[i] = augment.ID;
+                string selectedRarity = GetRandomRarityForAugment(augment.ID);
+                currentSelectedRarities[i] = selectedRarity;
+
+                UpdateSlotDisplay(i, augment, selectedRarity);
+
+                if (debugMode) Debug.Log($"Generated augment for slot {i}: {augment.Name} (ID: {augment.ID})");
+            }
+            else
+            {
+                Debug.LogWarning($"AugmentsMenu: Could not generate augment for slot {i}");
+            }
+
+            UpdateRerollDisplay(i);
+        }
+
+        if (debugMode) Debug.Log("AugmentsMenu: Initial augments generation completed");
+    }
+
+    private AugmentData GenerateRandomAugment(List<int> excludeIDs)
+    {
+        if (AugmentRegistry.Instance == null)
+        {
+            Debug.LogError("AugmentsMenu: AugmentRegistry.Instance is null!");
+            return null;
+        }
+
+        var allAugments = AugmentRegistry.Instance.GetAllAugments();
+        if (allAugments == null || allAugments.Count == 0)
+        {
+            Debug.LogError("AugmentsMenu: No augments available from AugmentRegistry!");
+            return null;
+        }
+
+        var availableAugments = allAugments
+            .Where(a => a.Priority == 0 && !excludeIDs.Contains(a.ID) && a.Icon != null)
+            .ToList();
+
+        if (availableAugments.Count == 0)
+        {
+            Debug.LogWarning("AugmentsMenu: No available augments after exclusions!");
+            return null;
+        }
+
+        // Simple random selection - you can add rarity weighting here later
+        int randomIndex = UnityEngine.Random.Range(0, availableAugments.Count);
+        return availableAugments[randomIndex];
+    }
+
+    private List<int> GetExcludedIDs()
+    {
+        var excluded = new List<int>();
+
+        // Exclude currently displayed augments
+        if (currentAugmentIDs != null)
+        {
+            excluded.AddRange(currentAugmentIDs.Where(id => id != -1));
+        }
+
+        // Exclude already applied augments
+        if (AugmentRegistry.Instance != null)
+        {
+            excluded.AddRange(AugmentRegistry.Instance.GetAppliedAugments());
+        }
+
+        return excluded.Distinct().ToList();
+    }
+
+    private void UpdateSlotDisplay(int slotIndex, AugmentData augment, string rarity)
+    {
+        if (slotIndex < 0 || slotIndex >= augmentImages.Length) return;
+
+        // Update image
+        if (augmentImages[slotIndex] != null)
+        {
+            Sprite sprite = System.Array.Find(allSprites, s => s.name == augment.ID.ToString());
+            if (sprite != null)
+            {
+                augmentImages[slotIndex].sprite = sprite;
+            }
+            else if (debugMode)
+            {
+                Debug.LogWarning($"No sprite found for augment ID: {augment.ID}");
+            }
+        }
+
+        // Update rarity color
+        if (rarityImages != null && slotIndex < rarityImages.Length && rarityImages[slotIndex] != null)
+        {
+            Color rarityColor = rarityColors.ContainsKey(rarity) ? rarityColors[rarity] : Color.white;
+            rarityImages[slotIndex].color = rarityColor;
+        }
+
+        // Update name text
+        if (nameTexts != null && slotIndex < nameTexts.Length && nameTexts[slotIndex] != null)
+        {
+            nameTexts[slotIndex].text = augment.Name;
+        }
+
+        // Update description text
+        if (descriptionTexts != null && slotIndex < descriptionTexts.Length && descriptionTexts[slotIndex] != null)
+        {
+            descriptionTexts[slotIndex].text = augment.Description;
+        }
+    }
+
+    private void UpdateRerollDisplay(int slotIndex)
+    {
+        if (slotIndex < 0 || slotIndex >= rerollsLeft.Length) return;
+
+        // Update reroll count text
+        if (rerollNumberText != null && slotIndex < rerollNumberText.Length && rerollNumberText[slotIndex] != null)
+        {
+            rerollNumberText[slotIndex].text = rerollsLeft[slotIndex].ToString();
+        }
+
+        // Update reroll button interactability
+        if (rerollButtons != null && slotIndex < rerollButtons.Length && rerollButtons[slotIndex] != null)
+        {
+            rerollButtons[slotIndex].interactable = rerollsLeft[slotIndex] > 0;
+        }
+    }
+
+    // ===== PUBLIC INTERFACE =====
     public void ActivateAugments()
     {
-        if (augments == false)
+        if (debugMode) Debug.Log("AugmentsMenu: ActivateAugments called");
+
+        if (!isMenuActive)
         {
             augmentsMenu.SetActive(true);
             Cursor.visible = true;
             Time.timeScale = 0f;
+            isMenuActive = true;
+
+            if (debugMode) Debug.Log("AugmentsMenu: Menu activated");
         }
     }
 
     public void HideShowButton()
     {
-        if (hide == false)
-        {
-            hide = true;
-            hideShow.SetActive(false);
-        }
-        else
-        {
-            hide = false;
-            hideShow.SetActive(true);
-        }
-    }
-    // -------------- choose augment logic -------------------
-    public void ChooseAugment(int slotIndex)
-    {
-        Debug.Log("ChooseAugment called, slotIndex=" + slotIndex);
-
-        if (slotIndex < 0 || slotIndex >= currentAugmentIDs.Length) return;
-
-        int chosenId = currentAugmentIDs[slotIndex];
-        Debug.Log("Chosen augment ID: " + chosenId);
-        // Szukamy odpowiadający ScriptableObject
-        AugmentEffect effect = augmentEffects.Find(a => a.ID == chosenId);
-        if (effect != null)
-        {
-            PlayerStats player = FindAnyObjectByType<PlayerStats>();
-            if (player != null)
-            {
-                effect.ApplyPlayer(player);
-                Debug.Log($"Applied augment: {effect.augmentName}");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"No ScriptableObject found for augment ID {chosenId}");
-        }
-
-        augmentsMenu.SetActive(false);
-        Cursor.visible = false;
-        Time.timeScale = 1f;
+        isHidden = !isHidden;
+        hideShow.SetActive(!isHidden);
     }
 
-
-
-    // ================= CSV Loader =================
-    private void LoadAugmentsFromCSV()
+    public void Reroll(int slotIndex)
     {
-        if (augmentDatabase.Count > 0) return; //if loaded already
+        if (debugMode) Debug.Log($"AugmentsMenu: Reroll called for slot {slotIndex}");
 
-        //find file
-        TextAsset csvFile = Resources.Load<TextAsset>("Data/Tower Defense Augments - AugmentsPrior0Only");
-        if (csvFile == null)
+        if (slotIndex < 0 || slotIndex >= rerollsLeft.Length)
         {
-            Debug.LogError("CSV NOT FOUND!");
+            Debug.LogError($"Invalid slot index: {slotIndex}");
             return;
         }
 
-        string[] lines = csvFile.text.Split('\n');
-        for (int i = 1; i < lines.Length; i++) // skip 1st line
+        if (rerollsLeft[slotIndex] <= 0)
         {
-            string line = lines[i].Trim();
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (debugMode) Debug.Log($"No rerolls left for slot {slotIndex}");
+            return;
+        }
 
-            string[] values = line.Split(',');
+        rerollsLeft[slotIndex]--;
 
-            // Sprawd� czy s� wystarczaj�ce dane
-            if (values.Length >= 7)
-            {
-                AugmentData augment = new AugmentData
-                {
-                    ID = int.Parse(values[0]),
-                    Name = values[2],
-                    Rarity = values[4], // To b�dzie zawiera� wszystkie mo�liwe rarity (np. "Common, Epic")
-                    Description = values[6]
-                };
+        var newAugment = GenerateRandomAugment(GetExcludedIDs());
+        if (newAugment != null)
+        {
+            currentAugmentIDs[slotIndex] = newAugment.ID;
+            string newRarity = GetRandomRarityForAugment(newAugment.ID);
+            currentSelectedRarities[slotIndex] = newRarity;
 
-                if (!augmentDatabase.ContainsKey(augment.ID))
-                    augmentDatabase.Add(augment.ID, augment);
-            }
+            UpdateSlotDisplay(slotIndex, newAugment, newRarity);
+
+            if (debugMode) Debug.Log($"Rerolled slot {slotIndex} to: {newAugment.Name} (ID: {newAugment.ID})");
+        }
+        else
+        {
+            Debug.LogWarning($"Failed to generate new augment for reroll in slot {slotIndex}");
+        }
+
+        UpdateRerollDisplay(slotIndex);
+    }
+
+    public void ChooseAugment(int slotIndex)
+    {
+        if (debugMode) Debug.Log($"AugmentsMenu: ChooseAugment called for slot {slotIndex}");
+
+        if (slotIndex < 0 || slotIndex >= currentAugmentIDs.Length)
+        {
+            Debug.LogError($"Invalid slot index: {slotIndex}");
+            return;
+        }
+
+        int chosenId = currentAugmentIDs[slotIndex];
+        if (chosenId == -1)
+        {
+            Debug.LogError($"No valid augment in slot {slotIndex}");
+            return;
+        }
+
+        bool success = ApplyAugmentNew(chosenId);
+
+        if (success)
+        {
+            if (debugMode) Debug.Log($"Successfully applied augment {chosenId}, closing menu");
+            CloseMenu();
+        }
+        else
+        {
+            Debug.LogError($"Failed to apply augment {chosenId}");
         }
     }
 
-    // ================= Rarity Selection =================
-    private Dictionary<string, float> rarityWeights = new Dictionary<string, float>
+    private bool ApplyAugmentNew(int chosenId)
     {
-        {"Common", 50f},    // 50% szansy
-        {"Rare", 30f},      // 30% szansy  
-        {"Epic", 15f},      // 15% szansy
-        {"Legendary", 5f}   // 5% szansy
-    };
-    private Dictionary<string, Color> rarityColors = new Dictionary<string, Color>
-    {
-        {"Common", Color.green},                    // Green
-        {"Rare", Color.blue},                      // Blue  
-        {"Epic", new Color(0.8f, 0f, 1f)},        // Purple
-        {"Legendary", new Color(1f, 0.6f, 0f)}    // Gold
-    };
-    private void SetRarityColor(int slotIndex, string rarity)
-    {
-        Color targetColor = Color.green;
-
-        if (rarityColors.ContainsKey(rarity))
-            targetColor = rarityColors[rarity];
+        if (AugmentRegistry.Instance != null)
+        {
+            bool success = AugmentRegistry.Instance.ApplyAugment(chosenId);
+            if (success && debugMode)
+            {
+                Debug.Log($"Applied augment ID: {chosenId}");
+            }
+            return success;
+        }
         else
-            Debug.LogWarning($"Color not found for: {rarity}");
-
-        rarityImages[slotIndex].color = targetColor;
+        {
+            Debug.LogError("AugmentRegistry.Instance is null when trying to apply augment");
+            return false;
+        }
     }
+
+    private void CloseMenu()
+    {
+        augmentsMenu.SetActive(false);
+        Cursor.visible = false;
+        Time.timeScale = 1f;
+        isMenuActive = false;
+
+        if (debugMode) Debug.Log("AugmentsMenu: Menu closed");
+    }
+
+    public void ResetRerolls()
+    {
+        if (rerollsLeft == null) return;
+
+        for (int i = 0; i < rerollsLeft.Length; i++)
+        {
+            rerollsLeft[i] = maxRerolls;
+            UpdateRerollDisplay(i);
+        }
+
+        if (debugMode) Debug.Log($"Reset all rerolls to {maxRerolls}");
+    }
+
+    // ===== RARITY SYSTEM =====
     private string GetRandomRarityForAugment(int augmentId)
     {
-        if (!augmentDatabase.ContainsKey(augmentId))
-            return "Common"; // fallback
+        var augmentData = AugmentRegistry.Instance?.GetAugmentData(augmentId);
+        if (augmentData == null)
+            return "Common";
 
-        string rarityString = augmentDatabase[augmentId].Rarity;
+        string rarityString = augmentData.Rarity;
+        if (string.IsNullOrEmpty(rarityString))
+            return "Common";
 
-        // Usu� cudzys�owy je�li s� obecne
+        // Parse multiple rarities if separated by commas
         rarityString = rarityString.Trim('"');
-
-        // Podziel po przecinkach i wyczy�� ka�dy element
         string[] rarities = rarityString.Split(',');
         List<string> cleanRarities = new List<string>();
 
@@ -220,30 +446,21 @@ public class AugmentsMenu : MonoBehaviour
                 cleanRarities.Add(cleanRarity);
         }
 
-        // Je�li nie ma �adnych rarity, zwr�� domy�ln�
-        if (cleanRarities.Count == 0)
-            return "Common";
+        if (cleanRarities.Count == 0) return "Common";
+        if (cleanRarities.Count == 1) return cleanRarities[0];
 
-        // Je�li jest tylko jedna rarity, zwr�� j�
-        if (cleanRarities.Count == 1)
-            return cleanRarities[0];
-
-        // Wylosuj z wagami - zbierz tylko wagi dla dost�pnych rarity
+        // Weighted random selection
         List<float> weights = new List<float>();
         foreach (string rarity in cleanRarities)
         {
             if (rarityWeights.ContainsKey(rarity))
                 weights.Add(rarityWeights[rarity]);
             else
-                weights.Add(10f); // domy�lna waga je�li rarity nie jest w s�owniku
+                weights.Add(10f);
         }
 
-        // Weighted random selection
-        float totalWeight = 0f;
-        foreach (float weight in weights)
-            totalWeight += weight;
-
-        float randomValue = Random.Range(0f, totalWeight);
+        float totalWeight = weights.Sum();
+        float randomValue = UnityEngine.Random.Range(0f, totalWeight);
         float currentWeight = 0f;
 
         for (int i = 0; i < cleanRarities.Count; i++)
@@ -253,165 +470,10 @@ public class AugmentsMenu : MonoBehaviour
                 return cleanRarities[i];
         }
 
-        // Fallback - zwr�� pierwszy element
         return cleanRarities[0];
     }
-    //---------------------- AUGMENT NAME ----------------------
-    private void SetAugmentName(int slotIndex, int augmentId)
-    {
-        if (nameTexts == null || slotIndex < 0 || slotIndex >= nameTexts.Length)
-        {
-            Debug.LogWarning($"NameTexts array nie jest ustawiona lub nieprawid�owy slotIndex: {slotIndex}");
-            return;
-        }
 
-        if (nameTexts[slotIndex] == null)
-        {
-            Debug.LogWarning($"NameText dla slotu {slotIndex} jest null!");
-            return;
-        }
-
-        if (!augmentDatabase.ContainsKey(augmentId))
-        {
-            Debug.LogWarning($"Nie znaleziono augmentu o ID: {augmentId}");
-            nameTexts[slotIndex].text = "Unknown Augment";
-            return;
-        }
-
-        string augmentName = augmentDatabase[augmentId].Name;
-        nameTexts[slotIndex].text = augmentName;
-
-        Debug.Log($"Ustawiono nazw� '{augmentName}' dla slotu {slotIndex}");
-    }
-    // ---------------- AUGMENT DESCRIPTION ----------------
-    private void SetAugmentDescription(int slotIndex, int augmentId)
-    {
-        if (descriptionTexts == null || slotIndex < 0 || slotIndex >= descriptionTexts.Length)
-        {
-            Debug.LogWarning($"DescriptionTexts array nie jest ustawiona lub nieprawid�owy slotIndex: {slotIndex}");
-            return;
-        }
-
-        if (descriptionTexts[slotIndex] == null)
-        {
-            Debug.LogWarning($"DescriptionText dla slotu {slotIndex} jest null!");
-            return;
-        }
-
-        if (!augmentDatabase.ContainsKey(augmentId))
-        {
-            Debug.LogWarning($"Nie znaleziono augmentu o ID: {augmentId}");
-            descriptionTexts[slotIndex].text = "Unknown Description";
-            return;
-        }
-
-        string augmentDescription = augmentDatabase[augmentId].Description;
-        descriptionTexts[slotIndex].text = augmentDescription;
-
-        Debug.Log($"Ustawiono opis '{augmentDescription}' dla slotu {slotIndex}");
-    }
-    // ================= Augment Assign =================
-    private void AssignAugmentToImage(Image target, int augmentId, string selectedRarity)
-    {
-        if (!augmentDatabase.ContainsKey(augmentId)) return;
-
-        // sprite
-        Sprite sprite = System.Array.Find(allSprites, s => s.name == augmentId.ToString());
-        if (sprite != null)
-            target.sprite = sprite;
-        else
-            Debug.LogWarning($"SPRITE not found for augment ID={augmentId}");
-
-        //for TMP text later:
-        var data = augmentDatabase[augmentId];
-        Debug.Log($"Rolled augment: {data.Name} with rarity: {selectedRarity} - {data.Description}");
-    }
-
-    // Overload
-    private void AssignAugmentToImage(Image target, int augmentId)
-    {
-        string selectedRarity = GetRandomRarityForAugment(augmentId);
-        AssignAugmentToImage(target, augmentId, selectedRarity);
-    }
-
-    // get unique ID (not used one)
-    private int GetUniqueRandomId(List<int> pool, List<int> alreadyUsed)
-    {
-        List<int> available = new List<int>(pool);
-        foreach (int used in alreadyUsed)
-            available.Remove(used);
-
-        if (available.Count == 0)
-            return pool[Random.Range(0, pool.Count)]; // fallback
-
-        return available[Random.Range(0, available.Count)];
-    }
-
-    // ================= Reroll =================
-    public void Reroll(int slotIndex)
-    {
-        if (slotIndex < 0 || slotIndex >= augmentImages.Length) return;
-
-        List<int> keys = new List<int>(augmentDatabase.Keys);
-
-        if (rerollsleft[slotIndex] <= 0)
-        {
-            return;
-        }
-        //use rest of not used IDs
-        List<int> alreadyUsed = new List<int>();
-        for (int i = 0; i < currentAugmentIDs.Length; i++)
-        {
-            if (i != slotIndex)
-                alreadyUsed.Add(currentAugmentIDs[i]);
-        }
-
-        int newId = GetUniqueRandomId(keys, alreadyUsed);
-        currentAugmentIDs[slotIndex] = newId;
-
-        // Wylosuj now� rarity dla tego augmentu
-        string newRarity = GetRandomRarityForAugment(newId);
-        currentSelectedRarities[slotIndex] = newRarity;
-
-        AssignAugmentToImage(augmentImages[slotIndex], newId, newRarity);
-
-        SetRarityColor(slotIndex, newRarity);
-
-        SetAugmentName(slotIndex, newId);
-
-        SetAugmentDescription(slotIndex, newId);
-
-        rerollsleft[slotIndex]--;
-        UpdateRerollText(slotIndex);
-    }
-
-    private void UpdateRerollText(int slotIndex)
-    {
-        if (rerollNumberText != null && slotIndex < rerollNumberText.Length && rerollNumberText[slotIndex] != null)
-        {
-            rerollNumberText[slotIndex].text = $"{rerollsleft[slotIndex]}";
-        }
-
-        if (rerollButtons != null && slotIndex < rerollButtons.Length && rerollButtons[slotIndex] != null)
-        {
-            rerollButtons[slotIndex].interactable = rerollsleft[slotIndex] > 0;
-        }
-    }
-    public void ResetRerolls() //for Later
-    {
-        for (int i = 0; i < rerollsleft.Length; i++)
-        {
-            rerollsleft[i] = maxRerolls;
-        }
-        //EnableRerollButtons();
-
-        // Aktualizuj wszystkie teksty reroll�w
-        for (int i = 0; i < rerollNumberText.Length; i++)
-        {
-            UpdateRerollText(i);
-        }
-    }
-    // ================= Gettery dla aktualnych danych =================
+    // ===== GETTERS =====
     public string GetCurrentAugmentRarity(int slotIndex)
     {
         if (slotIndex >= 0 && slotIndex < currentSelectedRarities.Length)
@@ -421,8 +483,39 @@ public class AugmentsMenu : MonoBehaviour
 
     public AugmentData GetCurrentAugmentData(int slotIndex)
     {
-        if (slotIndex >= 0 && slotIndex < currentAugmentIDs.Length)
-            return augmentDatabase[currentAugmentIDs[slotIndex]];
-        return null;
+        if (slotIndex < 0 || slotIndex >= currentAugmentIDs.Length) return null;
+
+        int augmentId = currentAugmentIDs[slotIndex];
+        if (augmentId == -1) return null;
+
+        return AugmentRegistry.Instance?.GetAugmentData(augmentId);
+    }
+
+    // ===== DEBUG METHODS =====
+    [ContextMenu("Test Generate Augments")]
+    public void TestGenerateAugments()
+    {
+        if (Application.isPlaying)
+        {
+            GenerateInitialAugments();
+        }
+    }
+
+    [ContextMenu("Log Current State")]
+    public void LogCurrentState()
+    {
+        Debug.Log($"AugmentsMenu State:");
+        Debug.Log($"- AugmentRegistry.Instance: {(AugmentRegistry.Instance != null ? "Available" : "NULL")}");
+        Debug.Log($"- Available augments: {AugmentRegistry.Instance?.GetAllAugments().Count ?? 0}");
+        Debug.Log($"- Max rerolls: {maxRerolls}");
+        Debug.Log($"- Slots initialized: {currentAugmentIDs?.Length ?? 0}");
+
+        if (currentAugmentIDs != null)
+        {
+            for (int i = 0; i < currentAugmentIDs.Length; i++)
+            {
+                Debug.Log($"  Slot {i}: ID={currentAugmentIDs[i]}, Rerolls={rerollsLeft[i]}");
+            }
+        }
     }
 }
