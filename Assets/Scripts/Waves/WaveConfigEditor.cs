@@ -36,10 +36,10 @@ public class WaveConfigEditor : Editor
 
             // Checkbox: wszyscy z jednego kierunku
             EditorGUILayout.PropertyField(waveProp.FindPropertyRelative("oneDirectionForAllEnemies"), new GUIContent("One Direction For All Enemies"));
-
             // Delaye
             EditorGUILayout.PropertyField(waveProp.FindPropertyRelative("minSpawnDelay"), new GUIContent("Min Spawn Delay"));
             EditorGUILayout.PropertyField(waveProp.FindPropertyRelative("maxSpawnDelay"), new GUIContent("Max Spawn Delay"));
+            EditorGUILayout.PropertyField(waveProp.FindPropertyRelative("extraDelayBeforeStart"), new GUIContent("Extra Delay Before Start"));
 
             // Enemy groups
             SerializedProperty enemiesProp = waveProp.FindPropertyRelative("enemies");

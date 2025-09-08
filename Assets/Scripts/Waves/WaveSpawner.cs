@@ -36,13 +36,15 @@ public class WaveSpawner : MonoBehaviour
         countdown -= Time.deltaTime;
         if (countdown <= 0f)
         {
-            StartCoroutine(SpawnWave(currentWaveIndex)); // <-- przekazujemy indeks fali
+            StartCoroutine(SpawnWave(currentWaveIndex)); 
             countdown = waveConfig.timeBetweenWaves;
         }
     }
 
     IEnumerator SpawnWave(int index)
     {
+        
+
         if (index < 0 || index >= waveConfig.waves.Count)
         {
             Debug.LogWarning("SpawnWave: invalid index " + index);
@@ -51,10 +53,9 @@ public class WaveSpawner : MonoBehaviour
 
         WaveData wave = waveConfig.waves[index];
 
-        // pokazujemy wszystkie wskaźniki (jeśli jakieś są)
+        yield return new WaitForSeconds(waveConfig.timeBetweenWaves + wave.extraDelayBeforeStart);
         ShowWaveIndicators(wave.spawnDirections);
 
-        // Zbuduj listę prefabów do spawnu (z zabezpieczeniami)
         List<GameObject> enemyPrefabsToSpawn = new List<GameObject>();
         if (wave.enemies != null)
         {
@@ -74,11 +75,9 @@ public class WaveSpawner : MonoBehaviour
         // Opcjonalne tasowanie kolejności
         Shuffle(enemyPrefabsToSpawn);
 
-        // Muzyka intensywna
         if (AudioManager.instance != null)
             AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
 
-        // Jeśli tryb "wszyscy z jednego kierunku", wybierz go teraz (z zabezpieczeniem)
         SpawnDirection chosenDir = SpawnDirection.Top;
         if (wave.oneDirectionForAllEnemies && wave.spawnDirections != null && wave.spawnDirections.Count > 0)
         {
@@ -108,7 +107,6 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(delay);
         }
 
-        // zakończono falę -> przejdź do następnej
         currentWaveIndex++;
     }
 

@@ -4708,7 +4708,7 @@ MonoBehaviour:
   - {fileID: 865252911}
   - {fileID: 1827176139}
   - {fileID: 2088758711}
-  timeBetweenWaves: 5
+  waveConfig: {fileID: 11400000, guid: d3d3d7b01fe1cee4d9d93365b1f99214, type: 2}
 --- !u!1 &1329624269
 GameObject:
   m_ObjectHideFlags: 0

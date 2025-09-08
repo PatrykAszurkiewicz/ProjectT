@@ -12,5 +12,38 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 164b3b99d3cf2264e86118581a85ebea, type: 3}
   m_Name: WaveConfig
   m_EditorClassIdentifier: 
-  timeBetweenWaves: 10
-  waves: []
+  timeBetweenWaves: 5
+  waves:
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 2
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 39c47a9911052f342ad7214ed2462cf8, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 2505257184126395638, guid: 3915daee017becf44bca645570578686, type: 3}
+      count: 4
+  - waveNumber: 0
+    extraDelayBeforeStart: 5
+    spawnDirections: 000000000200000001000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 2
+    maxSpawnDelay: 3
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 39c47a9911052f342ad7214ed2462cf8, type: 3}
+      count: 15
+    - enemyPrefab: {fileID: 2505257184126395638, guid: 3915daee017becf44bca645570578686, type: 3}
+      count: 8
+  - waveNumber: 0
+    extraDelayBeforeStart: 5
+    spawnDirections: 000000000200000001000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 2
+    maxSpawnDelay: 3
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 39c47a9911052f342ad7214ed2462cf8, type: 3}
+      count: 15
+    - enemyPrefab: {fileID: 2505257184126395638, guid: 3915daee017becf44bca645570578686, type: 3}
+      count: 8
