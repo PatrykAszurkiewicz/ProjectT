@@ -6,52 +6,64 @@ using FMODUnity;
 
 public class WaveSpawner : MonoBehaviour
 {
-    public List<Collider2D> spawnAreas; // Top/Bottom/Left/Right jako nazwy
-    public float timeBetweenWaves = 10f;
-    private float countdown;
-    //public float initialWaveDelay = 5f;
+    [Header("Spawn areas (Top/Bottom/Left/Right)")]
+    public List<Collider2D> spawnAreas;
+
+    [Header("Config")]
+    public WaveConfig waveConfig;
 
     private int currentWaveIndex = 0;
-    private List<WaveData> waves;
     private int enemiesAlive = 0;
+    private float countdown;
 
     void Start()
     {
-        LoadWaves();
-        countdown = timeBetweenWaves;
+        if (waveConfig == null)
+        {
+            Debug.LogError("❌ Brak przypisanego WaveConfig do WaveSpawner!");
+            return;
+        }
+
+        countdown = waveConfig.timeBetweenWaves;
     }
 
     void Update()
     {
+        if (waveConfig == null) return;
         if (enemiesAlive > 0) return;
-
-        if (currentWaveIndex >= waves.Count)
-        {
-            Debug.Log("End of waves");
-            return;
-        }
+        if (currentWaveIndex >= waveConfig.waves.Count) return;
 
         countdown -= Time.deltaTime;
-
         if (countdown <= 0f)
         {
-            StartCoroutine(SpawnWave());
-            countdown = timeBetweenWaves;
+            StartCoroutine(SpawnWave(currentWaveIndex)); // <-- przekazujemy indeks fali
+            countdown = waveConfig.timeBetweenWaves;
         }
     }
 
-    IEnumerator SpawnWave()
+    IEnumerator SpawnWave(int index)
     {
-        WaveData wave = waves[currentWaveIndex];
-
-        ShowWaveIndicator(wave.spawnDirection); // 🔺 inicjator kierunku
-
-        List<string> enemyPrefabsToSpawn = new List<string>();
-
-        foreach (var group in wave.enemies)
+        if (index < 0 || index >= waveConfig.waves.Count)
         {
-            if (group != null && !string.IsNullOrEmpty(group.enemyPrefab))
+            Debug.LogWarning("SpawnWave: invalid index " + index);
+            yield break;
+        }
+
+        WaveData wave = waveConfig.waves[index];
+
+        // pokazujemy wszystkie wskaźniki (jeśli jakieś są)
+        ShowWaveIndicators(wave.spawnDirections);
+
+        // Zbuduj listę prefabów do spawnu (z zabezpieczeniami)
+        List<GameObject> enemyPrefabsToSpawn = new List<GameObject>();
+        if (wave.enemies != null)
+        {
+            foreach (var group in wave.enemies)
             {
+                if (group == null) continue;
+                if (group.enemyPrefab == null) continue;
+                if (group.count <= 0) continue;
+
                 for (int i = 0; i < group.count; i++)
                 {
                     enemyPrefabsToSpawn.Add(group.enemyPrefab);
@@ -59,18 +71,44 @@ public class WaveSpawner : MonoBehaviour
             }
         }
 
-        // opcjonalnie: tasowanie kolejności
+        // Opcjonalne tasowanie kolejności
         Shuffle(enemyPrefabsToSpawn);
-        AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
 
-        foreach (var prefabName in enemyPrefabsToSpawn)
+        // Muzyka intensywna
+        if (AudioManager.instance != null)
+            AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
+
+        // Jeśli tryb "wszyscy z jednego kierunku", wybierz go teraz (z zabezpieczeniem)
+        SpawnDirection chosenDir = SpawnDirection.Top;
+        if (wave.oneDirectionForAllEnemies && wave.spawnDirections != null && wave.spawnDirections.Count > 0)
         {
-            SpawnEnemy(prefabName, wave.spawnDirection);
+            chosenDir = wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
+        }
+
+        // Spawn każdego prefabu — dla każdego losujemy kierunek (chyba że oneDirectionForAllEnemies == true)
+        foreach (var prefab in enemyPrefabsToSpawn)
+        {
+            SpawnDirection dir;
+
+            if (wave.spawnDirections == null || wave.spawnDirections.Count == 0)
+            {
+                // brak zdefiniowanych kierunków -> fallback (chosenDir albo Top)
+                dir = chosenDir;
+            }
+            else
+            {
+                dir = wave.oneDirectionForAllEnemies
+                    ? chosenDir
+                    : wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
+            }
+
+            SpawnEnemy(prefab, dir);
 
             float delay = UnityEngine.Random.Range(wave.minSpawnDelay, wave.maxSpawnDelay);
             yield return new WaitForSeconds(delay);
         }
 
+        // zakończono falę -> przejdź do następnej
         currentWaveIndex++;
     }
 
@@ -79,20 +117,14 @@ public class WaveSpawner : MonoBehaviour
         enemiesAlive--;
         if (enemiesAlive <= 0)
         {
-            AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
+            if (AudioManager.instance != null)
+                AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
         }
     }
 
-    void LoadWaves()
+    Vector2 GetRandomPositionInArea(SpawnDirection direction)
     {
-        string json = Resources.Load<TextAsset>("Data/waves").text;
-        waves = JsonUtilityWrapper.FromJsonList<WaveData>(json);
-    }
-
-    Vector2 GetRandomPositionInArea(string direction)
-    {
-        Collider2D area = spawnAreas.Find(c => c.name.Equals(direction, StringComparison.OrdinalIgnoreCase));
-
+        Collider2D area = spawnAreas.Find(c => c.name.Equals(direction.ToString(), StringComparison.OrdinalIgnoreCase));
         if (area == null)
         {
             Debug.LogWarning($"Brak obszaru spawnu dla kierunku: {direction}");
@@ -100,12 +132,11 @@ public class WaveSpawner : MonoBehaviour
         }
 
         Bounds bounds = area.bounds;
-
         float x = UnityEngine.Random.Range(bounds.min.x, bounds.max.x);
         float y = UnityEngine.Random.Range(bounds.min.y, bounds.max.y);
-
         return new Vector2(x, y);
     }
+
     private void OnDrawGizmos()
     {
         Gizmos.color = Color.red;
@@ -121,13 +152,20 @@ public class WaveSpawner : MonoBehaviour
             }
         }
     }
-    void SpawnEnemy(string prefabName, string direction)
+
+    void SpawnEnemy(GameObject prefab, SpawnDirection direction)
     {
+        if (prefab == null)
+        {
+            Debug.LogWarning("SpawnEnemy: prefab == null");
+            return;
+        }
+
         Vector2 spawnPosition = GetRandomPositionInArea(direction);
-        GameObject enemyPrefab = Resources.Load<GameObject>("Enemies/" + prefabName);
-        Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
+        Instantiate(prefab, spawnPosition, Quaternion.identity);
         enemiesAlive++;
     }
+
     void Shuffle<T>(List<T> list)
     {
         for (int i = list.Count - 1; i > 0; i--)
@@ -136,9 +174,27 @@ public class WaveSpawner : MonoBehaviour
             (list[i], list[k]) = (list[k], list[i]);
         }
     }
-    void ShowWaveIndicator(string direction)
+
+    void ShowWaveIndicators(List<SpawnDirection> dirs)
     {
-        // np. wyświetlenie strzałki lub efektu
+        if (dirs == null) return;
+        foreach (var d in dirs) ShowWaveIndicator(d);
     }
 
+    void ShowWaveIndicator(SpawnDirection direction)
+    {
+        // np. wyświetlenie strzałki/efektu dla konkretnego kierunku
+    }
+
+    public void TestWave(int waveIndex)
+    {
+        if (waveIndex < 0 || waveIndex >= waveConfig.waves.Count)
+        {
+            Debug.LogWarning("Invalid wave index: " + waveIndex);
+            return;
+        }
+
+        StopAllCoroutines();
+        StartCoroutine(SpawnWave(waveIndex));
+    }
 }
