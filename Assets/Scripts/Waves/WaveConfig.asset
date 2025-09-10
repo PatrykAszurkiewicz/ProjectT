@@ -15,7 +15,7 @@ MonoBehaviour:
   timeBetweenWaves: 5
   waves:
   - waveNumber: 0
-    extraDelayBeforeStart: 0
+    extraDelayBeforeStart: 2
     spawnDirections: 0000000002000000
     oneDirectionForAllEnemies: 0
     minSpawnDelay: 1

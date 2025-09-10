@@ -285,6 +285,13 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         if (isDestroyed) return;
 
         Debug.Log("CentralCore: Destroying core");
+
+        // Play Central Core death sound
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.centralCoreDeath, transform.position);
+        }
+
         isDestroyed = true;
 
         // Stop all updates

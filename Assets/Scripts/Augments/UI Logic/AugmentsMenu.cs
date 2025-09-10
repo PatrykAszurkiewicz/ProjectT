@@ -3,7 +3,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 using TMPro;
 using System.Linq;
-using System.Collections; // DODANE dla IEnumerator
+using System.Collections;
 
 public class AugmentsMenu : MonoBehaviour
 {
@@ -35,6 +35,12 @@ public class AugmentsMenu : MonoBehaviour
 
     // Data sources
     private static Sprite[] allSprites;
+
+    public struct AugmentWithRarity
+    {
+        public AugmentData augment;
+        public string rarity;
+    }
 
     // Rarity system
     private Dictionary<string, float> rarityWeights = new Dictionary<string, float>
@@ -167,16 +173,15 @@ public class AugmentsMenu : MonoBehaviour
 
         for (int i = 0; i < augmentImages.Length; i++)
         {
-            var augment = GenerateRandomAugment(GetExcludedIDs());
-            if (augment != null)
+            var result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
+            if (result.augment != null)
             {
-                currentAugmentIDs[i] = augment.ID;
-                string selectedRarity = GetRandomRarityForAugment(augment.ID);
-                currentSelectedRarities[i] = selectedRarity;
+                currentAugmentIDs[i] = result.augment.ID;
+                currentSelectedRarities[i] = result.rarity;
 
-                UpdateSlotDisplay(i, augment, selectedRarity);
+                UpdateSlotDisplay(i, result.augment, result.rarity);
 
-                if (debugMode) Debug.Log($"Generated augment for slot {i}: {augment.Name} (ID: {augment.ID})");
+                if (debugMode) Debug.Log($"Generated augment for slot {i}: {result.augment.Name} (ID: {result.augment.ID}, Rarity: {result.rarity})");
             }
             else
             {
@@ -333,16 +338,15 @@ public class AugmentsMenu : MonoBehaviour
 
         rerollsLeft[slotIndex]--;
 
-        var newAugment = GenerateRandomAugment(GetExcludedIDs());
-        if (newAugment != null)
+        var result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
+        if (result.augment != null)
         {
-            currentAugmentIDs[slotIndex] = newAugment.ID;
-            string newRarity = GetRandomRarityForAugment(newAugment.ID);
-            currentSelectedRarities[slotIndex] = newRarity;
+            currentAugmentIDs[slotIndex] = result.augment.ID;
+            currentSelectedRarities[slotIndex] = result.rarity;
 
-            UpdateSlotDisplay(slotIndex, newAugment, newRarity);
+            UpdateSlotDisplay(slotIndex, result.augment, result.rarity);
 
-            if (debugMode) Debug.Log($"Rerolled slot {slotIndex} to: {newAugment.Name} (ID: {newAugment.ID})");
+            if (debugMode) Debug.Log($"Rerolled slot {slotIndex} to: {result.augment.Name} (ID: {result.augment.ID}, Rarity: {result.rarity})");
         }
         else
         {
@@ -472,7 +476,91 @@ public class AugmentsMenu : MonoBehaviour
 
         return cleanRarities[0];
     }
+    private AugmentWithRarity GenerateRandomAugmentWithRarity(List<int> excludeIDs)
+    {
+        if (AugmentRegistry.Instance == null)
+        {
+            Debug.LogError("AugmentsMenu: AugmentRegistry.Instance is null!");
+            return new AugmentWithRarity();
+        }
 
+        var allAugments = AugmentRegistry.Instance.GetAllAugments();
+        if (allAugments == null || allAugments.Count == 0)
+        {
+            Debug.LogError("AugmentsMenu: No augments available from AugmentRegistry!");
+            return new AugmentWithRarity();
+        }
+
+        var availableAugments = allAugments
+            .Where(a => a.Priority == 0 && !excludeIDs.Contains(a.ID) && a.Icon != null)
+            .ToList();
+
+        if (availableAugments.Count == 0)
+        {
+            Debug.LogWarning("AugmentsMenu: No available augments after exclusions!");
+            return new AugmentWithRarity();
+        }
+
+        // Create weighted list of augment-rarity combinations
+        List<(AugmentData augment, string rarity, float weight)> weightedCombinations = new List<(AugmentData, string, float)>();
+
+        foreach (var augment in availableAugments)
+        {
+            string rarityString = augment.Rarity;
+            if (string.IsNullOrEmpty(rarityString))
+            {
+                // Default to Common if no rarity specified
+                if (rarityWeights.ContainsKey("Common"))
+                    weightedCombinations.Add((augment, "Common", rarityWeights["Common"]));
+                continue;
+            }
+
+            // Parse multiple rarities if separated by commas
+            rarityString = rarityString.Trim('"');
+            string[] rarities = rarityString.Split(',');
+
+            foreach (string rarity in rarities)
+            {
+                string cleanRarity = rarity.Trim();
+                if (!string.IsNullOrEmpty(cleanRarity))
+                {
+                    float weight = rarityWeights.ContainsKey(cleanRarity) ? rarityWeights[cleanRarity] : 10f;
+                    weightedCombinations.Add((augment, cleanRarity, weight));
+                }
+            }
+        }
+
+        if (weightedCombinations.Count == 0)
+        {
+            Debug.LogWarning("AugmentsMenu: No weighted combinations available!");
+            return new AugmentWithRarity();
+        }
+
+        // Perform weighted random selection
+        float totalWeight = weightedCombinations.Sum(w => w.weight);
+        float randomValue = UnityEngine.Random.Range(0f, totalWeight);
+        float currentWeight = 0f;
+
+        foreach (var combination in weightedCombinations)
+        {
+            currentWeight += combination.weight;
+            if (randomValue <= currentWeight)
+            {
+                return new AugmentWithRarity
+                {
+                    augment = combination.augment,
+                    rarity = combination.rarity
+                };
+            }
+        }
+
+        // Fallback to first combination
+        return new AugmentWithRarity
+        {
+            augment = weightedCombinations[0].augment,
+            rarity = weightedCombinations[0].rarity
+        };
+    }
     // ===== GETTERS =====
     public string GetCurrentAugmentRarity(int slotIndex)
     {

@@ -305,10 +305,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638926893364908764
+  lastModified: 638930443608711781
   FileSizes:
   - Name: Desktop
-    Value: 1798
+    Value: 1846
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -346,13 +346,14 @@ MonoBehaviour:
   - {fileID: 3647127679787549618}
   - {fileID: -9170716191666958751}
   - {fileID: -6558356097771114238}
+  - {fileID: 9077964886532954577}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638926893364908764
+  cacheTime: 638930443608711781
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -390,6 +391,8 @@ MonoBehaviour:
     index: 16
   - key: event:/TowerCreation
     index: 17
+  - key: event:/CentralCoreDeath
+    index: 18
 --- !u!114 &1052223431168759608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -555,10 +558,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 638926893364898783
+  lastModified: 638930443608691801
   FileSizes:
   - Name: Desktop
-    Value: 922144
+    Value: 951104
   Exists: 1
 --- !u!114 &4699882167230820914
 MonoBehaviour:
@@ -846,3 +849,30 @@ MonoBehaviour:
   - Name: Desktop
     Value: 3420960
   Exists: 1
+--- !u!114 &9077964886532954577
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/CentralCoreDeath
+  m_EditorClassIdentifier: 
+  Path: event:/CentralCoreDeath
+  Guid:
+    Data1: 239168874
+    Data2: 1246713383
+    Data3: 738612373
+    Data4: 781697213
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0

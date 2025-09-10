@@ -4194,6 +4194,13 @@ MonoBehaviour:
       Data3: -738862183
       Data4: -396342993
     Path: event:/ResourceDropCollection
+  <centralCoreDeath>k__BackingField:
+    Guid:
+      Data1: 239168874
+      Data2: 1246713383
+      Data3: 738612373
+      Data4: 781697213
+    Path: event:/CentralCoreDeath
 --- !u!1 &1213227520
 GameObject:
   m_ObjectHideFlags: 0
@@ -4245,8 +4252,8 @@ MonoBehaviour:
   playerStartingEnergy: 300
   towerBuildCost: 100
   towerSellRefundPercentage: 0.5
-  enableCurrencyEarnedFromEnemyKills: 1
-  energyPerEnemyKill: 25
+  enableCurrencyEarnedFromEnemyKills: 0
+  energyPerEnemyKill: 0
   playerEnergyText: {fileID: 1758088795}
   energyTextFormat: 'Energy: {0}'
   defaultEnemyDamage: 10

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using System; // DODANE - to by³o g³ówn¹ przyczyn¹ b³êdu
+using System;
 
 // ===== ENHANCED DATA STRUCTURES =====
 [System.Serializable]
@@ -389,7 +389,7 @@ public class AugmentRegistry : MonoBehaviour
     public static AugmentRegistry Instance => _instance;
 
     [Header("Configuration")]
-    public string csvResourcePath = "Data/Tower Defense Augments - Augments";
+    public string csvResourcePath = "Data/Augments/";
     public string spriteBasePath = "Sprites/Augments/";
 
     [Header("Debug")]

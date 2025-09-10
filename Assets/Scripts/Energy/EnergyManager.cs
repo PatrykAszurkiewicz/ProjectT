@@ -74,8 +74,8 @@ public class EnergyManager : MonoBehaviour
     public int playerStartingEnergy = 300;
     public int towerBuildCost = 100;
     public float towerSellRefundPercentage = 0.5f;
-    public bool enableCurrencyEarnedFromEnemyKills = true;
-    public int energyPerEnemyKill = 25;
+    public bool enableCurrencyEarnedFromEnemyKills = false;
+    public int energyPerEnemyKill = 0;
 
     [Header("Player Currency UI")]
     public TMPro.TextMeshProUGUI playerEnergyText;
@@ -333,6 +333,7 @@ public class EnergyManager : MonoBehaviour
     {
         if (amount <= 0) return;
 
+        //Debug.Log($"[ENERGY DEBUG] +{amount} energy. Called from: {new System.Diagnostics.StackTrace(1, true).GetFrame(0).GetMethod().Name}");
         currentPlayerEnergy += amount;
         OnPlayerEnergyGained?.Invoke(amount);
         OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);

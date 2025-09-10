@@ -44,6 +44,9 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Resource Collection SFX")]
     [field: SerializeField] public EventReference resourceDropCollection { get; private set; }
 
+    [field: Header("Central Core Death SFX")]
+    [field: SerializeField] public EventReference centralCoreDeath { get; private set; }
+
     public static FMODEvents instance { get; private set; }
 
     private void Awake()

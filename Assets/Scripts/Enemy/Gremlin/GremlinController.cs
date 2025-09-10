@@ -338,7 +338,7 @@ public class GremlinGrapplingTarget : MonoBehaviour, IGrapplingTarget
         if (!isDestroyed && gremlinController != null && !gremlinController.IsDestroyed())
         {
             var rb = GetComponent<Rigidbody2D>();
-            if (rb != null && rb.linearVelocity.magnitude > 3f)
+            if (rb != null && rb.linearVelocity.magnitude > 15f)
             {
                 var enemies = FindObjectsByType<EnemyController>(FindObjectsSortMode.None);
                 bool otherEnemiesMovingFast = false;

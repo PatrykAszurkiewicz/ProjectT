@@ -34,16 +34,16 @@ public class WaveSpawner : MonoBehaviour
         if (currentWaveIndex >= waveConfig.waves.Count) return;
 
         countdown -= Time.deltaTime;
+
         if (countdown <= 0f)
         {
-            StartCoroutine(SpawnWave(currentWaveIndex)); 
+            StartCoroutine(SpawnWave(currentWaveIndex));
             countdown = waveConfig.timeBetweenWaves;
         }
     }
 
     IEnumerator SpawnWave(int index)
     {
-        
 
         if (index < 0 || index >= waveConfig.waves.Count)
         {
@@ -53,7 +53,9 @@ public class WaveSpawner : MonoBehaviour
 
         WaveData wave = waveConfig.waves[index];
 
-        yield return new WaitForSeconds(waveConfig.timeBetweenWaves + wave.extraDelayBeforeStart);
+        if (wave.extraDelayBeforeStart > 0)
+            yield return new WaitForSeconds(wave.extraDelayBeforeStart);
+
         ShowWaveIndicators(wave.spawnDirections);
 
         List<GameObject> enemyPrefabsToSpawn = new List<GameObject>();
