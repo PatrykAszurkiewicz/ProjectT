@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class Weapon : MonoBehaviour
 {
-    [SerializeField] private WeaponData weaponData;
+    [SerializeField] public WeaponData weaponData;
     [SerializeField] private PolygonCollider2D attackCollider;
     [SerializeField] private GameObject visual;
 

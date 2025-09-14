@@ -7799,8 +7799,16 @@ PrefabInstance:
       value: Player
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: maxArmor
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: maxHealth
       value: 500
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: currentArmor
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: currentHealth

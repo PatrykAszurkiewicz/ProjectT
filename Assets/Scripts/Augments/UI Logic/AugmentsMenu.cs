@@ -194,36 +194,6 @@ public class AugmentsMenu : MonoBehaviour
         if (debugMode) Debug.Log("AugmentsMenu: Initial augments generation completed");
     }
 
-    private AugmentData GenerateRandomAugment(List<int> excludeIDs)
-    {
-        if (AugmentRegistry.Instance == null)
-        {
-            Debug.LogError("AugmentsMenu: AugmentRegistry.Instance is null!");
-            return null;
-        }
-
-        var allAugments = AugmentRegistry.Instance.GetAllAugments();
-        if (allAugments == null || allAugments.Count == 0)
-        {
-            Debug.LogError("AugmentsMenu: No augments available from AugmentRegistry!");
-            return null;
-        }
-
-        var availableAugments = allAugments
-            .Where(a => a.Priority == 0 && !excludeIDs.Contains(a.ID) && a.Icon != null)
-            .ToList();
-
-        if (availableAugments.Count == 0)
-        {
-            Debug.LogWarning("AugmentsMenu: No available augments after exclusions!");
-            return null;
-        }
-
-        // Simple random selection - you can add rarity weighting here later
-        int randomIndex = UnityEngine.Random.Range(0, availableAugments.Count);
-        return availableAugments[randomIndex];
-    }
-
     private List<int> GetExcludedIDs()
     {
         var excluded = new List<int>();

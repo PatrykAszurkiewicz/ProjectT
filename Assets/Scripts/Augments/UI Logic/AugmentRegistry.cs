@@ -17,17 +17,20 @@ public class AugmentData
     public string AffectedStats;
     public string Description;
     public string SpritePath;
-    public string WhoImplements;
+    public string WhoImplements; // tylko dla ludzi
+    public string TargetTypes;   // faktyczne cele augmentu
 
-    // Runtime data
+    // Runtime
     public Sprite Icon { get; set; }
     public List<StatModification> ParsedModifications { get; set; }
 
-    public bool AffectsPlayer => WhoImplements.Contains("Player");
-    public bool AffectsEnemy => WhoImplements.Contains("Enemy");
-    public bool AffectsTower => WhoImplements.Contains("Tower");
-    public bool IsGlobal => WhoImplements.Contains("Global");
+    public bool AffectsPlayer => TargetTypes.Contains("Player");
+    public bool AffectsEnemy => TargetTypes.Contains("Enemy");
+    public bool AffectsTower => TargetTypes.Contains("Tower");
+    public bool AffectsWeapon => TargetTypes.Contains("Weapon");
+    public bool IsGlobal => TargetTypes.Contains("Global");
 }
+
 
 // ===== STAT MODIFICATION SYSTEM =====
 [System.Serializable]
@@ -59,19 +62,26 @@ public static class StatParser
             { "%", StatModification.ModificationType.Percentage }
         };
 
-    public static List<StatModification> ParseAffectedStats(string affectedStats, string whoImplements)
+    public static List<StatModification> ParseAffectedStats(string affectedStats, string targetTypes)
     {
         var modifications = new List<StatModification>();
 
         if (string.IsNullOrEmpty(affectedStats)) return modifications;
 
-        // Split multiple modifications by comma or semicolon
+        // Parse target types into array
+        string[] targets = targetTypes.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(t => t.Trim())
+                                    .ToArray();
+
+        // Split stat expressions
         string[] statExpressions = affectedStats.Split(new char[] { ',', ';' },
             System.StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (string expression in statExpressions)
+        // Map each stat expression to corresponding target type
+        for (int i = 0; i < statExpressions.Length; i++)
         {
-            var modification = ParseSingleStatExpression(expression.Trim(), whoImplements);
+            string targetType = i < targets.Length ? targets[i] : targets[0]; // Use first target as fallback
+            var modification = ParseSingleStatExpression(statExpressions[i].Trim(), targetType);
             if (modification != null)
             {
                 modifications.Add(modification);
@@ -81,7 +91,7 @@ public static class StatParser
         return modifications;
     }
 
-    private static StatModification ParseSingleStatExpression(string expression, string whoImplements)
+    private static StatModification ParseSingleStatExpression(string expression, string targetType)
     {
         // Regex to match patterns like: statName*1.5, health+10, damage*1.25, speed%30
         var regex = new Regex(@"^(\w+)([*+=\%])([0-9]*\.?[0-9]+)$");
@@ -95,7 +105,11 @@ public static class StatParser
 
         string statName = match.Groups[1].Value;
         string operatorStr = match.Groups[2].Value;
-        float value = float.Parse(match.Groups[3].Value);
+        if (!float.TryParse(match.Groups[3].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float value))
+        {
+            Debug.LogWarning($"StatParser: Could not parse numeric value in expression: '{expression}'");
+            return null;
+        }
 
         if (!OperatorMap.TryGetValue(operatorStr, out var operationType))
         {
@@ -108,10 +122,11 @@ public static class StatParser
             StatName = statName,
             OperationType = operationType,
             Value = value,
-            TargetType = whoImplements
+            TargetType = targetType // Bezpoœrednio u¿ywa przekazanego targetType
         };
     }
 }
+
 
 // ===== STAT APPLICATOR SYSTEM =====
 public static class StatApplicator
@@ -119,17 +134,23 @@ public static class StatApplicator
     public static bool ApplyModification(StatModification modification, AugmentTarget target)
     {
         object targetObject = GetTargetObject(modification.TargetType, target);
-        if (targetObject == null) return false;
+        if (targetObject == null)
+        {
+            Debug.LogWarning($"StatApplicator: No target object found for type: {modification.TargetType}");
+            return false;
+        }
 
         return ApplyToTarget(targetObject, modification);
     }
 
     private static object GetTargetObject(string targetType, AugmentTarget target)
     {
-        switch (targetType.ToLower())
+        switch (targetType.Trim().ToLower())
         {
             case "player":
                 return target.Player;
+            case "weapon":
+                return target.Weapon;
             case "enemy":
                 return target.Enemy;
             case "tower":
@@ -137,17 +158,19 @@ public static class StatApplicator
             case "global":
                 return target.GlobalContext;
             default:
-                // Try to infer from available targets
-                if (target.Player != null) return target.Player;
-                if (target.Tower != null) return target.Tower;
-                if (target.Enemy != null) return target.Enemy;
-                if (target.GlobalContext != null) return target.GlobalContext;
+                Debug.LogWarning($"StatApplicator: Unknown target type: '{targetType}'. Available: Player, Weapon, Enemy, Tower, Global");
                 return null;
         }
     }
 
     private static bool ApplyToTarget(object targetObject, StatModification modification)
     {
+        if (targetObject == null)
+        {
+            Debug.LogWarning($"StatApplicator: Target object is null for stat: {modification.StatName}");
+            return false;
+        }
+
         Type targetType = targetObject.GetType();
 
         // Try direct field access first
@@ -168,17 +191,18 @@ public static class StatApplicator
             return ApplyToProperty(property, targetObject, modification);
         }
 
-        // Try special cases for complex modifications
-        return ApplySpecialCase(targetObject, modification);
+        // Log if nothing was found
+        Debug.LogWarning($"StatApplicator: No field or property '{modification.StatName}' found on target type {targetType.Name}");
+        return false;
     }
 
     private static bool ApplyToField(FieldInfo field, object target, StatModification modification)
     {
-        float currentValue = Convert.ToSingle(field.GetValue(target));
-        float newValue = CalculateNewValue(currentValue, modification);
-
         try
         {
+            float currentValue = Convert.ToSingle(field.GetValue(target));
+            float newValue = CalculateNewValue(currentValue, modification);
+
             field.SetValue(target, Convert.ChangeType(newValue, field.FieldType));
             Debug.Log($"Applied {modification.OperationType} {modification.Value} to {field.Name}: {currentValue} -> {newValue}");
             return true;
@@ -192,11 +216,11 @@ public static class StatApplicator
 
     private static bool ApplyToProperty(PropertyInfo property, object target, StatModification modification)
     {
-        float currentValue = Convert.ToSingle(property.GetValue(target));
-        float newValue = CalculateNewValue(currentValue, modification);
-
         try
         {
+            float currentValue = Convert.ToSingle(property.GetValue(target));
+            float newValue = CalculateNewValue(currentValue, modification);
+
             property.SetValue(target, Convert.ChangeType(newValue, property.PropertyType));
             Debug.Log($"Applied {modification.OperationType} {modification.Value} to {property.Name}: {currentValue} -> {newValue}");
             return true;
@@ -206,99 +230,6 @@ public static class StatApplicator
             Debug.LogError($"Failed to apply modification to property {property.Name}: {e.Message}");
             return false;
         }
-    }
-
-    private static bool ApplySpecialCase(object target, StatModification modification)
-    {
-        // Handle special cases that need custom logic
-        switch (modification.StatName.ToLower())
-        {
-            case "energygeneration":
-            case "energygenerationrate":
-                return ApplyEnergyGenerationModification(target, modification);
-
-            case "towerdamage":
-                return ApplyAllTowerModification(modification, "damage");
-
-            case "towerrange":
-                return ApplyAllTowerModification(modification, "range");
-
-            case "playercurrency":
-            case "playerenergy":
-                return ApplyPlayerEnergyModification(modification);
-
-            default:
-                Debug.LogWarning($"StatApplicator: Unknown stat '{modification.StatName}' for target type {target.GetType().Name}");
-                return false;
-        }
-    }
-
-    private static bool ApplyEnergyGenerationModification(object target, StatModification modification)
-    {
-        if (target is Tower tower && tower.IsGenerator())
-        {
-            float currentRate = tower.GetGenerationRate();
-            float newRate = CalculateNewValue(currentRate, modification);
-            tower.SetGenerationRate(newRate);
-            return true;
-        }
-
-        // Apply to all generators
-        var generators = UnityEngine.Object.FindObjectsByType<Tower>(FindObjectsSortMode.None).Where(t => t.IsGenerator());
-        foreach (var generator in generators)
-        {
-            float currentRate = generator.GetGenerationRate();
-            float newRate = CalculateNewValue(currentRate, modification);
-            generator.SetGenerationRate(newRate);
-        }
-        return true;
-    }
-
-    private static bool ApplyAllTowerModification(StatModification modification, string statName)
-    {
-        var towers = UnityEngine.Object.FindObjectsByType<Tower>(FindObjectsSortMode.None);
-        bool anyApplied = false;
-
-        foreach (var tower in towers)
-        {
-            switch (statName.ToLower())
-            {
-                case "damage":
-                    float currentDamage = tower.GetDamage();
-                    float newDamage = CalculateNewValue(currentDamage, modification);
-                    tower.SetDamage(newDamage);
-                    anyApplied = true;
-                    break;
-
-                case "range":
-                    float currentRange = tower.GetRange();
-                    float newRange = CalculateNewValue(currentRange, modification);
-                    tower.SetRange(newRange);
-                    anyApplied = true;
-                    break;
-            }
-        }
-
-        return anyApplied;
-    }
-
-    private static bool ApplyPlayerEnergyModification(StatModification modification)
-    {
-        if (EnergyManager.Instance == null) return false;
-
-        int currentEnergy = EnergyManager.Instance.GetPlayerEnergy();
-        int energyChange = (int)CalculateNewValue(currentEnergy, modification) - currentEnergy;
-
-        if (energyChange > 0)
-        {
-            EnergyManager.Instance.GivePlayerEnergy(energyChange);
-        }
-        else if (energyChange < 0)
-        {
-            EnergyManager.Instance.TrySpendPlayerEnergy(-energyChange);
-        }
-
-        return true;
     }
 
     private static float CalculateNewValue(float currentValue, StatModification modification)
@@ -344,7 +275,7 @@ public class AutoGeneratedAugmentEffect : IAugmentEffect
         // Parse the affected stats when creating the effect
         augmentData.ParsedModifications = StatParser.ParseAffectedStats(
             augmentData.AffectedStats,
-            augmentData.WhoImplements);
+            augmentData.TargetTypes);
     }
 
     public void Apply(AugmentTarget target)
@@ -457,7 +388,7 @@ public class AugmentRegistry : MonoBehaviour
             if (string.IsNullOrWhiteSpace(line)) continue;
 
             string[] values = ParseCSVLine(line);
-            if (values.Length >= 9)
+            if (values.Length >= 10)
             {
                 var augment = new AugmentData
                 {
@@ -469,7 +400,8 @@ public class AugmentRegistry : MonoBehaviour
                     AffectedStats = values[5].Trim('"'),
                     Description = values[6].Trim('"'),
                     SpritePath = values[7].Trim('"'),
-                    WhoImplements = values[8].Trim('"')
+                    WhoImplements = values[8].Trim('"'),
+                    TargetTypes = values[9].Trim('"')
                 };
 
                 if (!augmentDatabase.ContainsKey(augment.ID))
@@ -501,9 +433,19 @@ public class AugmentRegistry : MonoBehaviour
         for (int i = 0; i < line.Length; i++)
         {
             char c = line[i];
+
             if (c == '"')
             {
-                inQuotes = !inQuotes;
+                // Check for escaped quotes ("")
+                if (i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    currentField += '"'; // Add single quote for escaped double quote
+                    i++; // Skip the next quote
+                }
+                else
+                {
+                    inQuotes = !inQuotes; // Toggle quote state
+                }
             }
             else if (c == ',' && !inQuotes)
             {
@@ -515,7 +457,16 @@ public class AugmentRegistry : MonoBehaviour
                 currentField += c;
             }
         }
+
+        // Add the last field
         result.Add(currentField);
+
+        // Debug output
+        if (debugMode)
+        {
+            Debug.Log($"ParseCSVLine: Found {result.Count} fields: [{string.Join("] [", result)}]");
+        }
+
         return result.ToArray();
     }
 
@@ -642,12 +593,34 @@ public class AugmentTarget
     public EnemyStats Enemy { get; set; }
     public Tower Tower { get; set; }
     public EnergyManager GlobalContext { get; set; }
+    public WeaponData Weapon { get; set; }
 
     public AugmentTarget(PlayerStats player) => Player = player;
     public AugmentTarget(EnemyStats enemy) => Enemy = enemy;
     public AugmentTarget(Tower tower) => Tower = tower;
     public AugmentTarget(EnergyManager global) => GlobalContext = global;
+    public AugmentTarget(WeaponData weapon) => Weapon = weapon;
 
-    public static AugmentTarget ForPlayer() => new AugmentTarget(UnityEngine.Object.FindFirstObjectByType<PlayerStats>());
-    public static AugmentTarget ForGlobal() => new AugmentTarget(EnergyManager.Instance);
+    public static AugmentTarget ForPlayer()
+        => new AugmentTarget(UnityEngine.Object.FindFirstObjectByType<PlayerStats>());
+
+    public static AugmentTarget ForGlobal()
+        => new AugmentTarget(EnergyManager.Instance);
+
+    public static AugmentTarget ForWeapon()
+    {
+        var player = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+        if (player == null) return null;
+
+        var cursorPointer = player.transform.Find("CursorPointer");
+        if (cursorPointer == null) return null;
+
+        var cursorVisual = cursorPointer.Find("CursorVisual");
+        if (cursorVisual == null) return null;
+
+        var weapon = cursorVisual.GetComponent<Weapon>();
+        if (weapon == null || weapon.weaponData == null) return null;
+
+        return new AugmentTarget(weapon.weaponData);
+    }
 }
