@@ -8,6 +8,7 @@ public class Weapon : MonoBehaviour
     [SerializeField] private PolygonCollider2D attackCollider;
     [SerializeField] private GameObject visual;
 
+
     private List<EnemyStats> hitEnemies = new List<EnemyStats>();
     private PlayerStats playerStats;
     private bool isOnCooldown = false;

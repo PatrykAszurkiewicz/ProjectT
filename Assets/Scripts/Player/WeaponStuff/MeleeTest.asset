@@ -23,3 +23,11 @@ MonoBehaviour:
   projectilePrefab: {fileID: 0}
   projectileSpeed: 0
   size: {x: 1.5, y: 1.5}
+  isGrapplingHook: 0
+  hookRange: 12
+  hookSpeed: 20
+  pullForce: 15
+  targetingAngle: 25
+  hookLineColor: {r: 0.6901961, g: 0.7686275, b: 0.8705883, a: 1}
+  targetHighlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  lineWidth: 0.08

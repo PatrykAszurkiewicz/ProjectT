@@ -1507,7 +1507,8 @@ MonoBehaviour:
   - {fileID: 229318904}
   - {fileID: 2110909284}
   maxRerolls: 99
-  debugMode: 0
+  debugMode: 1
+  forcedAugmentIDs: 01000000
 --- !u!114 &448482444
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1522,7 +1523,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   csvResourcePath: Data/Augments
   spriteBasePath: Sprites/Augments/
-  debugMode: 0
+  debugMode: 1
 --- !u!1 &453391371 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
