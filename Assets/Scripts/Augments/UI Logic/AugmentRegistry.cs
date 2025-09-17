@@ -73,6 +73,13 @@ public static class StatParser
                                     .Select(t => t.Trim())
                                     .ToArray();
 
+        // Check if targets array is empty and provide a default
+        if (targets.Length == 0)
+        {
+            Debug.LogWarning($"StatParser: No valid target types found in '{targetTypes}'. Using 'Player' as default.");
+            targets = new string[] { "Player" };
+        }
+
         // Split stat expressions
         string[] statExpressions = affectedStats.Split(new char[] { ',', ';' },
             System.StringSplitOptions.RemoveEmptyEntries);
@@ -80,7 +87,7 @@ public static class StatParser
         // Map each stat expression to corresponding target type
         for (int i = 0; i < statExpressions.Length; i++)
         {
-            string targetType = i < targets.Length ? targets[i] : targets[0]; // Use first target as fallback
+            string targetType = i < targets.Length ? targets[i] : targets[0]; // Now safe to access targets[0]
             var modification = ParseSingleStatExpression(statExpressions[i].Trim(), targetType);
             if (modification != null)
             {
@@ -122,7 +129,7 @@ public static class StatParser
             StatName = statName,
             OperationType = operationType,
             Value = value,
-            TargetType = targetType // Bezpoúrednio uøywa przekazanego targetType
+            TargetType = targetType // BezpoÔøΩrednio uÔøΩywa przekazanego targetType
         };
     }
 }
@@ -320,7 +327,7 @@ public class AugmentRegistry : MonoBehaviour
     public static AugmentRegistry Instance => _instance;
 
     [Header("Configuration")]
-    public string csvResourcePath = "Data/Augments/";
+    public string csvResourcePath = "Data/augments";
     public string spriteBasePath = "Sprites/Augments/";
 
     [Header("Debug")]
@@ -364,6 +371,7 @@ public class AugmentRegistry : MonoBehaviour
     }
 
     // ===== CSV LOADING =====
+
     private void LoadAugmentDatabase()
     {
         Debug.Log($"AugmentRegistry: Attempting to load CSV from: {csvResourcePath}");
@@ -390,29 +398,53 @@ public class AugmentRegistry : MonoBehaviour
             string[] values = ParseCSVLine(line);
             if (values.Length >= 10)
             {
-                var augment = new AugmentData
+                try
                 {
-                    ID = ParseInt(values[0]),
-                    Priority = ParseInt(values[1]),
-                    Name = values[2].Trim('"'),
-                    Category = values[3].Trim('"'),
-                    Rarity = values[4].Trim('"'),
-                    AffectedStats = values[5].Trim('"'),
-                    Description = values[6].Trim('"'),
-                    SpritePath = values[7].Trim('"'),
-                    WhoImplements = values[8].Trim('"'),
-                    TargetTypes = values[9].Trim('"')
-                };
-
-                if (!augmentDatabase.ContainsKey(augment.ID))
-                {
-                    augmentDatabase.Add(augment.ID, augment);
-                    loadedCount++;
-
-                    if (debugMode)
+                    var augment = new AugmentData
                     {
-                        Debug.Log($"Loaded augment: ID={augment.ID}, Name={augment.Name}, Stats={augment.AffectedStats}");
+                        ID = ParseInt(values[0]),
+                        Priority = ParseInt(values[1]),
+                        Name = values[2].Trim('"'),
+                        Category = values[3].Trim('"'),
+                        Rarity = values[4].Trim('"'),
+                        AffectedStats = values[5].Trim('"'),
+                        Description = values[6].Trim('"'),
+                        SpritePath = values[7].Trim('"'),
+                        WhoImplements = values[8].Trim('"'),
+                        TargetTypes = string.IsNullOrWhiteSpace(values[9].Trim('"')) ? "Player" : values[9].Trim('"') // Default to Player if empty
+                    };
+
+                    // Validate essential fields
+                    if (augment.ID <= 0)
+                    {
+                        Debug.LogWarning($"AugmentRegistry: Invalid ID in line {i}: {line}");
+                        continue;
                     }
+
+                    if (string.IsNullOrWhiteSpace(augment.Name))
+                    {
+                        Debug.LogWarning($"AugmentRegistry: Empty name in line {i}: {line}");
+                        continue;
+                    }
+
+                    if (!augmentDatabase.ContainsKey(augment.ID))
+                    {
+                        augmentDatabase.Add(augment.ID, augment);
+                        loadedCount++;
+
+                        if (debugMode)
+                        {
+                            Debug.Log($"Loaded augment: ID={augment.ID}, Name={augment.Name}, Stats={augment.AffectedStats}, Targets={augment.TargetTypes}");
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"AugmentRegistry: Duplicate ID {augment.ID} found in line {i}");
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"AugmentRegistry: Error parsing line {i}: {e.Message}. Line content: {line}");
                 }
             }
             else
@@ -609,17 +641,48 @@ public class AugmentTarget
 
     public static AugmentTarget ForWeapon()
     {
+        Debug.Log("[WorWeapon] Pr√≥ba znalezienia PlayerStats...");
         var player = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
-        if (player == null) return null;
+        if (player == null)
+        {
+            Debug.LogError("[WorWeapon] PlayerStats nie znaleziony w scenie!");
+            return null;
+        }
+        Debug.Log("[WorWeapon] PlayerStats znaleziony: " + player.name);
 
+        Debug.Log("[WorWeapon] Szukanie dziecka CursorPointer...");
         var cursorPointer = player.transform.Find("CursorPointer");
-        if (cursorPointer == null) return null;
+        if (cursorPointer == null)
+        {
+            Debug.LogError("[WorWeapon] Nie znaleziono obiektu CursorPointer w Player!");
+            return null;
+        }
+        Debug.Log("[WorWeapon] CursorPointer znaleziony: " + cursorPointer.name);
 
+        Debug.Log("[WorWeapon] Szukanie dziecka CursorVisual...");
         var cursorVisual = cursorPointer.Find("CursorVisual");
-        if (cursorVisual == null) return null;
+        if (cursorVisual == null)
+        {
+            Debug.LogError("[WorWeapon] Nie znaleziono obiektu CursorVisual w CursorPointer!");
+            return null;
+        }
+        Debug.Log("[WorWeapon] CursorVisual znaleziony: " + cursorVisual.name);
 
+        Debug.Log("[WorWeapon] Szukanie komponentu Weapon...");
         var weapon = cursorVisual.GetComponent<Weapon>();
-        if (weapon == null || weapon.weaponData == null) return null;
+        if (weapon == null)
+        {
+            Debug.LogError("[WorWeapon] Komponent Weapon NIE zosta≈Ç znaleziony na obiekcie CursorVisual!");
+            return null;
+        }
+        Debug.Log("[WorWeapon] Komponent Weapon znaleziony.");
+
+        if (weapon.weaponData == null)
+        {
+            Debug.LogError("[WorWeapon] weaponData w komponencie Weapon jest NULL!");
+            return null;
+        }
+        Debug.Log("[WorWeapon] weaponData znaleziony poprawnie.");
 
         return new AugmentTarget(weapon.weaponData);
     }

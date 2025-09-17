@@ -20,12 +20,15 @@ public class AugmentsMenu : MonoBehaviour
     [SerializeField] private Button[] rerollButtons;
     [SerializeField] private Button[] selectButtons;
 
+
     [Header("Settings")]
     public int maxRerolls = 2;
 
     [Header("Debug")]
     public bool debugMode = true;
 
+    [Header("Debug Options")]
+    public List<int> forcedAugmentIDs = new List<int>();
     // State variables
     private bool isHidden = false;
     private bool isMenuActive = false;
@@ -173,19 +176,35 @@ public class AugmentsMenu : MonoBehaviour
 
         for (int i = 0; i < augmentImages.Length; i++)
         {
-            var result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
+            AugmentWithRarity result;
+
+            if (debugMode && forcedAugmentIDs != null && i < forcedAugmentIDs.Count && forcedAugmentIDs[i] >= 0)
+            {
+                // Wymuszenie konkretnego augmentu z listy
+                var forcedAugment = AugmentRegistry.Instance.GetAugmentData(forcedAugmentIDs[i]);
+                if (forcedAugment != null)
+                {
+                    string rarity = GetRandomRarityForAugment(forcedAugment.ID);
+                    result = new AugmentWithRarity { augment = forcedAugment, rarity = rarity };
+                    if (debugMode) Debug.Log($"[DEBUG] Forced augment for slot {i}: {forcedAugment.Name} (ID: {forcedAugment.ID}, Rarity: {rarity})");
+                }
+                else
+                {
+                    Debug.LogWarning($"[DEBUG] Forced augment ID {forcedAugmentIDs[i]} not found, falling back to random.");
+                    result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
+                }
+            }
+            else
+            {
+                // Normalne losowanie
+                result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
+            }
+
             if (result.augment != null)
             {
                 currentAugmentIDs[i] = result.augment.ID;
                 currentSelectedRarities[i] = result.rarity;
-
                 UpdateSlotDisplay(i, result.augment, result.rarity);
-
-                if (debugMode) Debug.Log($"Generated augment for slot {i}: {result.augment.Name} (ID: {result.augment.ID}, Rarity: {result.rarity})");
-            }
-            else
-            {
-                Debug.LogWarning($"AugmentsMenu: Could not generate augment for slot {i}");
             }
 
             UpdateRerollDisplay(i);
