@@ -4,7 +4,8 @@ using UnityEngine;
 
 public class Weapon : MonoBehaviour
 {
-    [SerializeField] public WeaponData weaponData;
+    [SerializeField] public WeaponData originalWeaponData;
+    [SerializeField] private WeaponData weaponData;
     [SerializeField] private PolygonCollider2D attackCollider;
     [SerializeField] private GameObject visual;
 
@@ -21,18 +22,42 @@ public class Weapon : MonoBehaviour
 
     private void Awake()
     {
+        CreateRuntimeWeaponData();
         InitializeWeaponData();
         SetupWeapon();
         attackCollider.enabled = false;
     }
+    private void CreateRuntimeWeaponData()
+    {
+        WeaponData sourceData = null;
 
+        // selection manager -> originalWeaponData -> defaultWeapon)
+        if (WeaponSelectionManager.Instance != null)
+            sourceData = WeaponSelectionManager.Instance.GetChosenWeapon();
+
+        if (sourceData == null)
+            sourceData = originalWeaponData;
+
+        if (sourceData == null)
+            sourceData = defaultWeapon;
+
+        if (sourceData != null)
+        {
+            // runtime copy
+            weaponData = sourceData.CreateRuntimeCopy();
+            Debug.Log($"Created runtime copy of weapon: {weaponData.weaponName}");
+        }
+        else
+        {
+            Debug.LogError("No weapon data available for runtime copy!");
+        }
+    }
     private void InitializeWeaponData()
     {
-        if (weaponData == null && WeaponSelectionManager.Instance != null)
-            weaponData = WeaponSelectionManager.Instance.GetChosenWeapon();
-
         if (weaponData == null)
-            weaponData = defaultWeapon;
+        {
+            Debug.LogError("Runtime weapon data is null!");
+        }
     }
 
     private void SetupWeapon()
@@ -56,7 +81,15 @@ public class Weapon : MonoBehaviour
         if (weaponData.isGrapplingHook)
             grapplingSystem = new GrapplingHookSystem(this, weaponData);
     }
-
+    public void ResetToOriginalStats()
+    {
+        if (originalWeaponData != null)
+        {
+            // Stwórz nową kopię z oryginalnych danych
+            weaponData = originalWeaponData.CreateRuntimeCopy();
+            Debug.Log($"Reset weapon stats to original values: {weaponData.weaponName}");
+        }
+    }
     private void Update()
     {
         UpdateGrapplingSystem();

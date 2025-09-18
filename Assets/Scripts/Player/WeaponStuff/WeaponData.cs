@@ -34,6 +34,33 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isGrapplingHook")] public Color targetHighlightColor = Color.yellow;
     [ConditionalField("isGrapplingHook")] public float lineWidth = 0.08f;
 
+    public WeaponData CreateRuntimeCopy()
+    {
+        WeaponData copy = ScriptableObject.CreateInstance<WeaponData>();
+
+        // copy all variables
+        copy.weaponName = this.weaponName;
+        copy.sprite = this.sprite;
+        copy.damage = this.damage;
+        copy.attackCooldown = this.attackCooldown;
+        copy.armorBonus = this.armorBonus;
+        copy.knockBack = this.knockBack;
+        copy.knockBackForce = this.knockBackForce;
+        copy.isRanged = this.isRanged;
+        copy.projectilePrefab = this.projectilePrefab;
+        copy.projectileSpeed = this.projectileSpeed;
+        copy.size = this.size;
+        copy.isGrapplingHook = this.isGrapplingHook;
+        copy.hookRange = this.hookRange;
+        copy.hookSpeed = this.hookSpeed;
+        copy.pullForce = this.pullForce;
+        copy.targetingAngle = this.targetingAngle;
+        copy.hookLineColor = this.hookLineColor;
+        copy.targetHighlightColor = this.targetHighlightColor;
+        copy.lineWidth = this.lineWidth;
+
+        return copy;
+    }
     void OnValidate()
     {
         if (isGrapplingHook)

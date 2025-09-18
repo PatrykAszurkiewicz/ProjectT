@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   weaponName: Hook
   sprite: {fileID: 8676990244786655062, guid: 34e1c8ccd2d85ae4abb81a7b81530e3f, type: 3}
-  damage: 10
+  damage: 5
   attackCooldown: 1
   armorBonus: 0
   knockBack: 1

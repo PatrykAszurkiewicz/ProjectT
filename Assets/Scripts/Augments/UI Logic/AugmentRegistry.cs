@@ -342,6 +342,7 @@
             public System.Action<AugmentData> OnAugmentApplied;
             public System.Action OnDatabaseLoaded;
 
+            
             void Awake()
             {
                 if (_instance == null)
@@ -595,7 +596,7 @@
             target.Player = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
 
         if (augment.AffectsWeapon)
-            target.Weapon = UnityEngine.Object.FindFirstObjectByType<Weapon>()?.weaponData;
+            target.Weapon = UnityEngine.Object.FindFirstObjectByType<Weapon>()?.GetWeaponData();
 
         if (augment.AffectsEnemy)
             target.Enemy = UnityEngine.Object.FindFirstObjectByType<EnemyStats>();
@@ -620,7 +621,7 @@
             public bool IsAugmentApplied(int id) => appliedAugments.Contains(id);
             public bool HasImplementation(int id) => registeredEffects.ContainsKey(id);
         }
-
+    
         // ===== INTERFACE DEFINITIONS =====
         public interface IAugmentEffect
         {
@@ -663,13 +664,13 @@
                 }
                 Debug.Log("[ForWeapon] Weapon znaleziony na obiekcie: " + weapon.gameObject.name);
 
-                if (weapon.weaponData == null)
+                if (weapon.GetWeaponData() == null)
                 {
                     Debug.LogError("[ForWeapon] Weapon znaleziony, ale pole weaponData jest PUSTE!");
                     return null;
                 }
                 Debug.Log("[ForWeapon] WeaponData poprawnie przypisane.");
 
-                return new AugmentTarget(weapon.weaponData);
+                return new AugmentTarget(weapon.GetWeaponData());
             }
         }
