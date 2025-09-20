@@ -65,7 +65,7 @@ public class WeaponData : ScriptableObject
     {
         if (isGrapplingHook)
         {
-            isRanged = true;
+            isRanged = false;
             projectilePrefab = null;
         }
     }

@@ -20,15 +20,16 @@ public class AugmentsMenu : MonoBehaviour
     [SerializeField] private Button[] rerollButtons;
     [SerializeField] private Button[] selectButtons;
 
-
     [Header("Settings")]
     public int maxRerolls = 2;
 
     [Header("Debug")]
     public bool debugMode = true;
 
-    [Header("Debug Options")]
-    public List<int> forcedAugmentIDs = new List<int>();
+    [Header("Debug Options - Forced Augments")]
+    [Tooltip("Enter augment IDs to force specific augments in debug mode. Leave empty for random generation.")]
+    [SerializeField] private int[] forcedAugmentIDs = new int[0];
+
     // State variables
     private bool isHidden = false;
     private bool isMenuActive = false;
@@ -66,6 +67,10 @@ public class AugmentsMenu : MonoBehaviour
     {
         if (debugMode) Debug.Log("AugmentsMenu: Awake started");
 
+        // Ensure forced augments array is properly initialized
+        if (forcedAugmentIDs == null)
+            forcedAugmentIDs = new int[0];
+
         InitializeArrays();
         LoadSprites();
         SetupUI();
@@ -91,6 +96,14 @@ public class AugmentsMenu : MonoBehaviour
             return;
         }
 
+        for (int i = 0; i < augmentImages.Length; i++)
+        {
+            if (augmentImages[i] == null)
+            {
+                Debug.LogError($"AugmentsMenu: augmentImages[{i}] is null!");
+            }
+        }
+
         int slotCount = augmentImages.Length;
         rerollsLeft = new int[slotCount];
         currentAugmentIDs = new int[slotCount];
@@ -99,7 +112,7 @@ public class AugmentsMenu : MonoBehaviour
         for (int i = 0; i < slotCount; i++)
         {
             rerollsLeft[i] = maxRerolls;
-            currentAugmentIDs[i] = -1; // Initialize with invalid ID
+            currentAugmentIDs[i] = -1;
             currentSelectedRarities[i] = "Common";
         }
 
@@ -125,7 +138,7 @@ public class AugmentsMenu : MonoBehaviour
                 if (rerollButtons[i] != null)
                 {
                     int slotIndex = i;
-                    rerollButtons[i].onClick.RemoveAllListeners(); // Clear existing listeners
+                    rerollButtons[i].onClick.RemoveAllListeners();
                     rerollButtons[i].onClick.AddListener(() => Reroll(slotIndex));
                 }
             }
@@ -139,7 +152,7 @@ public class AugmentsMenu : MonoBehaviour
                 if (selectButtons[i] != null)
                 {
                     int slotIndex = i;
-                    selectButtons[i].onClick.RemoveAllListeners(); // Clear existing listeners
+                    selectButtons[i].onClick.RemoveAllListeners();
                     selectButtons[i].onClick.AddListener(() => ChooseAugment(slotIndex));
                 }
             }
@@ -178,10 +191,12 @@ public class AugmentsMenu : MonoBehaviour
         {
             AugmentWithRarity result;
 
-            if (debugMode && forcedAugmentIDs != null && i < forcedAugmentIDs.Count && forcedAugmentIDs[i] >= 0)
+            // Check for forced augments in debug mode
+            if (debugMode && ShouldUseForcedAugment(i))
             {
-                // Wymuszenie konkretnego augmentu z listy
-                var forcedAugment = AugmentRegistry.Instance.GetAugmentData(forcedAugmentIDs[i]);
+                int forcedID = GetForcedAugmentID(i);
+                var forcedAugment = AugmentRegistry.Instance?.GetAugmentData(forcedID);
+
                 if (forcedAugment != null)
                 {
                     string rarity = GetRandomRarityForAugment(forcedAugment.ID);
@@ -190,13 +205,13 @@ public class AugmentsMenu : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogWarning($"[DEBUG] Forced augment ID {forcedAugmentIDs[i]} not found, falling back to random.");
+                    Debug.LogWarning($"[DEBUG] Forced augment ID {forcedID} not found, falling back to random.");
                     result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
                 }
             }
             else
             {
-                // Normalne losowanie
+                // Normal random generation
                 result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
             }
 
@@ -211,6 +226,22 @@ public class AugmentsMenu : MonoBehaviour
         }
 
         if (debugMode) Debug.Log("AugmentsMenu: Initial augments generation completed");
+    }
+
+    // Simplified forced augment methods
+    private bool ShouldUseForcedAugment(int slotIndex)
+    {
+        return forcedAugmentIDs != null &&
+               slotIndex < forcedAugmentIDs.Length &&
+               forcedAugmentIDs[slotIndex] > 0;
+    }
+
+    private int GetForcedAugmentID(int slotIndex)
+    {
+        if (forcedAugmentIDs == null || slotIndex >= forcedAugmentIDs.Length)
+            return -1;
+
+        return forcedAugmentIDs[slotIndex];
     }
 
     private List<int> GetExcludedIDs()
@@ -465,6 +496,7 @@ public class AugmentsMenu : MonoBehaviour
 
         return cleanRarities[0];
     }
+
     private AugmentWithRarity GenerateRandomAugmentWithRarity(List<int> excludeIDs)
     {
         if (AugmentRegistry.Instance == null)
@@ -550,6 +582,7 @@ public class AugmentsMenu : MonoBehaviour
             rarity = weightedCombinations[0].rarity
         };
     }
+
     // ===== GETTERS =====
     public string GetCurrentAugmentRarity(int slotIndex)
     {
@@ -578,6 +611,44 @@ public class AugmentsMenu : MonoBehaviour
         }
     }
 
+    [ContextMenu("Validate Forced Augments")]
+    public void ValidateForcedAugments()
+    {
+        if (forcedAugmentIDs == null || forcedAugmentIDs.Length == 0)
+        {
+            Debug.Log("No forced augments configured.");
+            return;
+        }
+
+        Debug.Log($"Validating {forcedAugmentIDs.Length} forced augments:");
+        for (int i = 0; i < forcedAugmentIDs.Length; i++)
+        {
+            int id = forcedAugmentIDs[i];
+            if (id <= 0)
+            {
+                Debug.LogWarning($"Slot {i}: Invalid ID {id}");
+                continue;
+            }
+
+            if (AugmentRegistry.Instance != null)
+            {
+                var augment = AugmentRegistry.Instance.GetAugmentData(id);
+                if (augment != null)
+                {
+                    Debug.Log($"Slot {i}: Valid - {augment.Name} (ID: {id})");
+                }
+                else
+                {
+                    Debug.LogError($"Slot {i}: ID {id} not found in registry!");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"AugmentRegistry not available for validation");
+            }
+        }
+    }
+
     [ContextMenu("Log Current State")]
     public void LogCurrentState()
     {
@@ -586,6 +657,7 @@ public class AugmentsMenu : MonoBehaviour
         Debug.Log($"- Available augments: {AugmentRegistry.Instance?.GetAllAugments().Count ?? 0}");
         Debug.Log($"- Max rerolls: {maxRerolls}");
         Debug.Log($"- Slots initialized: {currentAugmentIDs?.Length ?? 0}");
+        Debug.Log($"- Forced augments count: {forcedAugmentIDs?.Length ?? 0}");
 
         if (currentAugmentIDs != null)
         {

@@ -19,7 +19,7 @@ MonoBehaviour:
   armorBonus: 0
   knockBack: 1
   knockBackForce: 5
-  isRanged: 1
+  isRanged: 0
   projectilePrefab: {fileID: 0}
   projectileSpeed: -0.36
   size: {x: 1.5, y: 1.5}
