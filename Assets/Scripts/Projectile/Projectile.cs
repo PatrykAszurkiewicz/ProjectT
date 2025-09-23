@@ -17,6 +17,14 @@ public class Projectile : MonoBehaviour
     private Rigidbody2D rb;
     private bool hasHit = false;
 
+    private float freezeChance = 0f;
+
+    public void SetFreezeChance(float chance)
+    {
+        freezeChance = Mathf.Clamp01(chance);
+        Debug.Log($"Projectile freeze chance set to: {freezeChance}");
+    }
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -114,11 +122,26 @@ public class Projectile : MonoBehaviour
     {
         hasHit = true;
 
-        // Deal damage - CHANGED: Look for EnemyStats instead of Health
+        // Deal damage
         EnemyStats targetStats = hitTarget.GetComponent<EnemyStats>();
         if (targetStats != null)
         {
             targetStats.TakeDamage(damage);
+
+            // Apply freeze effect if chance > 0
+            if (freezeChance > 0f && Random.Range(0f, 1f) <= freezeChance)
+            {
+                var enemyController = hitTarget.GetComponent<EnemyController>();
+                if (enemyController != null)
+                {
+                    enemyController.ApplyFreeze(2f); // Freeze for 2 seconds
+                    Debug.Log($"Projectile froze enemy {hitTarget.name}! (chance was {freezeChance})");
+                }
+                else
+                {
+                    Debug.LogError($"No EnemyController found on {hitTarget.name} for freeze effect!");
+                }
+            }
         }
 
         // Spawn impact effect

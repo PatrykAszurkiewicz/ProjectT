@@ -35,10 +35,24 @@ public class EnemyController : MonoBehaviour
     private float stuckModeTimer = 0f;
     private Vector2 stuckAvoidanceDirection;
 
+
+    [Header("Freeze System")]
+    private bool isFrozen = false;
+    private float freezeTimeRemaining = 0f;
+    private Color originalColor;
+    private SpriteRenderer spriteRenderer;
+
+
+
     private void Start()
     {
         stats = GetComponent<EnemyStats>();
         rb = GetComponent<Rigidbody2D>();
+
+        // Freeze system
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null)
+            originalColor = spriteRenderer.color;
 
         GameObject core = GameObject.FindGameObjectWithTag("Core");
         if (core != null)
@@ -62,19 +76,29 @@ public class EnemyController : MonoBehaviour
             //Debug.Log($"{gameObject.name} grappling ended");
         }
     }
+
+
     private void FixedUpdate()
     {
         // Check if grappling has ended
         if (isBeingGrappled && Time.time > grapplingEndTime)
         {
             isBeingGrappled = false;
-            //Debug.Log($"{gameObject.name} grappling duration ended");
+        }
+
+        // ADD FREEZE CHECK - Don't move while frozen
+        if (isFrozen)
+        {
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector2.zero; // Stop movement while frozen
+            }
+            return;
         }
 
         // Don't apply pathfinding movement while being grappled
         if (isBeingGrappled)
         {
-            // Add some drag while being grappled
             if (rb != null)
             {
                 rb.linearVelocity *= 0.95f;
@@ -82,7 +106,7 @@ public class EnemyController : MonoBehaviour
             return;
         }
 
-        // Existing movement while not being grappled
+        // Existing movement logic continues unchanged...
         if (currentTarget == null || isKnockedBack || !IsValidTarget(currentTarget))
         {
             if (!isKnockedBack && !IsValidTarget(currentTarget))
@@ -250,8 +274,19 @@ public class EnemyController : MonoBehaviour
         currentTarget = coreTarget;
     }
 
+
     private void Update()
     {
+
+        if (isFrozen)
+        {
+            freezeTimeRemaining -= Time.deltaTime;
+            if (freezeTimeRemaining <= 0f)
+            {
+                UnfreezeEnemy();
+            }
+        }
+
         // Handle knockback timer
         if (isKnockedBack)
         {
@@ -269,8 +304,8 @@ public class EnemyController : MonoBehaviour
             return;
         }
 
-        // Handle attacking
-        if (currentTarget != null)
+        // Handle attacking - DON'T attack while frozen
+        if (currentTarget != null && !isFrozen)
         {
             float distance = Vector2.Distance(transform.position, currentTarget.position);
 
@@ -289,6 +324,41 @@ public class EnemyController : MonoBehaviour
         }
         attackTimer = 0f;
     }
+
+    public void ApplyFreeze(float duration)
+    {
+        isFrozen = true;
+        freezeTimeRemaining = duration;
+
+        // Visual feedback - blue tint for frozen
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = Color.cyan;
+        }
+
+        // Stop movement immediately
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+        }
+
+        Debug.Log($"Enemy {gameObject.name} frozen for {duration} seconds");
+    }
+
+    private void UnfreezeEnemy()
+    {
+        isFrozen = false;
+        freezeTimeRemaining = 0f;
+
+        // Restore original color
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = originalColor;
+        }
+
+        Debug.Log($"Enemy {gameObject.name} unfrozen");
+    }
+
 
     // Helper method to validate if a target is still valid
     private bool IsValidTarget(Transform target)

@@ -8,7 +8,6 @@ using UnityEditor;
 
 public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 {
-
     [Header("Energy Generator Settings")]
     public bool isEnergyGenerator = false; // Should be set to true for Generator towers
     public float energyGenerationRate = 1f; // Energy units per second
@@ -20,8 +19,20 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     private GameObject auraObject;
     private SpriteRenderer auraRenderer;
 
+    // Augments
+    [Header("Special Effects")]
+    public float freezeChance = 0f;        // Chance to freeze enemies
+    public float healthRegenRate = 0f;     // Energy regeneration per second
+    public float energyCostMultiplier = 1f; // Multiplier for energy costs (1.0 = normal, 0.7 = 30% less energy cost)
 
-
+    // Auxiliary method for Augments
+    private void UpdateTowerRegeneration()
+    {
+        if (healthRegenRate > 0f && currentEnergy < maxEnergy)
+        {
+            SupplyEnergy(healthRegenRate * Time.deltaTime);
+        }
+    }
 
     [Header("Collision Settings")]
     public SpriteCollisionConfig collisionConfig = new SpriteCollisionConfig()
@@ -57,7 +68,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     }
 
     public enum TowerType { Basic, Artillery, Laser, Ice, Poison, Generator }
-
 
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
@@ -150,18 +160,54 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         SetupTower();
         EnergyManager.Instance?.RegisterEnergyConsumer(this);
+
+        // CRITICAL: Apply any augments that were applied before this tower was created
+        ApplyGlobalAugments();
+    }
+
+    // ADDED: Method to apply all previously applied augments to this tower
+    public void ApplyGlobalAugments()
+    {
+        if (AugmentRegistry.Instance == null) return;
+
+        var appliedAugments = AugmentRegistry.Instance.GetAppliedAugments();
+
+        foreach (int augmentId in appliedAugments)
+        {
+            var augmentData = AugmentRegistry.Instance.GetAugmentData(augmentId);
+            if (augmentData != null && augmentData.AffectsTower)
+            {
+                var effect = AugmentRegistry.Instance.GetEffect(augmentId);
+                if (effect != null)
+                {
+                    var target = new AugmentTarget(null as PlayerStats) { Tower = this };
+                    if (effect.CanApplyTo(target))
+                    {
+                        try
+                        {
+                            effect.Apply(target);
+                            Debug.Log($"Applied existing augment '{augmentData.Name}' to new tower: {towerName}");
+                        }
+                        catch (System.Exception e)
+                        {
+                            Debug.LogError($"Failed to apply augment '{augmentData.Name}' to new tower: {e.Message}");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     void Update()
     {
         if (isDestroyed) return;
 
-        // Add safety check and exception handling
         try
         {
             if (IsEnergyDepleted() || isDisabledByDamage) return;
 
-            // Branch logic based on tower type
+            UpdateTowerRegeneration();
+
             if (isEnergyGenerator || towerType == TowerType.Generator)
             {
                 UpdateEnergyGeneration();
@@ -176,7 +222,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         catch (System.Exception e)
         {
             Debug.LogError($"Tower '{towerName}': Error in Update: {e.Message}");
-            // Prevent further updates if we're in a bad state
             if (float.IsNaN(currentEnergy) || float.IsNaN(maxEnergy))
             {
                 Debug.LogError($"Tower '{towerName}': Detected corrupted energy values, disabling tower");
@@ -185,7 +230,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             }
         }
     }
-
 
     #region Energy Generation System
     void UpdateEnergyGeneration()
@@ -414,8 +458,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     }
     #endregion
 
-
-
     void OnDestroy() => Cleanup();
 
     #region Initialization
@@ -525,7 +567,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // TODO adjust when we have new Generator sprites
         auraObject.transform.localPosition = new Vector3(0.1f, 0.1f, 0f);
 
-
         auraRenderer = auraObject.AddComponent<SpriteRenderer>();
         auraRenderer.sprite = CreateCircleSprite();
         auraRenderer.color = generationEffectColor;
@@ -542,7 +583,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         auraObject.transform.localScale = Vector3.one * auraScale;
     }
-
 
     Sprite CreateCircleSprite()
     {
@@ -640,8 +680,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         energyGenerationRate = rate;
     }
 
-
-
     void SetupSpriteCollision()
     {
         if (spriteRenderer?.sprite != null)
@@ -654,11 +692,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             SpriteCollisionManager.SetupCollisionDelayed(this, collisionConfig);
         }
     }
-
-    // TODO remove the helper methods
-    //public Bounds GetSpriteBounds() => SpriteCollisionManager.GetSpriteBounds(gameObject);
-    //public bool IsPointWithinSprite(Vector3 worldPoint) => SpriteCollisionManager.IsPointWithinSprite(gameObject, worldPoint);
-    //public void UpdateCollisionSettings() => spriteCollider = SpriteCollisionManager.UpdateCollisionSettings(gameObject, collisionConfig);
 
     void LoadSprite()
     {
@@ -788,12 +821,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (target == null || IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
 
-        float energyCost = damage * 0.1f;
+        float baseCost = damage * 0.1f;
+        float energyCost = baseCost * energyCostMultiplier; // APPLY MULTIPLIER
 
-        // Validate energy cost
         if (float.IsNaN(energyCost) || float.IsInfinity(energyCost))
         {
-            energyCost = 1f; // Fallback energy cost
+            energyCost = baseCost;
         }
 
         if (currentEnergy < energyCost) return;
@@ -815,15 +848,17 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
             float meleeDamage = damage * meleeConfig.damageMultiplier;
 
-            // Validate melee damage
             if (float.IsNaN(meleeDamage) || float.IsInfinity(meleeDamage))
             {
-                meleeDamage = damage; // Fallback to base damage
+                meleeDamage = damage;
             }
 
             stats?.TakeDamage(meleeDamage);
-            AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, FirePoint?.position ?? transform.position);
 
+            // Apply Freeze effect augment
+            ApplyFreezeEffect(target);
+
+            AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, FirePoint?.position ?? transform.position);
         }
         else if (dist <= ProjectileRange)
         {
@@ -838,21 +873,60 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 Vector3 dir = (target.transform.position - spawn).normalized;
                 float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
 
-                // Validate angle
                 if (float.IsNaN(angle) || float.IsInfinity(angle))
                 {
                     angle = 0f;
                 }
 
                 var proj = Instantiate(projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
-                proj.GetComponent<Projectile>()?.Initialize(target, damage, range);
+                var projectileComponent = proj.GetComponent<Projectile>();
+                if (projectileComponent != null)
+                {
+                    projectileComponent.Initialize(target, damage, range);
+
+                    // Pass freeze chance to projectile 
+                    if (freezeChance > 0f)
+                    {
+                        projectileComponent.SetFreezeChance(freezeChance);
+                        //Debug.Log($"Tower {towerName} passing freeze chance {freezeChance} to projectile");
+                    }
+                }
             }
             else
             {
-                target.GetComponent<EnemyStats>()?.TakeDamage(damage);
+                var enemyStats = target.GetComponent<EnemyStats>();
+                if (enemyStats != null)
+                {
+                    enemyStats.TakeDamage(damage);
+                    ApplyFreezeEffect(target);
+                }
             }
         }
     }
+
+    private void ApplyFreezeEffect(GameObject target)
+    {
+        Debug.Log($"ApplyFreezeEffect called on {target.name} with freezeChance={freezeChance}");
+
+        if (freezeChance <= 0f) return;
+
+        if (Random.Range(0f, 1f) <= freezeChance)
+        {
+            Debug.Log($"Freeze chance succeeded! Looking for EnemyController on {target.name}");
+
+            var enemyController = target.GetComponent<EnemyController>();
+            if (enemyController != null)
+            {
+                enemyController.ApplyFreeze(2f);
+                Debug.Log($"Tower '{towerName}' froze enemy {target.name}!");
+            }
+            else
+            {
+                Debug.LogError($"No EnemyController found on {target.name}!");
+            }
+        }
+    }
+
     #endregion
 
     #region Tentacle System

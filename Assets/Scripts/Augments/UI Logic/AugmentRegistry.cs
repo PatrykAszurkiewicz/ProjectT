@@ -29,7 +29,6 @@ public class AugmentData
     public bool IsGlobal => TargetTypes.Split(',', ';').Any(t => t.Trim().Equals("Global", StringComparison.OrdinalIgnoreCase));
 }
 
-
 // ===== STAT MODIFICATION SYSTEM =====
 [System.Serializable]
 public class StatModification
@@ -49,7 +48,6 @@ public class StatModification
 }
 
 // ===== STAT MODIFICATION PARSER =====
-
 public static class StatParser
 {
     private static readonly Dictionary<string, StatModification.ModificationType> OperatorMap =
@@ -57,6 +55,7 @@ public static class StatParser
         {
             { "*", StatModification.ModificationType.Multiply },
             { "+", StatModification.ModificationType.Add },
+            { "-", StatModification.ModificationType.Add }, // Minus gets converted to negative add
             { "=", StatModification.ModificationType.Set },
             { "%", StatModification.ModificationType.Percentage }
         };
@@ -64,24 +63,68 @@ public static class StatParser
     // Aliases fields to avoid refactoring Tower scripts and Energy Consumer
     private static readonly Dictionary<string, string> StatAliases = new Dictionary<string, string>
     {
-        // Tower stats
-        {"tower_damage", "damage"},
+        // Tower stats 
+        { "tower_damage", "damage"},
         {"tower_range", "range"},
         {"tower_fire_rate", "fireRate"},
         {"tower_rotation_speed", "rotationSpeed"},
         {"tower_armor", "armorReduction"},
         {"tower_max_energy", "maxEnergy"},
         {"tower_energy", "currentEnergy"},
+
+        {"tower_health", "maxEnergy"},
+        {"tower_max_health", "maxEnergy"},
+        {"tower_current_health", "currentEnergy"},
+        {"tower_hp", "maxEnergy"},
+        {"tower_attack_damage", "damage"},
+        {"tower_attack_speed", "fireRate"},
+        {"tower_fire_speed", "fireRate"},
+        {"tower_attack_rate", "fireRate"},
+        {"tower_shoot_rate", "fireRate"},
+        {"tower_attack_range", "range"},
+        {"tower_sight_range", "range"},
+        {"tower_detection_range", "range"},
+        {"tower_turn_speed", "rotationSpeed"},
+        {"tower_rotation", "rotationSpeed"},
+        {"tower_defense", "armorReduction"},
+        {"tower_resistance", "armorReduction"},
+        {"tower_armor_reduction", "armorReduction"},
+        {"tower_cost", "cost"},
+        {"tower_build_cost", "cost"},
+
+        {"tower_freeze_chance", "freezeChance"},
+        {"tower_health_regen", "healthRegenRate"},
+        {"tower_energy_cost", "energyCostMultiplier"},
+        {"tower_energy_consumption", "energyCostMultiplier"},
         
-        // Player stats
-        //{"player_health", "health"},
-        //{"player_speed", "moveSpeed"},
-        //{"player_damage", "attackDamage"},
+        // Generator tower stats
+        {"tower_generation_rate", "energyGenerationRate"},
+        {"tower_generation_range", "generationRange"},
+        {"tower_generation_interval", "generationInterval"},
+        {"generator_rate", "energyGenerationRate"},
+        {"generator_range", "generationRange"},
+        {"generator_interval", "generationInterval"},
+        {"generator_speed", "energyGenerationRate"},
+        {"generator_efficiency", "energyGenerationRate"},
+        {"generator_output", "energyGenerationRate"},
+        {"generation_rate", "energyGenerationRate"},
+        {"generation_range", "generationRange"},
+        {"generation_interval", "generationInterval"},
+        {"energy_generation_rate", "energyGenerationRate"},
+        {"energy_generation_range", "generationRange"},
+        {"energy_generation_interval", "generationInterval"},
         
-        // Enemy stats
-        //{"enemy_health", "health"},
-        //{"enemy_speed", "moveSpeed"},
-        //{"enemy_damage", "attackDamage"}
+        // Alternative naming conventions
+        {"damage", "damage"},
+        {"range", "range"},
+        {"fireRate", "fireRate"},
+        {"rotationSpeed", "rotationSpeed"},
+        {"armorReduction", "armorReduction"},
+        {"maxEnergy", "maxEnergy"},
+        {"currentEnergy", "currentEnergy"},
+        {"energyGenerationRate", "energyGenerationRate"},
+        {"generationRange", "generationRange"},
+        {"generationInterval", "generationInterval"},
     };
 
     public static List<StatModification> ParseAffectedStats(string affectedStats, string targetTypes)
@@ -122,8 +165,7 @@ public static class StatParser
 
     private static StatModification ParseSingleStatExpression(string expression, string targetType)
     {
-        // Regex to match patterns like: statName*1.5, health+10, damage*1.25, speed%30
-        var regex = new Regex(@"^(\w+)([*+=\%])([0-9]*\.?[0-9]+)$");
+        var regex = new Regex(@"^(\w+)([*+=\-%])([0-9]*\.?[0-9]+)$");
         var match = regex.Match(expression);
 
         if (!match.Success)
@@ -134,7 +176,6 @@ public static class StatParser
 
         string statName = match.Groups[1].Value;
 
-        // Check for aliases and convert to actual field name
         if (StatAliases.TryGetValue(statName, out string actualStatName))
         {
             Debug.Log($"StatParser: Mapping '{statName}' to '{actualStatName}'");
@@ -154,6 +195,12 @@ public static class StatParser
             return null;
         }
 
+        // Convert minus operator to negative addition
+        if (operatorStr == "-")
+        {
+            value = -value;
+        }
+
         return new StatModification
         {
             StatName = statName,
@@ -164,12 +211,24 @@ public static class StatParser
     }
 }
 
-
 // ===== STAT APPLICATOR SYSTEM =====
 public static class StatApplicator
 {
     public static bool ApplyModification(StatModification modification, AugmentTarget target)
     {
+        // Handle global repair cost effect
+        if (modification.StatName == "tower_repair_cost")
+        {
+            if (EnergyManager.Instance == null) return false;
+
+            float currentCost = EnergyManager.Instance.repairCostPerClick;
+            float newCost = CalculateNewValue(currentCost, modification);
+            EnergyManager.Instance.repairCostPerClick = Mathf.Max(1, Mathf.RoundToInt(newCost));
+
+            Debug.Log($"Applied global repair cost modification: {currentCost} -> {EnergyManager.Instance.repairCostPerClick}");
+            return true;
+        }
+
         object targetObject = GetTargetObject(modification.TargetType, target);
         if (targetObject == null)
         {
@@ -178,6 +237,36 @@ public static class StatApplicator
         }
 
         return ApplyToTarget(targetObject, modification);
+    }
+
+    private static bool ApplyGlobalRepairCostEffect(StatModification modification)
+    {
+        if (EnergyManager.Instance == null) return false;
+
+        float currentCost = EnergyManager.Instance.repairCostPerClick;
+        float newCost = CalculateNewValue(currentCost, modification);
+        EnergyManager.Instance.repairCostPerClick = Mathf.Max(1, Mathf.RoundToInt(newCost));
+
+        Debug.Log($"Applied global repair cost modification: {currentCost} -> {EnergyManager.Instance.repairCostPerClick}");
+        return true;
+    }
+
+    private static bool ApplyGlobalEffect(StatModification modification, AugmentTarget target)
+    {
+        if (EnergyManager.Instance == null) return false;
+
+        switch (modification.StatName)
+        {
+            case "GLOBAL_tower_repair_cost":
+            case "GLOBAL_repair_cost":
+                float currentCost = EnergyManager.Instance.repairCostPerClick;
+                float newCost = CalculateNewValue(currentCost, modification);
+                EnergyManager.Instance.repairCostPerClick = Mathf.Max(1, Mathf.RoundToInt(newCost));
+                Debug.Log($"Applied global repair cost modification: {currentCost} -> {EnergyManager.Instance.repairCostPerClick}");
+                return true;
+        }
+
+        return false;
     }
 
     private static object GetTargetObject(string targetType, AugmentTarget target)
@@ -275,16 +364,12 @@ public static class StatApplicator
         {
             case StatModification.ModificationType.Add:
                 return currentValue + modification.Value;
-
             case StatModification.ModificationType.Multiply:
                 return currentValue * modification.Value;
-
             case StatModification.ModificationType.Set:
                 return modification.Value;
-
             case StatModification.ModificationType.Percentage:
                 return currentValue * (1f + modification.Value / 100f);
-
             default:
                 return currentValue;
         }
@@ -309,6 +394,13 @@ public class AutoGeneratedAugmentEffect : IAugmentEffect
     {
         augmentData = data;
 
+        // Skip parsing for NULL stats augments
+        if (string.IsNullOrEmpty(augmentData.AffectedStats) || augmentData.AffectedStats == "NULL")
+        {
+            augmentData.ParsedModifications = new List<StatModification>(); // Empty list
+            return;
+        }
+
         // Parse the affected stats when creating the effect
         augmentData.ParsedModifications = StatParser.ParseAffectedStats(
             augmentData.AffectedStats,
@@ -317,10 +409,19 @@ public class AutoGeneratedAugmentEffect : IAugmentEffect
 
     public void Apply(AugmentTarget target)
     {
+        // Handle NULL stats augments
         if (augmentData.ParsedModifications == null || augmentData.ParsedModifications.Count == 0)
         {
-            Debug.LogWarning($"No parsed modifications found for augment: {augmentData.Name}");
-            return;
+            if (string.IsNullOrEmpty(augmentData.AffectedStats) || augmentData.AffectedStats == "NULL")
+            {
+                Debug.LogWarning($"Augment '{augmentData.Name}' has NULL stats - no automatic implementation available");
+                return;
+            }
+            else
+            {
+                Debug.LogWarning($"No parsed modifications found for augment: {augmentData.Name}");
+                return;
+            }
         }
 
         int successfulModifications = 0;
@@ -333,7 +434,6 @@ public class AutoGeneratedAugmentEffect : IAugmentEffect
 
         Debug.Log($"Applied {successfulModifications}/{augmentData.ParsedModifications.Count} modifications for augment: {augmentData.Name}");
     }
-
     public bool CanApplyTo(AugmentTarget target)
     {
         // Check if we have a valid target for this augment's requirements
@@ -350,7 +450,6 @@ public class AutoGeneratedAugmentEffect : IAugmentEffect
     public string GetDescription() => augmentData.Description;
 }
 
-// ===== UPDATED AUGMENT REGISTRY =====
 public class AugmentRegistry : MonoBehaviour
 {
     private static AugmentRegistry _instance;
@@ -372,6 +471,40 @@ public class AugmentRegistry : MonoBehaviour
     public System.Action<AugmentData> OnAugmentApplied;
     public System.Action OnDatabaseLoaded;
 
+    [ContextMenu("Find Broken Priority 0 Augments")]
+    void FindBrokenAugments()
+    {
+        var allAugments = AugmentRegistry.Instance.GetAllAugments()
+            .Where(a => a.Priority == 0).ToList();
+        var brokenIDs = new List<int>();
+        foreach (var augment in allAugments)
+        {
+            bool willWork = false;
+            // Check if it has valid affected stats
+            if (!string.IsNullOrEmpty(augment.AffectedStats) &&
+                augment.AffectedStats != "NULL")
+            {
+                // Check if stats parsed successfully
+                if (augment.ParsedModifications != null &&
+                    augment.ParsedModifications.Count > 0)
+                {
+                    willWork = true;
+                }
+            }
+
+            if (!willWork)
+            {
+                brokenIDs.Add(augment.ID);
+                Debug.LogWarning($"❌ ID {augment.ID}: '{augment.Name}' - Stats: '{augment.AffectedStats}'");
+            }
+            else
+            {
+                Debug.Log($"✅ ID {augment.ID}: '{augment.Name}' - WORKS");
+            }
+        }
+
+        Debug.Log($"\nBROKEN AUGMENT IDs: {string.Join(", ", brokenIDs)}");
+    }
 
     void Awake()
     {
@@ -402,7 +535,6 @@ public class AugmentRegistry : MonoBehaviour
     }
 
     // ===== CSV LOADING =====
-
     private void LoadAugmentDatabase()
     {
         Debug.Log($"AugmentRegistry: Attempting to load CSV from: {csvResourcePath}");
@@ -595,7 +727,13 @@ public class AugmentRegistry : MonoBehaviour
             return false;
         }
 
-        // Determine target based on augment data
+        // Special handling for tower augments
+        if (augmentData.AffectsTower)
+        {
+            return ApplyTowerAugment(augmentID, augmentData, effect);
+        }
+
+        // Logic for non-tower augments
         AugmentTarget target = CreateTargetForAugment(augmentData);
         if (target == null || !effect.CanApplyTo(target))
         {
@@ -603,7 +741,6 @@ public class AugmentRegistry : MonoBehaviour
             return false;
         }
 
-        // Apply the effect
         effect.Apply(target);
         appliedAugments.Add(augmentID);
 
@@ -614,6 +751,138 @@ public class AugmentRegistry : MonoBehaviour
 
         OnAugmentApplied?.Invoke(augmentData);
         return true;
+    }
+
+    private bool ApplyTowerAugment(int augmentID, AugmentData augmentData, IAugmentEffect effect)
+    {
+        var allTowers = UnityEngine.Object.FindObjectsByType<Tower>(FindObjectsSortMode.None);
+
+        if (allTowers.Length == 0)
+        {
+            Debug.LogWarning($"AugmentRegistry: No towers found to apply augment {augmentID} ({augmentData.Name}) - will apply to future towers");
+        }
+        else
+        {
+            int successCount = 0;
+
+            foreach (var tower in allTowers)
+            {
+                var target = new AugmentTarget(null as PlayerStats) { Tower = tower };
+
+                if (effect.CanApplyTo(target))
+                {
+                    try
+                    {
+                        effect.Apply(target);
+                        successCount++;
+
+                        if (debugMode)
+                        {
+                            Debug.Log($"Applied tower augment '{augmentData.Name}' to existing tower: {tower.towerName} at {tower.transform.position}");
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogError($"Failed to apply tower augment '{augmentData.Name}' to tower {tower.towerName}: {e.Message}");
+                    }
+                }
+            }
+
+            Debug.Log($"Applied tower augment '{augmentData.Name}' to {successCount}/{allTowers.Length} existing towers");
+        }
+
+        appliedAugments.Add(augmentID);
+        OnAugmentApplied?.Invoke(augmentData);
+
+        Debug.Log($"Tower augment '{augmentData.Name}' will now apply to all future towers");
+        return true;
+    }
+
+    [ContextMenu("Test All Tower Augments")]
+    public void TestAllTowerAugments()
+    {
+        var towerAugments = GetAugmentsByCategory("Tower")
+            .Where(a => a.Priority == 0)
+            .ToList();
+
+        Debug.Log($"=== Testing {towerAugments.Count} Tower Augments ===");
+
+        foreach (var augment in towerAugments)
+        {
+            TestSingleTowerAugment(augment);
+        }
+    }
+
+    public void TestSingleTowerAugment(AugmentData augment)
+    {
+        Debug.Log($"\n--- Testing Tower Augment: {augment.Name} (ID: {augment.ID}) ---");
+        Debug.Log($"Affected Stats: {augment.AffectedStats}");
+        Debug.Log($"Target Types: {augment.TargetTypes}");
+
+        // Handle NULL stats augments
+        if (string.IsNullOrEmpty(augment.AffectedStats) || augment.AffectedStats == "NULL")
+        {
+            Debug.LogWarning($"⚠️ Augment '{augment.Name}' has NULL stats - requires custom implementation");
+            return;
+        }
+
+        if (augment.ParsedModifications == null || augment.ParsedModifications.Count == 0)
+        {
+            Debug.LogError($"❌ No parsed modifications for augment: {augment.Name}");
+            return;
+        }
+
+        var towers = UnityEngine.Object.FindObjectsByType<Tower>(FindObjectsSortMode.None);
+        if (towers.Length == 0)
+        {
+            Debug.LogWarning($"⚠️ No towers in scene to test augment: {augment.Name}");
+            return;
+        }
+
+        bool allModificationsValid = true;
+        foreach (var mod in augment.ParsedModifications)
+        {
+            Debug.Log($"  Testing modification: {mod.StatName} {mod.OperationType} {mod.Value} (Target: {mod.TargetType})");
+
+            // Handle global repair cost effect
+            if (mod.StatName == "tower_repair_cost")
+            {
+                Debug.Log($"    ✅ Global repair cost effect (affects EnergyManager)");
+                continue;
+            }
+
+            // Check if stat exists on tower
+            var tower = towers[0];
+            var field = tower.GetType().GetField(mod.StatName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            var property = tower.GetType().GetProperty(mod.StatName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+            if (field == null && property == null)
+            {
+                Debug.LogError($"    ❌ Stat '{mod.StatName}' not found on Tower class");
+                allModificationsValid = false;
+            }
+            else
+            {
+                Debug.Log($"    ✅ Stat '{mod.StatName}' found on Tower class");
+            }
+        }
+
+        if (allModificationsValid)
+        {
+            Debug.Log($"✅ Tower augment '{augment.Name}' appears to be correctly implemented");
+        }
+        else
+        {
+            Debug.LogError($"❌ Tower augment '{augment.Name}' has implementation issues");
+        }
+    }
+
+    private bool IsGlobalEffect(string statName)
+    {
+        // List of stat names that are global effects, not Tower fields
+        return statName == "GLOBAL_tower_repair_cost" ||
+               statName == "tower_repair_cost" ||
+               statName.StartsWith("GLOBAL_");
     }
 
     private AugmentTarget CreateTargetForAugment(AugmentData augment)
@@ -632,12 +901,56 @@ public class AugmentRegistry : MonoBehaviour
             target.Enemy = UnityEngine.Object.FindFirstObjectByType<EnemyStats>();
 
         if (augment.AffectsTower)
+        {
             target.Tower = UnityEngine.Object.FindFirstObjectByType<Tower>();
+            var allTowers = UnityEngine.Object.FindObjectsByType<Tower>(FindObjectsSortMode.None);
+            Debug.Log($"[CreateTargetForAugment] Found {allTowers.Length} towers in scene for augment: {augment.Name}");
+        }
 
-        if (augment.IsGlobal)
+        // For global effects (like repair costs) - provide global context
+        if (augment.IsGlobal || augment.AffectedStats.Contains("repair_cost") || augment.AffectedStats.Contains("build_cost"))
             target.GlobalContext = EnergyManager.Instance;
 
         return target;
+    }
+
+    // Method to get effects for newly created towers
+    public IAugmentEffect GetEffect(int augmentId)
+    {
+        return registeredEffects.TryGetValue(augmentId, out IAugmentEffect effect) ? effect : null;
+    }
+
+    // Method to apply augments to a single new tower
+    public void ApplyTowerAugmentsToSingleTower(Tower tower)
+    {
+        if (tower == null) return;
+
+        var appliedAugmentsList = GetAppliedAugments();
+
+        foreach (int augmentId in appliedAugmentsList)
+        {
+            var augmentData = GetAugmentData(augmentId);
+            if (augmentData != null && augmentData.AffectsTower)
+            {
+                var effect = GetEffect(augmentId);
+                if (effect != null)
+                {
+                    var target = new AugmentTarget(null as PlayerStats) { Tower = tower };
+                    if (effect.CanApplyTo(target))
+                    {
+                        try
+                        {
+                            effect.Apply(target);
+                            Debug.Log($"Applied existing augment '{augmentData.Name}' to new tower: {tower.towerName}");
+                        }
+                        catch (System.Exception e)
+                        {
+                            Debug.LogError($"Failed to apply augment '{augmentData.Name}' to new tower: {e.Message}");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Getters

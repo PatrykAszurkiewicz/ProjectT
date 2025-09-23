@@ -30,6 +30,8 @@ public class AugmentsMenu : MonoBehaviour
     [Tooltip("Enter augment IDs to force specific augments in debug mode. Leave empty for random generation.")]
     [SerializeField] private int[] forcedAugmentIDs = new int[0];
 
+
+    [SerializeField] private ChosenAugmentsUI chosenAugmentsUI; // menu pauzy itp
     // State variables
     private bool isHidden = false;
     private bool isMenuActive = false;
@@ -80,6 +82,8 @@ public class AugmentsMenu : MonoBehaviour
 
     void Start()
     {
+        chosenAugmentsUI = FindAnyObjectByType<ChosenAugmentsUI>(FindObjectsInactive.Include);
+
         if (debugMode) Debug.Log("AugmentsMenu: Start called");
 
         augmentsMenu.SetActive(false);
@@ -404,6 +408,8 @@ public class AugmentsMenu : MonoBehaviour
         {
             Debug.LogError($"Failed to apply augment {chosenId}");
         }
+
+        chosenAugmentsUI.RefreshUI();
     }
 
     private bool ApplyAugmentNew(int chosenId)
