@@ -20,9 +20,6 @@ public class EnemyStats : CharacterStats
         {
             maxHealth = enemyData.maxHealth;
             currentHealth = maxHealth;
-
-            maxArmor = enemyData.maxArmor;
-            currentArmor = maxArmor;
         }
     }
 

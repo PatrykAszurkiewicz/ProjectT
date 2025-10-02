@@ -35,8 +35,10 @@ public class PlayerStats : CharacterStats
         base.TakeDamage(amount);
         regenTimer = 0f;
     }
+
     private void Update()
     {
+        //Debug.Log(currentArmor);
 
         if (!IsDead() && currentHealth < maxHealth)
         {

@@ -6,7 +6,6 @@ public class CharacterStats : MonoBehaviour
     [Header("HP")]
     public float maxHealth = 100f;
     public float currentHealth = 100f;
-    public float maxArmor = 0f;
     public float currentArmor = 0f;
 
     // Event UI
@@ -24,6 +23,7 @@ public class CharacterStats : MonoBehaviour
             Die();
         }
     }
+    
     public virtual void Heal(float amount)
     {
         currentHealth += amount;

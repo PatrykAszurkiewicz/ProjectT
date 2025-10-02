@@ -1775,7 +1775,7 @@ MonoBehaviour:
   - {fileID: 2110909284}
   maxRerolls: 99
   debugMode: 1
-  forcedAugmentIDsList: 18000000190000003c000000
+  forcedAugmentIDsList: 01000000190000003c000000
   chosenAugmentsUI: {fileID: 1984759432}
 --- !u!1 &453391371 stripped
 GameObject:
@@ -9807,10 +9807,6 @@ PrefabInstance:
     - target: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_TagString
       value: Player
-      objectReference: {fileID: 0}
-    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
-      propertyPath: maxArmor
-      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: maxHealth

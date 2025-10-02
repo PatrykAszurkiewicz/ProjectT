@@ -105,6 +105,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dashStaminaCost: 0
+  playerSprites: []
+  animationSpeed: 0.1
+  playerScale: 0.5
 --- !u!114 &2816154035199129691
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -119,7 +122,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHealth: 100
   currentHealth: 100
-  maxArmor: 0
+  maxArmor: 10
   currentArmor: 0
   maxMana: 50
   currentMana: 50
@@ -136,6 +139,8 @@ MonoBehaviour:
   staminaRegenRate: 1
   staminaDrainRate: 1.5
   currentStamina: 5
+  healthRegenRate: 2
+  healthRegenDelay: 3
 --- !u!58 &2845798086413134017
 CircleCollider2D:
   m_ObjectHideFlags: 0

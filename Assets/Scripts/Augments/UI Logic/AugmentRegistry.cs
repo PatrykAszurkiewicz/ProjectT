@@ -163,7 +163,7 @@ public static class StatParser
         {"generationRange", "generationRange"},
         {"generationInterval", "generationInterval"},
 
-        { "player_armor", "currentArmor" },
+        //{ "player_armor", "currentArmor" },
     };
 
     public static List<StatModification> ParseAffectedStats(string affectedStats, string targetTypes)
@@ -258,7 +258,8 @@ public static class StatApplicator
 
         // Handle player-tower coordination (mutual armor boost)
         if ((modification.StatName == "currentArmor" || modification.StatName == "armorReduction") &&
-            (modification.TargetType == "Player" || modification.TargetType == "Tower"))
+            (modification.TargetType == "Player" || modification.TargetType == "Tower") &&
+            modification.OperationType == StatModification.ModificationType.Add)
         {
             //Debug.Log($"[COORDINATION] Detected coordination stat: {modification.StatName} for {modification.TargetType}, value: {modification.Value}");
 
