@@ -14,6 +14,7 @@ public class CursorManager : MonoBehaviour
     public string meleeCursorPath = "Sprites/Cursors/cursor_spritesheet_melee";
     public string hookCursorPath = "Sprites/Cursors/cursor_spritesheet_hook2";
     public string hookHighlightCursorPath = "Sprites/Cursors/cursor_spritesheet_hook_highlight";
+    public string obstacleDrawerCursorPath = "Sprites/Cursors/cursor_spritesheet_obstacle_drawer";
 
     private Sprite defaultCursorSprite;
     private Sprite repairCursorSprite;
@@ -21,6 +22,7 @@ public class CursorManager : MonoBehaviour
     private Sprite meleeCursorSprite;
     private Sprite hookCursorSprite;
     private Sprite hookHighlightCursorSprite;
+    private Sprite obstacleDrawerCursorSprite;
 
     private Sprite previousCursorSprite;
     private CursorType currentCursorType = CursorType.Default;
@@ -32,7 +34,8 @@ public class CursorManager : MonoBehaviour
         Shield,
         Melee,
         Hook,
-        HookHightlight
+        HookHightlight,
+        ObstacleDrawer
     }
 
     void Awake()
@@ -61,6 +64,7 @@ public class CursorManager : MonoBehaviour
         meleeCursorSprite = Resources.Load<Sprite>(meleeCursorPath);
         hookCursorSprite = Resources.Load<Sprite>(hookCursorPath);
         hookHighlightCursorSprite = Resources.Load<Sprite>(hookHighlightCursorPath);
+        obstacleDrawerCursorSprite = Resources.Load<Sprite>(obstacleDrawerCursorPath);
     }
 
     public void SetCursor(CursorType cursorType)
@@ -71,7 +75,7 @@ public class CursorManager : MonoBehaviour
             return;
         }
 
-        // FIXED: Don't let grappling hook override repair cursor during placement mode
+        // Don't let grappling hook override repair cursor during placement mode
         bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
 
         if (inPlacementMode && currentCursorType == CursorType.Repair)
@@ -96,6 +100,7 @@ public class CursorManager : MonoBehaviour
             CursorType.Melee => meleeCursorSprite,
             CursorType.Hook => hookCursorSprite,
             CursorType.HookHightlight => hookHighlightCursorSprite,
+            CursorType.ObstacleDrawer => obstacleDrawerCursorSprite,
             _ => defaultCursorSprite
         };
 

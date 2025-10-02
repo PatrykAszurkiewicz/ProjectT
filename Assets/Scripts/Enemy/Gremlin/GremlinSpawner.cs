@@ -86,6 +86,13 @@ public class GremlinSpawner : MonoBehaviour
 
         GameObject newGremlin = Instantiate(gremlinPrefab, position, Quaternion.identity);
         newGremlin.SetActive(true);
+
+        // Play gremlin appearance sound
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.gremlinAppearance, position);
+        }
+
         activeGremlins.Add(newGremlin);
         StartCoroutine(MonitorGremlin(newGremlin));
     }

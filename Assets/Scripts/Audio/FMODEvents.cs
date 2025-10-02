@@ -13,6 +13,7 @@ public class FMODEvents : MonoBehaviour
     [field: SerializeField] public EventReference musicAmbient { get; private set; }
     [field: SerializeField] public EventReference musicElectronic { get; private set; }
     [field: SerializeField] public EventReference musicPiano { get; private set; }
+    [field: SerializeField] public EventReference musicCalm { get; private set; }
 
     [field: Header("Multi Shot SFX")]
     [field: SerializeField] public EventReference multiShotSound { get; private set; }
@@ -40,6 +41,9 @@ public class FMODEvents : MonoBehaviour
 
     [field: Header("Tower Creation SFX")]
     [field: SerializeField] public EventReference towerCreation { get; private set; }
+    [field: Header("Tower Death SFX")]
+    [field: SerializeField] public EventReference towerDeath { get; private set; }
+
 
     [field: Header("Resource Collection SFX")]
     [field: SerializeField] public EventReference resourceDropCollection { get; private set; }
@@ -47,6 +51,16 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Central Core Death SFX")]
     [field: SerializeField] public EventReference centralCoreDeath { get; private set; }
 
+    [field: Header("Gremlin SFX")]
+    [field: SerializeField] public EventReference gremlinAppearance { get; private set; }
+    [field: SerializeField] public EventReference gremlinDeath { get; private set; }
+
+    [field: Header("Enemy SFX")]
+    [field: SerializeField] public EventReference enemyAttack { get; private set; }
+
+    [field: Header("Augment SFX")]
+    [field: SerializeField] public EventReference augmentReroll { get; private set; }
+    [field: SerializeField] public EventReference click { get; private set; }
     public static FMODEvents instance { get; private set; }
 
     private void Awake()

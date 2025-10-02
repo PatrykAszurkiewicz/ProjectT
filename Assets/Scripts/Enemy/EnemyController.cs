@@ -376,6 +376,8 @@ public class EnemyController : MonoBehaviour
 
     private void Attack(Transform target)
     {
+        PlayAttackSound();
+
         var stats = target.GetComponent<CharacterStats>();
         if (stats != null)
         {
@@ -403,6 +405,14 @@ public class EnemyController : MonoBehaviour
                     rb.linearVelocity = Vector2.zero;
                 }
             }
+        }
+    }
+
+    private void PlayAttackSound()
+    {
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.enemyAttack, transform.position);
         }
     }
 

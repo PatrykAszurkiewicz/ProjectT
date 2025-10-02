@@ -40,6 +40,11 @@ public class EnergyManager : MonoBehaviour
     private float accumulatedPlayerEnergyCost = 0f;
 
 
+    [Header("Resource Generation")]
+    public float globalResourceMultiplier = 1.0f;
+    public float bonusResourceDropChance = 0.0f;
+    public float bonusResourceMultiplier = 2.0f;
+
     #region Configuration
     [Header("Global Energy Settings")]
     public float globalEnergyDecayRate = 1f;
@@ -73,7 +78,7 @@ public class EnergyManager : MonoBehaviour
     [Header("Player Currency Settings")]
     public int playerStartingEnergy = 300;
     public int towerBuildCost = 100;
-    public float towerSellRefundPercentage = 0.5f;
+    public float towerSellRefundPercentage = 0.1f;
     public bool enableCurrencyEarnedFromEnemyKills = false;
     public int energyPerEnemyKill = 0;
 
@@ -110,6 +115,8 @@ public class EnergyManager : MonoBehaviour
     #endregion
 
     #region Core Components
+    [System.NonSerialized]
+
     private List<IEnergyConsumer> energyConsumers = new List<IEnergyConsumer>();
     private GameObject player;
     private Camera mainCamera;
@@ -351,7 +358,9 @@ public class EnergyManager : MonoBehaviour
     {
         if (enableCurrencyEarnedFromEnemyKills)
         {
-            GivePlayerEnergy(energyPerEnemyKill);
+            int reward = Mathf.RoundToInt(energyPerEnemyKill * globalResourceMultiplier);
+            GivePlayerEnergy(reward);
+            //GivePlayerEnergy(energyPerEnemyKill);
         }
     }
 
@@ -837,7 +846,20 @@ public class EnergyManager : MonoBehaviour
     float GetDecayRate(IEnergyConsumer consumer)
     {
         float baseRate = consumer is CentralCore ? coreEnergyDecayRate : towerEnergyDecayRate;
-        return baseRate * globalEnergyDecayRate;
+        float finalRate = baseRate * globalEnergyDecayRate;
+
+        // Check for Tower Commander boost (energy decay reduction)
+        if (consumer is Tower tower)
+        {
+            var commanderBoost = tower.GetComponent<TowerCommanderBoost>();
+            if (commanderBoost != null)
+            {
+                finalRate *= commanderBoost.GetEnergyDecayMultiplier();
+                Debug.Log($"[ENERGY_MANAGER] Tower {tower.towerName} energy decay: {baseRate * globalEnergyDecayRate:F3} -> {finalRate:F3} (multiplier: {commanderBoost.GetEnergyDecayMultiplier():F3})");
+            }
+        }
+
+        return finalRate;
     }
 
     void CheckGameOverCondition(IEnergyConsumer consumer)

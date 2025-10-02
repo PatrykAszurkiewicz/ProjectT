@@ -112,19 +112,25 @@ public class EnergyDropManager : MonoBehaviour
     void SpawnEnergyDropInternal(Vector3 position, float customDropChance, int customEnergyValue)
     {
         float dropChance = customDropChance >= 0 ? customDropChance : globalDropChance;
-
         if (Random.Range(0f, 1f) > dropChance) return;
-
         int energyValue = customEnergyValue > 0 ? customEnergyValue : defaultEnergyValue;
-
         GameObject drop = CreateEnergyDrop(position, energyValue);
-
         // Track statistics
         totalDropsSpawned++;
         totalEnergySpawned += energyValue;
         activeDrops.Add(drop);
-
         //Debug.Log($"EnergyDropManager: Spawned energy drop worth {energyValue} at {position}");
+    }
+
+    GameObject CreateEnergyDropOld(Vector3 position, int energyValue)
+    {
+        // Add random spread
+        Vector3 spawnPos = position + (Vector3)Random.insideUnitCircle * spawnRadius;
+        spawnPos.z = 0;
+        int adjustedValue = Mathf.RoundToInt(energyValue * EnergyManager.Instance.globalResourceMultiplier);
+        GameObject drop = EnergyDrop.CreateEnergyDrop(spawnPos, adjustedValue);
+        //GameObject drop = EnergyDrop.CreateEnergyDrop(spawnPos, energyValue);
+        return drop;
     }
 
     GameObject CreateEnergyDrop(Vector3 position, int energyValue)
@@ -132,10 +138,21 @@ public class EnergyDropManager : MonoBehaviour
         // Add random spread
         Vector3 spawnPos = position + (Vector3)Random.insideUnitCircle * spawnRadius;
         spawnPos.z = 0;
-        GameObject drop = EnergyDrop.CreateEnergyDrop(spawnPos, energyValue);
 
+        int adjustedValue = Mathf.RoundToInt(energyValue * EnergyManager.Instance.globalResourceMultiplier);
+
+        // Roll for bonus resources
+        if (EnergyManager.Instance.bonusResourceDropChance > 0f &&
+            Random.Range(0f, 1f) <= EnergyManager.Instance.bonusResourceDropChance)
+        {
+            adjustedValue = Mathf.RoundToInt(adjustedValue * EnergyManager.Instance.bonusResourceMultiplier);
+            //Debug.Log($"Bonus resources! {adjustedValue} energy");
+        }
+
+        GameObject drop = EnergyDrop.CreateEnergyDrop(spawnPos, adjustedValue);
         return drop;
     }
+
 
     // Registration methods for player collector
     public static void RegisterPlayerCollector(PlayerEnergyCollector collector)

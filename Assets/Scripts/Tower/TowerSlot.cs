@@ -134,9 +134,27 @@ public class TowerSlot : MonoBehaviour
         currentTower = Instantiate(towerPrefab, transform.position, Quaternion.identity);
         currentTower.transform.parent = transform;
         isOccupied = true;
+
+        // Apply Augments
+        Tower towerComponent = currentTower.GetComponent<Tower>();
+        if (towerComponent != null)
+        {
+            // Use a coroutine to ensure the tower is fully initialized
+            StartCoroutine(ApplyAugmentsAfterFrame(towerComponent));
+        }
+
         UpdateVisuals();
         //Debug.Log($"Tower placed successfully at Ring {ringIndex}, Slot {slotIndex}. Energy spent: {EnergyManager.Instance?.GetTowerBuildCost() ?? 0}");
         return true;
+    }
+    private System.Collections.IEnumerator ApplyAugmentsAfterFrame(Tower tower)
+    {
+        yield return null; // Wait one frame for tower to be fully initialized
+        if (AugmentRegistry.Instance != null)
+        {
+            AugmentRegistry.Instance.ApplyTowerAugmentsToSingleTower(tower);
+            Debug.Log($"Applied augments to newly created tower: {tower.towerName}");
+        }
     }
 
     public bool RemoveTower()

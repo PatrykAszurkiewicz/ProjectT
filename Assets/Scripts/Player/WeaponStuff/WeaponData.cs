@@ -34,6 +34,16 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isGrapplingHook")] public Color targetHighlightColor = Color.yellow;
     [ConditionalField("isGrapplingHook")] public float lineWidth = 0.08f;
 
+    [Header("Obstacle Drawer Settings")]
+    public bool isObstacleDrawer = false;
+    [ConditionalField("isObstacleDrawer")] public float drawDuration = 0.3f;
+    [ConditionalField("isObstacleDrawer")] public float obstacleWidth = 0.3f;
+    [ConditionalField("isObstacleDrawer")] public int maxObstacles = 3;
+    [ConditionalField("isObstacleDrawer")] public float minDrawDistance = 0.1f; // Minimum distance between points
+    [ConditionalField("isObstacleDrawer")] public Color drawLineColor = new Color(0.8f, 0.8f, 0.8f); // light grey
+    [ConditionalField("isObstacleDrawer")] public Color solidifiedColor = new Color(0.2f, 0.2f, 0.2f); // dark grey
+    [ConditionalField("isObstacleDrawer")] public float obstacleHealth = 50f;
+
     public WeaponData CreateRuntimeCopy()
     {
         WeaponData copy = ScriptableObject.CreateInstance<WeaponData>();
@@ -59,13 +69,32 @@ public class WeaponData : ScriptableObject
         copy.targetHighlightColor = this.targetHighlightColor;
         copy.lineWidth = this.lineWidth;
 
+        // Obstacle drawer
+        copy.isObstacleDrawer = this.isObstacleDrawer;
+        copy.drawDuration = this.drawDuration;
+        copy.obstacleWidth = this.obstacleWidth;
+        copy.maxObstacles = this.maxObstacles;
+        copy.minDrawDistance = this.minDrawDistance;
+        copy.drawLineColor = this.drawLineColor;
+        copy.solidifiedColor = this.solidifiedColor;
+        copy.obstacleHealth = this.obstacleHealth;
+
         return copy;
     }
+
     void OnValidate()
     {
         if (isGrapplingHook)
         {
             isRanged = false;
+            projectilePrefab = null;
+            isObstacleDrawer = false;
+        }
+
+        if (isObstacleDrawer)
+        {
+            isRanged = false;
+            isGrapplingHook = false;
             projectilePrefab = null;
         }
     }

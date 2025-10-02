@@ -8,6 +8,7 @@ public class PlayerAttack : MonoBehaviour
     [SerializeField] private float attackAnimationDuration = 0.3f; // Duration of attack animation
 
     private PlayerMovement playerMovement;
+    private bool isAttackButtonHeld = false;
 
     void Start()
     {
@@ -16,9 +17,33 @@ public class PlayerAttack : MonoBehaviour
 
     public void OnAttack(InputAction.CallbackContext context)
     {
-        if (context.performed && weapon != null)
+        if (weapon == null) return;
+
+        WeaponData weaponData = weapon.GetWeaponData();
+
+        // Handle obstacle drawer - hold and release mechanics
+        if (weaponData != null && weaponData.isObstacleDrawer)
         {
-            StartCoroutine(PerformAttackWithAnimation());
+            if (context.started)
+            {
+                // Button pressed - start drawing
+                isAttackButtonHeld = true;
+                weapon.PerformAttack(); // This starts the drawing
+            }
+            else if (context.canceled)
+            {
+                // Button released - stop drawing
+                isAttackButtonHeld = false;
+                weapon.StopAttack(); // This finalizes the obstacle
+            }
+        }
+        else
+        {
+            // Regular weapons - single press
+            if (context.performed)
+            {
+                StartCoroutine(PerformAttackWithAnimation());
+            }
         }
     }
 
@@ -40,11 +65,11 @@ public class PlayerAttack : MonoBehaviour
             }
         }
 
-
         weapon.PerformAttack();
+
         // Wait for animation duration
         yield return new WaitForSeconds(attackAnimationDuration);
-        // End appropriate animation
+
         if (playerMovement != null)
         {
             if (isRangedAttack)

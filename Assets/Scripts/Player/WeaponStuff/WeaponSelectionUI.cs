@@ -21,4 +21,6 @@ public class WeaponSelectionUI : MonoBehaviour
         WeaponSelectionManager.Instance.SelectedWeapon = gunData;
     }
 
+    // TODO update weapon selection UI
+
 }

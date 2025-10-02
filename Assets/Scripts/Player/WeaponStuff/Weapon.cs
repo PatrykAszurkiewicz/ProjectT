@@ -9,7 +9,6 @@ public class Weapon : MonoBehaviour
     [SerializeField] private PolygonCollider2D attackCollider;
     [SerializeField] private GameObject visual;
 
-
     private List<EnemyStats> hitEnemies = new List<EnemyStats>();
     private PlayerStats playerStats;
     private bool isOnCooldown = false;
@@ -17,6 +16,9 @@ public class Weapon : MonoBehaviour
 
     // Grappling Hook System
     private GrapplingHookSystem grapplingSystem;
+
+    // Obstacle Drawer System
+    private ObstacleDrawerSystem obstacleDrawerSystem;
 
     public WeaponData GetWeaponData() => weaponData;
 
@@ -27,11 +29,10 @@ public class Weapon : MonoBehaviour
         SetupWeapon();
         attackCollider.enabled = false;
     }
+
     private void CreateRuntimeWeaponData()
     {
         WeaponData sourceData = null;
-
-        // selection manager -> originalWeaponData -> defaultWeapon)
         if (WeaponSelectionManager.Instance != null)
             sourceData = WeaponSelectionManager.Instance.GetChosenWeapon();
 
@@ -43,7 +44,7 @@ public class Weapon : MonoBehaviour
 
         if (sourceData != null)
         {
-            // runtime copy
+            // Runtime copy
             weaponData = sourceData.CreateRuntimeCopy();
             Debug.Log($"Created runtime copy of weapon: {weaponData.weaponName}");
         }
@@ -52,6 +53,7 @@ public class Weapon : MonoBehaviour
             Debug.LogError("No weapon data available for runtime copy!");
         }
     }
+
     private void InitializeWeaponData()
     {
         if (weaponData == null)
@@ -80,7 +82,12 @@ public class Weapon : MonoBehaviour
         // Initialize grappling hook system
         if (weaponData.isGrapplingHook)
             grapplingSystem = new GrapplingHookSystem(this, weaponData);
+
+        // Initialize obstacle drawer system
+        if (weaponData.isObstacleDrawer)
+            obstacleDrawerSystem = new ObstacleDrawerSystem(this, weaponData);
     }
+
     public void ResetToOriginalStats()
     {
         if (originalWeaponData != null)
@@ -90,9 +97,11 @@ public class Weapon : MonoBehaviour
             Debug.Log($"Reset weapon stats to original values: {weaponData.weaponName}");
         }
     }
+
     private void Update()
     {
         UpdateGrapplingSystem();
+        UpdateObstacleDrawerSystem();
     }
 
     private void UpdateGrapplingSystem()
@@ -107,6 +116,16 @@ public class Weapon : MonoBehaviour
             grapplingSystem.Update();
     }
 
+    private void UpdateObstacleDrawerSystem()
+    {
+        if (weaponData?.isObstacleDrawer != true || obstacleDrawerSystem == null) return;
+
+        bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
+
+        if (!inPlacementMode)
+            obstacleDrawerSystem.Update();
+    }
+
     private void ResizeCollider()
     {
         if (attackCollider != null)
@@ -117,7 +136,15 @@ public class Weapon : MonoBehaviour
     {
         if (isOnCooldown) return;
 
-        if (weaponData.isGrapplingHook)
+        if (weaponData.isObstacleDrawer)
+        {
+            // Starting to draw
+            if (obstacleDrawerSystem != null && !obstacleDrawerSystem.IsDrawing())
+            {
+                obstacleDrawerSystem.StartDrawing();
+            }
+        }
+        else if (weaponData.isGrapplingHook)
         {
             // Grappling hooks only use the grappling system
             if (grapplingSystem?.CanFire() == true)
@@ -135,6 +162,18 @@ public class Weapon : MonoBehaviour
         {
             StartCoroutine(AttackRoutine());
             StartCoroutine(CooldownRoutine());
+        }
+    }
+
+    public void StopAttack()
+    {
+        if (weaponData?.isObstacleDrawer == true && obstacleDrawerSystem != null)
+        {
+            if (obstacleDrawerSystem.IsDrawing())
+            {
+                obstacleDrawerSystem.StopDrawing();
+                StartCoroutine(CooldownRoutine());
+            }
         }
     }
 
@@ -202,5 +241,14 @@ public class Weapon : MonoBehaviour
         }
 
         return direction;
+    }
+
+    void OnDestroy()
+    {
+        // Clean up obstacle drawer system
+        if (obstacleDrawerSystem != null)
+        {
+            obstacleDrawerSystem.Cleanup();
+        }
     }
 }

@@ -14,6 +14,7 @@ public class TowerDefenseMap : MonoBehaviour
     [Header("Tower Slot Configuration")]
     public GameObject towerSlotPrefab;
     public List<RingConfiguration> rings = new List<RingConfiguration>();
+    public int maxTotalRings = 8; // Limits total rings including augment-added ones
 
     [Header("Central Core Configuration")]
     public bool enableCentralCore = true;
@@ -26,6 +27,7 @@ public class TowerDefenseMap : MonoBehaviour
     public Color debugCircleColor = Color.white;
     public float debugCircleWidth = 0.02f;
 
+    [System.NonSerialized]
     private List<TowerSlot> allTowerSlots = new List<TowerSlot>();
     private GameObject terrainObject;
     private GameObject slotsContainer;

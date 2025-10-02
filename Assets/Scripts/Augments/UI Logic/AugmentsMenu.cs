@@ -5,6 +5,10 @@ using TMPro;
 using System.Linq;
 using System.Collections;
 
+#if UNITY_EDITOR
+[System.Serializable]
+#endif
+
 public class AugmentsMenu : MonoBehaviour
 {
     [Header("UI References")]
@@ -28,18 +32,47 @@ public class AugmentsMenu : MonoBehaviour
 
     [Header("Debug Options - Forced Augments")]
     [Tooltip("Enter augment IDs to force specific augments in debug mode. Leave empty for random generation.")]
-    [SerializeField] private int[] forcedAugmentIDs = new int[0];
+    //[SerializeField] private int[] forcedAugmentIDs = new int[0];
+    //[SerializeField] private List<int> forcedAugmentIDsList = new List<int>();
+    //private int[] forcedAugmentIDs
+    //{
+    //    get => forcedAugmentIDsList.ToArray();
+    //    set => forcedAugmentIDsList = new List<int>(value ?? new int[0]);
+    //}
+
+
+    [SerializeField] private List<int> forcedAugmentIDsList = new List<int>();
+
+    // Remove the problematic property entirely and use the List directly
+    public void SetForcedAugments(int[] augments)
+    {
+        forcedAugmentIDsList = new List<int>(augments ?? new int[0]);
+    }
+
+    public int[] GetForcedAugments()
+    {
+        return forcedAugmentIDsList.ToArray();
+    }
 
 
     [SerializeField] private ChosenAugmentsUI chosenAugmentsUI; // menu pauzy itp
+
     // State variables
     private bool isHidden = false;
     private bool isMenuActive = false;
+    [System.NonSerialized]
+
     private int[] rerollsLeft;
+    [System.NonSerialized]
+
     private int[] currentAugmentIDs;
+    [System.NonSerialized]
+
     private string[] currentSelectedRarities;
 
     // Data sources
+    [System.NonSerialized]
+
     private static Sprite[] allSprites;
 
     public struct AugmentWithRarity
@@ -48,21 +81,15 @@ public class AugmentsMenu : MonoBehaviour
         public string rarity;
     }
 
-    // Rarity system
-    private Dictionary<string, float> rarityWeights = new Dictionary<string, float>
+    //  Get data from AugmentRegistry 
+    private Dictionary<string, float> rarityWeights => AugmentRegistry.Instance?.GetRarityWeights() ?? new Dictionary<string, float>
     {
-        {"Common", 50f},
-        {"Rare", 30f},
-        {"Epic", 15f},
-        {"Legendary", 5f}
+        {"Common", 50f}, {"Rare", 30f}, {"Epic", 15f}, {"Legendary", 5f} // Fallback if registry not available
     };
 
-    private Dictionary<string, Color> rarityColors = new Dictionary<string, Color>
+    private Dictionary<string, Color> rarityColors => AugmentRegistry.Instance?.GetRarityColors() ?? new Dictionary<string, Color>
     {
-        {"Common", Color.green},
-        {"Rare", Color.blue},
-        {"Epic", new Color(0.8f, 0f, 1f)},
-        {"Legendary", new Color(1f, 0.6f, 0f)}
+        {"Common", Color.green}, {"Rare", Color.blue}, {"Epic", new Color(0.8f, 0f, 1f)}, {"Legendary", new Color(1f, 0.6f, 0f)} // Fallback if registry not available
     };
 
     void Awake()
@@ -70,14 +97,34 @@ public class AugmentsMenu : MonoBehaviour
         if (debugMode) Debug.Log("AugmentsMenu: Awake started");
 
         // Ensure forced augments array is properly initialized
-        if (forcedAugmentIDs == null)
-            forcedAugmentIDs = new int[0];
+        //if (forcedAugmentIDs == null)
+        //    forcedAugmentIDs = new int[0];
 
+        if (forcedAugmentIDsList == null)
+            forcedAugmentIDsList = new List<int>();
         InitializeArrays();
         LoadSprites();
         SetupUI();
 
         if (debugMode) Debug.Log("AugmentsMenu: Awake completed");
+    }
+
+    void OnValidate()
+    {
+        // Clean up null entries in forced augments list
+        if (forcedAugmentIDsList != null)
+        {
+            forcedAugmentIDsList.RemoveAll(id => id < 0);
+        }
+    }
+
+    void OnEnable()
+    {
+        // Ensure arrays are initialized even after deserialization
+        if (augmentImages != null && (rerollsLeft == null || rerollsLeft.Length != augmentImages.Length))
+        {
+            InitializeArrays();
+        }
     }
 
     void Start()
@@ -176,13 +223,58 @@ public class AugmentsMenu : MonoBehaviour
         // Small delay to ensure everything is fully initialized
         yield return new WaitForSeconds(0.1f);
 
+        // Validate rarity configuration consistency
+        ValidateRarityConfiguration();
+
         if (debugMode) Debug.Log($"AugmentsMenu: AugmentRegistry ready with {AugmentRegistry.Instance.GetAllAugments().Count} augments");
 
         GenerateInitialAugments();
     }
 
+    private void ValidateRarityConfiguration()
+    {
+        if (AugmentRegistry.Instance == null)
+        {
+            Debug.LogError("AugmentRegistry not found! Rarity system will not work properly.");
+            return;
+        }
+
+        var weights = rarityWeights;
+        var colors = rarityColors;
+
+        if (weights.Count != colors.Count)
+        {
+            Debug.LogWarning($"Rarity configuration mismatch: {weights.Count} weights vs {colors.Count} colors");
+        }
+
+        foreach (var rarity in weights.Keys)
+        {
+            if (!colors.ContainsKey(rarity))
+            {
+                Debug.LogError($"Rarity '{rarity}' has weight but no color defined!");
+            }
+        }
+
+        if (debugMode)
+        {
+            Debug.Log($"Validated {weights.Count} rarity configurations from AugmentRegistry");
+            foreach (var kvp in weights)
+            {
+                Debug.Log($"  {kvp.Key}: Weight={kvp.Value}, Color={colors[kvp.Key]}");
+            }
+        }
+    }
+
     private void GenerateInitialAugments()
     {
+        // Add unique timestamp to see if this method is actually called each time
+        //Debug.Log($"🔄 [GENERATION] Starting at {System.DateTime.Now:HH:mm:ss.fff} - Tick: {System.Environment.TickCount}");
+
+        // Reset random seed with current time to ensure different results
+        int newSeed = System.Environment.TickCount + UnityEngine.Random.Range(0, 10000);
+        UnityEngine.Random.InitState(newSeed);
+        //Debug.Log($"🎲 [SEED] Set random seed to: {newSeed}");
+
         if (debugMode) Debug.Log("AugmentsMenu: Generating initial augments...");
 
         if (augmentImages == null)
@@ -203,9 +295,10 @@ public class AugmentsMenu : MonoBehaviour
 
                 if (forcedAugment != null)
                 {
+                    //Debug.Log($"🔧 [FORCED] Slot {i}: About to generate rarity for ID {forcedID}");
                     string rarity = GetRandomRarityForAugment(forcedAugment.ID);
                     result = new AugmentWithRarity { augment = forcedAugment, rarity = rarity };
-                    if (debugMode) Debug.Log($"[DEBUG] Forced augment for slot {i}: {forcedAugment.Name} (ID: {forcedAugment.ID}, Rarity: {rarity})");
+                    //Debug.Log($"🔧 [FORCED] Slot {i}: ID {forcedID} -> {rarity} rarity");
                 }
                 else
                 {
@@ -215,7 +308,7 @@ public class AugmentsMenu : MonoBehaviour
             }
             else
             {
-                // Normal random generation
+                // Random generation
                 result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
             }
 
@@ -223,6 +316,7 @@ public class AugmentsMenu : MonoBehaviour
             {
                 currentAugmentIDs[i] = result.augment.ID;
                 currentSelectedRarities[i] = result.rarity;
+                //Debug.Log($"🎯 [STORED] Slot {i}: Stored ID {result.augment.ID} with rarity {result.rarity}");
                 UpdateSlotDisplay(i, result.augment, result.rarity);
             }
 
@@ -231,21 +325,20 @@ public class AugmentsMenu : MonoBehaviour
 
         if (debugMode) Debug.Log("AugmentsMenu: Initial augments generation completed");
     }
-
     // Simplified forced augment methods
     private bool ShouldUseForcedAugment(int slotIndex)
     {
-        return forcedAugmentIDs != null &&
-               slotIndex < forcedAugmentIDs.Length &&
-               forcedAugmentIDs[slotIndex] > 0;
+        return forcedAugmentIDsList != null &&
+               slotIndex < forcedAugmentIDsList.Count &&
+               forcedAugmentIDsList[slotIndex] > 0;
     }
 
     private int GetForcedAugmentID(int slotIndex)
     {
-        if (forcedAugmentIDs == null || slotIndex >= forcedAugmentIDs.Length)
+        if (forcedAugmentIDsList == null || slotIndex >= forcedAugmentIDsList.Count)
             return -1;
 
-        return forcedAugmentIDs[slotIndex];
+        return forcedAugmentIDsList[slotIndex];
     }
 
     private List<int> GetExcludedIDs()
@@ -325,7 +418,7 @@ public class AugmentsMenu : MonoBehaviour
     // ===== PUBLIC INTERFACE =====
     public void ActivateAugments()
     {
-        if (debugMode) Debug.Log("AugmentsMenu: ActivateAugments called");
+        //Debug.Log($"🎮 [MENU] ActivateAugments called at {System.DateTime.Now:HH:mm:ss.fff}");
 
         if (!isMenuActive)
         {
@@ -333,6 +426,10 @@ public class AugmentsMenu : MonoBehaviour
             Cursor.visible = true;
             Time.timeScale = 0f;
             isMenuActive = true;
+
+            // Force regeneration of augments each time menu opens
+            //Debug.Log("🔄 [MENU] Forcing augment regeneration");
+            GenerateInitialAugments();
 
             if (debugMode) Debug.Log("AugmentsMenu: Menu activated");
         }
@@ -360,6 +457,12 @@ public class AugmentsMenu : MonoBehaviour
             return;
         }
 
+        // Play reroll sound
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.augmentReroll, transform.position);
+        }
+
         rerollsLeft[slotIndex]--;
 
         var result = GenerateRandomAugmentWithRarity(GetExcludedIDs());
@@ -380,6 +483,7 @@ public class AugmentsMenu : MonoBehaviour
         UpdateRerollDisplay(slotIndex);
     }
 
+    // Passes both augment ID and selected rarity to the Registry
     public void ChooseAugment(int slotIndex)
     {
         if (debugMode) Debug.Log($"AugmentsMenu: ChooseAugment called for slot {slotIndex}");
@@ -397,29 +501,39 @@ public class AugmentsMenu : MonoBehaviour
             return;
         }
 
-        bool success = ApplyAugmentNew(chosenId);
+        // Get the selected rarity for this slot
+        string selectedRarity = GetCurrentAugmentRarity(slotIndex);
+
+        // Pass both ID and rarity to the registry
+        bool success = ApplyAugmentNew(chosenId, selectedRarity);
 
         if (success)
         {
-            if (debugMode) Debug.Log($"Successfully applied augment {chosenId}, closing menu");
+            if (debugMode) Debug.Log($"Successfully applied {selectedRarity} augment {chosenId}, closing menu");
+
+            // znajdź handler augmentów i uruchom efekt
+            var handler = FindAnyObjectByType<AugmentEffectHandler>();
+            if (handler != null)
+                handler.ApplyAugmentEffect(chosenId);
+
             CloseMenu();
         }
         else
         {
-            Debug.LogError($"Failed to apply augment {chosenId}");
+            Debug.LogError($"Failed to apply {selectedRarity} augment {chosenId}");
         }
 
         chosenAugmentsUI.RefreshUI();
     }
 
-    private bool ApplyAugmentNew(int chosenId)
+    private bool ApplyAugmentNew(int chosenId, string selectedRarity)
     {
         if (AugmentRegistry.Instance != null)
         {
-            bool success = AugmentRegistry.Instance.ApplyAugment(chosenId);
+            bool success = AugmentRegistry.Instance.ApplyAugment(chosenId, selectedRarity);
             if (success && debugMode)
             {
-                Debug.Log($"Applied augment ID: {chosenId}");
+                Debug.Log($"Applied {selectedRarity} augment ID: {chosenId}");
             }
             return success;
         }
@@ -479,7 +593,7 @@ public class AugmentsMenu : MonoBehaviour
         if (cleanRarities.Count == 0) return "Common";
         if (cleanRarities.Count == 1) return cleanRarities[0];
 
-        // Weighted random selection
+        // Weighted random selection using consolidated rarity weights
         List<float> weights = new List<float>();
         foreach (string rarity in cleanRarities)
         {
@@ -491,18 +605,22 @@ public class AugmentsMenu : MonoBehaviour
 
         float totalWeight = weights.Sum();
         float randomValue = UnityEngine.Random.Range(0f, totalWeight);
-        float currentWeight = 0f;
 
+        Debug.Log($"[RARITY DEBUG] ID {augmentId}: Rarities={string.Join(",", cleanRarities)}, Weights={string.Join(",", weights)}, TotalWeight={totalWeight}, RandomValue={randomValue}");
+
+        float currentWeight = 0f;
         for (int i = 0; i < cleanRarities.Count; i++)
         {
             currentWeight += weights[i];
             if (randomValue <= currentWeight)
+            {
+                Debug.Log($"[RARITY DEBUG] Selected: {cleanRarities[i]} (currentWeight={currentWeight})");
                 return cleanRarities[i];
+            }
         }
 
         return cleanRarities[0];
     }
-
     private AugmentWithRarity GenerateRandomAugmentWithRarity(List<int> excludeIDs)
     {
         if (AugmentRegistry.Instance == null)
@@ -528,7 +646,7 @@ public class AugmentsMenu : MonoBehaviour
             return new AugmentWithRarity();
         }
 
-        // Create weighted list of augment-rarity combinations
+        // Create weighted list of augment-rarity combinations using consolidated rarity weights
         List<(AugmentData augment, string rarity, float weight)> weightedCombinations = new List<(AugmentData, string, float)>();
 
         foreach (var augment in availableAugments)
@@ -620,16 +738,16 @@ public class AugmentsMenu : MonoBehaviour
     [ContextMenu("Validate Forced Augments")]
     public void ValidateForcedAugments()
     {
-        if (forcedAugmentIDs == null || forcedAugmentIDs.Length == 0)
+        if (forcedAugmentIDsList == null || forcedAugmentIDsList.Count == 0)
         {
             Debug.Log("No forced augments configured.");
             return;
         }
 
-        Debug.Log($"Validating {forcedAugmentIDs.Length} forced augments:");
-        for (int i = 0; i < forcedAugmentIDs.Length; i++)
+        Debug.Log($"Validating {forcedAugmentIDsList.Count} forced augments:");
+        for (int i = 0; i < forcedAugmentIDsList.Count; i++)
         {
-            int id = forcedAugmentIDs[i];
+            int id = forcedAugmentIDsList[i];
             if (id <= 0)
             {
                 Debug.LogWarning($"Slot {i}: Invalid ID {id}");
@@ -663,14 +781,67 @@ public class AugmentsMenu : MonoBehaviour
         Debug.Log($"- Available augments: {AugmentRegistry.Instance?.GetAllAugments().Count ?? 0}");
         Debug.Log($"- Max rerolls: {maxRerolls}");
         Debug.Log($"- Slots initialized: {currentAugmentIDs?.Length ?? 0}");
-        Debug.Log($"- Forced augments count: {forcedAugmentIDs?.Length ?? 0}");
+        Debug.Log($"- Forced augments count: {forcedAugmentIDsList?.Count ?? 0}");
+
+        Debug.Log($"- Rarity weights from registry: {rarityWeights.Count} entries");
+        Debug.Log($"- Rarity colors from registry: {rarityColors.Count} entries");
 
         if (currentAugmentIDs != null)
         {
             for (int i = 0; i < currentAugmentIDs.Length; i++)
             {
-                Debug.Log($"  Slot {i}: ID={currentAugmentIDs[i]}, Rerolls={rerollsLeft[i]}");
+                Debug.Log($"  Slot {i}: ID={currentAugmentIDs[i]}, Rarity={currentSelectedRarities[i]}, Rerolls={rerollsLeft[i]}");
             }
+        }
+    }
+
+    [ContextMenu("Test Rarity System Integration")]
+    public void TestRaritySystemIntegration()
+    {
+        Debug.Log("=== Testing Rarity System Integration ===");
+
+        if (AugmentRegistry.Instance == null)
+        {
+            Debug.LogError("AugmentRegistry not available!");
+            return;
+        }
+
+        var registryWeights = AugmentRegistry.Instance.GetRarityWeights();
+        var registryColors = AugmentRegistry.Instance.GetRarityColors();
+        var menuWeights = rarityWeights;
+        var menuColors = rarityColors;
+
+        Debug.Log($"Registry has {registryWeights.Count} weight entries, {registryColors.Count} color entries");
+        Debug.Log($"Menu sees {menuWeights.Count} weight entries, {menuColors.Count} color entries");
+
+        bool weightsMatch = true;
+        bool colorsMatch = true;
+
+        foreach (var kvp in registryWeights)
+        {
+            if (!menuWeights.ContainsKey(kvp.Key) || menuWeights[kvp.Key] != kvp.Value)
+            {
+                Debug.LogError($"Weight mismatch for {kvp.Key}: Registry={kvp.Value}, Menu={menuWeights.GetValueOrDefault(kvp.Key, -1)}");
+                weightsMatch = false;
+            }
+        }
+
+        foreach (var kvp in registryColors)
+        {
+            if (!menuColors.ContainsKey(kvp.Key) || menuColors[kvp.Key] != kvp.Value)
+            {
+                Debug.LogError($"Color mismatch for {kvp.Key}: Registry={kvp.Value}, Menu={menuColors.GetValueOrDefault(kvp.Key, Color.black)}");
+                colorsMatch = false;
+            }
+        }
+
+        if (weightsMatch && colorsMatch)
+        {
+            Debug.Log("✅ Rarity system integration is working correctly!");
+        }
+        else
+        {
+            Debug.LogError("❌ Rarity system integration has issues!");
         }
     }
 }

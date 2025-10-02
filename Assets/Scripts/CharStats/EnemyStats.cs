@@ -50,7 +50,20 @@ public class EnemyStats : CharacterStats
 
     public override void Die()
     {
-        // Handle energy drop spawning
+        // Check if this enemy has a GremlinController and use its death logic
+        var gremlinController = GetComponent<GremlinController>();
+        if (gremlinController != null)
+        {
+            // Clean up health bar first
+            if (healthBar != null)
+                Destroy(healthBar.gameObject);
+
+            // Let GremlinController handle the death 
+            gremlinController.Die();
+            return;
+        }
+
+        // Original logic for regular enemies
         if (canDropEnergy)
         {
             EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);

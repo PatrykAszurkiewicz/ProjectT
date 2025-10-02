@@ -11,11 +11,6 @@ public class ObstacleGenerator : MonoBehaviour
 
     private Transform coreTransform;
 
-    private void Start()
-    {
-        
-    }
-
     public void GenerateObstacles()
     {
         coreTransform = GameObject.FindGameObjectWithTag("Core").transform;

@@ -27,6 +27,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-7941932424386418284
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/GremlinAppearance
+  m_EditorClassIdentifier: 
+  Path: event:/GremlinAppearance
+  Guid:
+    Data1: -1483461998
+    Data2: 1309756251
+    Data3: -1860937344
+    Data4: -35436576
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-7811742797356613956
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -209,6 +236,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-5243557979073852544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/AugmentReroll
+  m_EditorClassIdentifier: 
+  Path: event:/AugmentReroll
+  Guid:
+    Data1: -1116858208
+    Data2: 1293702704
+    Data3: -1842931072
+    Data4: 1442451726
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-3723619638092549200
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -236,6 +290,57 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 196
+--- !u!114 &-3039619035344016467
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/MusicCalm/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 6
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 0
+  IsGlobal: 0
+  Labels: []
+  Exists: 1
+--- !u!114 &-2754841307453508336
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/GremlinDeath
+  m_EditorClassIdentifier: 
+  Path: event:/GremlinDeath
+  Guid:
+    Data1: -1150057822
+    Data2: 1228684988
+    Data3: -902479985
+    Data4: -835861714
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-2371819548618659074
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -290,6 +395,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-1837708856942917988
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/EnemyAttack
+  m_EditorClassIdentifier: 
+  Path: event:/EnemyAttack
+  Guid:
+    Data1: -1496161281
+    Data2: 1263613492
+    Data3: -973098315
+    Data4: -170769422
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-89216244576792818
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -305,10 +437,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638930443608711781
+  lastModified: 638946753870953992
   FileSizes:
   - Name: Desktop
-    Value: 1846
+    Value: 2166
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -347,13 +479,20 @@ MonoBehaviour:
   - {fileID: -9170716191666958751}
   - {fileID: -6558356097771114238}
   - {fileID: 9077964886532954577}
+  - {fileID: 6850197530369327895}
+  - {fileID: 858377814577949011}
+  - {fileID: -7941932424386418284}
+  - {fileID: -5243557979073852544}
+  - {fileID: -2754841307453508336}
+  - {fileID: -1837708856942917988}
+  - {fileID: 8149117700929340597}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638930443608711781
+  cacheTime: 638946753871973429
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -393,6 +532,47 @@ MonoBehaviour:
     index: 17
   - key: event:/CentralCoreDeath
     index: 18
+  - key: event:/Click
+    index: 19
+  - key: event:/TowerDeath
+    index: 20
+  - key: event:/GremlinAppearance
+    index: 21
+  - key: event:/AugmentReroll
+    index: 22
+  - key: event:/GremlinDeath
+    index: 23
+  - key: event:/EnemyAttack
+    index: 24
+  - key: event:/Music/MusicCalm
+    index: 25
+--- !u!114 &858377814577949011
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/TowerDeath
+  m_EditorClassIdentifier: 
+  Path: event:/TowerDeath
+  Guid:
+    Data1: 1811497561
+    Data2: 1121566150
+    Data3: 768344978
+    Data4: 1338637834
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &1052223431168759608
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -558,10 +738,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 638930443608691801
+  lastModified: 638946753870933995
   FileSizes:
   - Name: Desktop
-    Value: 951104
+    Value: 1115104
   Exists: 1
 --- !u!114 &4699882167230820914
 MonoBehaviour:
@@ -722,6 +902,33 @@ MonoBehaviour:
   IsGlobal: 0
   Labels: []
   Exists: 1
+--- !u!114 &6850197530369327895
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Click
+  m_EditorClassIdentifier: 
+  Path: event:/Click
+  Guid:
+    Data1: -817804514
+    Data2: 1136743607
+    Data3: -1759412330
+    Data4: 1754517006
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &7043781551158048209
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -829,6 +1036,34 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &8149117700929340597
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/MusicCalm
+  m_EditorClassIdentifier: 
+  Path: event:/Music/MusicCalm
+  Guid:
+    Data1: -2125480614
+    Data2: 1318857584
+    Data3: -1986423419
+    Data4: -1820070629
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: -3039619035344016467}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 162666
 --- !u!114 &8434910682899568656
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -844,10 +1079,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/MusicAmbient.bank
   Name: MusicAmbient
   StudioPath: bank:/MusicAmbient
-  lastModified: 638898438174545915
+  lastModified: 638946753871973429
   FileSizes:
   - Name: Desktop
-    Value: 3420960
+    Value: 4819008
   Exists: 1
 --- !u!114 &9077964886532954577
 MonoBehaviour:

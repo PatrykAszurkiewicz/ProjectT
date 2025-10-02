@@ -4,15 +4,15 @@ public class WeaponSelectionManager : MonoBehaviour
 {
     public static WeaponSelectionManager Instance;
 
-    public WeaponData SelectedWeapon; // save selected weapon
-    public WeaponData DefaultWeapon;  
+    public WeaponData SelectedWeapon; // Save selected weapon
+    public WeaponData DefaultWeapon;
 
     private void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // work between scenes
+            DontDestroyOnLoad(gameObject); // Work between scenes
         }
         else
         {

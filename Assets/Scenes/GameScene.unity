@@ -1775,8 +1775,8 @@ MonoBehaviour:
   - {fileID: 2110909284}
   maxRerolls: 99
   debugMode: 1
-  forcedAugmentIDs: 010000000500000010000000
-  chosenAugmentsUI: {fileID: 0}
+  forcedAugmentIDsList: 18000000190000003c000000
+  chosenAugmentsUI: {fileID: 1984759432}
 --- !u!1 &453391371 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2138885173737701668, guid: 75bc5fbc067628744a7bce95d344e4c5, type: 3}
@@ -2179,7 +2179,7 @@ MonoBehaviour:
   weaponData: {fileID: 0}
   attackCollider: {fileID: 549341035}
   visual: {fileID: 549341031}
-  defaultWeapon: {fileID: 11400000, guid: e55ebc9d834ec5441ad8430220fe403b, type: 2}
+  defaultWeapon: {fileID: 11400000, guid: 40d1aaa84d6447044afe59352c36c1dc, type: 2}
 --- !u!60 &549341035
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -4171,6 +4171,7 @@ MonoBehaviour:
   meleeCursorPath: Sprites/Cursors/cursor_spritesheet_melee
   hookCursorPath: Sprites/Cursors/cursor_spritesheet_hook2
   hookHighlightCursorPath: Sprites/Cursors/cursor_spritesheet_hook_highlight
+  obstacleDrawerCursorPath: Sprites/Cursors/cursor_spritesheet_obstacle_drawer
 --- !u!1 &1027311100
 GameObject:
   m_ObjectHideFlags: 0
@@ -4916,6 +4917,13 @@ MonoBehaviour:
       Data3: 311959207
       Data4: 2053324099
     Path: event:/Music/MusicPiano
+  <musicCalm>k__BackingField:
+    Guid:
+      Data1: -2125480614
+      Data2: 1318857584
+      Data3: -1986423419
+      Data4: -1820070629
+    Path: event:/Music/MusicCalm
   <multiShotSound>k__BackingField:
     Guid:
       Data1: -179989327
@@ -4979,6 +4987,13 @@ MonoBehaviour:
       Data3: 1808483507
       Data4: -1877119790
     Path: event:/TowerCreation
+  <towerDeath>k__BackingField:
+    Guid:
+      Data1: 1811497561
+      Data2: 1121566150
+      Data3: 768344978
+      Data4: 1338637834
+    Path: event:/TowerDeath
   <resourceDropCollection>k__BackingField:
     Guid:
       Data1: 1847399950
@@ -4993,6 +5008,41 @@ MonoBehaviour:
       Data3: 738612373
       Data4: 781697213
     Path: event:/CentralCoreDeath
+  <gremlinAppearance>k__BackingField:
+    Guid:
+      Data1: -1483461998
+      Data2: 1309756251
+      Data3: -1860937344
+      Data4: -35436576
+    Path: event:/GremlinAppearance
+  <gremlinDeath>k__BackingField:
+    Guid:
+      Data1: -1150057822
+      Data2: 1228684988
+      Data3: -902479985
+      Data4: -835861714
+    Path: event:/GremlinDeath
+  <enemyAttack>k__BackingField:
+    Guid:
+      Data1: -1496161281
+      Data2: 1263613492
+      Data3: -973098315
+      Data4: -170769422
+    Path: event:/EnemyAttack
+  <augmentReroll>k__BackingField:
+    Guid:
+      Data1: -1116858208
+      Data2: 1293702704
+      Data3: -1842931072
+      Data4: 1442451726
+    Path: event:/AugmentReroll
+  <click>k__BackingField:
+    Guid:
+      Data1: -817804514
+      Data2: 1136743607
+      Data3: -1759412330
+      Data4: 1754517006
+    Path: event:/Click
 --- !u!1 &1213227520
 GameObject:
   m_ObjectHideFlags: 0
@@ -5022,6 +5072,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9ed2cc7375b47dc469e54d74d6c50a40, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  globalResourceMultiplier: 1
+  bonusResourceDropChance: 0
+  bonusResourceMultiplier: 2
   globalEnergyDecayRate: 1
   supplyRange: 2.2
   supplyRate: 10
@@ -5043,7 +5096,7 @@ MonoBehaviour:
   coreDeadEnergyThreshold: 0
   playerStartingEnergy: 300
   towerBuildCost: 100
-  towerSellRefundPercentage: 0.5
+  towerSellRefundPercentage: 0.1
   enableCurrencyEarnedFromEnemyKills: 0
   energyPerEnemyKill: 0
   playerEnergyText: {fileID: 1758088795}
@@ -5145,6 +5198,7 @@ MonoBehaviour:
   terrainColor: {r: 0, g: 1, b: 0, a: 1}
   towerSlotPrefab: {fileID: 1137732674636810103, guid: 0c973a55cdd562b4d9ebc953372a4e90, type: 3}
   rings: []
+  maxTotalRings: 8
   enableCentralCore: 1
   coreSize: 2
   coreMaxEnergy: 100
@@ -5865,6 +5919,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1338708042}
   - component: {fileID: 1338708043}
+  - component: {fileID: 1338708044}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -5906,6 +5961,18 @@ MonoBehaviour:
   minDistanceFromCore: 6
   minDistanceBetweenObstacles: 1.5
   mapRange: 15
+--- !u!114 &1338708044
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1338708041}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b5e3b04cb6a9124097a2c35b3a37e95, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1355754382
 GameObject:
   m_ObjectHideFlags: 0
@@ -6061,6 +6128,7 @@ MonoBehaviour:
   ambienceVolume: 1
   SFXVolume: 1
   musicEnabled: 0
+  enableDebugLogs: 1
 --- !u!4 &1357493429
 Transform:
   m_ObjectHideFlags: 0

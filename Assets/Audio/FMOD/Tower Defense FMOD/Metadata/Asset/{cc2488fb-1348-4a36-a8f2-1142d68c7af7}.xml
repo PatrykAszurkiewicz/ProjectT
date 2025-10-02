@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="EncodableAsset" id="{cc2488fb-1348-4a36-a8f2-1142d68c7af7}">
+		<property name="assetPath">
+			<value>FX/TowerDeath/</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{df2ccf63-2592-47b6-b348-eab208991016}</destination>
+		</relationship>
+	</object>
+</objects>

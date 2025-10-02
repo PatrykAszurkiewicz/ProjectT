@@ -35,6 +35,7 @@ public class GremlinController : MonoBehaviour, IDamageable
         EnsureVisibility();
     }
 
+
     void SetupComponents()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -96,7 +97,6 @@ public class GremlinController : MonoBehaviour, IDamageable
             spriteRenderer.color = Color.green;
         }
     }
-
     void SetupGremlinProperties()
     {
         var grapplingTarget = GetComponent<GremlinGrapplingTarget>();
@@ -121,7 +121,10 @@ public class GremlinController : MonoBehaviour, IDamageable
         enemyStats.enemyData = enemyData;
         enemyStats.maxHealth = 1f;
         enemyStats.currentHealth = 1f;
-        enemyStats.canDropEnergy = false;
+        enemyStats.canDropEnergy = true;
+
+        enemyStats.energyDropChance = 1f; // 100% drop chance
+        enemyStats.energyDropValue = energyDropValue;
     }
 
     void EnsureVisibility()
@@ -262,6 +265,7 @@ public class GremlinController : MonoBehaviour, IDamageable
     {
         if (isDead) return;
         isDead = true;
+        PlayDeathSound();
 
         rb.linearVelocity = Vector2.zero;
         rb.simulated = false;
@@ -272,9 +276,17 @@ public class GremlinController : MonoBehaviour, IDamageable
         if (EnergyManager.Instance != null)
             EnergyManager.Instance.OnEnemyKilled(gameObject);
 
-        var waveSpawner = FindFirstObjectByType<WaveSpawner>();
-        if (waveSpawner != null)
-            waveSpawner.OnEnemyDeath();
+        //var waveSpawner = FindFirstObjectByType<WaveSpawner>();
+        //if (waveSpawner != null)
+        //    waveSpawner.OnEnemyDeath();
+    }
+
+    private void PlayDeathSound()
+    {
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.gremlinDeath, transform.position);
+        }
     }
 
     IEnumerator DeathSequence()

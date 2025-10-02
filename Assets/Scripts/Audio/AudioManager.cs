@@ -4,6 +4,7 @@ using UnityEngine;
 using FMODUnity;
 using FMOD.Studio;
 
+[DefaultExecutionOrder(-100)] // Ensure AudioManager initializes before other scripts
 public class AudioManager : MonoBehaviour
 {
     [Header("Volume")]
@@ -17,8 +18,11 @@ public class AudioManager : MonoBehaviour
     public float SFXVolume = 1;
 
     [Header("Music Settings")]
-    public bool musicEnabled = false; // Set to false by default
-    private bool previousMusicEnabled = false;
+    public bool musicEnabled = true; // Enable by default
+    private bool previousMusicEnabled = true;
+
+    [Header("Debug")]
+    public bool enableDebugLogs = true;
 
     private Bus masterBus;
     private Bus musicBus;
@@ -31,6 +35,7 @@ public class AudioManager : MonoBehaviour
     private EventInstance ambienceEventInstance;
     private EventInstance musicEventInstance;
     private bool musicInitialized = false;
+    private bool fmodInitialized = false;
 
     public static AudioManager instance { get; private set; }
 
@@ -39,35 +44,102 @@ public class AudioManager : MonoBehaviour
         if (instance != null)
         {
             Debug.LogError("Found more than one Audio Manager in the scene.");
+            Destroy(gameObject);
+            return;
         }
         instance = this;
 
         eventInstances = new List<EventInstance>();
         eventEmitters = new List<StudioEventEmitter>();
-
-        // UNCOMMENTED: Initialize the buses
-        masterBus = RuntimeManager.GetBus("bus:/");
-        musicBus = RuntimeManager.GetBus("bus:/Music");
-        ambienceBus = RuntimeManager.GetBus("bus:/Ambience");
-        sfxBus = RuntimeManager.GetBus("bus:/SFX");
+        StartCoroutine(InitializeFMOD());
     }
 
-    private void Start()
+    private IEnumerator InitializeFMOD()
     {
-        //InitializeAmbience(FMODEvents.instance.ambience);
+        if (enableDebugLogs) Debug.Log("Initializing FMOD...");
 
-        previousMusicEnabled = musicEnabled; // Initialize the tracking variable
+        // Wait for FMOD to be ready
+        int attempts = 0;
+        while (attempts < 100) // Max 5 seconds
+        {
+            try
+            {
+                masterBus = RuntimeManager.GetBus("bus:/");
+                musicBus = RuntimeManager.GetBus("bus:/Music");
+                ambienceBus = RuntimeManager.GetBus("bus:/Ambience");
+                sfxBus = RuntimeManager.GetBus("bus:/SFX");
 
+                if (masterBus.isValid() && musicBus.isValid() && ambienceBus.isValid() && sfxBus.isValid())
+                {
+                    fmodInitialized = true;
+                    if (enableDebugLogs) Debug.Log("FMOD buses initialized successfully");
+                    break;
+                }
+            }
+            catch (System.Exception e)
+            {
+                if (enableDebugLogs) Debug.LogWarning($"FMOD not ready yet (attempt {attempts}): {e.Message}");
+            }
+
+            attempts++;
+            yield return new WaitForSeconds(0.05f);
+        }
+
+        if (!fmodInitialized)
+        {
+            Debug.LogError("Failed to initialize FMOD after 5 seconds!");
+            yield break;
+        }
+
+        // Initialize music if enabled
+        previousMusicEnabled = musicEnabled;
         if (musicEnabled)
         {
-            InitializeMusic(FMODEvents.instance.musicAmbient);
-            AudioManager.instance.SetMusicSection(MusicSection.Calm);
+            yield return StartCoroutine(InitializeMusicCoroutine());
+        }
+    }
+
+    private IEnumerator InitializeMusicCoroutine()
+    {
+        // Wait for FMODEvents to be initialized
+        float timeout = 5f;
+        float elapsed = 0f;
+
+        while (FMODEvents.instance == null && elapsed < timeout)
+        {
+            if (enableDebugLogs) Debug.Log("Waiting for FMODEvents to initialize...");
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (FMODEvents.instance == null)
+        {
+            Debug.LogError("FMODEvents.instance is still null after waiting! Make sure FMODEvents is in the scene and has the FMODEvents script attached.");
+            yield break;
+        }
+
+        if (FMODEvents.instance.musicAmbient.IsNull)
+        {
+            Debug.LogError("musicAmbient EventReference is not assigned in FMODEvents!");
+            yield break;
+        }
+
+        // Wait one more frame to ensure everything is ready
+        yield return new WaitForEndOfFrame();
+
+        InitializeMusic(FMODEvents.instance.musicAmbient);
+
+        if (musicInitialized)
+        {
+            SetMusicSection(MusicSection.Calm);
         }
     }
 
     private void Update()
     {
-        // Check if buses are valid before setting volume
+        if (!fmodInitialized) return;
+
+        // Update bus volumes
         if (masterBus.isValid())
             masterBus.setVolume(masterVolume);
         if (musicBus.isValid())
@@ -99,21 +171,60 @@ public class AudioManager : MonoBehaviour
 
     private void InitializeAmbience(EventReference ambienceEventReference)
     {
+        if (!fmodInitialized)
+        {
+            Debug.LogWarning("Cannot initialize ambience - FMOD not ready");
+            return;
+        }
+
         ambienceEventInstance = CreateInstance(ambienceEventReference);
         ambienceEventInstance.start();
+        if (enableDebugLogs) Debug.Log("Ambience initialized");
     }
 
     private void InitializeMusic(EventReference musicEventReference)
     {
-        musicEventInstance = CreateInstance(musicEventReference);
-        musicEventInstance.start();
-        musicInitialized = true;
+        if (!fmodInitialized)
+        {
+            Debug.LogWarning("Cannot initialize music - FMOD not ready");
+            return;
+        }
+
+        if (enableDebugLogs) Debug.Log("Attempting to initialize music...");
+
+        if (musicEventReference.IsNull)
+        {
+            Debug.LogError("Music EventReference is null!");
+            return;
+        }
+
+        try
+        {
+            musicEventInstance = CreateInstance(musicEventReference);
+
+            FMOD.RESULT result = musicEventInstance.start();
+            if (result != FMOD.RESULT.OK)
+            {
+                Debug.LogError($"Failed to start music instance: {result}");
+                return;
+            }
+
+            musicInitialized = true;
+
+            // Verify the instance is in a good state
+            FMOD.Studio.PLAYBACK_STATE state;
+            musicEventInstance.getPlaybackState(out state);
+            if (enableDebugLogs) Debug.Log($"Music initialized successfully. Playback state: {state}");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Exception initializing music: {e.Message}");
+        }
     }
 
     public void SetMusicSection(int sectionIndex)
     {
-        if (!musicEnabled || !musicInitialized) return;
-        musicEventInstance.setParameterByName("MusicSection", sectionIndex);
+        SetMusicSection((MusicSection)sectionIndex);
     }
 
     public enum MusicSection
@@ -128,8 +239,89 @@ public class AudioManager : MonoBehaviour
 
     public void SetMusicSection(MusicSection section)
     {
-        if (!musicEnabled || !musicInitialized) return;
-        musicEventInstance.setParameterByName("MusicSection", (float)section);
+        if (enableDebugLogs) Debug.Log($"SetMusicSection called: {section}");
+
+        if (!musicEnabled)
+        {
+            if (enableDebugLogs) Debug.LogWarning("Music is disabled");
+            return;
+        }
+
+        if (!fmodInitialized)
+        {
+            if (enableDebugLogs) Debug.LogWarning("FMOD not initialized, deferring music section change");
+            StartCoroutine(DeferredMusicSection(section));
+            return;
+        }
+
+        if (!musicInitialized)
+        {
+            if (enableDebugLogs) Debug.LogWarning("Music not initialized, attempting to initialize");
+
+            // Try to initialize music now
+            if (FMODEvents.instance != null && !FMODEvents.instance.musicAmbient.IsNull)
+            {
+                InitializeMusic(FMODEvents.instance.musicAmbient);
+
+                if (!musicInitialized)
+                {
+                    Debug.LogError("Failed to initialize music");
+                    return;
+                }
+            }
+            else
+            {
+                Debug.LogError("Cannot initialize music - FMODEvents or musicAmbient is null");
+                return;
+            }
+        }
+
+        if (!musicEventInstance.isValid())
+        {
+            Debug.LogError("musicEventInstance is not valid!");
+            return;
+        }
+
+        try
+        {
+            FMOD.RESULT result = musicEventInstance.setParameterByName("MusicSection", (float)section);
+            if (result == FMOD.RESULT.OK)
+            {
+                if (enableDebugLogs) Debug.Log($"Music section successfully set to: {section} ({(int)section})");
+            }
+            else
+            {
+                Debug.LogError($"Failed to set music parameter: {result}");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Exception setting music section: {e.Message}");
+        }
+    }
+
+    private IEnumerator DeferredMusicSection(MusicSection section)
+    {
+        if (enableDebugLogs) Debug.Log($"Deferring music section change to: {section}");
+
+        // Wait for FMOD to be ready
+        float timeout = 5f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout && (!fmodInitialized || !musicBus.isValid()))
+        {
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (!fmodInitialized || !musicBus.isValid())
+        {
+            Debug.LogError("Timed out waiting for FMOD to initialize");
+            yield break;
+        }
+
+        // Try to set the music section now
+        SetMusicSection(section);
     }
 
     public void ToggleMusic()
@@ -141,41 +333,58 @@ public class AudioManager : MonoBehaviour
 
     private void HandleMusicToggle()
     {
-        if (musicEnabled && !musicInitialized)
+        if (musicEnabled && !musicInitialized && fmodInitialized)
         {
             // Initialize music if it wasn't initialized before
-            if (FMODEvents.instance != null && FMODEvents.instance.musicAmbient.IsNull == false)
+            if (FMODEvents.instance != null && !FMODEvents.instance.musicAmbient.IsNull)
             {
                 InitializeMusic(FMODEvents.instance.musicAmbient);
-                SetMusicSection(MusicSection.Calm);
+                if (musicInitialized)
+                {
+                    SetMusicSection(MusicSection.Calm);
+                }
             }
         }
         else if (!musicEnabled && musicInitialized)
         {
             // Stop music but keep it initialized for quick restart
-            musicEventInstance.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            if (musicEventInstance.isValid())
+            {
+                musicEventInstance.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            }
         }
         else if (musicEnabled && musicInitialized)
         {
             // Restart music if it was stopped
-            musicEventInstance.start();
+            if (musicEventInstance.isValid())
+            {
+                musicEventInstance.start();
+            }
         }
     }
 
     public void SetAmbienceParameter(string parameterName, float parameterValue)
     {
-        ambienceEventInstance.setParameterByName(parameterName, parameterValue);
+        if (ambienceEventInstance.isValid())
+        {
+            ambienceEventInstance.setParameterByName(parameterName, parameterValue);
+        }
     }
 
-    // ADDED: Method to play SFX sounds through the SFX bus
     public void PlaySFX(EventReference sound, Vector3 worldPos = default(Vector3))
     {
-        RuntimeManager.PlayOneShot(sound, worldPos);
+        if (fmodInitialized)
+        {
+            RuntimeManager.PlayOneShot(sound, worldPos);
+        }
     }
 
     public void PlayOneShot(EventReference sound, Vector3 worldPos)
     {
-        RuntimeManager.PlayOneShot(sound, worldPos);
+        if (fmodInitialized)
+        {
+            RuntimeManager.PlayOneShot(sound, worldPos);
+        }
     }
 
     public EventInstance CreateInstance(EventReference eventReference)
@@ -193,16 +402,34 @@ public class AudioManager : MonoBehaviour
         return emitter;
     }
 
+    // Public method for other scripts to force music initialization if needed
+    public void EnsureMusicReady()
+    {
+        if (!musicEnabled) return;
+
+        if (!fmodInitialized)
+        {
+            Debug.LogWarning("FMOD not initialized when EnsureMusicReady called");
+            return;
+        }
+
+        if (!musicInitialized && FMODEvents.instance != null && !FMODEvents.instance.musicAmbient.IsNull)
+        {
+            InitializeMusic(FMODEvents.instance.musicAmbient);
+        }
+    }
+
+    // Public properties for debugging
+    public bool IsFMODInitialized => fmodInitialized;
+    public bool IsMusicInitialized => musicInitialized;
+
     private void CleanUp()
     {
-        // FIXED: Add null checks to prevent NullReferenceException
-
         // Stop and release any created instances
         if (eventInstances != null)
         {
             foreach (EventInstance eventInstance in eventInstances)
             {
-                // Check if the event instance is valid before trying to stop it
                 if (eventInstance.isValid())
                 {
                     eventInstance.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
@@ -217,7 +444,6 @@ public class AudioManager : MonoBehaviour
         {
             foreach (StudioEventEmitter emitter in eventEmitters)
             {
-                // Check if emitter is not null before trying to stop it
                 if (emitter != null)
                 {
                     emitter.Stop();

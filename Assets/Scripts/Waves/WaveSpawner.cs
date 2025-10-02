@@ -78,7 +78,17 @@ public class WaveSpawner : MonoBehaviour
         Shuffle(enemyPrefabsToSpawn);
 
         if (AudioManager.instance != null)
+        {
+            // Ensure music system is ready
+            AudioManager.instance.EnsureMusicReady();
+
+            // Force music to Intense with retry logic
             AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
+            if (AudioManager.instance.enableDebugLogs)
+            {
+                Debug.Log($"Wave {currentWaveIndex}: Music should now be Intense. FMOD Ready: {AudioManager.instance.IsFMODInitialized}, Music Ready: {AudioManager.instance.IsMusicInitialized}");
+            }
+        }
 
         SpawnDirection chosenDir = SpawnDirection.Top;
         if (wave.oneDirectionForAllEnemies && wave.spawnDirections != null && wave.spawnDirections.Count > 0)
