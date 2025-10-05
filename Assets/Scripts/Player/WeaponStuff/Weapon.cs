@@ -214,7 +214,14 @@ public class Weapon : MonoBehaviour
 
         // Deal damage
         if (weaponData.damage > 0)
+        {
             enemy.TakeDamage(weaponData.damage);
+
+            // Energy vampire effect (3 lines)
+            var vampireEffect = playerStats?.GetComponent<EnergyVampireTouchEffect>();
+            if (vampireEffect != null)
+                vampireEffect.DrainEnergy();
+        }
 
         // Apply knockback
         if (weaponData.knockBack)

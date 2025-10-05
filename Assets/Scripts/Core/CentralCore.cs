@@ -233,9 +233,26 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     #endregion
 
     #region IDamageable Implementation
+
+    // In CentralCore.cs, replace the TakeDamage method with this:
     public bool TakeDamage(float damageAmount, GameObject damageSource = null)
     {
         if (immuneToEnemyDamage || isDestroyed) return false;
+
+        // Check for shield component first
+        var shield = GetComponent<CoreShieldMatrix>();
+        if (shield != null && shield.IsShieldActive())
+        {
+            bool allDamageAbsorbed = shield.AbsorbDamage(ref damageAmount);
+
+            if (allDamageAbsorbed)
+            {
+                // All damage absorbed by shield, no damage to core
+                return false;
+            }
+            // If some damage remains, continue to apply it to core below
+        }
+
 
         float actualDamage = damageAmount * (1f - armorReduction);
         bool wasCritical = IsInCriticalState();

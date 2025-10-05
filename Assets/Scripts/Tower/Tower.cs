@@ -935,12 +935,18 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (target == null || IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
 
-        // Keeping energy boost at original level
-        //float baseCost = damage * 0.1f;  // Use original damage for energy cost
-        //float energyCost = baseCost * energyCostMultiplier;
         // Use base damage (before augments) for energy cost calculation
         float baseCost = baseDamageForEnergyCost * 0.1f;
         float energyCost = baseCost * energyCostMultiplier;
+
+        // Apply generator proximity efficiency boost
+        var generatorBoost = GetComponent<GeneratorProximityBoost>();
+        if (generatorBoost != null)
+        {
+            float efficiencyMultiplier = generatorBoost.GetEnergyEfficiencyMultiplier();
+            energyCost *= efficiencyMultiplier;
+            Debug.Log($"[TOWER] {towerName} energy cost reduced by generator proximity: {baseCost * energyCostMultiplier:F2} -> {energyCost:F2}");
+        }
 
         if (float.IsNaN(energyCost) || float.IsInfinity(energyCost))
         {

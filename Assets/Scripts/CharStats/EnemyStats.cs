@@ -1,3 +1,5 @@
+using Unity.Collections;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class EnemyStats : CharacterStats
@@ -14,10 +16,13 @@ public class EnemyStats : CharacterStats
     public int energyDropValue = -1; // -1 = use global setting
     public bool canDropEnergy = true;
 
+
     private void Awake()
     {
         if (enemyData != null)
         {
+            enemyData = ScriptableObjectUtility.Clone(enemyData);
+
             maxHealth = enemyData.maxHealth;
             currentHealth = maxHealth;
         }
@@ -36,6 +41,16 @@ public class EnemyStats : CharacterStats
             }
         }
     }
+#if UNITY_EDITOR
+    [Header("Debug")]
+    [SerializeField, ReadOnly] private float currentMoveSpeedDebug;
+#endif
+#if UNITY_EDITOR
+    private void Update()
+    {
+        currentMoveSpeedDebug = MoveSpeed;
+    }
+#endif
 
     public override void TakeDamage(float amount)
     {
@@ -113,4 +128,5 @@ public class EnemyStats : CharacterStats
         UnityEditor.Handles.Label(transform.position + Vector3.up * 1.3f, $"Energy: {value}");
     }
 #endif
+
 }

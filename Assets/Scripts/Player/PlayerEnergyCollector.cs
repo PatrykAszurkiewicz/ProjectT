@@ -13,6 +13,32 @@ public class PlayerEnergyCollector : MonoBehaviour
     // Events
     public System.Action<int> OnEnergyCollected;
 
+    public void UpdateCollectionRadius(float newRadius)
+    {
+        collectionRadius = newRadius;
+
+        // Update existing collider on player
+        var existingCollider = GetComponent<CircleCollider2D>();
+        if (existingCollider != null && existingCollider.isTrigger)
+        {
+            existingCollider.radius = newRadius;
+            //Debug.Log($"[PlayerEnergyCollector] Updated player collider radius to {newRadius}");
+            return;
+        }
+
+        // Update collider on child trigger object
+        var triggerObj = transform.Find("EnergyCollectionTrigger");
+        if (triggerObj != null)
+        {
+            var childCollider = triggerObj.GetComponent<CircleCollider2D>();
+            if (childCollider != null)
+            {
+                childCollider.radius = newRadius;
+                //Debug.Log($"[PlayerEnergyCollector] Updated child trigger collider radius to {newRadius}");
+            }
+        }
+    }
+
     void Awake()
     {
         // Auto-setup collection trigger

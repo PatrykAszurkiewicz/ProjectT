@@ -10,6 +10,8 @@ public class EnergyManager : MonoBehaviour
     #region Singleton Management
     private static bool isApplicationQuitting = false;
 
+    public System.Action<GameObject> OnEnemyKilledEvent;
+
 
     private static EnergyManager instance;
     private bool isGameOver = false;
@@ -360,8 +362,10 @@ public class EnergyManager : MonoBehaviour
         {
             int reward = Mathf.RoundToInt(energyPerEnemyKill * globalResourceMultiplier);
             GivePlayerEnergy(reward);
-            //GivePlayerEnergy(energyPerEnemyKill);
         }
+
+        // Fire event for other systems (like Energy Scavenging augment)
+        OnEnemyKilledEvent?.Invoke(enemy);
     }
 
     void UpdatePlayerEnergyUI()
@@ -827,6 +831,11 @@ public class EnergyManager : MonoBehaviour
 
     void ProcessEnergyDecay()
     {
+        // Debug every 60 frames
+        if (Time.frameCount % 60 == 0)
+        {
+            Debug.Log($"[ENERGY] Core decay rate: {coreEnergyDecayRate:F2}");
+        }
         for (int i = energyConsumers.Count - 1; i >= 0; i--)
         {
             if (energyConsumers[i] == null)
@@ -847,15 +856,23 @@ public class EnergyManager : MonoBehaviour
     {
         float baseRate = consumer is CentralCore ? coreEnergyDecayRate : towerEnergyDecayRate;
         float finalRate = baseRate * globalEnergyDecayRate;
-
-        // Check for Tower Commander boost (energy decay reduction)
         if (consumer is Tower tower)
         {
+            // Check for Tower Commander boost (energy decay reduction)
             var commanderBoost = tower.GetComponent<TowerCommanderBoost>();
             if (commanderBoost != null)
             {
                 finalRate *= commanderBoost.GetEnergyDecayMultiplier();
-                Debug.Log($"[ENERGY_MANAGER] Tower {tower.towerName} energy decay: {baseRate * globalEnergyDecayRate:F3} -> {finalRate:F3} (multiplier: {commanderBoost.GetEnergyDecayMultiplier():F3})");
+                //Debug.Log($"[ENERGY_MANAGER] Tower {tower.towerName} energy decay: {baseRate * globalEnergyDecayRate:F3} -> {finalRate:F3} (multiplier: {commanderBoost.GetEnergyDecayMultiplier():F3})");
+            }
+
+            // Check for Generator Proximity boost
+            var generatorBoost = tower.GetComponent<GeneratorProximityBoost>();
+            if (generatorBoost != null)
+            {
+                float beforeProximity = finalRate;
+                finalRate *= generatorBoost.GetEnergyEfficiencyMultiplier();
+                //Debug.Log($"[ENERGY_MANAGER] Tower {tower.towerName} decay reduced by generator proximity: {beforeProximity:F3} -> {finalRate:F3}");
             }
         }
 

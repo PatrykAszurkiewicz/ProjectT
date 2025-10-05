@@ -351,10 +351,30 @@ public class AugmentsMenu : MonoBehaviour
             excluded.AddRange(currentAugmentIDs.Where(id => id != -1));
         }
 
-        // Exclude already applied augments
+        // Define augments that CANNOT be selected multiple times
+        HashSet<int> nonRepeatableAugments = new HashSet<int>
+        { 
+            // Unlock augments
+            2,   // Unlocked melee
+            3,   // Obstacles generation
+            //4,   // More obstacles
+            65,  // Unlocked grappling hook
+            66,  // Unlocked ranged weapon
+            93,  // Unlocked flamethrower
+            94,  // Unlocked portable obstacles
+            231, // Unlocked heavy melee weapon
+            232, // Unlocked dagger melee weapon
+            // One-time special effects
+            30,  // God Mode (permanent penalty)
+            37,  // Quick revive (once per wave)
+            163, // Time Rewind (once per game)
+        };
+
         if (AugmentRegistry.Instance != null)
         {
-            excluded.AddRange(AugmentRegistry.Instance.GetAppliedAugments());
+            var appliedAugments = AugmentRegistry.Instance.GetAppliedAugments();
+            // Only exclude non-repeatable augments
+            excluded.AddRange(appliedAugments.Where(id => nonRepeatableAugments.Contains(id)));
         }
 
         return excluded.Distinct().ToList();

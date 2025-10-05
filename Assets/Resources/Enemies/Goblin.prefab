@@ -168,10 +168,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHealth: 100
   currentHealth: 100
-  maxArmor: 0
   currentArmor: 0
   healthBarPrefab: {fileID: 4013683592240770047, guid: cde1533554ef19f439dc1bac60c6978b, type: 3}
   enemyData: {fileID: 11400000, guid: d3f41e20a0dbd4c4294659626c6a08e5, type: 2}
+  energyDropChance: 0
+  energyDropValue: -1
+  canDropEnergy: 1
 --- !u!114 &1608654102432218712
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -191,3 +193,5 @@ MonoBehaviour:
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8192
+  stuckCheckTime: 0.5
+  minMovementThreshold: 0.2

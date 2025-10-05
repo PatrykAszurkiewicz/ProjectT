@@ -1,4 +1,3 @@
-
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
@@ -250,11 +249,251 @@ public static class StatParser
     }
 }
 
+
+
 // ===== STAT APPLICATOR SYSTEM =====
 public static class StatApplicator
 {
     public static bool ApplyModification(StatModification modification, AugmentTarget target)
     {
+
+        // Handle Core Repair Systems (augment ID 74)
+        if (modification.StatName == "core_regen_rate" && modification.TargetType == "Global")
+        {
+            var map = UnityEngine.Object.FindFirstObjectByType<TowerDefenseMap>();
+            if (map == null)
+            {
+                Debug.LogError("[CORE_REPAIR] TowerDefenseMap not found");
+                return false;
+            }
+
+            var core = map.GetCentralCore();
+            if (core == null)
+            {
+                Debug.LogError("[CORE_REPAIR] Central Core not found");
+                return false;
+            }
+
+            var coreObj = ((MonoBehaviour)core).gameObject;
+            var existing = coreObj.GetComponent<CoreRepairSystems>();
+
+            if (existing != null)
+            {
+                // Stack regeneration rate
+                existing.regenerationRate += modification.Value;
+                //Debug.Log($"[CORE_REPAIR] Stacked! Regen rate: {existing.regenerationRate} HP/sec");
+                return true;
+            }
+
+            var repairSystem = coreObj.AddComponent<CoreRepairSystems>();
+            repairSystem.regenerationRate = modification.Value;
+            //Debug.Log($"[CORE_REPAIR] Added: {modification.Value} HP/sec after 30s without damage");
+            return true;
+        }
+
+
+        // Handle Core Shield Matrix (augment ID 73)
+        if (modification.StatName == "core_shield" && modification.TargetType == "Global")
+        {
+            var map = UnityEngine.Object.FindFirstObjectByType<TowerDefenseMap>();
+            if (map == null)
+            {
+                Debug.LogError("[CORE_SHIELD] TowerDefenseMap not found");
+                return false;
+            }
+
+            var core = map.GetCentralCore();
+            if (core == null)
+            {
+                Debug.LogError("[CORE_SHIELD] Central Core not found");
+                return false;
+            }
+
+            var coreObj = ((MonoBehaviour)core).gameObject;
+            var existing = coreObj.GetComponent<CoreShieldMatrix>();
+
+            if (existing != null)
+            {
+                // Stack shield strength
+                existing.maxShieldStrength += modification.Value;
+                existing.currentShieldStrength += modification.Value;
+                //Debug.Log($"[CORE_SHIELD] Stacked Shield: {existing.currentShieldStrength}/{existing.maxShieldStrength}");
+                return true;
+            }
+
+            var shieldMatrix = coreObj.AddComponent<CoreShieldMatrix>();
+            shieldMatrix.maxShieldStrength = modification.Value;
+            shieldMatrix.currentShieldStrength = modification.Value;
+            //Debug.Log($"[CORE_SHIELD] Added shield with {modification.Value} HP");
+            return true;
+        }
+
+        // Handle Energy Scavenging (augment ID 72)
+        if (modification.StatName == "energy_scavenging_amount")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = ((MonoBehaviour)playerStats).gameObject;
+
+                var existing = playerObj.GetComponent<EnergyScavengingEffect>();
+                if (existing != null)
+                {
+                    existing.energyAmount += (int)modification.Value;
+                    //Debug.Log($"[ENERGY_SCAVENGING] Stacked! Amount now: {existing.energyAmount}");
+                    return true;
+                }
+
+                var scavengingEffect = playerObj.AddComponent<EnergyScavengingEffect>();
+                scavengingEffect.energyAmount = (int)modification.Value;
+                //Debug.Log($"[ENERGY_SCAVENGING] Added with {modification.Value} energy per enemy near generator");
+                return true;
+            }
+
+            Debug.LogError("[ENERGY_SCAVENGING] Could not find PlayerStats!");
+            return false;
+        }
+
+
+        // Handle Energy Vampire Touch (augment ID 71)
+        if (modification.StatName == "player_energy_drain")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = ((MonoBehaviour)playerStats).gameObject;
+
+                var existing = playerObj.GetComponent<EnergyVampireTouchEffect>();
+                if (existing != null)
+                {
+                    // Stack the drain amount
+                    existing.drainAmount += (int)modification.Value;
+                    //Debug.Log($"[ENERGY_VAMPIRE] Stacked! Drain amount now: {existing.drainAmount}");
+                    return true;
+                }
+
+                var vampireEffect = playerObj.AddComponent<EnergyVampireTouchEffect>();
+                vampireEffect.drainAmount = (int)modification.Value;
+                //Debug.Log($"[ENERGY_VAMPIRE] Added with {modification.Value} energy drain per melee hit");
+                return true;
+            }
+
+            Debug.LogError("[ENERGY_VAMPIRE] Could not find PlayerStats!");
+            return false;
+        }
+
+
+        // Handle player collection radius (augment ID 64: Auto-collect resources)
+        if (modification.StatName == "collectionRadius" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var collector = playerStats.GetComponent<PlayerEnergyCollector>();
+                if (collector != null)
+                {
+                    float currentValue = collector.collectionRadius;
+                    float newValue = CalculateNewValue(currentValue, modification);
+
+                    // Use the new method that updates both the field AND the collider
+                    collector.UpdateCollectionRadius(newValue);
+
+                    //Debug.Log($"[AUTO_COLLECT] Collection radius: {currentValue:F2} -> {newValue:F2}");
+                    return true;
+                }
+            }
+            Debug.LogError("[AUTO_COLLECT] Could not find PlayerEnergyCollector");
+            return false;
+        }
+
+        // Handle player energy boost (augment ID 62: Starting resource boost)
+        if (modification.StatName == "current_energy" && modification.TargetType == "Global")
+        {
+            if (EnergyManager.Instance == null)
+            {
+                Debug.LogError("[AUGMENT] EnergyManager not found for player energy boost");
+                return false;
+            }
+
+            int currentEnergy = EnergyManager.Instance.GetPlayerEnergy();
+            int energyToAdd = 0;
+
+            switch (modification.OperationType)
+            {
+                case StatModification.ModificationType.Multiply:
+                    // For multiply: give (multiplier - 1) * current as bonus e.g., 1.50 means +50% of current
+                    energyToAdd = Mathf.RoundToInt(currentEnergy * (modification.Value - 1f));
+                    break;
+                case StatModification.ModificationType.Add:
+                    energyToAdd = Mathf.RoundToInt(modification.Value);
+                    break;
+                case StatModification.ModificationType.Set:
+                    EnergyManager.Instance.SetPlayerEnergy(Mathf.RoundToInt(modification.Value));
+                    //Debug.Log($"[AUGMENT] Set player energy to {modification.Value}");
+                    return true;
+            }
+
+            if (energyToAdd > 0)
+            {
+                EnergyManager.Instance.GivePlayerEnergy(energyToAdd);
+                //Debug.Log($"[AUGMENT] Starting resource boost: gave player {energyToAdd} energy (50% of {currentEnergy})");
+                return true;
+            }
+
+            return false;
+        }
+
+
+        // Implementation of Augment ID 61
+        // Handle generator proximity efficiency boost
+        if (modification.StatName == "tower_near_generator_efficiency")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = ((MonoBehaviour)playerStats).gameObject;
+
+                var existing = playerObj.GetComponent<GeneratorProximityEffect>();
+                if (existing != null)
+                {
+                    // Stack multiplicatively (0.8 * 0.8 = 0.64 = 36% total reduction)
+                    float oldMultiplier = existing.energyEfficiencyMultiplier;
+                    existing.energyEfficiencyMultiplier *= modification.Value;
+                    // Cap at 1.0 to prevent increased consumption
+                    existing.energyEfficiencyMultiplier = Mathf.Min(existing.energyEfficiencyMultiplier, 1.0f);
+                    Debug.Log($"[GENERATOR_PROXIMITY] Stacked! {oldMultiplier:F3}x * {modification.Value:F2} = {existing.energyEfficiencyMultiplier:F3}x (capped at 1.0)");
+                    return true;
+                }
+
+                var generatorProximity = playerObj.AddComponent<GeneratorProximityEffect>();
+                generatorProximity.energyEfficiencyMultiplier = Mathf.Min(modification.Value, 1.0f);
+                Debug.Log($"[GENERATOR_PROXIMITY] Added with {generatorProximity.energyEfficiencyMultiplier:F2}x energy efficiency");
+                return true;
+            }
+
+            Debug.LogError("[GENERATOR_PROXIMITY] Could not find PlayerStats!");
+            return false;
+        }
 
         // Handle player-tower coordination (mutual armor boost)
         if ((modification.StatName == "currentArmor" || modification.StatName == "armorReduction") &&
@@ -1725,276 +1964,3 @@ public class AugmentTarget
     }
 }
 
-public class TowerCommanderEffect : MonoBehaviour
-{
-    [System.NonSerialized]
-    public float energyDecayMultiplier = 1.0f; // This will be set from CSV (e.g., 0.8 for 20% reduction)
-    private const float RANGE = 2.5f;
-
-    void Start()
-    {
-        Debug.Log($"[TOWER_COMMANDER] Start() called! energyDecayMultiplier={energyDecayMultiplier}");
-        Debug.Log($"[TOWER_COMMANDER] Component on object: {gameObject.name}, enabled: {enabled}");
-
-        //Debug.Log($"[TOWER_COMMANDER] TowerCommanderEffect started! Decay multiplier: {energyDecayMultiplier}, Range: {RANGE}");
-        // Validate the energy decay multiplier value
-        if (energyDecayMultiplier <= 0f)
-        {
-            //Debug.LogWarning($"[TOWER_COMMANDER] Invalid energyDecayMultiplier value: {energyDecayMultiplier}, setting to 1.0 (no reduction)");
-            energyDecayMultiplier = 1.0f;
-        }
-
-        // Do an immediate update and then start the repeating updates
-        UpdateTowers();
-        InvokeRepeating(nameof(UpdateTowers), 0.1f, 0.3f);
-        //Debug.Log($"[TOWER_COMMANDER] InvokeRepeating set up successfully");
-
-    }
-    void UpdateTowers()
-    {
-        //Debug.Log($"[TOWER_COMMANDER] === UpdateTowers called! ===");
-
-        try
-        {
-            Tower[] towers = FindObjectsByType<Tower>(FindObjectsSortMode.None);
-            Vector3 playerPos = transform.position;
-
-            //Debug.Log($"[TOWER_COMMANDER] Found {towers.Length} towers, player at {playerPos}");
-
-            foreach (Tower tower in towers)
-            {
-                if (tower == null || tower.IsDestroyed())
-                {
-                    //Debug.Log($"[TOWER_COMMANDER] Skipping null/destroyed tower");
-                    continue;
-                }
-
-                float distance = Vector3.Distance(playerPos, tower.transform.position);
-                bool shouldBoost = distance <= RANGE;
-
-                //Debug.Log($"[TOWER_COMMANDER] Tower '{tower.towerName}' at distance {distance:F2}, shouldBoost={shouldBoost}, RANGE={RANGE}");
-
-                var boostComp = tower.GetComponent<TowerCommanderBoost>();
-
-                if (shouldBoost && boostComp == null)
-                {
-                    //Debug.Log($"[TOWER_COMMANDER] ✓ ADDING boost to {tower.towerName}");
-                    boostComp = tower.gameObject.AddComponent<TowerCommanderBoost>();
-                    boostComp.energyDecayMultiplier = energyDecayMultiplier;
-
-                    var renderer = tower.GetComponent<SpriteRenderer>();
-                    if (renderer != null)
-                    {
-                        renderer.color = Color.Lerp(Color.white, Color.cyan, 0.3f);
-                    }
-                }
-                else if (!shouldBoost && boostComp != null)
-                {
-                    //Debug.Log($"[TOWER_COMMANDER] ✗ REMOVING boost from {tower.towerName}");
-                    var renderer = tower.GetComponent<SpriteRenderer>();
-                    if (renderer != null) renderer.color = Color.white;
-
-                    Destroy(boostComp);
-                }
-                else if (shouldBoost && boostComp != null)
-                {
-                    //Debug.Log($"[TOWER_COMMANDER] Tower {tower.towerName} already has boost");
-                }
-                else
-                {
-                    //Debug.Log($"[TOWER_COMMANDER] Tower {tower.towerName} out of range, no boost to remove");
-                }
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"[TOWER_COMMANDER] UpdateTowers exception: {e.Message}\n{e.StackTrace}");
-        }
-    }
-
-    // Public method to force an immediate update when new towers are built
-    public void ForceUpdate()
-    {
-        UpdateTowers();
-    }
-    void OnDisable()
-    {
-        CancelInvoke(nameof(UpdateTowers));
-    }
-}
-
-public class TowerCommanderBoost : MonoBehaviour
-{
-    public float energyDecayMultiplier = 1.0f;
-
-    public float GetEnergyDecayMultiplier()
-    {
-        return energyDecayMultiplier;
-    }
-}
-
-
-// Base class for player proximity effects on towers
-public abstract class PlayerProximityEffect : MonoBehaviour
-{
-    protected const float RANGE = 2.5f;
-    protected float updateInterval = 0.3f;
-
-    protected virtual float GetRange() => RANGE;
-
-    void Start()
-    {
-        OnEffectStart();
-        InvokeRepeating(nameof(UpdateTowers), 0f, updateInterval);
-    }
-
-    protected virtual void OnEffectStart() { }
-
-    void UpdateTowers()
-    {
-        Tower[] towers = FindObjectsByType<Tower>(FindObjectsSortMode.None);
-        Vector3 playerPos = transform.position;
-
-        foreach (Tower tower in towers)
-        {
-            if (tower == null || tower.IsDestroyed()) continue;
-
-            float distance = Vector3.Distance(playerPos, tower.transform.position);
-            bool shouldBoost = distance <= GetRange();
-
-            UpdateTowerBoost(tower, shouldBoost);
-        }
-
-        // TODO - potentially update player based on nearby tower count
-        OnProximityUpdate(towers, playerPos);
-    }
-
-    protected abstract void UpdateTowerBoost(Tower tower, bool shouldBoost);
-    protected virtual void OnProximityUpdate(Tower[] allTowers, Vector3 playerPos) { }
-}
-
-public class PlayerTowerCoordinationEffect : MonoBehaviour
-{
-    [System.NonSerialized]
-    public float playerArmorBonus = 0f; // Flat armor for player (from CSV)
-    [System.NonSerialized]
-    public float towerArmorBonus = 0f; // Percentage armor for towers (from CSV)
-
-    private const float RANGE = 3.5f;
-
-    private PlayerStats playerStats;
-    private float basePlayerArmor;
-
-    void Start()
-    {
-        playerStats = GetComponent<PlayerStats>();
-        if (playerStats != null)
-        {
-            basePlayerArmor = playerStats.currentArmor;
-            Debug.Log($"[COORDINATION] Effect started. Base player armor: {basePlayerArmor}, Bonus: +{playerArmorBonus:F1} flat, Tower bonus: +{towerArmorBonus:F3}");
-        }
-
-        InvokeRepeating(nameof(UpdateCoordination), 0f, 0.3f);
-    }
-
-    void UpdateCoordination()
-    {
-        if (playerStats == null) return;
-
-        Tower[] towers = FindObjectsByType<Tower>(FindObjectsSortMode.None);
-        Vector3 playerPos = transform.position;
-        int nearbyCount = 0;
-
-        foreach (Tower tower in towers)
-        {
-            if (tower == null || tower.IsDestroyed()) continue;
-
-            float distance = Vector3.Distance(playerPos, tower.transform.position);
-            bool shouldBoost = distance <= RANGE;
-
-            var boostComp = tower.GetComponent<CoordinationArmorBoost>();
-
-            if (shouldBoost)
-            {
-                nearbyCount++;
-
-                if (boostComp == null)
-                {
-                    float towerArmorBefore = tower.armorReduction;
-
-                    boostComp = tower.gameObject.AddComponent<CoordinationArmorBoost>();
-                    boostComp.armorBonus = towerArmorBonus; // Use the CSV value
-                    boostComp.ApplyBoost(tower);
-
-                    float towerArmorAfter = tower.armorReduction;
-                    Debug.Log($"[COORDINATION] Tower '{tower.towerName}': {towerArmorBefore:F3} -> {towerArmorAfter:F3} (clamped to max 1.0)");
-
-                    var renderer = tower.GetComponent<SpriteRenderer>();
-                    if (renderer != null)
-                    {
-                        renderer.color = Color.Lerp(Color.white, new Color(0.7f, 0.8f, 1f), 0.35f);
-                    }
-                }
-                else
-                {
-                    // Update existing boost if the bonus changed
-                    boostComp.armorBonus = towerArmorBonus;
-                    boostComp.ApplyBoost(tower);
-                }
-            }
-            else if (!shouldBoost && boostComp != null)
-            {
-                boostComp.RemoveBoost(tower);
-
-                var renderer = tower.GetComponent<SpriteRenderer>();
-                if (renderer != null) renderer.color = Color.white;
-
-                Destroy(boostComp);
-            }
-        }
-
-        // Apply player armor bonus
-        float newPlayerArmor = nearbyCount > 0 ? basePlayerArmor + playerArmorBonus : basePlayerArmor;
-
-        if (Mathf.Abs(playerStats.currentArmor - newPlayerArmor) > 0.01f)
-        {
-            playerStats.currentArmor = newPlayerArmor;
-            Debug.Log($"[COORDINATION] Player armor: {newPlayerArmor:F1} ({nearbyCount} towers, bonus: +{playerArmorBonus:F1} flat)");
-        }
-    }
-
-    void OnDestroy()
-    {
-        if (playerStats != null)
-        {
-            playerStats.currentArmor = basePlayerArmor;
-        }
-    }
-}
-
-public class CoordinationArmorBoost : MonoBehaviour
-{
-    public float armorBonus = 0f; // From CSV, will be added to tower's armor
-    private float originalArmor = -1f;
-
-    public void ApplyBoost(Tower tower)
-    {
-        if (tower == null) return;
-        if (originalArmor < 0f) originalArmor = tower.armorReduction;
-
-        // Add bonus and CLAMP to prevent going above 1.0 (which would cause extra damage)
-        float newArmor = originalArmor + armorBonus;
-        tower.armorReduction = Mathf.Clamp(newArmor, 0f, 1.0f);
-
-        if (newArmor > 1.0f)
-        {
-            Debug.LogWarning($"[COORDINATION] Tower armor capped at 100% (was trying to set {newArmor:F3})");
-        }
-    }
-
-    public void RemoveBoost(Tower tower)
-    {
-        if (tower == null || originalArmor < 0f) return;
-        tower.armorReduction = originalArmor;
-    }
-}
