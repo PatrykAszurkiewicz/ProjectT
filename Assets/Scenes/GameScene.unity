@@ -399,7 +399,7 @@ GameObject:
   - component: {fileID: 49175266}
   - component: {fileID: 49175265}
   m_Layer: 5
-  m_Name: PrimaryStats
+  m_Name: Weapon
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6202,7 +6202,7 @@ GameObject:
   - component: {fileID: 1303523962}
   - component: {fileID: 1303523961}
   m_Layer: 5
-  m_Name: PrimaryStats (1)
+  m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
