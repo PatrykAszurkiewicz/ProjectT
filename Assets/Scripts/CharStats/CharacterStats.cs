@@ -8,6 +8,20 @@ public class CharacterStats : MonoBehaviour
     public float currentHealth = 100f;
     public float currentArmor = 0f;
 
+    // GET & SET AND ON VALUE CHANGED
+    public event Action OnStatsChanged;
+    public float MaxHealth
+    {
+        get => maxHealth;
+        set
+        {
+            if (maxHealth != value)
+            {
+                maxHealth = value;
+                OnStatsChanged?.Invoke();
+            }
+        }
+    }
     // Event UI
     public event Action<float, float> OnHealthChanged;
     public virtual void TakeDamage(float amount)
