@@ -24,8 +24,24 @@ public class EnemyStats : CharacterStats
             enemyData = ScriptableObjectUtility.Clone(enemyData);
 
             maxHealth = enemyData.maxHealth;
+
+            // Apply global health modifier
+            if (EnemyStatModifierManager.Instance != null)
+            {
+                maxHealth *= EnemyStatModifierManager.Instance.GetHealthMultiplier();
+            }
+
             currentHealth = maxHealth;
         }
+
+        // Register with modifier manager
+        EnemyStatModifierManager.Instance?.RegisterEnemy(this);
+    }
+
+    private void OnDestroy()
+    {
+        // Unregister when destroyed
+        EnemyStatModifierManager.Instance?.UnregisterEnemy(this);
     }
 
     private void Start()
@@ -99,8 +115,46 @@ public class EnemyStats : CharacterStats
         base.Die();
     }
 
-    public float Damage => enemyData?.damage ?? 0f;
-    public float MoveSpeed => enemyData?.moveSpeed ?? 1f;
+    //public float Damage => enemyData?.damage ?? 0f;
+    public float Damage
+    {
+        get
+        {
+            float baseDamage = enemyData?.damage ?? 0f;
+            if (EnemyStatModifierManager.Instance != null)
+            {
+                float multiplier = EnemyStatModifierManager.Instance.GetDamageMultiplier();
+                return baseDamage * multiplier;
+            }
+            return baseDamage;
+        }
+    }
+
+
+    //public float MoveSpeed => enemyData?.moveSpeed ?? 1f;
+
+    public float MoveSpeed
+    {
+        get
+        {
+            float baseSpeed = enemyData?.moveSpeed ?? 1f;
+            if (EnemyStatModifierManager.Instance != null)
+            {
+                float multiplier = EnemyStatModifierManager.Instance.GetMoveSpeedMultiplier();
+                float finalSpeed = baseSpeed * multiplier;
+                /*
+                if (Time.frameCount % 60 == 0) // Log every 60 frames 
+                {
+                    Debug.Log($"[ENEMY] {gameObject.name} speed: base={baseSpeed}, multiplier={multiplier}, final={finalSpeed}");
+                }
+                */
+                return finalSpeed;
+            }
+            return baseSpeed;
+        }
+    }
+
+
     public float Mass => enemyData?.mass ?? 50f;
 
     // Configure drops at runtime

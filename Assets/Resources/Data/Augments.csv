@@ -17,7 +17,7 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 16,0,Freeze Ray,Tower,Epic,tower_freeze_chance=0.2,20% chance to freeze enemies for 2 seconds,Resources/Sprites/Augments/16,Kuba,Tower
 17,0,Tower Healing,Tower,Rare,tower_health_regen+0.1,Towers slowly regenerate health over time,Resources/Sprites/Augments/17,Kuba,Tower
 18,0,Overcharge,Tower,Epic,"tower_damage*1.08,tower_energy_cost*1.03",Towers deal 8% more damage but consume 3% more energy to fire,Resources/Sprites/Augments/18,Kuba,Tower
-19,0,Rough Terrain,Map,Rare,"enemy_move_speed*0.8,tower_build_cost*1.3",Enemies move slower but towers cost more,Resources/Sprites/Augments/19,Patryk,Enemy
+19,0,Rough Terrain,Map,Rare,"MoveSpeed*0.8,towerBuildCost*1.3",Enemies move slower but towers cost more,Resources/Sprites/Augments/19,Patryk,Enemy
 20,0,Generator Abundance,Tower,Common,energyGenerationRate*1.15,15% more resource generation from Generator Towers,Resources/Sprites/Augments/20,Kuba,Tower
 21,0,Scavenger's Paradise,Map,Rare,resource_generation*1.05,Defeating enemies yields 5% extra resources,Resources/Sprites/Augments/21,Kuba,Global
 22,0,Economic Crisis,Map,Epic,"towerBuildCost*1.3,repairCostPerClick*1.3,globalResourceMultiplier*1.2",All costs increased by 30% and rewards by 20%,Resources/Sprites/Augments/22,Kuba,Global
@@ -43,16 +43,16 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 42,0,Tower health boost,Tower,Common,tower_max_health*1.15,Increases tower maximum health by 15%,Resources/Sprites/Augments/42,Kuba,Tower
 43,0,Cheaper tower construction,Tower,Rare,towerBuildCost*0.85,Reduces tower construction costs by 15%,Resources/Sprites/Augments/43,Kuba,Global
 44,0,Tower repair efficiency,Tower,Rare,tower_repair_cost*0.8,Tower repairs cost 20% less resources,Resources/Sprites/Augments/44,Kuba,Global
-45,1,Tower targeting priority,Tower,Common,NULL,Towers automatically target closest enemies first,Resources/Sprites/Augments/45,Kuba,
+45,2,Tower targeting priority,Tower,Common,NULL,Towers automatically target closest enemies first,Resources/Sprites/Augments/45,Kuba,
 46,0,Reinforced towers,Tower,Rare,tower_armor+0.05,Towers take 5% less damage from enemy attacks,Resources/Sprites/Augments/46,Kuba,Tower
 47,0,Tower energy efficiency,Tower,Epic,"tower_energy_consumption*0.8,globalEnergyDecayRate*0.8","Towers consume 20% less energy",Resources/Sprites/Augments/47,Kuba,"Tower,Global"
 48,0,Basic energy boost,Energy,Common,energy_generation_rate*1.2,Increases base energy generation by 20%,Resources/Sprites/Augments/48,Kuba,Tower
 49,0,Energy cost reduction,Energy,Rare,"towerBuildCost*0.8,tower_energy_consumption*0.8,tower_repair_cost*0.8","All energy-consuming actions cost 20% less",Resources/Sprites/Augments/49,Kuba,"Tower,Global"
 50,0,Overclocked generators,Energy,Epic,"energy_generation_rate*1.3,generatorSelfConsumption*1.2",Generators produce 30% more energy but wear out 20% faster,Resources/Sprites/Augments/50,Kuba,Tower
 51,2,Smart energy management,Energy,Rare,NULL,Automatically optimizes energy distribution to most critical systems,Resources/Sprites/Augments/51,Kuba,
-52,0,Enemy slowdown,Enemy,Common,MoveSpeed*0.85,All enemies move 15% slower,Resources/Sprites/Augments/52,Patryk,Enemy
-53,0,Weaker enemy spawns,Enemy,Rare,Damage*0.80,All enemies deal 20% less damage,Resources/Sprites/Augments/53,Patryk,Enemy
-54,0,Reduced enemy health,Enemy,Common,MaxHealth*0.75,All enemies have 25% less maximum health,Resources/Sprites/Augments/54,Patryk,Enemy
+52,0,Enemy slowdown,Enemy,Common,MoveSpeed*0.85,All enemies move 15% slower,Resources/Sprites/Augments/52,Kuba,Enemy
+53,0,Weaker enemy spawns,Enemy,Rare,Damage*0.85,All enemies deal 20% less damage,Resources/Sprites/Augments/53,Kuba,Enemy
+54,0,Reduced enemy health,Enemy,Common,MaxHealth*0.75,All enemies have 25% less maximum health,Resources/Sprites/Augments/54,Kuba,Enemy
 55,0,Delayed enemy waves,Enemy,Rare,wave_spawn_delay+5,Each wave starts 5 seconds later,Resources/Sprites/Augments/55,Patryk,
 56,0,Enemy supply shortage,Enemy,Common,{enemy_spawn_count: -0.10},10% fewer enemies spawn per wave,Resources/Sprites/Augments/56,Patryk,
 57,0,Resource deposits,Map,Common,{map_resource_nodes: 3},Adds 3 additional resource collection points to the map,Resources/Sprites/Augments/57,Patryk,
@@ -73,7 +73,7 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 72,0,Energy Scavenging,Energy,Rare,energy_scavenging_amount+5,Gain 5 energy units for each enemy destroyed near Generators,Resources/Sprites/Augments/72,Kuba,Global
 73,1,Core Shield Matrix,Central Core,Epic,core_shield+200,Provide energy-based shield with 200 hit points protecting the Central Core,Resources/Sprites/Augments/73,Kuba,Global
 74,0,Core Repair Systems,Central Core,Rare,core_regen_rate+0.5,Core stops decaying and regenerates 0.5 energy per second after 30 seconds without getting damaged,Resources/Sprites/Augments/74,Kuba,Global
-75,0,Core Energy Siphon,Central Core,Rare,{core_energy_from_attacks: 0.20},Core gains energy from enemy attacks converting 20% of damage to power,Resources/Sprites/Augments/75,Kuba,
+75,0,Core Energy Siphon,Central Core,Rare,core_energy_from_attacks*0.20,Core gains energy from enemy attacks converting 20% damage to Central Core health energy,Resources/Sprites/Augments/75,Kuba,Global
 76,0,Pheromone Control,Player,Epic,{player_enemy_confusion_aura: 0.25},Nearby enemies have 25% chance to ignore you or attack each other,Resources/Sprites/Augments/76,Patryk,
 77,0,Grappling Hook Damage,Player,"Rare, Epic, Legendary",{player_attack: 15},Grappling Hook deals damage when shot at the enemy,Resources/Sprites/Augments/77,Patryk,
 78,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",{player_damage: -0.15},Reduce incoming damage to the Player by 15%,Resources/Sprites/Augments/78,Patryk,
