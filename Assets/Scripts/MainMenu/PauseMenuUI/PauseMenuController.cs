@@ -15,11 +15,15 @@ public class PauseMenuController : MonoBehaviour
         if(activated == false)
         {
             activated = true;
+            Time.timeScale = 0f;
+            Cursor.visible = true;
             pauseMenu.SetActive(true);
         }
         else
         {
             activated = false;
+            Time.timeScale = 1f;
+            Cursor.visible = false;
             pauseMenu.SetActive(false);
         }
     }
