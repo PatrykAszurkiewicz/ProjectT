@@ -8,22 +8,9 @@ public class CharacterStats : MonoBehaviour
     public float currentHealth = 100f;
     public float currentArmor = 0f;
 
-    // GET & SET AND ON VALUE CHANGED
-    public event Action OnStatsChanged;
-    public float MaxHealth
-    {
-        get => maxHealth;
-        set
-        {
-            if (maxHealth != value)
-            {
-                maxHealth = value;
-                OnStatsChanged?.Invoke();
-            }
-        }
-    }
-    // Event UI
     public event Action<float, float> OnHealthChanged;
+    // parametry: currentHealth, maxHealth
+
     public virtual void TakeDamage(float amount)
     {
         float mitigated = Mathf.Max(amount - currentArmor, 0f);
@@ -37,7 +24,7 @@ public class CharacterStats : MonoBehaviour
             Die();
         }
     }
-    
+
     public virtual void Heal(float amount)
     {
         currentHealth += amount;
@@ -45,10 +32,12 @@ public class CharacterStats : MonoBehaviour
 
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
+
     public virtual void Die()
     {
         Destroy(gameObject);
     }
+
     public virtual bool IsDead()
     {
         return currentHealth <= 0;

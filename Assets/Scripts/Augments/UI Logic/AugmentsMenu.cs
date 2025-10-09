@@ -542,8 +542,10 @@ public class AugmentsMenu : MonoBehaviour
         {
             Debug.LogError($"Failed to apply {selectedRarity} augment {chosenId}");
         }
+        FindAnyObjectByType<StatsUI>().RefreshUI();
 
         chosenAugmentsUI.RefreshUI();
+
     }
 
     private bool ApplyAugmentNew(int chosenId, string selectedRarity)
