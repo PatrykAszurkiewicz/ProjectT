@@ -1,5 +1,6 @@
 using UnityEngine;
 using System;
+using System.Collections;
 
 public class PlayerStats : CharacterStats
 {
@@ -31,15 +32,68 @@ public class PlayerStats : CharacterStats
     public float healthRegenDelay = 3f;
     private float regenTimer = 0f;
 
+    [Header("Visual Feedback")]
+    public float damageFlashDuration = 0.1f;
+    public Color damageFlashColor = new Color(2f, 2f, 2f, 1f); // Additive bright flash
+    private SpriteRenderer spriteRenderer;
+    private Coroutine damageFlashCoroutine;
+    private Color baseColor = Color.white; // Store base color
+
+    private void Awake()
+    {
+        spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (spriteRenderer == null)
+        {
+            Debug.LogWarning($"[PLAYER_BLINK] {gameObject.name}: SpriteRenderer not found!");
+        }
+        else
+        {
+            // Store the base color at start
+            baseColor = spriteRenderer.color;
+        }
+    }
+
     public override void TakeDamage(float amount)
     {
         base.TakeDamage(amount);
         regenTimer = 0f;
+
+        // Trigger damage flash
+        StartDamageFlash();
     }
+
+    private void StartDamageFlash()
+    {
+        if (spriteRenderer == null) return;
+
+        // Restore color before stopping
+        if (damageFlashCoroutine != null)
+        {
+            StopCoroutine(damageFlashCoroutine);
+            spriteRenderer.color = baseColor; // Force restore
+        }
+
+        damageFlashCoroutine = StartCoroutine(DamageFlashCoroutine());
+    }
+
+    private IEnumerator DamageFlashCoroutine()
+    {
+        if (spriteRenderer == null) yield break;
+        for (int i = 0; i < 2; i++)
+        {
+            spriteRenderer.color = damageFlashColor;
+            yield return new WaitForSeconds(damageFlashDuration);
+            spriteRenderer.color = baseColor; // CHANGED: use baseColor
+            yield return new WaitForSeconds(0.05f);
+        }
+
+        spriteRenderer.color = baseColor;
+        damageFlashCoroutine = null;
+    }
+
     private void Update()
     {
-        //Debug.Log(currentArmor);
-
         if (!IsDead() && currentHealth < maxHealth)
         {
             regenTimer += Time.deltaTime;
@@ -50,11 +104,37 @@ public class PlayerStats : CharacterStats
             }
         }
     }
+
+    // Cleanup on disable
+    private void OnDisable()
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = baseColor;
+        }
+
+        if (damageFlashCoroutine != null)
+        {
+            StopCoroutine(damageFlashCoroutine);
+            damageFlashCoroutine = null;
+        }
+    }
+
+    // Cleanup on destroy
+    private void OnDestroy()
+    {
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = baseColor;
+        }
+    }
+
     public void UseMana(float amount)
     {
         currentMana -= amount;
         if (currentMana < 0) currentMana = 0;
     }
+
     public void RegenerateMana(float amount)
     {
         currentMana += amount;

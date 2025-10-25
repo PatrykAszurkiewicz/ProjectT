@@ -123,7 +123,7 @@ public class GremlinController : MonoBehaviour, IDamageable
         enemyStats.currentHealth = 1f;
         enemyStats.canDropEnergy = true;
 
-        enemyStats.energyDropChance = 1f; // 100% drop chance
+        enemyStats.energyDropChance = 1f;
         enemyStats.energyDropValue = energyDropValue;
     }
 
@@ -275,10 +275,6 @@ public class GremlinController : MonoBehaviour, IDamageable
 
         if (EnergyManager.Instance != null)
             EnergyManager.Instance.OnEnemyKilled(gameObject);
-
-        //var waveSpawner = FindFirstObjectByType<WaveSpawner>();
-        //if (waveSpawner != null)
-        //    waveSpawner.OnEnemyDeath();
     }
 
     private void PlayDeathSound()

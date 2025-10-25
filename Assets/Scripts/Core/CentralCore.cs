@@ -38,7 +38,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     [Header("Damage Settings")]
     public float armorReduction = 0f;
     public bool immuneToEnemyDamage = false;
-    public float damageFlashDuration = 0.2f;
+    public float damageFlashDuration = 0.1f;
+    public Color damageFlashColor = new Color(2f, 2f, 2f, 1f); // Additive bright flash
     public bool enableDamageEffects = true;
     public float criticalHealthShakeIntensity = 0.1f;
 
@@ -339,11 +340,15 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         if (spriteRenderer == null) yield break;
 
         Color originalColor = spriteRenderer.color;
-        Color flashColor = EnergyManager.Instance?.damageFlashColor ?? Color.red;
 
-        spriteRenderer.color = flashColor;
-        yield return new WaitForSeconds(damageFlashDuration);
-        spriteRenderer.color = originalColor;
+        // Double blink with additive bright color for better visibility
+        for (int i = 0; i < 2; i++)
+        {
+            spriteRenderer.color = damageFlashColor; // Bright additive color
+            yield return new WaitForSeconds(damageFlashDuration);
+            spriteRenderer.color = originalColor;
+            yield return new WaitForSeconds(0.05f);
+        }
 
         damageFlashCoroutine = null;
     }

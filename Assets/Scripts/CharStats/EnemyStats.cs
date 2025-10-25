@@ -1,6 +1,7 @@
 using Unity.Collections;
 using Unity.VisualScripting;
 using UnityEngine;
+using System.Collections;
 
 public class EnemyStats : CharacterStats
 {
@@ -12,20 +13,37 @@ public class EnemyStats : CharacterStats
     public EnemyData enemyData;
 
     [Header("Energy Drop Settings")]
-    [Range(0f, 1f)] public float energyDropChance = -1f; // -1 = use global setting
-    public int energyDropValue = -1; // -1 = use global setting
+    [Range(0f, 1f)] public float energyDropChance = -1f;
+    public int energyDropValue = -1;
     public bool canDropEnergy = true;
 
+    [Header("Visual Feedback")]
+    public float damageFlashDuration = 0.1f;
+    public Color damageFlashColor = new Color(2f, 2f, 2f, 1f); // Additive bright white
+    private SpriteRenderer spriteRenderer;
+    private Coroutine damageFlashCoroutine;
+    private Material originalMaterial;
+    private Material flashMaterial;
 
     private void Awake()
     {
+        spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (spriteRenderer != null)
+        {
+            // Store original material
+            originalMaterial = spriteRenderer.material;
+
+            // Create flash material with additive blending
+            flashMaterial = new Material(originalMaterial);
+        }
+
         if (enemyData != null)
         {
             enemyData = ScriptableObjectUtility.Clone(enemyData);
 
             maxHealth = enemyData.maxHealth;
 
-            // Apply global health modifier
             if (EnemyStatModifierManager.Instance != null)
             {
                 maxHealth *= EnemyStatModifierManager.Instance.GetHealthMultiplier();
@@ -34,14 +52,18 @@ public class EnemyStats : CharacterStats
             currentHealth = maxHealth;
         }
 
-        // Register with modifier manager
         EnemyStatModifierManager.Instance?.RegisterEnemy(this);
     }
 
     private void OnDestroy()
     {
-        // Unregister when destroyed
         EnemyStatModifierManager.Instance?.UnregisterEnemy(this);
+
+        // Clean up materials
+        if (flashMaterial != null)
+        {
+            Destroy(flashMaterial);
+        }
     }
 
     private void Start()
@@ -57,10 +79,12 @@ public class EnemyStats : CharacterStats
             }
         }
     }
+
 #if UNITY_EDITOR
     [Header("Debug")]
     [SerializeField, ReadOnly] private float currentMoveSpeedDebug;
 #endif
+
 #if UNITY_EDITOR
     private void Update()
     {
@@ -72,41 +96,63 @@ public class EnemyStats : CharacterStats
     {
         base.TakeDamage(amount);
 
+        StartDamageFlash();
+
         if (healthBar != null)
             healthBar.UpdateHealth(currentHealth);
     }
 
+    private void StartDamageFlash()
+    {
+        if (spriteRenderer == null) return;
+
+        if (damageFlashCoroutine != null)
+            StopCoroutine(damageFlashCoroutine);
+        damageFlashCoroutine = StartCoroutine(DamageFlashCoroutine());
+    }
+
+    private IEnumerator DamageFlashCoroutine()
+    {
+        if (spriteRenderer == null) yield break;
+
+        Color originalColor = spriteRenderer.color;
+
+        // Double blink 
+        for (int i = 0; i < 2; i++)
+        {
+            spriteRenderer.color = damageFlashColor;
+            yield return new WaitForSeconds(damageFlashDuration);
+            spriteRenderer.color = originalColor;
+            yield return new WaitForSeconds(0.05f);
+        }
+
+        damageFlashCoroutine = null;
+    }
+
     public override void Die()
     {
-        // Check if this enemy has a GremlinController and use its death logic
         var gremlinController = GetComponent<GremlinController>();
         if (gremlinController != null)
         {
-            // Clean up health bar first
             if (healthBar != null)
                 Destroy(healthBar.gameObject);
 
-            // Let GremlinController handle the death 
             gremlinController.Die();
             return;
         }
 
-        // Original logic for regular enemies
         if (canDropEnergy)
         {
             EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);
         }
 
-        // Clean up health bar
         if (healthBar != null)
             Destroy(healthBar.gameObject);
 
-        // Notify wave spawner
         WaveSpawner waveSpawner = FindAnyObjectByType<WaveSpawner>();
         if (waveSpawner != null)
             waveSpawner.OnEnemyDeath();
 
-        // Notify energy manager
         if (EnergyManager.Instance != null)
         {
             EnergyManager.Instance.OnEnemyKilled(gameObject);
@@ -115,7 +161,6 @@ public class EnemyStats : CharacterStats
         base.Die();
     }
 
-    //public float Damage => enemyData?.damage ?? 0f;
     public float Damage
     {
         get
@@ -130,9 +175,6 @@ public class EnemyStats : CharacterStats
         }
     }
 
-
-    //public float MoveSpeed => enemyData?.moveSpeed ?? 1f;
-
     public float MoveSpeed
     {
         get
@@ -142,22 +184,14 @@ public class EnemyStats : CharacterStats
             {
                 float multiplier = EnemyStatModifierManager.Instance.GetMoveSpeedMultiplier();
                 float finalSpeed = baseSpeed * multiplier;
-                /*
-                if (Time.frameCount % 60 == 0) // Log every 60 frames 
-                {
-                    Debug.Log($"[ENEMY] {gameObject.name} speed: base={baseSpeed}, multiplier={multiplier}, final={finalSpeed}");
-                }
-                */
                 return finalSpeed;
             }
             return baseSpeed;
         }
     }
 
-
     public float Mass => enemyData?.mass ?? 50f;
 
-    // Configure drops at runtime
     public void ConfigureEnergyDrop(float dropChance, int dropValue)
     {
         energyDropChance = Mathf.Clamp01(dropChance);
@@ -174,7 +208,6 @@ public class EnemyStats : CharacterStats
     {
         if (!canDropEnergy) return;
 
-        // Show drop settings
         float chance = energyDropChance >= 0 ? energyDropChance : (EnergyDropManager.Instance?.globalDropChance ?? 0.5f);
         int value = energyDropValue > 0 ? energyDropValue : (EnergyDropManager.Instance?.defaultEnergyValue ?? 10);
 
@@ -182,5 +215,4 @@ public class EnemyStats : CharacterStats
         UnityEditor.Handles.Label(transform.position + Vector3.up * 1.3f, $"Energy: {value}");
     }
 #endif
-
 }

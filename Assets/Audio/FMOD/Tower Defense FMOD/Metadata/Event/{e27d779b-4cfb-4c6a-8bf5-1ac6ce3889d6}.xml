@@ -78,7 +78,6 @@
 			<destination>{8df427c1-3d32-4cf4-bcb4-8867d8e17ba7}</destination>
 			<destination>{aea08106-7e95-44d9-bdac-f925a250b516}</destination>
 			<destination>{500e76a1-1c4b-49f9-8c56-36b77529b106}</destination>
-			<destination>{5ce9a1e3-cbeb-42e7-9680-974fec8bfed3}</destination>
 			<destination>{6f71f7fb-97f8-4c90-83e0-146af1d9eb5b}</destination>
 			<destination>{efe7612b-2ff1-440c-a20a-169a90772648}</destination>
 		</relationship>
@@ -88,7 +87,6 @@
 	</object>
 	<object class="Timeline" id="{500ac405-667c-4004-9749-144fe96df2bd}">
 		<relationship name="modules">
-			<destination>{5ce9a1e3-cbeb-42e7-9680-974fec8bfed3}</destination>
 			<destination>{6f71f7fb-97f8-4c90-83e0-146af1d9eb5b}</destination>
 			<destination>{efe7612b-2ff1-440c-a20a-169a90772648}</destination>
 		</relationship>
@@ -175,17 +173,6 @@
 		<property name="length">
 			<value>0</value>
 		</property>
-	</object>
-	<object class="SingleSound" id="{5ce9a1e3-cbeb-42e7-9680-974fec8bfed3}">
-		<property name="start">
-			<value>160.46927471435666</value>
-		</property>
-		<property name="length">
-			<value>10.666666666666666</value>
-		</property>
-		<relationship name="audioFile">
-			<destination>{9ac8b14f-4578-4e77-a26f-f844ffd084bb}</destination>
-		</relationship>
 	</object>
 	<object class="SingleSound" id="{6f71f7fb-97f8-4c90-83e0-146af1d9eb5b}">
 		<property name="length">

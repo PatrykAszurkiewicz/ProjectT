@@ -153,7 +153,8 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     [Header("Damage Settings")]
     public float armorReduction = 0f;
     public bool immuneToEnemyDamage = false;
-    public float damageFlashDuration = 0.15f;
+    public float damageFlashDuration = 0.1f;
+    public Color damageFlashColor = new Color(2f, 2f, 2f, 1f); // Additive bright flash
 
     // Properties
     public bool CanUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && upgradeTowerPrefab != null;
@@ -936,7 +937,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (target == null || IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
 
         // Use base damage (before augments) for energy cost calculation
-        float baseCost = baseDamageForEnergyCost * 0.1f;
+        float baseCost = baseDamageForEnergyCost * 0.05f;
         float energyCost = baseCost * energyCostMultiplier;
 
         // Apply generator proximity efficiency boost
@@ -1452,10 +1453,18 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     IEnumerator DamageFlashCoroutine()
     {
         if (spriteRenderer == null) yield break;
-        Color orig = spriteRenderer.color;
-        spriteRenderer.color = EnergyManager.Instance?.damageFlashColor ?? Color.red;
-        yield return new WaitForSeconds(damageFlashDuration);
-        spriteRenderer.color = orig;
+
+        Color originalColor = spriteRenderer.color;
+
+        // Double blink with additive bright color for better visibility
+        for (int i = 0; i < 2; i++)
+        {
+            spriteRenderer.color = damageFlashColor; // Bright additive color
+            yield return new WaitForSeconds(damageFlashDuration);
+            spriteRenderer.color = originalColor;
+            yield return new WaitForSeconds(0.05f);
+        }
+
         damageFlashCoroutine = null;
     }
     #endregion

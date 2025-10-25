@@ -77,16 +77,15 @@ public class WaveSpawner : MonoBehaviour
         // Opcjonalne tasowanie kolejności
         Shuffle(enemyPrefabsToSpawn);
 
-        if (AudioManager.instance != null)
+        if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
         {
             // Ensure music system is ready
             AudioManager.instance.EnsureMusicReady();
-
             // Force music to Intense with retry logic
             AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
             if (AudioManager.instance.enableDebugLogs)
             {
-                Debug.Log($"Wave {currentWaveIndex}: Music should now be Intense. FMOD Ready: {AudioManager.instance.IsFMODInitialized}, Music Ready: {AudioManager.instance.IsMusicInitialized}");
+                Debug.Log($"Wave {currentWaveIndex}: Music switched to Intense.");
             }
         }
 
@@ -127,8 +126,10 @@ public class WaveSpawner : MonoBehaviour
         enemiesAlive--;
         if (enemiesAlive <= 0)
         {
-            if (AudioManager.instance != null)
+            if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
+            {
                 AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
+            }
         }
     }
 
