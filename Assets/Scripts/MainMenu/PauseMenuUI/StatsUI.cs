@@ -79,6 +79,13 @@ public class StatsUI : MonoBehaviour
 
     private void Update()
     {
+        // Add null check for destroyed player
+        if (playerStats == null)
+        {
+            // Player is destroyed, stop updating UI
+            return;
+        }
+
         if (autoRefresh)
         {
             refreshTimer += Time.deltaTime;
@@ -148,6 +155,20 @@ public class StatsUI : MonoBehaviour
 
     public void RefreshUI()
     {
+        // Safety check - if player is destroyed, skip refresh
+        if (showPlayerStats && playerStats == null)
+        {
+            // Try to find player again (might have respawned)
+            playerStats = FindAnyObjectByType<PlayerStats>();
+
+            // If still null, clear UI and return
+            if (playerStats == null)
+            {
+                ClearUI();
+                return;
+            }
+        }
+
         currentIndex = 0;
 
         if (showPlayerStats && playerStats != null)
@@ -155,7 +176,7 @@ public class StatsUI : MonoBehaviour
             DisplayPlayerStats();
         }
 
-        if (showWeaponStats)
+        if (showWeaponStats && playerStats != null) // Added null check
         {
             DisplayWeaponStats();
         }
@@ -189,6 +210,7 @@ public class StatsUI : MonoBehaviour
             }
         }
     }
+
 
     private void DisplayPlayerStats()
     {
@@ -236,7 +258,15 @@ public class StatsUI : MonoBehaviour
     {
         AddHeader("WEAPON");
 
-        var weapon = playerStats?.GetComponentInChildren<Weapon>();
+        // Safety check - player might be destroyed
+        if (playerStats == null)
+        {
+            AddLine("Player not found", negativeColor);
+            AddSpacer();
+            return;
+        }
+
+        var weapon = playerStats.GetComponentInChildren<Weapon>();
         if (weapon == null)
         {
             AddLine("No weapon equipped", warningColor);
@@ -286,6 +316,19 @@ public class StatsUI : MonoBehaviour
         }
 
         AddSpacer();
+    }
+
+    // Add this new helper method
+    private void ClearUI()
+    {
+        // Hide all text objects when player is destroyed
+        for (int i = 0; i < textObjects.Count; i++)
+        {
+            if (textObjects[i] != null)
+            {
+                textObjects[i].gameObject.SetActive(false);
+            }
+        }
     }
 
     private void DisplayTowerStats()

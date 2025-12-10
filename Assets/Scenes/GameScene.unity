@@ -2279,7 +2279,7 @@ MonoBehaviour:
   - {fileID: 2110909284}
   maxRerolls: 99
   debugMode: 1
-  forcedAugmentIDsList: 200000003500000001000000
+  forcedAugmentIDsList: 1d0000000d00000042000000
   chosenAugmentsUI: {fileID: 1984759432}
 --- !u!1 &453391371 stripped
 GameObject:
@@ -2683,7 +2683,7 @@ MonoBehaviour:
   weaponData: {fileID: 0}
   attackCollider: {fileID: 549341035}
   visual: {fileID: 549341031}
-  defaultWeapon: {fileID: 11400000, guid: 40d1aaa84d6447044afe59352c36c1dc, type: 2}
+  defaultWeapon: {fileID: 11400000, guid: d034e8891614dfb44a1514bb3e2c68a5, type: 2}
 --- !u!60 &549341035
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -5522,6 +5522,7 @@ MonoBehaviour:
   hookCursorPath: Sprites/Cursors/cursor_spritesheet_hook2
   hookHighlightCursorPath: Sprites/Cursors/cursor_spritesheet_hook_highlight
   obstacleDrawerCursorPath: Sprites/Cursors/cursor_spritesheet_obstacle_drawer
+  rangedCursorPath: Sprites/Cursors/cursor_spritesheet_ranged
 --- !u!1 &1007241863
 GameObject:
   m_ObjectHideFlags: 0
@@ -6873,7 +6874,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 12.857971, y: -398.4901}
+  m_AnchoredPosition: {x: 12.857971, y: -398.488}
   m_SizeDelta: {x: 307.6046, y: 754.8006}
   m_Pivot: {x: 0, y: 0.5}
 --- !u!114 &1289787614
@@ -9958,7 +9959,7 @@ MonoBehaviour:
   m_HandleRect: {fileID: 431917521}
   m_Direction: 2
   m_Value: 0
-  m_Size: 0.9999987
+  m_Size: 0.99984324
   m_NumberOfSteps: 0
   m_OnValueChanged:
     m_PersistentCalls:
@@ -12175,7 +12176,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: currentArmor
-      value: 10
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: currentHealth

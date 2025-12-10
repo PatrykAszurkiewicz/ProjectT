@@ -15,12 +15,14 @@ public class CursorManager : MonoBehaviour
     public string hookCursorPath = "Sprites/Cursors/cursor_spritesheet_hook2";
     public string hookHighlightCursorPath = "Sprites/Cursors/cursor_spritesheet_hook_highlight";
     public string obstacleDrawerCursorPath = "Sprites/Cursors/cursor_spritesheet_obstacle_drawer";
+    public string rangedCursorPath = "Sprites/Cursors/cursor_spritesheet_ranged";
 
     private Sprite defaultCursorSprite;
     private Sprite repairCursorSprite;
     private Sprite shieldCursorSprite;
     private Sprite meleeCursorSprite;
     private Sprite hookCursorSprite;
+    private Sprite rangedCursorSprite;
     private Sprite hookHighlightCursorSprite;
     private Sprite obstacleDrawerCursorSprite;
 
@@ -34,6 +36,7 @@ public class CursorManager : MonoBehaviour
         Shield,
         Melee,
         Hook,
+        Ranged,
         HookHightlight,
         ObstacleDrawer
     }
@@ -57,6 +60,7 @@ public class CursorManager : MonoBehaviour
         {
             defaultCursorSprite = cursorSpriteRenderer.sprite;
             previousCursorSprite = cursorSpriteRenderer.sprite;
+            cursorSpriteRenderer.color = Color.white;
         }
 
         repairCursorSprite = Resources.Load<Sprite>(repairCursorPath);
@@ -65,25 +69,44 @@ public class CursorManager : MonoBehaviour
         hookCursorSprite = Resources.Load<Sprite>(hookCursorPath);
         hookHighlightCursorSprite = Resources.Load<Sprite>(hookHighlightCursorPath);
         obstacleDrawerCursorSprite = Resources.Load<Sprite>(obstacleDrawerCursorPath);
+        rangedCursorSprite = Resources.Load<Sprite>(rangedCursorPath);
+
+        // DEBUG LOGGING
+        /*
+        Debug.Log("========== CURSOR SPRITES LOADED ==========");
+        Debug.Log($"Repair: {(repairCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
+        Debug.Log($"Melee: {(meleeCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
+        Debug.Log($"Hook: {(hookCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
+        Debug.Log($"ObstacleDrawer: {(obstacleDrawerCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
+        Debug.Log($"Ranged: {(rangedCursorSprite != null ? "✓ LOADED" : "✗ NULL")} <- Path: '{rangedCursorPath}'");
+        Debug.Log("==========================================");
+
+        if (rangedCursorSprite == null)
+        {
+            Debug.LogError($"[CursorManager] RANGED CURSOR FAILED TO LOAD!");
+            Debug.LogError($"[CursorManager] Tried path: '{rangedCursorPath}'");
+            Debug.LogError($"[CursorManager] Full path should be: Assets/Resources/{rangedCursorPath}.png (or in spritesheet)");
+        }
+        */
     }
 
     public void SetCursor(CursorType cursorType)
     {
+        Debug.Log($"[CursorManager] SetCursor called with: {cursorType}");
+
         if (cursorSpriteRenderer == null)
         {
             Debug.LogWarning("CursorManager: No SpriteRenderer assigned");
             return;
         }
 
-        // Don't let grappling hook override repair cursor during placement mode
         bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
 
         if (inPlacementMode && currentCursorType == CursorType.Repair)
         {
-            // During placement mode, don't let hook cursors override the repair cursor
             if (cursorType == CursorType.Hook || cursorType == CursorType.HookHightlight)
             {
-                return; // Ignore hook cursor changes during placement mode
+                return;
             }
         }
 
@@ -99,20 +122,24 @@ public class CursorManager : MonoBehaviour
             CursorType.Shield => shieldCursorSprite,
             CursorType.Melee => meleeCursorSprite,
             CursorType.Hook => hookCursorSprite,
+            CursorType.Ranged => rangedCursorSprite,
             CursorType.HookHightlight => hookHighlightCursorSprite,
             CursorType.ObstacleDrawer => obstacleDrawerCursorSprite,
             _ => defaultCursorSprite
         };
 
+        //Debug.Log($"[CursorManager] Target sprite for {cursorType}: {(targetSprite != null ? targetSprite.name : "NULL")}");
+
         if (targetSprite != null)
         {
             cursorSpriteRenderer.sprite = targetSprite;
+            cursorSpriteRenderer.color = Color.white;
             currentCursorType = cursorType;
-            //Debug.Log($"CursorManager: Changed cursor to {cursorType}");
+            //Debug.Log($"[CursorManager] ✓ Successfully set cursor to {cursorType} (sprite: {targetSprite.name})");
         }
         else
         {
-            Debug.LogWarning($"CursorManager: {cursorType} cursor sprite is null");
+            Debug.LogError($"[CursorManager] ✗ {cursorType} cursor sprite is NULL! Cannot change cursor!");
         }
     }
 
@@ -125,8 +152,8 @@ public class CursorManager : MonoBehaviour
         }
 
         cursorSpriteRenderer.sprite = previousCursorSprite;
-        currentCursorType = CursorType.Default; // Reset to default
-        //Debug.Log("CursorManager: Returned to previous cursor");
+        cursorSpriteRenderer.color = Color.white;
+        currentCursorType = CursorType.Default;
     }
 
     public CursorType GetCurrentCursorType()

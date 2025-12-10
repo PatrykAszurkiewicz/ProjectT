@@ -374,6 +374,7 @@ public class EnemyController : MonoBehaviour
         return true;
     }
 
+
     private void Attack(Transform target)
     {
         PlayAttackSound();
@@ -381,7 +382,28 @@ public class EnemyController : MonoBehaviour
         var stats = target.GetComponent<CharacterStats>();
         if (stats != null)
         {
-            stats.TakeDamage(this.stats.Damage);
+            // Store damage amount before applying
+            float damageAmount = this.stats.Damage;
+
+            stats.TakeDamage(damageAmount);
+
+            // Check for damage reflection on player
+            var playerStats = stats as PlayerStats;
+            if (playerStats != null)
+            {
+                var reflectionEffect = playerStats.GetComponent<DamageReflectionEffect>();
+                if (reflectionEffect != null)
+                {
+                    reflectionEffect.ReflectDamage(damageAmount, gameObject);
+                }
+
+                // Check for ice armor on player
+                var iceArmorEffect = playerStats.GetComponent<IceArmorEffect>();
+                if (iceArmorEffect != null)
+                {
+                    iceArmorEffect.FreezeAttacker(gameObject);
+                }
+            }
 
             if (stats.IsDead())
             {
@@ -397,9 +419,7 @@ public class EnemyController : MonoBehaviour
 
             if (wasDestroyed)
             {
-                // Immediately clear target and switch to Central Core
                 currentTarget = coreTarget;
-                // Force immediate movement toward core by clearing velocity
                 if (rb != null && !isKnockedBack)
                 {
                     rb.linearVelocity = Vector2.zero;

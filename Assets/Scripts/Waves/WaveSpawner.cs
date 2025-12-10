@@ -173,7 +173,15 @@ public class WaveSpawner : MonoBehaviour
         }
 
         Vector2 spawnPosition = GetRandomPositionInArea(direction);
-        Instantiate(prefab, spawnPosition, Quaternion.identity);
+        GameObject enemyObj = Instantiate(prefab, spawnPosition, Quaternion.identity);
+
+        // Configure energy drops for regular enemies
+        EnemyStats stats = enemyObj.GetComponent<EnemyStats>();
+        if (stats != null)
+        {
+            stats.ConfigureEnergyDrop(0.5f, 10); // 50% chance, 10 energy per drop
+        }
+
         enemiesAlive++;
     }
 
@@ -184,6 +192,11 @@ public class WaveSpawner : MonoBehaviour
             int k = UnityEngine.Random.Range(0, i + 1);
             (list[i], list[k]) = (list[k], list[i]);
         }
+    }
+
+    public int GetCurrentWaveIndex()
+    {
+        return currentWaveIndex;
     }
 
     void ShowWaveIndicators(List<SpawnDirection> dirs)

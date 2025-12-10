@@ -54,15 +54,41 @@ public class PlayerStats : CharacterStats
         }
     }
 
+
     public override void TakeDamage(float amount)
     {
+        //Debug.Log($"[PLAYER] ========== TakeDamage({amount}) CALLED ==========");
+
+        // Check for immunity (augment ID 11)
+        var immunityPhases = GetComponent<ImmunityPhasesEffect>();
+
+        //Debug.Log($"[PLAYER] ImmunityPhasesEffect component: {(immunityPhases != null ? "EXISTS" : "NULL")}");
+
+        if (immunityPhases != null)
+        {
+            //Debug.Log($"[PLAYER] Component found - enabled: {immunityPhases.enabled}, isActiveAndEnabled: {immunityPhases.isActiveAndEnabled}");
+
+            bool shouldBlock = immunityPhases.ShouldBlockDamage();
+            //Debug.Log($"[PLAYER] ShouldBlockDamage returned: {shouldBlock}");
+
+            if (shouldBlock)
+            {
+                //Debug.Log("[PLAYER] ✓✓✓ Damage BLOCKED by Immunity Phases! ✓✓✓");
+                return; // No damage taken
+            }
+        }
+        else
+        {
+            //Debug.Log("[PLAYER] No ImmunityPhasesEffect component found!");
+        }
+
+        //Debug.Log($"[PLAYER] Applying damage: {amount}");
         base.TakeDamage(amount);
         regenTimer = 0f;
 
         // Trigger damage flash
         StartDamageFlash();
     }
-
     private void StartDamageFlash()
     {
         if (spriteRenderer == null) return;

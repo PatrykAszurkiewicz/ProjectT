@@ -1,19 +1,19 @@
 ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,WhoImplements,TargetTypes
 1,0,Melee attack increase and defense decrease,Player,"Common, Rare, Epic","damage*1.1,currentArmor*0.8",Perk increases melee attack by 10% and decreases physical damage defense by 10%,Resources/Sprites/Augments/1,Patryk,"Weapon,Player"
-2,0,Unlocked melee,Player,Epic,NULL,Unlocked melee attack,Resources/Sprites/Augments/2,Patryk,Weapon
+2,0,Unlocked melee,Player,Epic,NULL,Unlocked melee attack,Resources/Sprites/Augments/2,Kuba,Player
 3,0,Obstacles generation,Map,Epic,NULL,Unlocked obstacles generation,Resources/Sprites/Augments/3,Patryk,Global
-4,0,More obstacles,Map,"Epic, Rare",NULL,Unlocked more obstacles,Resources/Sprites/Augments/4,Patryk,Global
+4,0,Unlocked obstacle drawer,Player,"Epic",NULL,Unlocked obstacle drawer,Resources/Sprites/Augments/4,Kuba,Player
 5,0,Tower damage increase,Tower,"Common, Rare, Epic",tower_damage+5,Increased tower attack,Resources/Sprites/Augments/5,Kuba,Tower
-6,0,Berserker's Fury,Player,Legendary,player_damage_stack_kill*0.02,Player attack increases by 2% for each enemy killed resets on taking damage,Resources/Sprites/Augments/6,Patryk,Weapon
-7,0,Rapid Fire,Player,Epic,"player_attack_speed*1.4,player_damage*0.85",Increases player attack speed by 40% decreases damage by 15%,Resources/Sprites/Augments/7,Patryk,Player
-8,0,Lifesteal,Player,Epic,player_current_health+0.15*player_damage,Player heals for 15% of damage dealt,Resources/Sprites/Augments/8,Patryk,Player
+6,0,Berserker's Fury,Player,Legendary,player_damage_stack_kill*1.02,Player attack increases by 2% for each enemy killed resets on taking damage,Resources/Sprites/Augments/6,Kuba,Player
+7,0,Rapid Fire,Player,Epic,"attackCooldown*0.714,damage*0.85",Increases player attack speed by 40% decreases damage by 15%,Resources/Sprites/Augments/7,Kuba,Player
+8,0,Lifesteal,Player,Epic,lifesteal_percentage=0.15,Player heals for 15% of damage dealt,Resources/Sprites/Augments/8,Kuba,Player
 9,0,Armor Plating,Player,Common,currentArmor*1.2,Reduces all incoming damage by 20%,Resources/Sprites/Augments/9,Patryk,Player
 10,0,Regeneration,Player,Epic,healthRegenRate+0.02,Slowly heal 2% max health per second when not taking damage,Resources/Sprites/Augments/10,Patryk,Player
-11,0,Immunity Phases,Player,Legendary,NULL,Become immune to damage for 2 seconds after taking a hit (15s cooldown),Resources/Sprites/Augments/11,Patryk,Player
-12,0,Damage Reflection,Player,Rare,enemy_damage*1.3,Reflect 30% of received damage back to attackers,Resources/Sprites/Augments/12,Patryk,Player
-13,0,Ice Armor,Player,Epic,enemy_move_speed*0.5,Slows attackers by 50% for 3 seconds when hit,Resources/Sprites/Augments/13,Patryk,Player
+11,0,Immunity Phases,Player,Legendary,NULL,Become immune to damage for 2 seconds after taking a hit (15s cooldown),Resources/Sprites/Augments/11,Kub,Player
+12,0,Damage Reflection,Player,Rare,reflection_percentage=0.30,Reflect 30% of received damage back to attackers,Resources/Sprites/Augments/12,Kuba,Player
+13,0,Ice Armor,Player,Epic,ice_armor_duration=3,Freeze enemy attackers for 3 seconds when hit,Resources/Sprites/Augments/13,Kuba,Player
 14,0,Speed Boost,Player,Common,moveSpeed*1.3,+30% movement speed permanently,Resources/Sprites/Augments/14,Patryk,Player
-15,0,Magnetic Field,Player,Epic,resources_magnet_radius*1.5,Automatically collect resources within larger radius,Resources/Sprites/Augments/15,Patryk,Player
+15,0,Magnetic Field,Player,Epic,collectionRadius*1.5,Automatically collect resources within larger radius,Resources/Sprites/Augments/15,Kuba,Player
 16,0,Freeze Ray,Tower,Epic,tower_freeze_chance=0.2,20% chance to freeze enemies for 2 seconds,Resources/Sprites/Augments/16,Kuba,Tower
 17,0,Tower Healing,Tower,Rare,tower_health_regen+0.1,Towers slowly regenerate health over time,Resources/Sprites/Augments/17,Kuba,Tower
 18,0,Overcharge,Tower,Epic,"tower_damage*1.08,tower_energy_cost*1.03",Towers deal 8% more damage but consume 3% more energy to fire,Resources/Sprites/Augments/18,Kuba,Tower
@@ -25,9 +25,9 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 24,0,Symbiosis,Synergy,Legendary,proximity_tower_damage*1.2,Player presence near towers increase towers attack by 20%,Resources/Sprites/Augments/24,Kuba,Player
 25,0,Tower Commander,Synergy,Rare,tower_energy_decay*0.7,Player presence near towers decrease constant natural energy decay by 30%,Resources/Sprites/Augments/25,Kuba,Tower
 26,2,Environmental Mastery,Synergy,Epic,NULL,Player can activate map effects manually,Resources/Sprites/Augments/26,Patryk,
-27,0,Escalation,Stack,Common,damage_per_wave*1.02,Each wave cleared increases all damage by 2% (stacks infinitely),Resources/Sprites/Augments/27,Patryk,
-28,0,Momentum,Stack,Rare,"player_health*1.03, player_attack*1.03",Consecutive kills without taking damage increase health and attack by 3%,Resources/Sprites/Augments/28,Patryk,
-29,1,Friendly Fire,Special,Epic,enemy_infighting_chance*1.1,1 Random enemy occasionally attack other enemy with 10% chance,Resources/Sprites/Augments/29,Patryk,
+27,0,Escalation,Stack,Common,escalation_multiplier=1.02,Each wave cleared increases all damage by 2% (stacks infinitely),Resources/Sprites/Augments/27,Kuba,Player
+28,0,Momentum,Stack,Rare,"momentum_health=1.03,momentum_damage=1.03",Consecutive kills without taking damage increase health and attack by 3%,Resources/Sprites/Augments/28,Kuba,Player
+29,1,Friendly Fire,Special,Epic,"enemy_infighting_chance=0.5,enemy_infighting_duration=30",1 Random enemy attacks other enemies for 20 seconds (30s cooldown),Resources/Sprites/Augments/29,Kuba,Global
 30,1,God Mode,Special,Legendary,"temporary_invincibility*1, max_health_reduction*0.96",Temporary invincibility for 60 seconds but permanently reduces max health afterward by 4%,Resources/Sprites/Augments/30,Patryk,
 31,0,Player damage boost,Player,"Common, Rare, Epic, Legendary",damage*1.15,Increases player attack damage by 5%,Resources/Sprites/Augments/31,Patryk,Player
 32,0,Player health increase,Player,"Common, Rare, Epic",maxHealth*1.25,Increases player maximum health by 15%,Resources/Sprites/Augments/32,Patryk,Player
@@ -63,8 +63,8 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 62,0,Starting resource boost,Economy,Common,current_energy*1.50,Get 50% additional energy,Resources/Sprites/Augments/62,Kuba,Global
 63,1,Cost reduction,Economy,Rare,{all_purchase_costs: -0.15},All purchases cost 15% less,Resources/Sprites/Augments/63,Patryk,
 64,0,Auto-collect resources,Utility,Rare,collectionRadius*3.0,Automatically collects nearby resources without manual interaction,Resources/Sprites/Augments/64,Kuba,Player
-65,0,Unlocked grappling hook,Player,Rare,NULL,Unlocked grappling hook weapon,Resources/Sprites/Augments/65,Patryk,
-66,0,Unlocked ranged weapon,Player,Rare,NULL,Unlocked ranged weapon,Resources/Sprites/Augments/66,Patryk,
+65,0,Unlocked grappling hook,Player,Rare,NULL,Unlocked grappling hook weapon,Resources/Sprites/Augments/65,Kuba,
+66,0,Unlocked ranged weapon,Player,Rare,NULL,Unlocked ranged weapon,Resources/Sprites/Augments/66,Kuba,
 67,0,Adrenaline Rush,Player,Rare,"{player_attack_speed: 0.80, player_movement_speed: 0.60}",When health drops below 30% gain massive speed and attack rate for 15 seconds,Resources/Sprites/Augments/67,Patryk,
 68,0,Berserker Mode,Player,Epic,"{player_damage_per_missing_health: 0.02, player_defense: -0.25}",Gain 2% damage for every 1% health missing but lose 25% defense,Resources/Sprites/Augments/68,Patryk,
 69,1,Combat Medic,Player,Epic,tower_energy_heal*1.30,Player can heal damaged towers at increased efficiencies,Resources/Sprites/Augments/69,Kuba,

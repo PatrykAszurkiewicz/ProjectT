@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: RangeTest
   m_EditorClassIdentifier: 
   weaponName: Pistol
-  sprite: {fileID: -2371157847659589090, guid: 0eb724827d5f4704983f3dbdf4c75d29, type: 3}
+  sprite: {fileID: -420296200359305026, guid: 329ddd65160367146bc52eab86eeb3dc, type: 3}
   damage: 12
   attackCooldown: 0.2
   armorBonus: 0
@@ -22,3 +22,20 @@ MonoBehaviour:
   isRanged: 1
   projectilePrefab: {fileID: 3232055685823593232, guid: 2ba789b52e493624b98470c3b775efe8, type: 3}
   projectileSpeed: 10
+  size: {x: 1, y: 1}
+  isGrapplingHook: 0
+  hookRange: 12
+  hookSpeed: 20
+  pullForce: 15
+  targetingAngle: 25
+  hookLineColor: {r: 0.6901961, g: 0.7686275, b: 0.8705883, a: 1}
+  targetHighlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  lineWidth: 0.08
+  isObstacleDrawer: 0
+  drawDuration: 0.3
+  obstacleWidth: 0.3
+  maxObstacles: 3
+  minDrawDistance: 0.1
+  drawLineColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
+  solidifiedColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+  obstacleHealth: 50

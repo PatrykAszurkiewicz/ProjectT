@@ -45,7 +45,10 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
 
         var spriteRenderer = spriteObj.AddComponent<SpriteRenderer>();
         spriteRenderer.sprite = hookSprite ?? CreateFallbackSprite();
-        spriteRenderer.color = Color.white;
+
+        // Green color for the indicator 
+        spriteRenderer.color = Color.green;
+
         spriteRenderer.sortingLayerName = "Default";
         spriteRenderer.sortingOrder = 1000;
         spriteRenderer.transform.localScale = Vector3.one * 1.1f;
@@ -82,9 +85,47 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
 
     private void FollowTarget()
     {
-        if (target == null) return;
+        // Enhanced validation to prevent erratic movement
+        if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy)
+        {
+            Hide();
+            return;
+        }
+
+        // Additional check for destroyed grappling targets
+        var grapplingTarget = target.GetComponent<IGrapplingTarget>();
+        if (grapplingTarget != null && !grapplingTarget.CanBeGrappled())
+        {
+            Hide();
+            return;
+        }
+
+        // Check if target is a Gremlin and if it's dead
+        var gremlinController = target.GetComponent<GremlinController>();
+        if (gremlinController != null && gremlinController.IsDestroyed())
+        {
+            Hide();
+            return;
+        }
+
+        // Check if target is an Enemy and if it's dead
+        var enemyStats = target.GetComponent<EnemyStats>();
+        if (enemyStats != null && enemyStats.IsDead())
+        {
+            Hide();
+            return;
+        }
 
         Vector3 targetPosition = target.position + Vector3.up * TARGET_OFFSET_Y;
+
+        // Prevent indicator from moving if distance is too large (indicates something went wrong)
+        float distance = Vector3.Distance(transform.position, targetPosition);
+        if (distance > 50f) // Sanity check
+        {
+            Hide();
+            return;
+        }
+
         transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * FOLLOW_SPEED);
     }
 

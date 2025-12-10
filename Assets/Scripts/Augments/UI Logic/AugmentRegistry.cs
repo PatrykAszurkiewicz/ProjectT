@@ -277,6 +277,319 @@ public static class StatApplicator
     {
         //Debug.Log($"[STAT_APPLICATOR] ApplyModification called: StatName={modification.StatName}, TargetType={modification.TargetType}, Value={modification.Value}, OpType={modification.OperationType}");
 
+        // Handle Friendly Fire (augment ID 29)
+        if ((modification.StatName == "enemy_infighting_chance" || modification.StatName == "enemy_infighting_duration")
+            && modification.TargetType == "Global")
+        {
+            //Debug.Log($"[FRIENDLY_FIRE_DEBUG] Processing stat: {modification.StatName} = {modification.Value}");
+
+            GameObject managerObj = GameObject.Find("FriendlyFireManager");
+            if (managerObj == null)
+            {
+                managerObj = new GameObject("FriendlyFireManager");
+                //Debug.Log("[FRIENDLY_FIRE_DEBUG] Created FriendlyFireManager GameObject");
+            }
+
+            var existing = managerObj.GetComponent<FriendlyFireEffect>();
+            if (existing == null)
+            {
+                existing = managerObj.AddComponent<FriendlyFireEffect>();
+                //Debug.Log("[FRIENDLY_FIRE_DEBUG] Added FriendlyFireEffect component");
+            }
+
+            // Apply the modification with sensible caps
+            if (modification.StatName == "enemy_infighting_chance")
+            {
+                existing.infightingChance = Mathf.Clamp(modification.Value, 0.1f, 1.0f); // 10% to 100%
+                //Debug.Log($"[FRIENDLY_FIRE]  Chance set to: {existing.infightingChance * 100f:F1}% (capped)");
+            }
+            else if (modification.StatName == "enemy_infighting_duration")
+            {
+                existing.infightingDuration = Mathf.Clamp(modification.Value, 5f, 20f); // 5s to 20s max
+                //Debug.Log($"[FRIENDLY_FIRE] ✓ Duration set to: {existing.infightingDuration}s (capped)");
+            }
+
+            return true;
+        }
+
+        // Handle Momentum - Health boost per kill (augment ID 28)
+        if (modification.StatName == "momentum_health" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats == null)
+            {
+                Debug.LogError("[MOMENTUM] PlayerStats not found!");
+                return false;
+            }
+
+            var playerObj = playerStats.gameObject;
+
+            // Get or create momentum effect
+            var momentum = playerObj.GetComponent<MomentumEffect>();
+            if (momentum == null)
+            {
+                momentum = playerObj.AddComponent<MomentumEffect>();
+            }
+
+            // CSV value is the multiplier per kill (1.03), convert to percentage increase (0.03)
+            float healthIncreasePerKill = modification.Value - 1.0f;
+            momentum.healthMultiplierPerKill = healthIncreasePerKill;
+
+            //Debug.Log($"[MOMENTUM] Set health multiplier: {healthIncreasePerKill * 100f:F1}% per kill (CSV: {modification.Value})");
+            return true;
+        }
+
+        // Handle Momentum - Damage boost per kill (augment ID 28)
+        if (modification.StatName == "momentum_damage" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats == null)
+            {
+                Debug.LogError("[MOMENTUM] PlayerStats not found!");
+                return false;
+            }
+
+            var playerObj = playerStats.gameObject;
+
+            // Get or create momentum effect
+            var momentum = playerObj.GetComponent<MomentumEffect>();
+            if (momentum == null)
+            {
+                momentum = playerObj.AddComponent<MomentumEffect>();
+            }
+
+            // CSV value is the multiplier per kill (1.03), convert to percentage increase (0.03)
+            float damageIncreasePerKill = modification.Value - 1.0f;
+            momentum.damageMultiplierPerKill = damageIncreasePerKill;
+
+            Debug.Log($"[MOMENTUM] Set damage multiplier: {damageIncreasePerKill * 100f:F1}% per kill (CSV: {modification.Value})");
+            return true;
+        }
+
+
+        // Handle Escalation (augment ID 27)
+        if (modification.StatName == "escalation_multiplier" && modification.TargetType == "Player")
+        {
+            WaveSpawner spawner = UnityEngine.Object.FindFirstObjectByType<WaveSpawner>();
+            if (spawner == null)
+            {
+                Debug.LogError("[ESCALATION] WaveSpawner not found!");
+                return false;
+            }
+
+            var spawnerObj = spawner.gameObject;
+
+            // Check if escalation already exists
+            var existing = spawnerObj.GetComponent<EscalationEffect>();
+            if (existing != null)
+            {
+                Debug.LogWarning("[ESCALATION] Escalation already active - cannot stack augment");
+                return false;
+            }
+
+            float damageIncreasePerWave = modification.Value - 1.0f;
+
+            var escalation = spawnerObj.AddComponent<EscalationEffect>();
+            escalation.damageIncreasePerWave = damageIncreasePerWave;
+
+            //Debug.Log($"[ESCALATION] Added with {damageIncreasePerWave * 100f:F1}% damage increase per wave (CSV value: {modification.Value})");
+            return true;
+        }
+
+
+        // Handle Ice Armor freeze effect (augment ID 13)
+        if (modification.StatName == "ice_armor_duration" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                // Check if ice armor already exists (stacking)
+                var existing = playerObj.GetComponent<IceArmorEffect>();
+                if (existing != null)
+                {
+                    // Stack duration additively (3 + 3 = 6 seconds)
+                    existing.freezeDuration += modification.Value;
+
+                    //Debug.Log($"[ICE_ARMOR] Stacked! Freeze duration now: {existing.freezeDuration}s");
+                    return true;
+                }
+
+                var iceArmor = playerObj.AddComponent<IceArmorEffect>();
+                iceArmor.freezeDuration = modification.Value;
+                //Debug.Log($"[ICE_ARMOR] Added with {iceArmor.freezeDuration}s freeze duration");
+                return true;
+            }
+
+            Debug.LogError("[ICE_ARMOR] Could not find PlayerStats!");
+            return false;
+        }
+
+
+        // Handle Damage Reflection percentage (augment ID 12)
+        if (modification.StatName == "reflection_percentage" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                // Check if reflection already exists (stacking)
+                var existing = playerObj.GetComponent<DamageReflectionEffect>();
+                if (existing != null)
+                {
+                    // Stack reflection percentage additively (0.30 + 0.30 = 0.60 = 60%)
+                    existing.reflectionPercentage += modification.Value;
+
+                    //Debug.Log($"[DAMAGE_REFLECTION] Stacked! Reflection now: {existing.reflectionPercentage * 100:F1}%");
+                    return true;
+                }
+
+                var reflection = playerObj.AddComponent<DamageReflectionEffect>();
+                reflection.reflectionPercentage = modification.Value;
+                //Debug.Log($"[DAMAGE_REFLECTION] Added with {reflection.reflectionPercentage * 100:F1}% reflection");
+                return true;
+            }
+
+            Debug.LogError("[DAMAGE_REFLECTION] Could not find PlayerStats!");
+            return false;
+        }
+
+
+        // Handle Lifesteal percentage (augment ID 8)
+        if (modification.StatName == "lifesteal_percentage" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                // Check if lifesteal already exists (stacking)
+                var existing = playerObj.GetComponent<LifestealEffect>();
+                if (existing != null)
+                {
+                    // Stack lifesteal percentage additively
+                    float oldPercentage = existing.lifestealPercentage;
+
+                    switch (modification.OperationType)
+                    {
+                        case StatModification.ModificationType.Add:
+                            existing.lifestealPercentage += modification.Value;
+                            break;
+                        case StatModification.ModificationType.Set:
+                            existing.lifestealPercentage += modification.Value; // Add to existing for stacking
+                            break;
+                        case StatModification.ModificationType.Multiply:
+                            existing.lifestealPercentage *= modification.Value;
+                            break;
+                    }
+
+                    //Debug.Log($"[LIFESTEAL] Stacked! {oldPercentage * 100:F1}% -> {existing.lifestealPercentage * 100:F1}%");
+                    return true;
+                }
+
+                var lifesteal = playerObj.AddComponent<LifestealEffect>();
+                lifesteal.lifestealPercentage = modification.Value;
+                //Debug.Log($"[LIFESTEAL] Added with {modification.Value * 100:F1}% lifesteal from CSV");
+                return true;
+            }
+
+            Debug.LogError("[LIFESTEAL] Could not find PlayerStats!");
+            return false;
+        }
+
+        // Handle weapon stats (attackCooldown, damage) when target is Player (augment ID 7)
+        if ((modification.StatName == "attackCooldown" || modification.StatName == "damage") &&
+            modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var weapon = playerStats.GetComponentInChildren<Weapon>();
+                if (weapon == null)
+                {
+                    weapon = UnityEngine.Object.FindFirstObjectByType<Weapon>();
+                }
+
+                if (weapon != null)
+                {
+                    var weaponData = weapon.GetWeaponData();
+                    if (weaponData != null)
+                    {
+                        // Apply modification to weapon data
+                        return ApplyToTarget(weaponData, modification);
+                    }
+                }
+                Debug.LogError($"[WEAPON_STAT] Could not find Weapon or WeaponData for stat: {modification.StatName}");
+                return false;
+            }
+        }
+
+        // Handle Berserker's Fury (augment ID 6)
+        if (modification.StatName == "player_damage_stack_kill" && modification.TargetType == "Player") // CHANGED: "Weapon" → "Player"
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = ((MonoBehaviour)playerStats).gameObject;
+
+                // Extract percentage increase from multiplier
+                float percentageIncrease = modification.Value - 1.0f;
+
+                var existing = playerObj.GetComponent<BerserkersFuryEffect>();
+                if (existing != null)
+                {
+                    // Stack the effect
+                    existing.damageIncreasePerKill += percentageIncrease;
+                    //Debug.Log($"[BERSERKER] Stacked! Damage increase per kill: {existing.damageIncreasePerKill * 100f:F1}%");
+                    return true;
+                }
+
+                var berserkerEffect = playerObj.AddComponent<BerserkersFuryEffect>();
+                berserkerEffect.damageIncreasePerKill = percentageIncrease;
+                //Debug.Log($"[BERSERKER] Added with {percentageIncrease * 100f:F1}% damage increase per kill");
+                return true;
+            }
+
+            Debug.LogError("[BERSERKER] Could not find PlayerStats!");
+            return false;
+        }
 
         // Handle Core Energy Siphon (augment ID 75)
         if (modification.StatName == "core_energy_from_attacks")
@@ -1224,8 +1537,54 @@ public class RarityAwareAugmentEffect : IAugmentEffect
         return scaled;
     }
 
+    // Helper method for percentage-based augments
+    private bool IsPerEventMultiplierStat(string statName)
+    {
+        string lower = statName.ToLower();
+        return lower == "momentum_health" ||
+               lower == "momentum_damage" ||
+               lower == "player_damage_stack_kill" ||  // Berserker's Fury
+               lower == "escalation_multiplier";       // Escalation
+    }
+
+    private bool IsAbsoluteValueStat(string statName)
+    {
+        string lower = statName.ToLower();
+        return lower.Contains("duration") ||
+               lower.Contains("chance") ||
+               lower.Contains("infighting");
+    }
+
     private float CalculateScaledValue(float baseValue, StatModification.ModificationType operationType, string statName)
     {
+
+        // Handle absolute values that should scale proportionally (durations, chances, etc.)
+        if (IsAbsoluteValueStat(statName) && operationType == StatModification.ModificationType.Set)
+        {
+            // Scale proportionally: treat the value as a bonus to scale
+            return baseValue * rarityMultiplier;
+        }
+
+
+        // Handle per-event multiplier stats (momentum, berserker, escalation)
+        // These use format 1.XX where 0.XX is the percentage bonus per event
+        // Example: 1.03 means "+3% per kill", not "103% bonus"
+        if (IsPerEventMultiplierStat(statName))
+        {
+            // Extract percentage part (1.03 → 0.03)
+            float percentageBonus = baseValue - 1.0f;
+
+            // Scale only the percentage (0.03 × 1.223 = 0.0367)
+            float scaledPercentage = percentageBonus * rarityMultiplier;
+
+            // Rebuild multiplier (1 + 0.0367 = 1.0367)
+            float scaledValue = 1.0f + scaledPercentage;
+
+            //Debug.Log($"[PER-EVENT SCALING] {statName}: {baseValue:F4} ({percentageBonus * 100:F2}% per event) → {scaledValue:F4} ({scaledPercentage * 100:F2}% per event)");
+
+            return scaledValue;
+        }
+
         // Check if this is an enemy debuff stat (special handling)
         bool isEnemyDebuff = IsEnemyDebuffStat(statName);
 

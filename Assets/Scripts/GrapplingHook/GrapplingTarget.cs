@@ -337,10 +337,14 @@ public class GrapplingHookSystem
 
     private void UpdateCursor(IGrapplingTarget bestTarget)
     {
-        if (currentTarget != bestTarget && CursorManager.Instance != null &&
+        if (CursorManager.Instance != null &&
             (TowerPlacementManager.Instance == null || !TowerPlacementManager.Instance.IsInPlacementMode()))
         {
-            var cursorType = bestTarget != null ? CursorManager.CursorType.HookHightlight : CursorManager.CursorType.Default;
+            // Use Hook (black) when no target, HookHighlight (green) when targeting
+            var cursorType = bestTarget != null ? CursorManager.CursorType.HookHightlight : CursorManager.CursorType.Hook;
+
+            //Debug.Log($"[GRAPPLING] UpdateCursor - BestTarget: {bestTarget != null}, CursorType: {cursorType}");
+
             CursorManager.Instance.SetCursor(cursorType);
         }
     }
