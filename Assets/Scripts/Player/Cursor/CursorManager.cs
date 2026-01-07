@@ -92,7 +92,7 @@ public class CursorManager : MonoBehaviour
 
     public void SetCursor(CursorType cursorType)
     {
-        Debug.Log($"[CursorManager] SetCursor called with: {cursorType}");
+        //Debug.Log($"[CursorManager] SetCursor called with: {cursorType}");
 
         if (cursorSpriteRenderer == null)
         {

@@ -277,6 +277,321 @@ public static class StatApplicator
     {
         //Debug.Log($"[STAT_APPLICATOR] ApplyModification called: StatName={modification.StatName}, TargetType={modification.TargetType}, Value={modification.Value}, OpType={modification.OperationType}");
 
+
+        // Handle Lightning on Dodge (augment ID 79)
+        if (modification.StatName == "lightning_dodge_damage" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                var lightning = playerObj.GetComponent<LightningOnDodgeEffect>();
+                if (lightning == null)
+                {
+                    lightning = playerObj.AddComponent<LightningOnDodgeEffect>();
+                }
+                lightning.damagePercent = modification.Value;
+                //Debug.Log($"[LIGHTNING_DODGE] Set damage percent: {modification.Value * 100}%");
+                return true;
+            }
+            Debug.LogError("[LIGHTNING_DODGE] Could not find PlayerStats");
+            return false;
+        }
+
+        // Handle Fire on Dodge (augment ID 80)
+        if ((modification.StatName == "fire_dodge_damage" ||
+             modification.StatName == "fire_dodge_dot" ||
+             modification.StatName == "fire_dodge_duration") &&
+            modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                var fire = playerObj.GetComponent<FireOnDodgeEffect>();
+                if (fire == null)
+                {
+                    fire = playerObj.AddComponent<FireOnDodgeEffect>();
+                }
+
+                switch (modification.StatName)
+                {
+                    case "fire_dodge_damage":
+                        fire.damagePercent = modification.Value;
+                        //Debug.Log($"[FIRE_DODGE] Set initial damage: {modification.Value * 100}%");
+                        break;
+                    case "fire_dodge_dot":
+                        fire.dotPercent = modification.Value;
+                        //Debug.Log($"[FIRE_DODGE] Set damage over time: {modification.Value * 100}% per second");
+                        break;
+                    case "fire_dodge_duration":
+                        fire.dotDuration = modification.Value;
+                        //Debug.Log($"[FIRE_DODGE] Set damage over time duration: {modification.Value}s");
+                        break;
+                }
+                return true;
+            }
+            Debug.LogError("[FIRE_DODGE] Could not find PlayerStats");
+            return false;
+        }
+
+
+        // Handle Resource Deposits (augment ID 57)
+        if (modification.StatName == "resource_node_count" && modification.TargetType == "Global")
+        {
+            // Ensure ResourceDepositSpawner exists
+            var spawner = UnityEngine.Object.FindFirstObjectByType<ResourceDepositSpawner>();
+            if (spawner == null)
+            {
+                var spawnerObj = new GameObject("ResourceDepositSpawner");
+                spawner = spawnerObj.AddComponent<ResourceDepositSpawner>();
+            }
+
+            int nodeCount = Mathf.RoundToInt(modification.Value);
+            spawner.SpawnResourceDeposits(nodeCount);
+
+            //Debug.Log($"[RESOURCE_DEPOSITS] Spawned {nodeCount} resource deposits on map");
+            return true;
+        }
+
+        // Handle Grappling Hook Damage (augment ID 77)
+        if (modification.StatName == "grappling_hook_damage" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                // Get or create Grappling Hook Damage effect
+                var grapplingDamage = playerObj.GetComponent<GrapplingHookDamageEffect>();
+                if (grapplingDamage == null)
+                {
+                    grapplingDamage = playerObj.AddComponent<GrapplingHookDamageEffect>();
+                }
+
+                // Add damage (supports stacking)
+                grapplingDamage.damage += modification.Value;
+
+                //Debug.Log($"[GRAPPLING_DAMAGE] Set damage: {grapplingDamage.damage}");
+
+                return true;
+            }
+
+            Debug.LogError("[GRAPPLING_DAMAGE] Could not find PlayerStats!");
+            return false;
+        }
+
+        // Handle Pheromone Control (augment ID 76)
+        if (modification.StatName == "player_enemy_confusion_aura" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+                // Get or create Pheromone Control effect
+                var pheromoneControl = playerObj.GetComponent<PheromoneControlEffect>();
+                if (pheromoneControl == null)
+                {
+                    pheromoneControl = playerObj.AddComponent<PheromoneControlEffect>();
+                }
+                pheromoneControl.confusionChance = modification.Value;
+                //Debug.Log($"[PHEROMONE_CONTROL] Set confusion chance: {modification.Value * 100f}%");
+                return true;
+            }
+            Debug.LogError("[PHEROMONE_CONTROL] Could not find PlayerStats!");
+            return false;
+        }
+
+
+
+        // Handle Berserker Mode (augment ID 68)
+        if (modification.StatName == "berserker_damage_per_missing_health" ||
+            modification.StatName == "berserker_defense_penalty")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                // Get or create Berserker Mode effect
+                var berserkerMode = playerObj.GetComponent<BerserkerModeEffect>();
+                if (berserkerMode == null)
+                {
+                    berserkerMode = playerObj.AddComponent<BerserkerModeEffect>();
+                }
+
+                // Set the appropriate parameter
+                switch (modification.StatName)
+                {
+                    case "berserker_damage_per_missing_health":
+                        berserkerMode.damagePerMissingHealthPercent = modification.Value;
+                        //Debug.Log($"[BERSERKER_MODE] Set damage per missing health: {modification.Value * 100}% per 1%");
+                        break;
+                    case "berserker_defense_penalty":
+                        berserkerMode.defensePenalty = modification.Value;
+                        //Debug.Log($"[BERSERKER_MODE] Set defense penalty: {modification.Value * 100}%");
+                        break;
+                }
+
+                return true;
+            }
+
+            Debug.LogError("[BERSERKER_MODE] Could not find PlayerStats!");
+            return false;
+        }
+
+        // Handle Adrenaline Rush (augment ID 67)
+        if (modification.StatName == "adrenaline_health_threshold" ||
+            modification.StatName == "adrenaline_duration" ||
+            modification.StatName == "adrenaline_cooldown" ||
+            modification.StatName == "adrenaline_attack_speed" ||
+            modification.StatName == "adrenaline_move_speed")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+
+                // Get or create Adrenaline Rush effect
+                var adrenalineRush = playerObj.GetComponent<AdrenalineRushEffect>();
+                if (adrenalineRush == null)
+                {
+                    adrenalineRush = playerObj.AddComponent<AdrenalineRushEffect>();
+                }
+
+                // Set the appropriate parameter
+                switch (modification.StatName)
+                {
+                    case "adrenaline_health_threshold":
+                        adrenalineRush.healthThreshold = modification.Value;
+                        //Debug.Log($"[ADRENALINE_RUSH] Set health threshold: {modification.Value * 100}%");
+                        break;
+                    case "adrenaline_duration":
+                        adrenalineRush.effectDuration = modification.Value;
+                        //Debug.Log($"[ADRENALINE_RUSH] Set duration: {modification.Value}s");
+                        break;
+                    case "adrenaline_cooldown":
+                        adrenalineRush.cooldownDuration = modification.Value;
+                        //Debug.Log($"[ADRENALINE_RUSH] Set cooldown: {modification.Value}s");
+                        break;
+                    case "adrenaline_attack_speed":
+                        adrenalineRush.attackSpeedMultiplier = modification.Value;
+                        //Debug.Log($"[ADRENALINE_RUSH] Set attack speed multiplier: {modification.Value}x");
+                        break;
+                    case "adrenaline_move_speed":
+                        adrenalineRush.movementSpeedMultiplier = modification.Value;
+                        //Debug.Log($"[ADRENALINE_RUSH] Set movement speed bonus: +{modification.Value * 100}%");
+                        break;
+                }
+
+                return true;
+            }
+
+            Debug.LogError("[ADRENALINE_RUSH] Could not find PlayerStats!");
+            return false;
+        }
+
+
+        // Handle enemy spawn count multiplier (augment ID 56)
+        if (modification.StatName == "enemy_spawn_count")
+        {
+            var waveSpawner = UnityEngine.Object.FindFirstObjectByType<WaveSpawner>();
+            if (waveSpawner == null)
+            {
+                Debug.LogError("[ENEMY_SPAWN_COUNT] WaveSpawner not found");
+                return false;
+            }
+
+            float currentMultiplier = waveSpawner.enemySpawnCountMultiplier;
+            float newMultiplier = CalculateNewValue(currentMultiplier, modification);
+
+            // Clamp to reasonable values (min 10% spawns, max 500%)
+            newMultiplier = Mathf.Clamp(newMultiplier, 0.1f, 5f);
+
+            waveSpawner.enemySpawnCountMultiplier = newMultiplier;
+
+            //Debug.Log($"[ENEMY_SPAWN_COUNT] Enemy spawn multiplier: {currentMultiplier:F2}x -> {newMultiplier:F2}x ({(newMultiplier - 1f) * 100f:+0;-0}% enemies)");
+            return true;
+        }
+
+        // Handle wave spawn delay (augment ID 55)
+        if (modification.StatName == "wave_spawn_delay" && modification.TargetType == "Global")
+        {
+            var waveSpawner = UnityEngine.Object.FindFirstObjectByType<WaveSpawner>();
+            if (waveSpawner == null)
+            {
+                Debug.LogError("[WAVE_DELAY] WaveSpawner not found");
+                return false;
+            }
+            float currentDelay = waveSpawner.waveSpawnDelayModifier;
+            float newDelay = CalculateNewValue(currentDelay, modification);
+            waveSpawner.waveSpawnDelayModifier = newDelay;
+            //Debug.Log($"[WAVE_DELAY] Wave spawn delay modifier: {currentDelay:F1}s -> {newDelay:F1}s (Total delay: {waveSpawner.waveConfig.timeBetweenWaves + newDelay:F1}s)");
+            return true;
+        }
+
+        // Handle Health on Kill (augment ID 34)
+        if (modification.StatName == "health_per_kill" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+            {
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+            }
+            if (playerStats != null)
+            {
+                var playerObj = playerStats.gameObject;
+                // Get or create Health on Kill effect
+                var existing = playerObj.GetComponent<HealthOnKillEffect>();
+                if (existing != null)
+                {
+                    // Stack the effect
+                    existing.healthPerKill += modification.Value;
+                    //Debug.Log($"[HEALTH_ON_KILL] Stacked! Now restores {existing.healthPerKill} HP per kill");
+                    return true;
+                }
+                var healthOnKill = playerObj.AddComponent<HealthOnKillEffect>();
+                healthOnKill.healthPerKill = modification.Value;
+                //Debug.Log($"[HEALTH_ON_KILL] Added with {modification.Value} HP per kill from CSV");
+                return true;
+            }
+
+            Debug.LogError("[HEALTH_ON_KILL] Could not find PlayerStats");
+            return false;
+        }
+
+
         // Handle Friendly Fire (augment ID 29)
         if ((modification.StatName == "enemy_infighting_chance" || modification.StatName == "enemy_infighting_duration")
             && modification.TargetType == "Global")
@@ -1555,8 +1870,42 @@ public class RarityAwareAugmentEffect : IAugmentEffect
                lower.Contains("infighting");
     }
 
+    private bool IsAdrenalineRushStat(string statName)
+    {
+        string lower = statName.ToLower();
+        return lower == "adrenaline_health_threshold" ||
+               lower == "adrenaline_duration" ||
+               lower == "adrenaline_cooldown" ||
+               lower == "adrenaline_attack_speed" ||
+               lower == "adrenaline_move_speed";
+    }
     private float CalculateScaledValue(float baseValue, StatModification.ModificationType operationType, string statName)
     {
+
+        if (statName == "berserker_damage_per_missing_health")
+        {
+            // Higher value = more damage bonus (better)
+            return baseValue * rarityMultiplier;
+            // Common (1.0x): 0.02 (2% per 1% missing = 200% at 0 HP)
+            // Rare (1.24x): 0.025 (2.5% per 1% missing = 250% at 0 HP)
+            // Epic (1.45x): 0.029 (2.9% per 1% missing = 290% at 0 HP)
+            // Legendary (1.85x): 0.037 (3.7% per 1% missing = 370% at 0 HP)
+        }
+        if (statName == "berserker_defense_penalty")
+        {
+            // Lower penalty = better (less defense lost)
+            return baseValue / rarityMultiplier;
+            // Common (1.0x): 0.25 (lose 25% defense)
+            // Rare (1.24x): 0.20 (lose 20% defense)
+            // Epic (1.45x): 0.17 (lose 17% defense)
+            // Legendary (1.85x): 0.14 (lose 14% defense)
+        }
+
+        // Handle adrenaline rush special stats - these should not be scaled by rarity
+        if (IsAdrenalineRushStat(statName))
+        {
+            return baseValue; // Return as-is, no rarity scaling for these
+        }
 
         // Handle absolute values that should scale proportionally (durations, chances, etc.)
         if (IsAbsoluteValueStat(statName) && operationType == StatModification.ModificationType.Set)
@@ -1667,13 +2016,14 @@ public class RarityAwareAugmentEffect : IAugmentEffect
         return baseValue * rarityMultiplier;
     }
 
-    // Helper method to identify enemy debuff stats
+    // Helper method to identify enemy debuff stats and stats that should not be scaled upwards
     private bool IsEnemyDebuffStat(string statName)
     {
         string lower = statName.ToLower();
         return lower == "movespeed" ||
                lower == "damage" ||
-               lower == "maxhealth";
+               lower == "maxhealth" ||
+               lower == "enemy_spawn_count";
     }
 
     private bool IsCostRelatedStat(string statName)
@@ -1765,7 +2115,7 @@ public class AugmentRegistry : MonoBehaviour
     private RarityConfiguration[] rarityConfigurations;
 
     [Header("Debug")]
-    public bool debugMode = true;
+    public bool debugMode = false;
 
     // Core data 
     [System.NonSerialized]
@@ -2092,7 +2442,7 @@ public class AugmentRegistry : MonoBehaviour
 
             if (debugMode)
             {
-                Debug.Log($"Auto-generated effect for: {augmentData.Name} (ID: {augmentData.ID}) - Stats: {augmentData.AffectedStats}");
+                //Debug.Log($"Auto-generated effect for: {augmentData.Name} (ID: {augmentData.ID}) - Stats: {augmentData.AffectedStats}");
             }
         }
     }

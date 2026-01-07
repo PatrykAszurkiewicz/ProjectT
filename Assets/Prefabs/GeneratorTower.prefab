@@ -45,12 +45,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f29c0ba85860ca4c8c8fc1f70afd795, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  generatorSelfConsumption: 0.1
   isEnergyGenerator: 1
   energyGenerationRate: 1
   generationRange: 4
   generationInterval: 3
   showGenerationEffects: 1
   generationEffectColor: {r: 0.2, g: 0.6, b: 1, a: 0.39215687}
+  freezeChance: 0
+  healthRegenRate: 0
+  energyCostMultiplier: 1
   collisionConfig:
     enableCollision: 1
     isTrigger: 0
@@ -58,13 +62,12 @@ MonoBehaviour:
     paddingPercent: 0.05
   towerName: Energy Generator
   damage: 0
-  range: 0
   fireRate: 0
   cost: 100
   towerType: 5
-  spriteResourcePath: Sprites/TowerGeneratorSprites/tower_generator_sprite1_cropv2
+  spriteResourcePath: Sprites/Buildings/Towers/tower_generator_sprite
   spriteIndex: 0
-  spriteScale: 0.4
+  spriteScale: 0.25
   enableAnimation: 1
   animationFrameCount: 43
   animationSpeed: 0.25
@@ -117,13 +120,13 @@ MonoBehaviour:
       m_RotationOrder: 4
   rotationSpeed: 180
   smoothRotation: 1
-  maxEnergy: 100
   currentEnergy: 100
   requiresEnergyToFunction: 1
   showEnergyBar: 1
   armorReduction: 0
   immuneToEnemyDamage: 0
   damageFlashDuration: 0.15
+  damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
 --- !u!1 &3321510626698392789
 GameObject:
   m_ObjectHideFlags: 0

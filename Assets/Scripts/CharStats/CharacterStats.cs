@@ -42,4 +42,11 @@ public class CharacterStats : MonoBehaviour
     {
         return currentHealth <= 0;
     }
+
+    // Allows derived classes to trigger health changed event
+    protected void TriggerHealthChangedEvent()
+    {
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+    }
+
 }

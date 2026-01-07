@@ -12,6 +12,10 @@ public class WaveSpawner : MonoBehaviour
     [Header("Config")]
     public WaveConfig waveConfig;
 
+    [Header("Modifiers")]
+    public float waveSpawnDelayModifier = 0f; // For augment ID 55
+    public float enemySpawnCountMultiplier = 1f; // For augment ID 56
+
     private int currentWaveIndex = 0;
     private int enemiesAlive = 0;
     private float countdown;
@@ -20,11 +24,11 @@ public class WaveSpawner : MonoBehaviour
     {
         if (waveConfig == null)
         {
-            Debug.LogError("❌ Brak przypisanego WaveConfig do WaveSpawner!");
+            Debug.LogError("No assigned WaveConfig for the WaveSpawner!");
             return;
         }
 
-        countdown = waveConfig.timeBetweenWaves;
+        countdown = GetModifiedWaveDelay();
     }
 
     void Update()
@@ -38,13 +42,17 @@ public class WaveSpawner : MonoBehaviour
         if (countdown <= 0f)
         {
             StartCoroutine(SpawnWave(currentWaveIndex));
-            countdown = waveConfig.timeBetweenWaves;
+            countdown = GetModifiedWaveDelay();
         }
+    }
+
+    private float GetModifiedWaveDelay()
+    {
+        return waveConfig.timeBetweenWaves + waveSpawnDelayModifier;
     }
 
     IEnumerator SpawnWave(int index)
     {
-
         if (index < 0 || index >= waveConfig.waves.Count)
         {
             Debug.LogWarning("SpawnWave: invalid index " + index);
@@ -67,21 +75,21 @@ public class WaveSpawner : MonoBehaviour
                 if (group.enemyPrefab == null) continue;
                 if (group.count <= 0) continue;
 
-                for (int i = 0; i < group.count; i++)
+                // CHANGED: Apply spawn count multiplier
+                int modifiedCount = Mathf.Max(1, Mathf.RoundToInt(group.count * enemySpawnCountMultiplier));
+
+                for (int i = 0; i < modifiedCount; i++)
                 {
                     enemyPrefabsToSpawn.Add(group.enemyPrefab);
                 }
             }
         }
 
-        // Opcjonalne tasowanie kolejności
         Shuffle(enemyPrefabsToSpawn);
 
         if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
         {
-            // Ensure music system is ready
             AudioManager.instance.EnsureMusicReady();
-            // Force music to Intense with retry logic
             AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
             if (AudioManager.instance.enableDebugLogs)
             {
@@ -95,14 +103,12 @@ public class WaveSpawner : MonoBehaviour
             chosenDir = wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
         }
 
-        // Spawn każdego prefabu — dla każdego losujemy kierunek (chyba że oneDirectionForAllEnemies == true)
         foreach (var prefab in enemyPrefabsToSpawn)
         {
             SpawnDirection dir;
 
             if (wave.spawnDirections == null || wave.spawnDirections.Count == 0)
             {
-                // brak zdefiniowanych kierunków -> fallback (chosenDir albo Top)
                 dir = chosenDir;
             }
             else
@@ -175,11 +181,10 @@ public class WaveSpawner : MonoBehaviour
         Vector2 spawnPosition = GetRandomPositionInArea(direction);
         GameObject enemyObj = Instantiate(prefab, spawnPosition, Quaternion.identity);
 
-        // Configure energy drops for regular enemies
         EnemyStats stats = enemyObj.GetComponent<EnemyStats>();
         if (stats != null)
         {
-            stats.ConfigureEnergyDrop(0.5f, 10); // 50% chance, 10 energy per drop
+            stats.ConfigureEnergyDrop(0.5f, 10);
         }
 
         enemiesAlive++;
@@ -207,7 +212,7 @@ public class WaveSpawner : MonoBehaviour
 
     void ShowWaveIndicator(SpawnDirection direction)
     {
-        // np. wyświetlenie strzałki/efektu dla konkretnego kierunku
+        // Implementation for showing wave indicators
     }
 
     public void TestWave(int waveIndex)
@@ -221,4 +226,19 @@ public class WaveSpawner : MonoBehaviour
         StopAllCoroutines();
         StartCoroutine(SpawnWave(waveIndex));
     }
+
+#if UNITY_EDITOR
+    [Header("Debug Info")]
+    [SerializeField] private float totalWaveDelay;
+    [SerializeField] private float effectiveSpawnMultiplier;
+
+    private void OnValidate()
+    {
+        if (waveConfig != null)
+        {
+            totalWaveDelay = waveConfig.timeBetweenWaves + waveSpawnDelayModifier;
+        }
+        effectiveSpawnMultiplier = enemySpawnCountMultiplier;
+    }
+#endif
 }

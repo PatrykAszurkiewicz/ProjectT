@@ -9,7 +9,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         enableCollision = true,
         isTrigger = false,
         colliderType = SpriteCollisionConfig.ColliderType.Circle,
-        paddingPercent = 0.1f // 10% padding for Core
+        //paddingPercent = 0.1f // 10% padding for Core
+        paddingPercent = -0.2f // 10% padding for Core
     };
     private Collider2D spriteCollider;
 
@@ -156,7 +157,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void LoadCoreSprites()
     {
-        coreSprites = Resources.LoadAll<Sprite>("Sprites/Buildings/central_core_spritesheet2");
+        //coreSprites = Resources.LoadAll<Sprite>("Sprites/Buildings/central_core_spritesheet2");
+        coreSprites = Resources.LoadAll<Sprite>("Sprites/Buildings/Towers/central_core_sprite");
         if (coreSprites?.Length > 0)
             spriteRenderer.sprite = coreSprites[spriteStartIndex];
     }

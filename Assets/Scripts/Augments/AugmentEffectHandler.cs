@@ -42,13 +42,40 @@ public class AugmentEffectHandler : MonoBehaviour
                 ApplyImmunityPhases();
                 break;
 
+            case 37:
+                ApplyQuickRevive();
+                break;
+
             default:
                 Debug.Log($"No special effect defined for augment {augmentId}");
                 break;
         }
     }
 
+    private void ApplyQuickRevive()
+    {
+        PlayerStats playerStats = FindAnyObjectByType<PlayerStats>();
+        if (playerStats == null)
+        {
+            Debug.LogError("[AUGMENT] Could not find PlayerStats for Quick Revive");
+            return;
+        }
 
+        var playerObj = playerStats.gameObject;
+
+        // Check if already exists
+        var existing = playerObj.GetComponent<QuickReviveEffect>();
+        if (existing != null)
+        {
+            Debug.LogWarning("[AUGMENT] Quick Revive already active - cannot stack");
+            return;
+        }
+
+        // Add Quick Revive effect
+        var quickRevive = playerObj.AddComponent<QuickReviveEffect>();
+
+        //Debug.Log($"[AUGMENT] Added Quick Revive effect Player will revive once per wave with 50% HP");
+    }
     private void ApplyImmunityPhases()
     {
         //Debug.Log("[AUGMENT] ========== ApplyImmunityPhases CALLED ==========");

@@ -28,7 +28,7 @@ public class AugmentsMenu : MonoBehaviour
     public int maxRerolls = 2;
 
     [Header("Debug")]
-    public bool debugMode = true;
+    public bool debugMode = false;
 
     [Header("Debug Options - Forced Augments")]
     [Tooltip("Enter augment IDs to force specific augments in debug mode. Leave empty for random generation.")]

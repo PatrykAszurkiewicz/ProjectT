@@ -68,7 +68,35 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         public AnimationCurve swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
     }
 
-    public enum TowerType { Basic, Artillery, Laser, Ice, Poison, Generator }
+    public enum TowerType { Basic, Artillery, Laser, Ice, Poison, Generator, Hammer }
+
+
+    [Header("Hammer Tower (AOE) Settings")]
+    public bool isHammerTower = false;
+    public float hammerAOERadius = 2f;
+    public float hammerAttackInterval = 1.5f;
+    private float lastHammerAttackTime;
+    public GameObject hammerImpactEffectPrefab;
+
+    [Header("Laser Tower Settings")]
+    public bool isLaserTower = false;
+    public float laserWidth = 0.5f;
+    public float laserMaxLength = 12f;
+    public float laserDamagePerSecond = 15f;
+    public Color laserColor = Color.red;
+    private LineRenderer laserRenderer;
+    private GameObject laserObject;
+    private bool isLaserActive = false;
+
+
+    private LineRenderer laserGlowRenderer; // Secondary glow layer
+    private ParticleSystem laserStartParticles;
+    private ParticleSystem laserImpactParticles;
+    private float laserFlickerTimer = 0f;
+    private float laserScrollOffset = 0f;
+    private Material laserBeamMaterial;
+    private Material laserGlowMaterial;
+
 
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
@@ -94,7 +122,8 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public TowerType towerType = TowerType.Basic;
 
     [Header("Visual Settings")]
-    public string spriteResourcePath = "Sprites/spritesheet_transparent2";
+    //public string spriteResourcePath = "Sprites/spritesheet_transparent2";
+    public string spriteResourcePath = "Sprites/Towers/tower_melee_sprite";
     public int spriteIndex = 0;
     public float spriteScale = 0.5f;
     public bool enableAnimation = true;
@@ -218,6 +247,36 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         // Apply any augments that were applied before this tower was created
         ApplyGlobalAugments();
+        // ADD THIS ENTIRE SECTION
+        if (isLaserTower)
+        {
+            // Fix: Find the TRIGGER collider (that's our range collider)
+            var allColliders = GetComponents<CircleCollider2D>();
+            foreach (var col in allColliders)
+            {
+                if (col.isTrigger)
+                {
+                    rangeCollider = col;
+                    break;
+                }
+            }
+
+            laserMaxLength = 12f;
+            range = 8f;
+            ProjectileRange = 8f;
+            rangeCollider.radius = 8f;
+            //Debug.Log($"Laser setup: collider radius={rangeCollider.radius}, ProjectileRange={ProjectileRange}");
+
+            if (laserRenderer != null)
+            {
+                laserRenderer.startWidth = 0.12f;
+                laserRenderer.endWidth = 0.07f;
+                laserRenderer.sortingOrder = 100;
+                //Debug.Log($"Laser visual: width={laserRenderer.startWidth}, sorting={laserRenderer.sortingOrder}");
+            }
+        }
+
+
     }
 
     // Method to apply all previously applied augments to this tower
@@ -230,14 +289,14 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
 
         var appliedAugments = AugmentRegistry.Instance.GetAppliedAugments();
-        Debug.Log($"Tower '{towerName}': Found {appliedAugments.Count} applied augments to check");
+        //Debug.Log($"Tower '{towerName}': Found {appliedAugments.Count} applied augments to check");
 
         foreach (int augmentId in appliedAugments)
         {
             var augmentData = AugmentRegistry.Instance.GetAugmentData(augmentId);
             if (augmentData != null && augmentData.AffectsTower)
             {
-                Debug.Log($"Tower '{towerName}': Applying tower augment '{augmentData.Name}' (ID: {augmentId})");
+                //Debug.Log($"Tower '{towerName}': Applying tower augment '{augmentData.Name}' (ID: {augmentId})");
 
                 var effect = AugmentRegistry.Instance.GetEffect(augmentId);
                 if (effect != null)
@@ -249,7 +308,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                         {
                             float oldRate = energyGenerationRate;
                             effect.Apply(target);
-                            Debug.Log($"Tower '{towerName}': Applied augment '{augmentData.Name}' - Generation rate: {oldRate} -> {energyGenerationRate}");
+                            //Debug.Log($"Tower '{towerName}': Applied augment '{augmentData.Name}' - Generation rate: {oldRate} -> {energyGenerationRate}");
                         }
                         catch (System.Exception e)
                         {
@@ -268,7 +327,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             }
             else if (augmentData != null)
             {
-                Debug.Log($"Tower '{towerName}': Skipping non-tower augment '{augmentData.Name}' (AffectsTower: {augmentData.AffectsTower})");
+                //Debug.Log($"Tower '{towerName}': Skipping non-tower augment '{augmentData.Name}' (AffectsTower: {augmentData.AffectsTower})");
             }
         }
     }
@@ -286,6 +345,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             if (isEnergyGenerator || towerType == TowerType.Generator)
             {
                 UpdateEnergyGeneration();
+            }
+            else if (isHammerTower)
+            {
+                UpdateHammerTower();
+            }
+            else if (isLaserTower)
+            {
+                UpdateTargeting();
+                UpdateLaserTower();
             }
             else
             {
@@ -305,6 +373,430 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             }
         }
     }
+
+
+
+    #region Hammer Tower System
+    void UpdateHammerTower()
+    {
+        if (!isHammerTower) return;
+
+        // Find enemies in AOE range
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, hammerAOERadius, targetLayer);
+        List<GameObject> validTargets = new List<GameObject>();
+
+        foreach (Collider2D hit in hits)
+        {
+            if (IsEnemy(hit.gameObject))
+            {
+                validTargets.Add(hit.gameObject);
+            }
+        }
+
+        // Attack at intervals
+        if (validTargets.Count > 0 && Time.time >= lastHammerAttackTime + hammerAttackInterval)
+        {
+            PerformHammerAttack(validTargets);
+            lastHammerAttackTime = Time.time;
+        }
+    }
+
+    void PerformHammerAttack(List<GameObject> targets)
+    {
+        if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
+
+        // Energy cost for AOE attack (higher than single target)
+        float baseCost = baseDamageForEnergyCost * 0.1f; // More expensive than normal attack
+        float energyCost = baseCost * energyCostMultiplier;
+
+        // Apply generator proximity efficiency boost
+        var generatorBoost = GetComponent<GeneratorProximityBoost>();
+        if (generatorBoost != null)
+        {
+            energyCost *= generatorBoost.GetEnergyEfficiencyMultiplier();
+        }
+
+        if (currentEnergy < energyCost) return;
+
+        ConsumeEnergy(energyCost);
+
+        float effectiveDamage = GetEffectiveDamage();
+
+        // Damage all enemies in range
+        foreach (GameObject target in targets)
+        {
+            if (target == null) continue;
+
+            var stats = target.GetComponent<EnemyStats>();
+            if (stats != null)
+            {
+                stats.TakeDamage(effectiveDamage);
+                ApplyFreezeEffect(target);
+            }
+        }
+
+        // Visual and audio feedback
+        PlayHammerImpactEffect();
+        AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, transform.position);
+
+        //Debug.Log($"Hammer Tower '{towerName}' hit {targets.Count} enemies for {effectiveDamage} damage each!");
+    }
+
+    void PlayHammerImpactEffect()
+    {
+        if (hammerImpactEffectPrefab != null)
+        {
+            Instantiate(hammerImpactEffectPrefab, transform.position, Quaternion.identity);
+        }
+
+        // Create shockwave visual effect
+        StartCoroutine(HammerShockwaveEffect());
+    }
+
+    System.Collections.IEnumerator HammerShockwaveEffect()
+    {
+        GameObject shockwave = new GameObject("HammerShockwave");
+        shockwave.transform.position = transform.position;
+        shockwave.transform.SetParent(transform);
+
+        LineRenderer lr = shockwave.AddComponent<LineRenderer>();
+        Material lineMat = new Material(Shader.Find("Sprites/Default"));
+        lineMat.color = new Color(1f, 0.5f, 0f, 0.8f); // Orange color
+        lr.material = lineMat;
+        lr.startWidth = 0.2f;
+        lr.endWidth = 0.2f;
+        lr.useWorldSpace = false;
+        lr.sortingOrder = 25;
+
+        // Create circle
+        int segments = 32;
+        lr.positionCount = segments + 1;
+
+        float duration = 0.3f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float currentRadius = Mathf.Lerp(0.5f, hammerAOERadius, t);
+            float alpha = 1f - t;
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (float)i / segments * 2f * Mathf.PI;
+                Vector3 pos = new Vector3(
+                    Mathf.Cos(angle) * currentRadius,
+                    Mathf.Sin(angle) * currentRadius,
+                    0f
+                );
+                lr.SetPosition(i, pos);
+            }
+
+            Color color = lineMat.color;
+            color.a = alpha * 0.8f;
+            lineMat.color = color;
+
+            yield return null;
+        }
+
+        Destroy(shockwave);
+    }
+    #endregion
+
+    #region Laser Tower System
+
+    void InitializeLaser()
+    {
+        if (!isLaserTower) return;
+
+        laserObject = new GameObject("Laser");
+        laserObject.transform.SetParent(transform);
+        laserObject.transform.localPosition = Vector3.zero;
+
+        // Main laser beam
+        laserRenderer = laserObject.AddComponent<LineRenderer>();
+        laserBeamMaterial = new Material(Shader.Find("Sprites/Default"));
+        laserBeamMaterial.color = Color.white;
+        laserRenderer.material = laserBeamMaterial;
+        laserRenderer.startWidth = 0.12f;
+        laserRenderer.endWidth = 0.07f;
+        laserRenderer.positionCount = 2;
+        laserRenderer.useWorldSpace = true;
+        laserRenderer.sortingOrder = 200;
+        laserRenderer.startColor = new Color(0.7f, 0f, 1f);
+        laserRenderer.endColor = new Color(0.5f, 0f, 1f, 0.5f);
+        laserRenderer.enabled = false;
+
+        // Glow layer (outer glow)
+        GameObject glowObject = new GameObject("LaserGlow");
+        glowObject.transform.SetParent(laserObject.transform);
+        glowObject.transform.localPosition = Vector3.zero;
+
+        laserGlowRenderer = glowObject.AddComponent<LineRenderer>();
+        laserGlowMaterial = new Material(Shader.Find("Sprites/Default"));
+        laserGlowMaterial.color = new Color(0.7f, 0f, 1f, 0.3f);
+        laserGlowRenderer.material = laserGlowMaterial;
+        laserGlowRenderer.startWidth = 0.35f;
+        laserGlowRenderer.endWidth = 0.15f;
+        laserGlowRenderer.positionCount = 2;
+        laserGlowRenderer.useWorldSpace = true;
+        laserGlowRenderer.sortingOrder = 199;
+        laserGlowRenderer.startColor = new Color(0.5f, 0f, 1f, 0.4f);
+        laserGlowRenderer.endColor = new Color(0.3f, 0f, 0.8f, 0.1f);
+        laserGlowRenderer.enabled = false;
+
+
+
+        // Laser start particles (muzzle flash effect)
+        GameObject startParticlesObj = new GameObject("LaserStartParticles");
+        startParticlesObj.transform.SetParent(laserObject.transform);
+        startParticlesObj.transform.localPosition = Vector3.zero;
+
+        laserStartParticles = startParticlesObj.AddComponent<ParticleSystem>();
+        var startMain = laserStartParticles.main;
+        startMain.startLifetime = 0.1f;
+        startMain.startSpeed = 0.2f;
+        startMain.startSize = 0.03f;
+        startMain.startColor = new Color(0.7f, 0f, 1f, 0.3f);
+        startMain.maxParticles = 5;
+
+        var startEmission = laserStartParticles.emission;
+        startEmission.rateOverTime = 10f;
+
+        var startShape = laserStartParticles.shape;
+        startShape.shapeType = ParticleSystemShapeType.Cone;
+        startShape.angle = 10f;
+        startShape.radius = 0.05f;
+
+        var startColorOverLifetime = laserStartParticles.colorOverLifetime;
+        startColorOverLifetime.enabled = true;
+        Gradient startGradient = new Gradient();
+        startGradient.SetKeys(
+            new GradientColorKey[] {
+            new GradientColorKey(new Color(0.7f, 0f, 1f), 0f),
+            new GradientColorKey(new Color(0.5f, 0f, 1f), 1f)
+            },
+            new GradientAlphaKey[] {
+            new GradientAlphaKey(0.8f, 0f),
+            new GradientAlphaKey(0f, 1f)
+            }
+        );
+        startColorOverLifetime.color = startGradient;
+
+        laserStartParticles.Stop();
+
+        // Laser impact particles
+        GameObject impactParticlesObj = new GameObject("LaserImpactParticles");
+        impactParticlesObj.transform.SetParent(laserObject.transform);
+
+        laserImpactParticles = impactParticlesObj.AddComponent<ParticleSystem>();
+        var impactMain = laserImpactParticles.main;
+        impactMain.startLifetime = 0.2f;
+        impactMain.startSpeed = 1.5f;
+        impactMain.startSize = 0.1f;
+        impactMain.startColor = new Color(1f, 0.3f, 1f, 1f);
+        impactMain.maxParticles = 50;
+        impactMain.loop = true;
+
+        var impactEmission = laserImpactParticles.emission;
+        impactEmission.rateOverTime = 50f;
+
+        var impactShape = laserImpactParticles.shape;
+        impactShape.shapeType = ParticleSystemShapeType.Sphere;
+        impactShape.radius = 0.1f;
+
+        var impactColorOverLifetime = laserImpactParticles.colorOverLifetime;
+        impactColorOverLifetime.enabled = true;
+        Gradient impactGradient = new Gradient();
+        impactGradient.SetKeys(
+            new GradientColorKey[] {
+            new GradientColorKey(new Color(1f, 0.5f, 1f), 0f),
+            new GradientColorKey(new Color(0.5f, 0f, 1f), 1f)
+            },
+            new GradientAlphaKey[] {
+            new GradientAlphaKey(1f, 0f),
+            new GradientAlphaKey(0f, 1f)
+            }
+        );
+        impactColorOverLifetime.color = impactGradient;
+
+        laserImpactParticles.Stop();
+    }
+
+
+    void UpdateLaserTower()
+    {
+        if (!isLaserTower || laserRenderer == null)
+        {
+            if (Time.frameCount % 120 == 0)
+            {
+                Debug.LogWarning($"UpdateLaserTower early exit: isLaserTower={isLaserTower}, laserRenderer null={laserRenderer == null}");
+            }
+            return;
+        }
+
+        // Find target
+        if (currentTarget == null || !IsValidTarget(currentTarget))
+        {
+            DisableLaser();
+            return;
+        }
+
+        float distanceToTarget = Vector2.Distance(transform.position, currentTarget.transform.position);
+
+        if (Time.frameCount % 60 == 0)
+        {
+            /*
+            Debug.Log($"Laser: target={currentTarget.name}, distance={distanceToTarget:F2}, " +
+                      $"ProjectileRange={ProjectileRange}, isActive={isLaserActive}");
+                      */
+        }
+
+        if (distanceToTarget > ProjectileRange)
+        {
+            //Debug.Log($"Laser: Target too far! {distanceToTarget:F2} > {ProjectileRange}");
+            DisableLaser();
+            return;
+        }
+
+        // Activate laser
+        if (!isLaserActive)
+        {
+            ActivateLaser();
+        }
+
+        // Update laser position and damage
+        UpdateLaserBeam();
+    }
+
+    void ActivateLaser()
+    {
+        if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed)
+        {
+            Debug.LogWarning("Cannot activate laser: depleted/disabled/destroyed");
+            return;
+        }
+        isLaserActive = true;
+        laserRenderer.enabled = true;
+        /*
+        Debug.Log($"✓✓✓ LASER ACTIVATED! LineRenderer enabled: {laserRenderer.enabled}, " +
+                  $"color: {laserRenderer.startColor}, width: {laserRenderer.startWidth}");
+                  */
+    }
+
+
+    void DisableLaser()
+    {
+        isLaserActive = false;
+        if (laserRenderer != null)
+        {
+            laserRenderer.enabled = false;
+        }
+        if (laserGlowRenderer != null)
+        {
+            laserGlowRenderer.enabled = false;
+        }
+        if (laserStartParticles != null && laserStartParticles.isPlaying)
+        {
+            laserStartParticles.Stop();
+        }
+        if (laserImpactParticles != null && laserImpactParticles.isPlaying)
+        {
+            laserImpactParticles.Stop();
+        }
+    }
+
+    void UpdateLaserBeam()
+    {
+        if (!isLaserActive || currentTarget == null) return;
+        if (laserRenderer == null)
+        {
+            Debug.LogError("laserRenderer is NULL");
+            return;
+        }
+
+        // Energy consumption
+        float energyCost = (damage * 0.1f * Time.deltaTime) * energyCostMultiplier;
+        if (currentEnergy < energyCost)
+        {
+            DisableLaser();
+            return;
+        }
+        ConsumeEnergy(energyCost);
+
+        // Calculate beam positions
+        Vector3 startPos = transform.position;
+        Vector3 endPos = currentTarget.transform.position;
+        Vector3 beamDirection = (endPos - startPos).normalized;
+        laserFlickerTimer += Time.deltaTime * 15f;
+        float wobbleAmount = 0.015f;
+        Vector3 perpendicular = new Vector3(-beamDirection.y, beamDirection.x, 0f);
+        int segmentCount = 4;
+        Vector3[] beamPositions = new Vector3[segmentCount];
+
+        for (int i = 0; i < segmentCount; i++)
+        {
+            float t = (float)i / (segmentCount - 1);
+            Vector3 basePos = Vector3.Lerp(startPos, endPos, t);
+            float wavePhase = laserFlickerTimer + (t * 5f);
+            float wave = Mathf.Sin(wavePhase) * wobbleAmount * Mathf.Sin(t * Mathf.PI) * 0.5f;
+
+            beamPositions[i] = basePos + (perpendicular * wave);
+        }
+
+        // Update main beam with segments
+        laserRenderer.positionCount = segmentCount;
+        laserRenderer.SetPositions(beamPositions);
+        laserRenderer.enabled = true;
+
+        // Update glow layer with same positions
+        if (laserGlowRenderer != null)
+        {
+            laserGlowRenderer.positionCount = segmentCount;
+            laserGlowRenderer.SetPositions(beamPositions);
+            laserGlowRenderer.enabled = true;
+
+            // Pulsate glow - SLOWER pulse
+            float glowPulse = 0.3f + Mathf.Sin(laserFlickerTimer * 0.3f) * 0.08f;
+            laserGlowMaterial.color = new Color(0.7f, 0f, 1f, glowPulse);
+        }
+
+        // Animate color intensity 
+        float colorPulse = 0.9f + Mathf.Sin(laserFlickerTimer * 1.5f) * 0.1f;
+        laserRenderer.startColor = new Color(0.7f * colorPulse, 0f, 1f * colorPulse);
+        laserRenderer.endColor = new Color(0.5f * colorPulse, 0f, 1f * colorPulse, 0.5f);
+        float widthPulse = 1f + Mathf.Sin(laserFlickerTimer * 2f) * 0.05f;
+        laserRenderer.startWidth = 0.12f * widthPulse;
+        laserRenderer.endWidth = 0.07f * widthPulse;
+
+        // Update particle systems
+        if (laserStartParticles != null)
+        {
+            laserStartParticles.transform.position = startPos;
+            laserStartParticles.transform.rotation = Quaternion.LookRotation(Vector3.forward, beamDirection);
+            if (!laserStartParticles.isPlaying)
+                laserStartParticles.Play();
+        }
+
+        if (laserImpactParticles != null)
+        {
+            laserImpactParticles.transform.position = endPos;
+            if (!laserImpactParticles.isPlaying)
+                laserImpactParticles.Play();
+        }
+
+        // Apply damage
+        float damageThisFrame = damage * Time.deltaTime;
+        var targetStats = currentTarget.GetComponent<EnemyStats>();
+        if (targetStats != null)
+        {
+            targetStats.TakeDamage(damageThisFrame);
+        }
+    }
+    #endregion
+
+
 
     #region Energy Generation System
     void UpdateEnergyGeneration()
@@ -389,8 +881,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             CreateGenerationPulse();
         }
-
-        Debug.Log($"Energy Generator '{towerName}' generated {energyAmount} energy for player!");
+        //Debug.Log($"Energy Generator '{towerName}' generated {energyAmount} energy for player");
     }
 
     void UpdateGenerationEffects()
@@ -398,7 +889,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (auraRenderer == null) return;
         if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed)
         {
-            auraRenderer.color = Color.clear; // Make aura invisible
+            auraRenderer.color = Color.clear;
             return;
         }
         // Create pulsating effect
@@ -583,6 +1074,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         gameObject.tag = "Tower";
 
+        // Initialize laser for laser towers
+        if (isLaserTower)
+        {
+            InitializeLaser();
+        }
+
         // Auto-detect if this is a generator based on tower type
         if (towerType == TowerType.Generator)
         {
@@ -726,6 +1223,52 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         parentSlot = GetComponentInParent<TowerSlot>();
 
+        // Ensure rangeCollider exists (it should be created in InitializeComponents)
+        if (rangeCollider == null)
+        {
+            rangeCollider = GetComponent<CircleCollider2D>();
+            if (rangeCollider == null)
+            {
+                Debug.LogWarning($"Tower '{towerName}': rangeCollider not found, creating one");
+                rangeCollider = gameObject.AddComponent<CircleCollider2D>();
+                rangeCollider.isTrigger = true;
+            }
+        }
+
+        if (isEnergyGenerator)
+        {
+            // Generators use generation range instead of projectile range
+            ProjectileRange = generationRange;
+            rangeCollider.radius = generationRange;
+        }
+        else if (isHammerTower)
+        {
+            // Hammer towers use AOE radius for detection
+            ProjectileRange = hammerAOERadius;
+            rangeCollider.radius = hammerAOERadius;
+        }
+        else if (isLaserTower)
+        {
+            // Laser towers use their max length
+            ProjectileRange = laserMaxLength;
+            rangeCollider.radius = laserMaxLength;
+        }
+        else
+        {
+            // Standard combat towers
+            float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
+            ProjectileRange = Mathf.Max(range * 2f, tentacleReach * 3.5f, 6f);
+            rangeCollider.radius = ProjectileRange + 0.5f;
+        }
+
+        LoadSprite();
+        SetupSpriteCollision();
+        SetupEnergyBar();
+    }
+    void SetupTower2()
+    {
+        parentSlot = GetComponentInParent<TowerSlot>();
+
         if (isEnergyGenerator)
         {
             // Generators use generation range instead of projectile range
@@ -775,12 +1318,17 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (sprites?.Length > spriteIndex)
         {
             spriteRenderer.sprite = sprites[spriteIndex];
-            if (enableAnimation && sprites.Length > 1)
+            // Only animate if: animation is enabled, there are multiple sprites available
+            // Animation frame count is greater than 1 and we have enough sprites for the animation frame count
+            bool hasEnoughFrames = sprites.Length >= animationFrameCount;
+            bool shouldAnimate = enableAnimation && sprites.Length > 1 && animationFrameCount > 1 && hasEnoughFrames;
+            if (shouldAnimate)
             {
                 StartCoroutine(Utilities.AnimateSprite(spriteRenderer, sprites, enableAnimation, animationFrameCount, spriteIndex, animationSpeed));
             }
         }
     }
+
 
     void SetupEnergyBar()
     {
@@ -893,24 +1441,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (currentTarget != null && CanFire) FireAtTarget(currentTarget);
     }
 
-
-    private float GetEffectiveDamageOLD()
-    {
-        float baseDamage = damage; // Always use the original damage value
-
-        var symbiosisBoost = GetComponent<SymbiosisBoost>();
-        if (symbiosisBoost != null)
-        {
-            float boostedDamage = baseDamage * symbiosisBoost.GetDamageMultiplier();
-            Debug.Log($"[TOWER] {towerName} using BOOSTED damage: {baseDamage} * {symbiosisBoost.GetDamageMultiplier()} = {boostedDamage}");
-            return boostedDamage;
-        }
-
-        Debug.Log($"[TOWER] {towerName} using NORMAL damage: {baseDamage}");
-        return baseDamage;
-    }
-
-
     private float GetEffectiveDamage()
     {
         float baseDamage = damage;
@@ -946,7 +1476,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             float efficiencyMultiplier = generatorBoost.GetEnergyEfficiencyMultiplier();
             energyCost *= efficiencyMultiplier;
-            Debug.Log($"[TOWER] {towerName} energy cost reduced by generator proximity: {baseCost * energyCostMultiplier:F2} -> {energyCost:F2}");
+            //Debug.Log($"[TOWER] {towerName} energy cost reduced by generator proximity: {baseCost * energyCostMultiplier:F2} -> {energyCost:F2}");
         }
 
         if (float.IsNaN(energyCost) || float.IsInfinity(energyCost))
@@ -1472,8 +2002,19 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     #region Collision & Public Interface
     void OnTriggerEnter2D(Collider2D other)
     {
+        /*Debug.Log($"[TOWER] OnTriggerEnter2D: {other.gameObject.name}, " +
+                  $"Layer: {LayerMask.LayerToName(other.gameObject.layer)}, " +
+                  $"IsEnemy: {IsEnemy(other.gameObject)}, " +
+                  $"LayerMatch: {((1 << other.gameObject.layer) & targetLayer) != 0}");*/
         if (IsEnemy(other.gameObject) && ((1 << other.gameObject.layer) & targetLayer) != 0)
+        {
             enemiesInRange.Add(other.gameObject);
+            //Debug.Log($"[TOWER] ✓ ADDED enemy to range! Total: {enemiesInRange.Count}");
+        }
+        else
+        {
+            //Debug.Log($"[TOWER] ✗ NOT added (failed checks)");
+        }
     }
 
     void OnTriggerExit2D(Collider2D other)
@@ -1556,6 +2097,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void Cleanup()
     {
+        // Cleanup laser
+        if (laserObject != null) DestroyImmediate(laserObject);
+        if (laserStartParticles != null) DestroyImmediate(laserStartParticles.gameObject);
+        if (laserImpactParticles != null) DestroyImmediate(laserImpactParticles.gameObject);
+
+
         // Mark as destroyed to prevent further operations
         isDestroyed = true;
 
@@ -1565,6 +2112,8 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (energyBar != null) Destroy(energyBar);
         if (damageFlashCoroutine != null) StopCoroutine(damageFlashCoroutine);
     }
+
+
 #if UNITY_EDITOR
     void OnDrawGizmosSelected()
     {
@@ -1578,15 +2127,46 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             UnityEditor.Handles.Label(transform.position + Vector3.up * 1.7f,
                 $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
         }
+        else if (isHammerTower)
+        {
+            // Hammer AOE range
+            UnityEditor.Handles.color = new Color(1f, 0.5f, 0f, 0.3f);
+            UnityEditor.Handles.DrawSolidDisc(transform.position, Vector3.forward, hammerAOERadius);
+            UnityEditor.Handles.color = Color.red;
+            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, hammerAOERadius);
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.5f,
+                $"Hammer AOE: {hammerAOERadius}m");
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.2f,
+                $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+        }
+        else if (isLaserTower)
+        {
+            // Laser range
+            UnityEditor.Handles.color = Color.red;
+            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, ProjectileRange);
+            if (currentTarget != null && isLaserActive)
+            {
+                UnityEditor.Handles.DrawLine(transform.position, currentTarget.transform.position);
+            }
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.5f,
+                $"Laser: {(isLaserActive ? "ACTIVE" : "INACTIVE")}");
+            UnityEditor.Handles.Label(transform.position + Vector3.up * 1.2f,
+                $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
+        }
         else
         {
-            // Original combat tower
+            // Original combat tower gizmos
             UnityEditor.Handles.color = Color.blue;
             UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, range);
             UnityEditor.Handles.color = Color.red;
             UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, ProjectileRange);
-            UnityEditor.Handles.color = Color.green;
-            UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, rangeCollider?.radius ?? 0f);
+
+            // NULL CHECK ADDED HERE
+            if (rangeCollider != null)
+            {
+                UnityEditor.Handles.color = Color.green;
+                UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, rangeCollider.radius);
+            }
 
             if (currentTarget != null)
             {

@@ -13,6 +13,7 @@ public class Weapon : MonoBehaviour
     private PlayerStats playerStats;
     private bool isOnCooldown = false;
     public WeaponData defaultWeapon;
+    public float grapplingDamage = 0f; // Damage dealt by grappling hook
 
     // Grappling Hook System
     private GrapplingHookSystem grapplingSystem;

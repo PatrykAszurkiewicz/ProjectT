@@ -493,6 +493,10 @@ public class GrapplingHookSystem
     // Mass-based pull sequence
     private IEnumerator ExecutePullSequence(IGrapplingTarget grappleTarget)
     {
+
+        // Deal damage to enemy targets when hook connects
+        DealGrapplingDamage(grappleTarget);
+
         float pullDuration = 1.5f;
         float elapsed = 0f;
         Vector3 lastPlayerPosition = playerTransform.position;
@@ -524,6 +528,30 @@ public class GrapplingHookSystem
 
             lastPlayerPosition = playerTransform.position;
             yield return null;
+        }
+    }
+
+    private void DealGrapplingDamage(IGrapplingTarget target)
+    {
+        // Only deal damage if weapon has grappling damage configured
+        if (weapon.grapplingDamage <= 0f) return;
+
+        // Only deal damage to enemies (not towers, obstacles, or core)
+        var targetTransform = target.GetTransform();
+        if (targetTransform == null) return;
+
+        var enemyStats = targetTransform.GetComponent<EnemyStats>();
+        if (enemyStats != null && !enemyStats.IsDead())
+        {
+            enemyStats.TakeDamage(weapon.grapplingDamage);
+            Debug.Log($"[GRAPPLING_HOOK] Dealt {weapon.grapplingDamage} damage to {targetTransform.name}");
+
+            // Play impact sound
+            if (AudioManager.instance != null && FMODEvents.instance != null)
+            {
+                //TODO add audio to the grappling hook hit
+                //AudioManager.instance.PlayOneShot(FMODEvents.instance.enemyHit, targetTransform.position);
+            }
         }
     }
 

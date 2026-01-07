@@ -22,9 +22,9 @@ MonoBehaviour:
     maxSpawnDelay: 2
     enemies:
     - enemyPrefab: {fileID: 3554655901426140020, guid: 39c47a9911052f342ad7214ed2462cf8, type: 3}
-      count: 5
-    - enemyPrefab: {fileID: 2505257184126395638, guid: 3915daee017becf44bca645570578686, type: 3}
-      count: 4
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: df8333252348a3b4ba98f15f72d87222, type: 3}
+      count: 2
   - waveNumber: 0
     extraDelayBeforeStart: 5
     spawnDirections: 000000000200000001000000

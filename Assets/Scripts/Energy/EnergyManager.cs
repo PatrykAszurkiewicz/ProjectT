@@ -834,7 +834,7 @@ public class EnergyManager : MonoBehaviour
         // Debug every 60 frames
         if (Time.frameCount % 60 == 0)
         {
-            Debug.Log($"[ENERGY] Core decay rate: {coreEnergyDecayRate:F2}");
+            //Debug.Log($"[ENERGY] Core decay rate: {coreEnergyDecayRate:F2}");
         }
         for (int i = energyConsumers.Count - 1; i >= 0; i--)
         {

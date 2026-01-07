@@ -54,10 +54,45 @@ public class PlayerStats : CharacterStats
         }
     }
 
+    public override void Die()
+    {
+        // Check for Quick Revive before dying
+        var quickRevive = GetComponent<QuickReviveEffect>();
+        if (quickRevive != null && quickRevive.IsAvailable())
+        {
+            //Debug.Log("[PLAYER] Death intercepted ");
+            // Not calling base.Die() - let QuickReviveEffect handle the revival
+            return;
+        }
+
+        // No Quick Revive available - proceed with normal death
+        // Debug.Log("[PLAYER] Player has died permanently");
+
+        // Play death animation if available
+        var movement = GetComponent<PlayerMovement>();
+        if (movement != null)
+        {
+            movement.PlayDeathAnimation();
+        }
+
+        base.Die();
+    }
+    public void SetHealthAndNotify(float newHealth)
+    {
+        currentHealth = Mathf.Clamp(newHealth, 0f, maxHealth);
+        TriggerHealthChangedEvent(); // Call the protected method from base class
+    }
 
     public override void TakeDamage(float amount)
     {
         //Debug.Log($"[PLAYER] ========== TakeDamage({amount}) CALLED ==========");
+
+        // Check for Berserker Mode damage amplification
+        var berserkerMode = GetComponent<BerserkerModeEffect>();
+        if (berserkerMode != null)
+        {
+            amount = berserkerMode.ModifyIncomingDamage(amount);
+        }
 
         // Check for immunity (augment ID 11)
         var immunityPhases = GetComponent<ImmunityPhasesEffect>();
@@ -80,6 +115,15 @@ public class PlayerStats : CharacterStats
         else
         {
             //Debug.Log("[PLAYER] No ImmunityPhasesEffect component found!");
+        }
+
+
+        // Check for temporary revive immunity (augment ID 37)
+        var tempImmunity = GetComponent<TemporaryReviveImmunity>();
+        if (tempImmunity != null && tempImmunity.ShouldBlockDamage())
+        {
+            //Debug.Log("[PLAYER] Damage BLOCKED by temporary revive immunity!");
+            return; // No damage taken
         }
 
         //Debug.Log($"[PLAYER] Applying damage: {amount}");
