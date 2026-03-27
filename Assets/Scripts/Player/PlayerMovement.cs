@@ -30,6 +30,18 @@ public class PlayerMovement : MonoBehaviour
     public float animationSpeed = 0.1f;
     [SerializeField] private float playerScale = 0.5f; // Configurable scale
 
+    [Header("Y-Sort")]
+    [Tooltip("Must match GrassCartoonOverlay.sortPrecision")]
+    public float sortPrecision = 10f;
+
+    [Tooltip("Must match GrassCartoonOverlay.sortOrderBase")]
+    public int sortOrderBase = 1000;
+
+    [Tooltip("Y offset for the sort point relative to transform center. " +
+             "Negative = sort from lower on the sprite (feet). " +
+             "Adjust so the front/behind transition happens at the player's feet.")]
+    public float sortYOffset = -0.3f;
+
     // Animation state tracking
     private enum AnimationState
     {
@@ -97,11 +109,9 @@ public class PlayerMovement : MonoBehaviour
         if (loadedSprites != null && loadedSprites.Length >= 12)
         {
             playerSprites = loadedSprites;
-            //Debug.Log($"Loaded {playerSprites.Length} sprites from player_character_spritesheet4");
 
             for (int i = 0; i < Mathf.Min(3, playerSprites.Length); i++)
             {
-                //Debug.Log($"Sprite {i}: {playerSprites[i].name}");
             }
         }
         else
@@ -119,6 +129,21 @@ public class PlayerMovement : MonoBehaviour
     {
         RegenerateDash();
         UpdateAnimationState();
+    }
+
+    /// <summary>
+    /// Update the player's sortingOrder based on Y position every frame.
+    /// Same formula as GrassCartoonOverlay baked values:
+    ///   sortingOrder = sortOrderBase + round(-(y + sortYOffset) * sortPrecision)
+    /// This is 1 integer assignment per frame on 1 object — zero performance cost.
+    /// </summary>
+    void LateUpdate()
+    {
+        if (spriteRenderer != null)
+        {
+            float sortY = transform.position.y + sortYOffset;
+            spriteRenderer.sortingOrder = sortOrderBase + Mathf.RoundToInt(-sortY * sortPrecision);
+        }
     }
 
     private void UpdateAnimationState()

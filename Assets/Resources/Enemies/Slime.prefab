@@ -191,7 +191,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   detectRange: 3
-  attackRange: 1.5
+  attackRange: 2.3
   attackCooldown: 1
   avoidDistance: 1
   obstacleLayer:
@@ -211,3 +211,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 228c506453c162848a43ef6f5a6ae6dc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  maxRotationAngle: 20
+  orientationSmoothSpeed: 10

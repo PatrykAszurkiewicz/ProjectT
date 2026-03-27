@@ -27,6 +27,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-8076573601562333735
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BossLaserShot
+  m_EditorClassIdentifier: 
+  Path: event:/BossLaserShot
+  Guid:
+    Data1: -206391553
+    Data2: 1245199791
+    Data3: -1440536920
+    Data4: 1141717623
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-7941932424386418284
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -263,6 +290,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-4336789798712153391
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Boss1GroundHit
+  m_EditorClassIdentifier: 
+  Path: event:/Boss1GroundHit
+  Guid:
+    Data1: -320858680
+    Data2: 1218359914
+    Data3: 1487889832
+    Data4: -993017630
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-3723619638092549200
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -437,10 +491,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 638946753870953992
+  lastModified: 639084142858528747
   FileSizes:
   - Name: Desktop
-    Value: 2166
+    Value: 2264
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -486,13 +540,15 @@ MonoBehaviour:
   - {fileID: -2754841307453508336}
   - {fileID: -1837708856942917988}
   - {fileID: 8149117700929340597}
+  - {fileID: -8076573601562333735}
+  - {fileID: -4336789798712153391}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 638996926772407147
+  cacheTime: 639084142858528747
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -546,6 +602,10 @@ MonoBehaviour:
     index: 24
   - key: event:/Music/MusicCalm
     index: 25
+  - key: event:/BossLaserShot
+    index: 26
+  - key: event:/Boss1GroundHit
+    index: 27
 --- !u!114 &858377814577949011
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -738,10 +798,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 638946753870933995
+  lastModified: 639084142858513488
   FileSizes:
   - Name: Desktop
-    Value: 1115104
+    Value: 1202976
   Exists: 1
 --- !u!114 &4699882167230820914
 MonoBehaviour:

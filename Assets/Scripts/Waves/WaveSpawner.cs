@@ -13,12 +13,15 @@ public class WaveSpawner : MonoBehaviour
     public WaveConfig waveConfig;
 
     [Header("Modifiers")]
-    public float waveSpawnDelayModifier = 0f; // For augment ID 55
-    public float enemySpawnCountMultiplier = 1f; // For augment ID 56
+    public float waveSpawnDelayModifier = 0f;
+    public float enemySpawnCountMultiplier = 1f;
 
     private int currentWaveIndex = 0;
     private int enemiesAlive = 0;
     private float countdown;
+
+    // Preloaded resources 
+    private bool resourcesPreloaded = false;
 
     void Start()
     {
@@ -29,11 +32,58 @@ public class WaveSpawner : MonoBehaviour
         }
 
         countdown = GetModifiedWaveDelay();
+
+        // Preload all enemy prefab resources on Start so Instantiate doesn't trigger
+        StartCoroutine(PreloadEnemyResources());
+    }
+
+
+    /// Pre-warm all enemy prefabs by instantiating them once (off-screen, disabled),
+    private IEnumerator PreloadEnemyResources()
+    {
+        if (waveConfig == null || waveConfig.waves == null)
+        {
+            resourcesPreloaded = true;
+            yield break;
+        }
+
+        HashSet<GameObject> uniquePrefabs = new HashSet<GameObject>();
+
+        foreach (var wave in waveConfig.waves)
+        {
+            if (wave.enemies == null) continue;
+            foreach (var group in wave.enemies)
+            {
+                if (group != null && group.enemyPrefab != null)
+                {
+                    uniquePrefabs.Add(group.enemyPrefab);
+                }
+            }
+        }
+
+        foreach (var prefab in uniquePrefabs)
+        {
+            // Instantiate disabled, far off-screen
+            GameObject warmup = Instantiate(prefab, new Vector3(-9999f, -9999f, 0f), Quaternion.identity);
+            warmup.SetActive(true); // Briefly activate to trigger Awake/Start resource loading
+
+            // Wait a frame so each prefab's loading is spread across frames
+            yield return null;
+
+            // Destroy the warmup instance
+            Destroy(warmup);
+
+            // Wait another frame for cleanup
+            yield return null;
+        }
+
+        resourcesPreloaded = true;
     }
 
     void Update()
     {
         if (waveConfig == null) return;
+        if (!resourcesPreloaded) return; // Don't start waves until resources are ready
         if (enemiesAlive > 0) return;
         if (currentWaveIndex >= waveConfig.waves.Count) return;
 
@@ -75,7 +125,6 @@ public class WaveSpawner : MonoBehaviour
                 if (group.enemyPrefab == null) continue;
                 if (group.count <= 0) continue;
 
-                // CHANGED: Apply spawn count multiplier
                 int modifiedCount = Mathf.Max(1, Mathf.RoundToInt(group.count * enemySpawnCountMultiplier));
 
                 for (int i = 0; i < modifiedCount; i++)

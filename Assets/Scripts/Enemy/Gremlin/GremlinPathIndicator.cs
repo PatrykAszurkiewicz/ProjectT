@@ -258,7 +258,7 @@ public class GremlinPathIndicator : MonoBehaviour
         SpriteRenderer renderer = footprint.AddComponent<SpriteRenderer>();
         renderer.sprite = footprintSprite;
         renderer.sortingLayerName = "Default";
-        renderer.sortingOrder = 5; // Above ground, below most game objects
+        renderer.sortingOrder = 2000; // Above grass Y-sort range (400-1600)
 
         // Set initial alpha
         Color color = Color.white;

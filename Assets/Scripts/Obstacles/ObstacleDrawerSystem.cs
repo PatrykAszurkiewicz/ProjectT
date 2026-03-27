@@ -41,7 +41,7 @@ public class ObstacleDrawerSystem
         drawingLineRenderer.endWidth = weaponData.obstacleWidth;
         drawingLineRenderer.startColor = weaponData.drawLineColor;
         drawingLineRenderer.endColor = weaponData.drawLineColor;
-        drawingLineRenderer.sortingOrder = 10;
+        drawingLineRenderer.sortingOrder = 2500; // Above grass Y-sort range while drawing
         drawingLineRenderer.numCapVertices = 5;
         drawingLineRenderer.numCornerVertices = 5;
 

@@ -26,7 +26,7 @@ public class DrawnObstacle : MonoBehaviour
         lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
         lineRenderer.startWidth = lineWidth;
         lineRenderer.endWidth = lineWidth;
-        lineRenderer.sortingOrder = 5;
+        lineRenderer.sortingOrder = 1000; // Default, will be overridden by YSortEntity
         lineRenderer.numCapVertices = 5;
         lineRenderer.numCornerVertices = 5;
 
@@ -57,6 +57,23 @@ public class DrawnObstacle : MonoBehaviour
         lineWidth = width;
         maxHealth = health;
         currentHealth = maxHealth;
+
+        // Set transform to the center of the path so Y-sort uses the middle Y
+        if (points.Count >= 2)
+        {
+            Vector2 center = Vector2.zero;
+            foreach (var p in points) center += p;
+            center /= points.Count;
+            transform.position = new Vector3(center.x, center.y, 0f);
+        }
+
+        // Y-Sort: dynamically sort against grass based on Y position
+        if (GetComponent<YSortEntity>() == null)
+        {
+            var ysort = gameObject.AddComponent<YSortEntity>();
+            ysort.sortPrecision = 10f;
+            ysort.sortOrderBase = 1000;
+        }
 
         UpdateVisuals();
         UpdateCollider();

@@ -46,6 +46,10 @@ public class Projectile : MonoBehaviour
             collider.radius = 0.1f;
             collider.isTrigger = true;
         }
+
+        // Ensure projectile renders above grass Y-sort range (400-1600)
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr != null) sr.sortingOrder = 2500;
     }
 
     void Start()

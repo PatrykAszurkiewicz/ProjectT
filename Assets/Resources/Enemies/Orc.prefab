@@ -190,7 +190,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   detectRange: 3
-  attackRange: 1.5
+  attackRange: 2.3
   attackCooldown: 1
   avoidDistance: 1
   obstacleLayer:

@@ -78,7 +78,7 @@ public class TowerSelectionWheel : MonoBehaviour
         SpriteRenderer sr = slice.AddComponent<SpriteRenderer>();
         sr.sprite = CreatePieSliceSprite(startAngle, angleStep);
         sr.color = new Color(0.4f, 0.4f, 0.4f, 0.9f);
-        sr.sortingOrder = 10;
+        sr.sortingOrder = 3000; // Above grass Y-sort range (400-1600) but below fog (5000)
 
         // Add tower name positioned outside the slice
         GameObject textObj = new GameObject("Text");
@@ -108,6 +108,14 @@ public class TowerSelectionWheel : MonoBehaviour
         text.color = Color.white;
         text.anchor = TextAnchor.MiddleCenter;
         text.characterSize = 0.2f;
+
+        // Ensure text renders above grass (same layer as slices)
+        MeshRenderer textRenderer = textObj.GetComponent<MeshRenderer>();
+        if (textRenderer != null)
+        {
+            textRenderer.sortingLayerName = "Default";
+            textRenderer.sortingOrder = 3001; // Just above slices (3000)
+        }
 
         return slice;
     }

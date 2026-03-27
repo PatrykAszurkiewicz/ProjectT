@@ -461,7 +461,11 @@ public class EnergyManager : MonoBehaviour
     private void ProcessContinuousSupply(IEnergyConsumer target)
     {
         if (target == null) return;
-
+        // Block supply to destroyed Central Core
+        if (target is CentralCore core && core.IsDestroyed())
+        {
+            return;
+        }
         // Check if enough time has passed since last supply
         if (Time.time - lastContinuousSupplyTime < minSupplyInterval)
         {
@@ -737,6 +741,32 @@ public class EnergyManager : MonoBehaviour
         {
             if (consumer == null) continue;
 
+            // Skip destroyed Central Core only
+            if (consumer is CentralCore core && core.IsDestroyed())
+            {
+                continue;
+            }
+
+            float distance = Vector3.Distance(position, consumer.GetPosition());
+            if (distance < closestDistance)
+            {
+                closest = consumer;
+                closestDistance = distance;
+            }
+        }
+
+        return closest;
+    }
+
+    IEnergyConsumer GetSupplyTargetOLD(Vector3 position)
+    {
+        IEnergyConsumer closest = null;
+        float closestDistance = maxSupplyDistance;
+
+        foreach (var consumer in energyConsumers)
+        {
+            if (consumer == null) continue;
+
             float distance = Vector3.Distance(position, consumer.GetPosition());
             if (distance < closestDistance)
             {
@@ -778,7 +808,11 @@ public class EnergyManager : MonoBehaviour
     public void SupplyEnergyToTarget(IEnergyConsumer target, float amount)
     {
         if (target == null) return;
-
+        // Block supply to destroyed Central Core
+        if (target is CentralCore core && core.IsDestroyed())
+        {
+            return;
+        }
         // Check if we're in placement mode (repair mode)
         bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
 

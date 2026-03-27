@@ -1,0 +1,217 @@
+// GrassGenerate.compute
+// Place in: Assets/Resources/GrassGenerate.compute
+//
+// Generates all per-blade data on the GPU in milliseconds.
+// No CPU loop needed — the entire 5M blade array is filled in one dispatch.
+
+#pragma kernel CSGenerateBlades
+
+struct GrassBlade
+{
+    float3 position;
+    float  height;
+    float  width;
+    float  lean;
+    float  curvature;
+    float  phase;
+    uint   packedType;
+    float  padding;
+    float4 colorBase;
+    float4 colorTip;
+};
+
+struct ClumpCenter
+{
+    float2 position;
+};
+
+RWStructuredBuffer<GrassBlade> _Blades;
+StructuredBuffer<ClumpCenter>  _Clumps;
+
+int    _BladeCount;
+int    _ClumpCount;
+float  _SpawnRadius;
+float  _CoreExclusion;
+float  _ClumpSpread;
+float  _FreeScatterRatio;
+float  _ClumpLeanCoherence;
+
+float  _BladeHeight;
+float  _HeightVariation;
+float  _BladeWidth;
+float  _WidthVariation;
+float  _BladeCurvature;
+
+int    _ShortCount;
+int    _TallCount;
+int    _DeadCount;
+int    _FreeCount;
+
+// Colors passed as float4
+float4 _ColorDarkBase;
+float4 _ColorMidBlade;
+float4 _ColorBrightTip;
+float4 _ColorGroundCover;
+float4 _ColorDeadBase;
+float4 _ColorDeadTip;
+float  _ColorVariation;
+
+float  _ShortBladeRatio;
+float  _TallBladeRatio;
+float  _DeadBladeRatio;
+
+// ── Fast GPU hash ────────────────────────────────────────
+
+uint WangHash(uint seed)
+{
+    seed = (seed ^ 61u) ^ (seed >> 16u);
+    seed *= 9u;
+    seed = seed ^ (seed >> 4u);
+    seed *= 0x27d4eb2du;
+    seed = seed ^ (seed >> 15u);
+    return seed;
+}
+
+float HashFloat(uint seed)
+{
+    return float(WangHash(seed) & 0x00FFFFFFu) / float(0x00FFFFFFu);
+}
+
+float HashSigned(uint seed)
+{
+    return HashFloat(seed) * 2.0 - 1.0;
+}
+
+float2 HashDirection(uint seed)
+{
+    float a = HashFloat(seed) * 6.28318530718;
+    return float2(cos(a), sin(a));
+}
+
+float2 HashInsideCircle(uint s1, uint s2)
+{
+    float a = HashFloat(s1) * 6.28318530718;
+    float r = sqrt(HashFloat(s2));
+    return float2(cos(a) * r, sin(a) * r);
+}
+
+float4 LerpColor(float4 a, float4 b, float t)
+{
+    return a + (b - a) * t;
+}
+
+// ── Kernel ───────────────────────────────────────────────
+
+[numthreads(256, 1, 1)]
+void CSGenerateBlades(uint3 id : SV_DispatchThreadID)
+{
+    int i = (int)id.x;
+    if (i >= _BladeCount) return;
+
+    uint seed = (uint)i * 73856093u ^ 19349663u;
+
+    GrassBlade b;
+    b.padding = 0.0;
+
+    // Type
+    uint type = 0;
+    if      (i < _ShortCount)                         type = 1;
+    else if (i < _ShortCount + _TallCount)            type = 2;
+    else if (i < _ShortCount + _TallCount + _DeadCount) type = 3;
+    b.packedType = type;
+
+    // Position
+    float2 pos;
+    float2 clumpCenter = float2(0, 0);
+    bool isClumped = (i >= _FreeCount) && (_ClumpCount > 0);
+
+    if (isClumped)
+    {
+        int ci = (int)(WangHash(seed + 1u) % (uint)_ClumpCount);
+        clumpCenter = _Clumps[ci].position;
+        float r = HashFloat(seed + 2u) * HashFloat(seed + 3u);
+        float2 dir = HashDirection(seed + 4u);
+        pos = clumpCenter + dir * r * _ClumpSpread;
+
+        float mag = length(pos);
+        if (mag > _SpawnRadius)
+            pos = normalize(pos) * _SpawnRadius * 0.98;
+        if (mag < _CoreExclusion)
+            pos = normalize(pos) * (_CoreExclusion + 0.2);
+    }
+    else
+    {
+        pos = HashInsideCircle(seed + 5u, seed + 6u) * _SpawnRadius;
+        if (length(pos) < _CoreExclusion)
+            pos = normalize(pos) * (_CoreExclusion + 0.2);
+    }
+
+    float z = HashFloat(seed + 7u) * -0.05;
+    b.position = float3(pos.x, pos.y, z);
+
+    // Shape
+    float hMult = 1.0, wMult = 1.0, curveMult = 1.0;
+    if (type == 1u)      { hMult = 0.4;  wMult = 1.5;  curveMult = 0.4; }
+    else if (type == 2u) { hMult = 1.7;  wMult = 0.55; curveMult = 1.5; }
+    else if (type == 3u) { hMult = 0.8;  wMult = 0.9;  curveMult = 1.8; }
+
+    b.height = _BladeHeight * hMult * (1.0 + HashSigned(seed + 8u) * _HeightVariation);
+    b.width  = _BladeWidth  * wMult * (1.0 + HashSigned(seed + 9u) * _WidthVariation);
+
+    // Lean
+    float leanDeg;
+    if (isClumped && _ClumpLeanCoherence > 0.0)
+    {
+        float2 outDir = pos - clumpCenter;
+        float outMag = length(outDir);
+        if (outMag < 0.001) outDir = HashDirection(seed + 10u);
+        float outAngle = atan2(outDir.x, outDir.y) * 57.29578;
+        float rndLean = HashSigned(seed + 11u) * 45.0;
+        leanDeg = lerp(rndLean, outAngle, _ClumpLeanCoherence);
+        leanDeg = clamp(leanDeg, -60.0, 60.0);
+    }
+    else
+    {
+        leanDeg = HashSigned(seed + 11u) * 45.0;
+    }
+    b.lean = leanDeg * 0.01745329;
+
+    float curveSign = sign(b.lean + HashSigned(seed + 12u) * 0.1);
+    b.curvature = _BladeCurvature * curveMult * b.height * curveSign;
+
+    b.phase = HashFloat(seed + 13u) * 6.28318530718;
+
+    // Colors
+    float cShift  = HashSigned(seed + 14u) * _ColorVariation;
+    float cShift2 = cShift * 0.5;
+    float4 cBase, cTip;
+
+    if (type == 3u)
+    {
+        cBase = _ColorDeadBase;
+        cTip  = _ColorDeadTip;
+    }
+    else if (type == 1u)
+    {
+        cBase = _ColorGroundCover;
+        cTip  = LerpColor(_ColorDarkBase, _ColorMidBlade, 0.3);
+    }
+    else if (type == 2u)
+    {
+        cBase = LerpColor(_ColorDarkBase, _ColorMidBlade, 0.3);
+        cTip  = LerpColor(_ColorBrightTip, float4(0.38, 0.72, 0.20, 0.68), 0.3);
+    }
+    else
+    {
+        cBase = _ColorDarkBase;
+        cTip  = _ColorBrightTip;
+    }
+
+    cBase.r += cShift2; cBase.g += cShift; cBase.b += cShift2;
+    cTip.r  += cShift2; cTip.g  += cShift; cTip.b  += cShift2;
+
+    b.colorBase = float4(max(cBase.r, 0.03), max(cBase.g, 0.03), max(cBase.b, 0.03), max(cBase.a, 0.85));
+    b.colorTip  = float4(max(cTip.r, 0.06),  max(cTip.g, 0.06),  max(cTip.b, 0.06),  max(cTip.a, 0.62));
+
+    _Blades[i] = b;
+}

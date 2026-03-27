@@ -31,7 +31,7 @@ public class TowerSlot : MonoBehaviour
         if (spriteRenderer != null)
         {
             spriteRenderer.sortingLayerName = "Default";
-            spriteRenderer.sortingOrder = 1;
+            spriteRenderer.sortingOrder = 3000; // Above grass Y-sort range (400-1600) but below fog (5000)
         }
         UpdateVisuals();
         // Register the slot with the placement manager

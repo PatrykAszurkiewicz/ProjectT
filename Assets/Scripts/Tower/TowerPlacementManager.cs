@@ -168,23 +168,30 @@ public class TowerPlacementManager : MonoBehaviour
     {
         if (!isRepairSoundInitialized) return;
 
-        if (isCurrentlySupplying && currentSupplyTarget != null)
+        // Check if target is still valid (not a destroyed core)
+        bool shouldPlaySound = isCurrentlySupplying && currentSupplyTarget != null;
+
+        if (shouldPlaySound && currentSupplyTarget is CentralCore core)
         {
-            // Check if repair sound should be playing
+            if (core.IsDestroyed())
+            {
+                shouldPlaySound = false;
+            }
+        }
+
+        if (shouldPlaySound)
+        {
             PLAYBACK_STATE playbackState;
             repairSound.getPlaybackState(out playbackState);
 
             if (playbackState.Equals(PLAYBACK_STATE.STOPPED))
             {
                 repairSound.start();
-                //Debug.Log("[TowerPlacement] Started repair sound");
             }
         }
         else
         {
-            // Stop repair sound
             repairSound.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
-            //Debug.Log("[TowerPlacement] Stopped repair sound");
         }
     }
 
@@ -508,6 +515,11 @@ public class TowerPlacementManager : MonoBehaviour
     private void StartContinuousSupplyToConsumer(IEnergyConsumer consumer)
     {
         if (consumer == null || EnergyManager.Instance == null) return;
+        // Block supply to destroyed Central Core
+        if (consumer is CentralCore core && core.IsDestroyed())
+        {
+            return;
+        }
 
         //Debug.Log($"[TowerPlacement] Starting continuous supply to {GetConsumerDisplayName(consumer)}");
 

@@ -25,4 +25,8 @@ MonoBehaviour:
     frameCount: 14
   attack:
     startFrame: 14
-    frameCount: 32
+    frameCount: 19
+  death:
+    startFrame: 33
+    frameCount: 12
+  deathAnimationDuration: 1.2

@@ -14,10 +14,14 @@ public class EnemyData : ScriptableObject
     public float mass = 50f;
 
     [Header("Animation")]
-    public string spriteFolderPath; // "Sprites/EnemySprites/Slime"
+    public string spriteFolderPath; // e.g. for Slime it is "Sprites/EnemySprites/Slime"
     public float animationSpeed = 0.1f;
+    //TODO Verify whether it collides with enemy vs boss animation frames
+    public AnimationFrameRange laserAttack = new AnimationFrameRange(57, 11);
     public AnimationFrameRange idle = new AnimationFrameRange(0, 14);
     public AnimationFrameRange attack = new AnimationFrameRange(14, 19);
+    public AnimationFrameRange death = new AnimationFrameRange(33, 12);
+    public float deathAnimationDuration = 1.2f; // How long before destroying the enemy
 }
 
 [System.Serializable]

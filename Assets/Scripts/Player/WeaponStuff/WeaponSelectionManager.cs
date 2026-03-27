@@ -4,24 +4,16 @@ public class WeaponSelectionManager : MonoBehaviour
 {
     public static WeaponSelectionManager Instance;
 
-    public WeaponData SelectedWeapon; // Save selected weapon
+    [Header("Fallback when nothing is selected")]
     public WeaponData DefaultWeapon;
+
+    public WeaponData SelectedWeapon;
 
     private void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject); // Work between scenes
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        if (Instance == null) { Instance = this; DontDestroyOnLoad(gameObject); }
+        else Destroy(gameObject);
     }
 
-    public WeaponData GetChosenWeapon()
-    {
-        return SelectedWeapon != null ? SelectedWeapon : DefaultWeapon;
-    }
+    public WeaponData GetChosenWeapon() => SelectedWeapon != null ? SelectedWeapon : DefaultWeapon;
 }

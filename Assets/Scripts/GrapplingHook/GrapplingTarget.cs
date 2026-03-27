@@ -20,6 +20,10 @@ public class GrapplingHookSystem
     private GrapplingHookTargetIndicator currentIndicator;
     private Sprite hookSprite;
 
+    // Hook head visual (dark half-circle at the tip of the line)
+    private GameObject hookHeadObject;
+    private SpriteRenderer hookHeadRenderer;
+
     // Line disintegration effect
     private bool isDisintegrating = false;
     private Coroutine disintegrationCoroutine;
@@ -125,6 +129,83 @@ public class GrapplingHookSystem
 
     private bool IsValidPixel(int x, int y, int size) => x >= 0 && x < size && y >= 0 && y < size;
 
+    private void CreateHookHead()
+    {
+        if (hookHeadObject != null) return;
+
+        hookHeadObject = new GameObject("GrapplingHookHead");
+
+        const int texSize = 64;
+        Texture2D tex = new Texture2D(texSize, texSize, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        Color[] pixels = new Color[texSize * texSize];
+        Color dark = new Color(0.12f, 0.10f, 0.10f, 1f);
+
+        float cx = texSize * 0.5f;
+        float cy = texSize * 0.5f;
+        float radius = texSize * 0.45f;
+
+        for (int y = 0; y < texSize; y++)
+        {
+            for (int x = 0; x < texSize; x++)
+            {
+                float dx = x - cx;
+                float dy = y - cy;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                if (dist <= radius && dy >= 0f)
+                {
+                    float edgeFade = Mathf.Clamp01((radius - dist) / 2f);
+                    pixels[y * texSize + x] = new Color(dark.r, dark.g, dark.b, edgeFade);
+                }
+                else
+                {
+                    pixels[y * texSize + x] = Color.clear;
+                }
+            }
+        }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+
+        Sprite halfCircle = Sprite.Create(tex, new Rect(0, 0, texSize, texSize), new Vector2(0.5f, 0f), 100f);
+
+        hookHeadRenderer = hookHeadObject.AddComponent<SpriteRenderer>();
+        hookHeadRenderer.sprite = halfCircle;
+        hookHeadRenderer.sortingOrder = 3000;
+        hookHeadRenderer.enabled = false;
+
+        hookHeadObject.transform.localScale = Vector3.one * 0.7f;
+    }
+
+    private void ShowHookHead(Vector3 position, Vector3 direction)
+    {
+        if (hookHeadObject == null) CreateHookHead();
+
+        hookHeadObject.transform.position = position;
+
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+        hookHeadObject.transform.rotation = Quaternion.Euler(0, 0, angle);
+
+        hookHeadRenderer.enabled = true;
+    }
+
+    private void HideHookHead()
+    {
+        if (hookHeadRenderer != null)
+            hookHeadRenderer.enabled = false;
+    }
+
+    private void DestroyHookHead()
+    {
+        if (hookHeadObject != null)
+        {
+            Object.Destroy(hookHeadObject);
+            hookHeadObject = null;
+            hookHeadRenderer = null;
+        }
+    }
+
     public void SetActive(bool active)
     {
         isActive = active;
@@ -132,8 +213,8 @@ public class GrapplingHookSystem
         {
             ClearCurrentTarget();
             HideIndicator();
+            HideHookHead();
 
-            // Stop any disintegration effect and hide line
             StopLineDisintegration();
             if (lineRenderer != null)
             {
@@ -159,7 +240,7 @@ public class GrapplingHookSystem
             lineRenderer.endWidth = weaponData.lineWidth * 0.5f;
             lineRenderer.positionCount = 2;
             lineRenderer.useWorldSpace = true;
-            lineRenderer.sortingOrder = 100;
+            lineRenderer.sortingOrder = 3000; // Above grass Y-sort range
             lineRenderer.enabled = false;
         }
     }
@@ -231,19 +312,34 @@ public class GrapplingHookSystem
 
         // Update targeting only when idle
         if (currentState == HookState.Idle)
+        {
             UpdateTargeting();
+        }
 
         // Update line renderer when shooting or connected
         if ((currentState == HookState.Shooting || currentState == HookState.Connected) &&
             currentTarget != null && IsTargetValid(currentTarget) && !isDisintegrating && lineRenderer.enabled)
         {
-            // Always update the start position to follow the player
             lineRenderer.SetPosition(0, playerTransform.position);
 
-            // Only update end position during connected state (shooting animation handles its own end position)
             if (currentState == HookState.Connected)
             {
                 lineRenderer.SetPosition(1, currentTarget.GetGrapplePoint());
+            }
+        }
+    }
+    private void ReapplyHighlight(IGrapplingTarget target)
+    {
+        if (target == null) return;
+        var targetTransform = target.GetTransform();
+        var spriteRenderer = targetTransform?.GetComponent<SpriteRenderer>();
+        if (spriteRenderer != null && originalColors.ContainsKey(target))
+        {
+            Color expectedColor = Color.Lerp(originalColors[target], weaponData.targetHighlightColor, 0.5f);
+            // Only reapply if the color has been changed by something else
+            if (spriteRenderer.color != expectedColor)
+            {
+                spriteRenderer.color = expectedColor;
             }
         }
     }
@@ -258,6 +354,7 @@ public class GrapplingHookSystem
     private void HandleDestroyedTarget()
     {
         HideIndicator();
+        HideHookHead();
 
         if (currentState == HookState.Shooting || currentState == HookState.Connected)
         {
@@ -269,26 +366,33 @@ public class GrapplingHookSystem
             currentTarget = null;
         }
     }
-
     private void UpdateTargeting()
     {
-        ClearCurrentTarget();
-        HideIndicator();
-
         Vector3 playerPos = playerTransform.position;
         Vector3 cursorWorldPos = GetCursorWorldPosition();
         Vector3 targetDirection = (cursorWorldPos - playerPos).normalized;
 
         IGrapplingTarget bestTarget = FindBestTarget(playerPos, targetDirection);
 
-        // Update cursor only when not in placement mode
-        UpdateCursor(bestTarget);
-
-        if (bestTarget != null)
+        // Only update if target changed
+        if (bestTarget != currentTarget)
         {
-            currentTarget = bestTarget;
-            AddHighlight(currentTarget);
-            ShowIndicator(currentTarget);
+            ClearCurrentTarget();
+            HideIndicator();
+
+            UpdateCursor(bestTarget);
+
+            if (bestTarget != null)
+            {
+                currentTarget = bestTarget;
+                AddHighlight(currentTarget);
+                ShowIndicator(currentTarget);
+            }
+        }
+        else
+        {
+            // Still update cursor even if target hasn't changed
+            UpdateCursor(bestTarget);
         }
     }
 
@@ -355,7 +459,21 @@ public class GrapplingHookSystem
         {
             var targetTransform = target.GetTransform();
             if (targetTransform != null)
-                currentIndicator = GrapplingHookTargetIndicator.CreateIndicator(targetTransform, hookSprite);
+            {
+                // Only show indicator if target is visible on screen
+                Vector3 screenPos = Camera.main.WorldToScreenPoint(targetTransform.position);
+                const float margin = 100f;
+                bool isVisible = screenPos.z > 0 &&
+                               screenPos.x >= -margin &&
+                               screenPos.x <= Screen.width + margin &&
+                               screenPos.y >= -margin &&
+                               screenPos.y <= Screen.height + margin;
+
+                if (isVisible)
+                {
+                    currentIndicator = GrapplingHookTargetIndicator.CreateIndicator(targetTransform, hookSprite);
+                }
+            }
         }
     }
 
@@ -402,6 +520,13 @@ public class GrapplingHookSystem
         {
             originalColors[target] = spriteRenderer.color;
             spriteRenderer.color = Color.Lerp(spriteRenderer.color, weaponData.targetHighlightColor, 0.5f);
+
+            // Tell tower to pause visual updates
+            var tower = targetTransform.GetComponent<Tower>();
+            if (tower != null)
+            {
+                tower.SetGrapplingTarget(true);
+            }
         }
     }
 
@@ -414,6 +539,13 @@ public class GrapplingHookSystem
         {
             spriteRenderer.color = originalColor;
             originalColors.Remove(target);
+
+            // Tell tower to resume visual updates
+            var tower = targetTransform.GetComponent<Tower>();
+            if (tower != null)
+            {
+                tower.SetGrapplingTarget(false);
+            }
         }
     }
 
@@ -462,6 +594,8 @@ public class GrapplingHookSystem
         // Animate hook shooting
         yield return AnimateHookShooting(startPos, targetPos, travelTime);
 
+        HideHookHead();
+
         // Execute pull sequence if target still valid
         if (IsTargetValid(grappleTarget))
         {
@@ -479,6 +613,8 @@ public class GrapplingHookSystem
         lineRenderer.SetPosition(0, startPos);
         lineRenderer.SetPosition(1, startPos);
 
+        Vector3 direction = (targetPos - startPos).normalized;
+
         float elapsed = 0f;
         while (elapsed < travelTime)
         {
@@ -486,6 +622,9 @@ public class GrapplingHookSystem
             float t = elapsed / travelTime;
             Vector3 currentEnd = Vector3.Lerp(startPos, targetPos, t);
             lineRenderer.SetPosition(1, currentEnd);
+
+            ShowHookHead(currentEnd, direction);
+
             yield return null;
         }
     }
@@ -530,7 +669,6 @@ public class GrapplingHookSystem
             yield return null;
         }
     }
-
     private void DealGrapplingDamage(IGrapplingTarget target)
     {
         // Only deal damage if weapon has grappling damage configured
@@ -540,6 +678,7 @@ public class GrapplingHookSystem
         var targetTransform = target.GetTransform();
         if (targetTransform == null) return;
 
+        // MODIFIED: Check for EnemyStats first
         var enemyStats = targetTransform.GetComponent<EnemyStats>();
         if (enemyStats != null && !enemyStats.IsDead())
         {
@@ -551,6 +690,29 @@ public class GrapplingHookSystem
             {
                 //TODO add audio to the grappling hook hit
                 //AudioManager.instance.PlayOneShot(FMODEvents.instance.enemyHit, targetTransform.position);
+            }
+            return;
+        }
+
+        // Check for IDamageable targets (like BossHead)
+        var damageable = targetTransform.GetComponent<IDamageable>();
+        if (damageable != null && damageable.CanTakeDamage())
+        {
+            // Check if it's not a tower or core (we don't want to damage friendly structures)
+            bool isTowerOrCore = targetTransform.GetComponent<Tower>() != null ||
+                                 targetTransform.GetComponent<CentralCore>() != null;
+
+            if (!isTowerOrCore)
+            {
+                damageable.TakeDamage(weapon.grapplingDamage, weapon.gameObject);
+                Debug.Log($"[GRAPPLING_HOOK] Dealt {weapon.grapplingDamage} damage to {targetTransform.name} (IDamageable)");
+
+                // Play impact sound
+                if (AudioManager.instance != null && FMODEvents.instance != null)
+                {
+                    //TODO add audio to the grappling hook hit
+                    //AudioManager.instance.PlayOneShot(FMODEvents.instance.enemyHit, targetTransform.position);
+                }
             }
         }
     }
@@ -663,6 +825,8 @@ public class GrapplingHookSystem
     private void EndGrappleSequence()
     {
         currentState = HookState.Retracting;
+
+        HideHookHead();
 
         // Start disintegration
         StartLineDisintegration();
@@ -785,6 +949,7 @@ public class GrapplingHookSystem
     public void Cleanup()
     {
         HideIndicator();
+        DestroyHookHead();
         StopLineDisintegration();
 
         if (lineRenderer != null)
@@ -812,6 +977,9 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
     public bool isSolidTarget = true;
     public Vector3 grapplePointOffset = Vector3.zero;
 
+    /// Extra offset for the hook indicator icon, set dynamically by bosses.
+    [HideInInspector] public Vector3 indicatorExtraOffset = Vector3.zero;
+
     private Rigidbody2D rb;
     private bool isBeingGrappled = false;
     private bool isDestroyed = false;
@@ -820,6 +988,13 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
     {
         rb = GetComponent<Rigidbody2D>();
         DetermineTargetType();
+
+        // If this is a Boss1, pull grappling offsets immediately so they're
+        // never zero — this handles the case where GrapplingHookSystem adds
+        // the GrapplingTarget component after Boss1.Start() has already run.
+        var boss = GetComponent<Boss1>();
+        if (boss != null)
+            boss.ApplyGrapplingOffsets(this);
     }
 
     private void DetermineTargetType()
@@ -910,3 +1085,5 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, pullVelocity, 1.0f);
     }
 }
+
+

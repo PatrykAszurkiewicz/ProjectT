@@ -22,6 +22,45 @@ public class Weapon : MonoBehaviour
     private ObstacleDrawerSystem obstacleDrawerSystem;
 
     public WeaponData GetWeaponData() => weaponData;
+    public void HotSwapWeapon(WeaponData newData)
+    {
+        if (newData == null) return;
+
+        // Tear down old sub-systems
+        if (obstacleDrawerSystem != null) { obstacleDrawerSystem.Cleanup(); obstacleDrawerSystem = null; }
+        if (grapplingSystem != null) { grapplingSystem.Cleanup(); grapplingSystem = null; }
+
+        // Undo old armor bonus
+        if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
+            playerStats.currentArmor -= weaponData.armorBonus;
+
+        // Swap to fresh runtime copy
+        weaponData = newData.CreateRuntimeCopy();
+
+        // Apply new armor bonus
+        if (weaponData.armorBonus > 0 && playerStats != null)
+            playerStats.currentArmor += weaponData.armorBonus;
+
+        // Update sprite
+        var sr = visual.GetComponent<SpriteRenderer>();
+        if (sr != null && weaponData.sprite != null)
+            sr.sprite = weaponData.sprite;
+
+        ResizeCollider();
+
+        // Start new sub-systems
+        if (weaponData.isGrapplingHook) grapplingSystem = new GrapplingHookSystem(this, weaponData);
+        if (weaponData.isObstacleDrawer) obstacleDrawerSystem = new ObstacleDrawerSystem(this, weaponData);
+        if (CursorManager.Instance != null)
+        {
+            if (weaponData.isGrapplingHook) CursorManager.Instance.SetCursor(CursorManager.CursorType.Hook);
+            else if (weaponData.isObstacleDrawer) CursorManager.Instance.SetCursor(CursorManager.CursorType.ObstacleDrawer);
+            else if (weaponData.armorBonus > 0f) CursorManager.Instance.SetCursor(CursorManager.CursorType.Shield);
+            else if (weaponData.isRanged) CursorManager.Instance.SetCursor(CursorManager.CursorType.Ranged);
+            else CursorManager.Instance.SetCursor(CursorManager.CursorType.Melee);
+        }
+        //Debug.Log($"[Weapon] Swapped to: {weaponData.weaponName}");
+    }
 
     private void Awake()
     {
@@ -47,7 +86,7 @@ public class Weapon : MonoBehaviour
         {
             // Runtime copy
             weaponData = sourceData.CreateRuntimeCopy();
-            Debug.Log($"Created runtime copy of weapon: {weaponData.weaponName}");
+            //Debug.Log($"Created runtime copy of weapon: {weaponData.weaponName}");
         }
         else
         {
@@ -93,9 +132,8 @@ public class Weapon : MonoBehaviour
     {
         if (originalWeaponData != null)
         {
-            // Stwórz nową kopię z oryginalnych danych
             weaponData = originalWeaponData.CreateRuntimeCopy();
-            Debug.Log($"Reset weapon stats to original values: {weaponData.weaponName}");
+            //Debug.Log($"Reset weapon stats to original values: {weaponData.weaponName}");
         }
     }
 
@@ -210,15 +248,18 @@ public class Weapon : MonoBehaviour
 
         var enemy = other.GetComponent<EnemyStats>();
         if (enemy == null || hitEnemies.Contains(enemy)) return;
+        //Debug.Log($"[WEAPON] Hitting: {other.gameObject.name}, root: {other.transform.root.gameObject.name}, component: {enemy.GetType().Name}");
 
         hitEnemies.Add(enemy);
 
         // Deal damage
         if (weaponData.damage > 0)
         {
-            enemy.TakeDamage(weaponData.damage);
+            var stats = other.GetComponent<CharacterStats>(); // TODO verify if it doesn't break any augments
+            if (stats != null) // TODO verify if it doesn't break any aguemnts
+                stats.TakeDamage(weaponData.damage);
 
-            // Energy vampire effect (3 lines)
+            // Energy vampire effect
             var vampireEffect = playerStats?.GetComponent<EnergyVampireTouchEffect>();
             if (vampireEffect != null)
                 vampireEffect.DrainEnergy();

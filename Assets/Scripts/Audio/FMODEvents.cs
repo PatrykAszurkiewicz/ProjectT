@@ -41,9 +41,9 @@ public class FMODEvents : MonoBehaviour
 
     [field: Header("Tower Creation SFX")]
     [field: SerializeField] public EventReference towerCreation { get; private set; }
+
     [field: Header("Tower Death SFX")]
     [field: SerializeField] public EventReference towerDeath { get; private set; }
-
 
     [field: Header("Resource Collection SFX")]
     [field: SerializeField] public EventReference resourceDropCollection { get; private set; }
@@ -58,9 +58,14 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Enemy SFX")]
     [field: SerializeField] public EventReference enemyAttack { get; private set; }
 
+    [field: Header("Boss SFX")]
+    [field: SerializeField] public EventReference bossLaserShot { get; private set; }
+    [field: SerializeField] public EventReference bossGroundHit { get; private set; }
+
     [field: Header("Augment SFX")]
     [field: SerializeField] public EventReference augmentReroll { get; private set; }
     [field: SerializeField] public EventReference click { get; private set; }
+
     public static FMODEvents instance { get; private set; }
 
     private void Awake()

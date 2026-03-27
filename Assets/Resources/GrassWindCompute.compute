@@ -1,0 +1,47 @@
+// GrassWindCompute.compute
+// Optional compute shader for advanced wind animation.
+// Place this file in a Resources/ folder so GrassOverlayGPU can load it.
+// If absent, wind is handled entirely in the vertex shader (which is fine for most cases).
+
+#pragma kernel CSMain
+
+struct GrassBlade
+{
+    float2 position;
+    float  height;
+    float  width;
+    float  lean;
+    float  curvature;
+    float  phase;
+    uint   packedType;
+    float4 colorBase;
+    float4 colorTip;
+};
+
+RWStructuredBuffer<GrassBlade> _Blades;
+
+int   _BladeCount;
+float _Time;
+float _WindStrength;
+float _WindSpeed;
+float _GustStrength;
+float _GustScale;
+float _GustSpeed;
+
+[numthreads(256, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _BladeCount) return;
+
+    GrassBlade blade = _Blades[id.x];
+
+    // Example: modulate phase slowly for organic variation over time
+    // This is subtle — the main wind is in the vertex shader.
+    // Use compute for effects that need to persist frame-to-frame,
+    // like progressive bending under sustained wind.
+
+    // Gentle phase drift for organic feel
+    blade.phase += 0.001 * sin(_Time * 0.1 + blade.position.x * 0.3);
+
+    _Blades[id.x] = blade;
+}

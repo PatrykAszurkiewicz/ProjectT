@@ -54,6 +54,20 @@ public class PlayerStats : CharacterStats
         }
     }
 
+    /// <summary>
+    /// Called by PlayerMovement after it moves the SpriteRenderer to a child object
+    /// for Y-sorting. This ensures damage flash and all visual effects target the
+    /// correct (visible) renderer.
+    /// </summary>
+    public void UpdateSpriteRenderer(SpriteRenderer newSR)
+    {
+        spriteRenderer = newSR;
+        if (spriteRenderer != null)
+        {
+            baseColor = spriteRenderer.color;
+        }
+    }
+
     public override void Die()
     {
         // Check for Quick Revive before dying

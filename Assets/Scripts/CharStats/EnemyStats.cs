@@ -25,7 +25,15 @@ public class EnemyStats : CharacterStats
     private Material originalMaterial;
     private Material flashMaterial;
 
-    private void Awake()
+    protected SpriteRenderer SpriteRenderer => spriteRenderer;
+    protected EnemyHealthBar HealthBar => healthBar;
+
+    protected void CallStartDamageFlash()
+    {
+        StartDamageFlash();
+    }
+
+    protected virtual void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
 
@@ -66,7 +74,9 @@ public class EnemyStats : CharacterStats
         }
     }
 
-    private void Start()
+    //private void Start()
+    protected virtual void Start()
+
     {
         if (healthBarPrefab != null)
         {
@@ -94,6 +104,8 @@ public class EnemyStats : CharacterStats
 
     public override void TakeDamage(float amount)
     {
+        //Debug.Log($"[ENEMY_STATS] TakeDamage amount={amount}");
+
         base.TakeDamage(amount);
 
         StartDamageFlash();
@@ -129,7 +141,56 @@ public class EnemyStats : CharacterStats
         damageFlashCoroutine = null;
     }
 
+
     public override void Die()
+    {
+        //Debug.Log($"[ENEMY_STATS] Die() called on {gameObject.name}");
+
+        // Stop all movement and reset rotation before death animation
+        var rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+        }
+        transform.rotation = Quaternion.identity;
+        // Check if this enemy has death animation
+        var animController = GetComponent<EnemyAnimationController>();
+        if (animController != null && enemyData != null && enemyData.death.frameCount > 0)
+        {
+            // Play death animation and delay destruction
+            animController.PlayDeathAnimation();
+            StartCoroutine(DelayedDeath());
+            return;
+        }
+
+        // No animation - die immediately (old behavior)
+        PerformDeath();
+    }
+
+    private IEnumerator DelayedDeath()
+    {
+        // Disable components so enemy can't move/attack while dying
+        var controller = GetComponent<EnemyController>();
+        if (controller != null) controller.enabled = false;
+
+        var rb = GetComponent<Rigidbody2D>();
+        if (rb != null) rb.linearVelocity = Vector2.zero;
+
+        var collider = GetComponent<Collider2D>();
+        if (collider != null) collider.enabled = false;
+
+        if (rb != null) rb.simulated = false;
+
+        // Wait for animation to complete
+        float animDuration = enemyData.deathAnimationDuration;
+        yield return new WaitForSeconds(animDuration);
+
+        // Destroy the enemy
+        PerformDeath();
+    }
+
+    private void PerformDeath()
     {
         var gremlinController = GetComponent<GremlinController>();
         if (gremlinController != null)
@@ -216,3 +277,4 @@ public class EnemyStats : CharacterStats
     }
 #endif
 }
+

@@ -565,10 +565,11 @@ namespace FMODUnity
         // [InitializeOnLoad] and calling this function from a static constructor.
         internal static void AddPlatformTemplate<T>(string identifier) where T : Platform
         {
-            PlatformTemplates.Add(new PlatformTemplate() {
-                    Identifier = identifier,
-                    CreateInstance = () => CreatePlatformInstance<T>(identifier)
-                });
+            PlatformTemplates.Add(new PlatformTemplate()
+            {
+                Identifier = identifier,
+                CreateInstance = () => CreatePlatformInstance<T>(identifier)
+            });
         }
 
         private static Platform CreatePlatformInstance<T>(string identifier) where T : Platform
@@ -746,7 +747,7 @@ namespace FMODUnity
                 string basename = Regex.Escape(Path.GetFileName(path));
                 Regex regex = new Regex(Il2CppCommand_AdditionalCpp + "=\"[^\"]*" + basename + "\"");
 
-                for (int startIndex = 0; startIndex < newArguments.Length; )
+                for (int startIndex = 0; startIndex < newArguments.Length;)
                 {
                     Match match = regex.Match(newArguments, startIndex);
 

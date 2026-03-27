@@ -50,7 +50,7 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
         spriteRenderer.color = Color.green;
 
         spriteRenderer.sortingLayerName = "Default";
-        spriteRenderer.sortingOrder = 1000;
+        spriteRenderer.sortingOrder = 2500; // Above grass Y-sort range (400-1600)
         spriteRenderer.transform.localScale = Vector3.one * 1.1f;
     }
 
@@ -73,9 +73,32 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
     {
         if (isDestroyed) return;
 
-        RotateIndicator();
+        // Check if target is visible before trying to follow it
+        if (!IsTargetVisible())
+        {
+            Hide();
+            return;
+        }
+
         FollowTarget();
-        KeepInCameraView();
+    }
+
+    private bool IsTargetVisible()
+    {
+        if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy)
+            return false;
+
+        if (Camera.main == null) return false;
+
+        Vector3 screenPos = Camera.main.WorldToScreenPoint(target.position);
+
+        // Target must be in front of camera and within screen bounds (with margin)
+        const float margin = 100f;
+        return screenPos.z > 0 &&
+               screenPos.x >= -margin &&
+               screenPos.x <= Screen.width + margin &&
+               screenPos.y >= -margin &&
+               screenPos.y <= Screen.height + margin;
     }
 
     private void RotateIndicator()
@@ -116,17 +139,23 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
             return;
         }
 
-        Vector3 targetPosition = target.position + Vector3.up * TARGET_OFFSET_Y;
-
-        // Prevent indicator from moving if distance is too large (indicates something went wrong)
-        float distance = Vector3.Distance(transform.position, targetPosition);
-        if (distance > 50f) // Sanity check
+        // Use the grapple point X as horizontal anchor (handles boss flip offsets)
+        // and float the indicator above it. Snap position — no lerp, no drift.
+        var gt = target.GetComponent<GrapplingTarget>();
+        Vector3 anchorPos;
+        if (gt != null)
         {
-            Hide();
-            return;
+            Vector3 grapplePoint = target.position + gt.grapplePointOffset;
+            anchorPos = new Vector3(grapplePoint.x, target.position.y, target.position.z)
+                      + Vector3.up * TARGET_OFFSET_Y
+                      + gt.indicatorExtraOffset;
+        }
+        else
+        {
+            anchorPos = target.position + Vector3.up * TARGET_OFFSET_Y;
         }
 
-        transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * FOLLOW_SPEED);
+        transform.position = anchorPos;
     }
 
     private void KeepInCameraView()

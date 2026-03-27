@@ -6,7 +6,8 @@ public class TowerDefenseMap : MonoBehaviour
     [Header("Map Configuration")]
     public float mapRadius = 10f;
     public GameObject backgroundGameObject; // Manual background GameObject reference
-    public string backgroundImagePath = "Backgrounds/Background3"; // Fallback for generated terrain
+    //public string backgroundImagePath = "Backgrounds/Background3"; // Fallback for generated terrain
+    public string backgroundImagePath = "Backgrounds/Background8"; // Fallback for generated terrain    
     public bool useBackgroundImage = true;
     public Material terrainMaterial;
     public Color terrainColor = Color.green;
@@ -140,11 +141,16 @@ public class TowerDefenseMap : MonoBehaviour
                     renderer.sprite = backgroundSprite;
                     renderer.color = Color.white;
 
-                    // Scale to fit map radius
-                    float textureSize = Mathf.Min(backgroundTexture.width, backgroundTexture.height) / 100f;
-                    float desiredSize = mapRadius * 2f;
-                    float scale = desiredSize / textureSize;
-                    terrainObject.transform.localScale = Vector3.one * scale;
+                    // Keep native pixel size (no scaling) — use tiling for full coverage
+                    terrainObject.transform.localScale = Vector3.one;
+
+                    // Add BackgroundTiler to cover the map area via repeating tiles
+                    BackgroundTiler tiler = terrainObject.GetComponent<BackgroundTiler>();
+                    if (tiler == null)
+                        tiler = terrainObject.AddComponent<BackgroundTiler>();
+                    tiler.autoCalculateGrid = true;
+                    tiler.coverageRadius = mapRadius + 5f;
+                    tiler.GenerateTiles();
                 }
                 else
                 {
@@ -372,7 +378,7 @@ public class TowerDefenseMap : MonoBehaviour
 
     private void OnCoreEnergyDepleted()
     {
-        Debug.Log("Core energy depleted! Game Over?");
+        Debug.Log("Core energy depleted! Game Over");
         // TODO: Handle Game Over in Orchestrator
     }
 
@@ -454,20 +460,22 @@ public class TowerDefenseMap : MonoBehaviour
     }
 
     // Utility methods
-    [ContextMenu("Scale Background to Map Radius")]
+    [ContextMenu("Tile Background to Map Radius")]
     public void ScaleBackgroundToMapRadius()
     {
         if (backgroundGameObject != null)
         {
-            var renderer = backgroundGameObject.GetComponent<SpriteRenderer>();
-            if (renderer != null && renderer.sprite != null)
-            {
-                float spriteSize = Mathf.Min(renderer.sprite.bounds.size.x, renderer.sprite.bounds.size.y);
-                float desiredSize = mapRadius * 2f;
-                float scale = desiredSize / spriteSize;
-                backgroundGameObject.transform.localScale = Vector3.one * scale;
-                Debug.Log($"Scaled background to {scale} to fit map radius {mapRadius}");
-            }
+            // Keep native size — use tiling for coverage
+            backgroundGameObject.transform.localScale = Vector3.one;
+
+            BackgroundTiler tiler = backgroundGameObject.GetComponent<BackgroundTiler>();
+            if (tiler == null)
+                tiler = backgroundGameObject.AddComponent<BackgroundTiler>();
+            tiler.autoCalculateGrid = true;
+            tiler.coverageRadius = mapRadius + 5f;
+            tiler.GenerateTiles();
+
+            Debug.Log($"Tiled background at native size to cover map radius {mapRadius}");
         }
     }
 

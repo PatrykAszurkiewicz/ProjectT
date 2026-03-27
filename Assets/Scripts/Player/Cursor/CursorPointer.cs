@@ -12,12 +12,11 @@ public class CursorPointer : MonoBehaviour
     {
         Cursor.visible = false;
 
-        // Get SpriteRenderer with safety check
-        spriteRenderer = GetComponent<SpriteRenderer>();
+        // Get SpriteRenderer — it's on the child CursorVisual, not on this GameObject
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>();
 
         if (spriteRenderer == null)
         {
-            // Try to add SpriteRenderer if missing
             spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
             Debug.LogWarning("[CURSOR POINTER] SpriteRenderer was missing - added automatically");
         }
@@ -25,6 +24,8 @@ public class CursorPointer : MonoBehaviour
         if (spriteRenderer != null)
         {
             spriteRenderer.color = Color.white;
+            // Must be above fog (5000) and grass Y-sort range (400–1600)
+            spriteRenderer.sortingOrder = 10000;
 
             // Ensure sprite is assigned
             if (spriteRenderer.sprite == null)
@@ -56,10 +57,14 @@ public class CursorPointer : MonoBehaviour
 
     void LateUpdate()
     {
-        // Ensure cursor stays white every frame
-        if (spriteRenderer != null && spriteRenderer.color != Color.white)
+        // Ensure cursor stays white and always renders above everything
+        if (spriteRenderer != null)
         {
-            spriteRenderer.color = Color.white;
+            if (spriteRenderer.color != Color.white)
+            {
+                spriteRenderer.color = Color.white;
+            }
+            spriteRenderer.sortingOrder = 10000;
         }
     }
 }

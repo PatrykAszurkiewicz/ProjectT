@@ -8,6 +8,7 @@ public class WeaponProjectile : MonoBehaviour
     private float speed;
     private float knockBackForce;
     [SerializeField] private float bulletDespawnTime = 5f;
+    public float GetDamage() => damage;
 
     public void Initialize(Vector2 dir, float dmg, float spd, float knockback)
     {
@@ -19,6 +20,10 @@ public class WeaponProjectile : MonoBehaviour
 
     private void Start()
     {
+        // Ensure projectile renders above grass Y-sort range (400-1600)
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        if (sr != null) sr.sortingOrder = 2500;
+
         StartCoroutine(DespawnAfterTime(bulletDespawnTime));
     }
 
@@ -35,7 +40,7 @@ public class WeaponProjectile : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        // Ignore certain trigger types that shouldn't destroy bullets
+        // Ignore triggers that should not destroy bullets
         if (other.name.Contains("EnergyCollectionTrigger") ||
             other.name.Contains("Energy") ||
             other.CompareTag("Player") ||
@@ -46,31 +51,38 @@ public class WeaponProjectile : MonoBehaviour
 
         if (other.CompareTag("Enemy"))
         {
-            // Try IDamageable first for Gremlin
+            // CharacterStats (covers EnemyStats, Boss1, all bosses) 
+            // GetComponent returns the most-derived type (virtual TakeDamage)
+            CharacterStats stats = other.GetComponent<CharacterStats>();
+            if (stats != null)
+            {
+                stats.TakeDamage(damage);
+
+                // Knockback (only for enemies that have a controller)
+                EnemyController enemyController = other.GetComponent<EnemyController>();
+                if (enemyController != null)
+                {
+                    Vector2 dir = (other.transform.position - transform.position).normalized;
+                    enemyController.ApplyKnockback(dir, knockBackForce);
+                }
+
+                Destroy(gameObject);
+                return;
+            }
+
+            // IDamageable for Gremlin and other non-CharacterStats enemies
             IDamageable damageable = other.GetComponent<IDamageable>();
             if (damageable != null)
             {
                 damageable.TakeDamage(damage, gameObject);
-            }
-            else
-            {
-                // Fallback to EnemyStats for regular enemies
-                EnemyStats enemy = other.GetComponent<EnemyStats>();
-                if (enemy != null)
-                {
-                    enemy.TakeDamage(damage);
-
-                    // Knockback
-                    EnemyController enemyController = enemy.GetComponent<EnemyController>();
-                    if (enemyController != null)
-                    {
-                        Vector2 dir = (enemy.transform.position - transform.position).normalized;
-                        enemyController.ApplyKnockback(dir, knockBackForce);
-                    }
-                }
+                Destroy(gameObject);
+                return;
             }
         }
 
-        Destroy(gameObject);
+        // When hitting something that isn't an enemy (wall, obstacle, etc.) - destroy bullet
+        // Destroy(gameObject);
+        if (!other.isTrigger)
+            Destroy(gameObject);
     }
 }

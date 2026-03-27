@@ -8,6 +8,15 @@ using UnityEditor;
 
 public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 {
+
+    [Header("Grappling Hook")]
+    private bool isGrapplingTarget = false;
+
+    public void SetGrapplingTarget(bool isTarget)
+    {
+        isGrapplingTarget = isTarget;
+    }
+
     [Header("Energy Generator Settings")]
     public float generatorSelfConsumption = 0.1f;
     public bool isEnergyGenerator = false; // Should be set to true for Generator towers
@@ -77,6 +86,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public float hammerAttackInterval = 1.5f;
     private float lastHammerAttackTime;
     public GameObject hammerImpactEffectPrefab;
+    [Header("Hammer Particle Effects")]
+    public bool enableDustParticles = true;
+    public Color dustColor = new Color(0.6f, 0.5f, 0.4f, 0.8f); // Brownish dust
+    public int dustParticleCount = 50;
+    public float dustLifetime = 1.5f;
+    public float dustSpeed = 3f;
+    public float dustSize = 0.15f;
+
+
 
     [Header("Laser Tower Settings")]
     public bool isLaserTower = false;
@@ -448,9 +466,72 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             Instantiate(hammerImpactEffectPrefab, transform.position, Quaternion.identity);
         }
-
+        // Create dust particle effect
+        if (enableDustParticles)
+        {
+            CreateDustParticleEffect();
+        }
         // Create shockwave visual effect
         StartCoroutine(HammerShockwaveEffect());
+    }
+
+    void CreateDustParticleEffect()
+    {
+        GameObject dustEffect = new GameObject("HammerDustEffect");
+        dustEffect.transform.position = transform.position;
+        ParticleSystem ps = dustEffect.AddComponent<ParticleSystem>();
+        ps.Stop();
+        ps.Clear();
+        var main = ps.main;
+        main.duration = 1f;
+        main.loop = false;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(1f, 1.5f); // Variation
+        main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 2f); // Speed variation
+        main.startSize = new ParticleSystem.MinMaxCurve(0.06f, 0.12f);
+        main.startColor = new Color(0.65f, 0.55f, 0.45f, 0.9f);
+        main.gravityModifier = 0f;
+        main.maxParticles = 50;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.playOnAwake = false;
+        var emission = ps.emission;
+        emission.enabled = true;
+        emission.rateOverTime = 0;
+        emission.burstCount = 1;
+        emission.SetBurst(0, new ParticleSystem.Burst(0f, 40));
+        // Radial emission 
+        var shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = 0.2f;
+        shape.radiusThickness = 0.3f;
+        shape.arc = 360f;
+        // Simulate particles spreading out then slowing down
+        var velocityOverLifetime = ps.velocityOverLifetime;
+        velocityOverLifetime.enabled = true;
+        velocityOverLifetime.space = ParticleSystemSimulationSpace.World;
+        // Deceleration curve 
+        AnimationCurve decelCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0.15f);
+        velocityOverLifetime.speedModifier = new ParticleSystem.MinMaxCurve(1f, decelCurve);
+        // Fade out
+        var colorOverLifetime = ps.colorOverLifetime;
+        colorOverLifetime.enabled = true;
+        Gradient gradient = new Gradient();
+        gradient.alphaKeys = new GradientAlphaKey[] {
+            new GradientAlphaKey(1f, 0f),
+            new GradientAlphaKey(0.7f, 0.4f),
+            new GradientAlphaKey(0f, 1f)
+        };
+        colorOverLifetime.color = gradient;
+        // Particles expand as dust cloud spreads
+        var sizeOverLifetime = ps.sizeOverLifetime;
+        sizeOverLifetime.enabled = true;
+        AnimationCurve sizeCurve = AnimationCurve.EaseInOut(0f, 0.4f, 1f, 1.2f);
+        sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
+        var renderer = ps.GetComponent<ParticleSystemRenderer>();
+        renderer.sortingOrder = 50;
+        renderer.renderMode = ParticleSystemRenderMode.Billboard;
+        ps.Play();
+        Destroy(dustEffect, 2f);
     }
 
     System.Collections.IEnumerator HammerShockwaveEffect()
@@ -1100,6 +1181,17 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             spriteRenderer.sortingLayerName = "Default";
         }
 
+        // Y-Sort: dynamically sort against grass based on Y position.
+        // Negative offset pushes the sort point toward the tower's base,
+        // preventing grass near the tower center from protruding in front.
+        if (GetComponent<YSortEntity>() == null)
+        {
+            var ysort = gameObject.AddComponent<YSortEntity>();
+            ysort.sortPrecision = 10f;
+            ysort.sortOrderBase = 1000;
+            ysort.sortYOffset = -0.5f;
+        }
+
         // Validate spriteScale before using it
         if (float.IsNaN(spriteScale) || float.IsInfinity(spriteScale) || spriteScale <= 0f)
         {
@@ -1204,7 +1296,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         tentacleRenderer.endWidth = tentacleConfig.width * 0.3f;
         tentacleRenderer.positionCount = tentacleConfig.segments;
         tentacleRenderer.useWorldSpace = false;
-        tentacleRenderer.sortingOrder = 16;
+        tentacleRenderer.sortingOrder = 999; // Will be overridden each frame in UpdateTentacles()
 
         var firePointObj = new GameObject("FirePoint");
         firePointObj.transform.SetParent(tentacleContainer.transform);
@@ -1593,6 +1685,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (!useTentacleTurret || tentacleRenderer == null) return;
 
+        // Keep tentacle just behind the tower's own sprite (which is Y-sorted dynamically)
+        if (spriteRenderer != null)
+            tentacleRenderer.sortingOrder = spriteRenderer.sortingOrder - 1;
+
         swayTimer += Time.deltaTime * tentacleConfig.swaySpeed;
 
         // Validate sway timer
@@ -1890,6 +1986,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void UpdateVisuals()
     {
+        // Skip visual updates if this tower is a grappling target
+        if (isGrapplingTarget) return;
+
         if (spriteRenderer != null && EnergyManager.Instance != null)
             EnergyManager.Instance.UpdateConsumerVisuals(this, spriteRenderer);
 

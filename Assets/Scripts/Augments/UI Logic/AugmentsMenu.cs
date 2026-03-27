@@ -357,9 +357,10 @@ public class AugmentsMenu : MonoBehaviour
             // Unlock augments
             2,   // Unlocked melee
             3,   // Obstacles generation
-            //4,   // More obstacles
+            4,   // Obstacle drawer
             65,  // Unlocked grappling hook
             66,  // Unlocked ranged weapon
+            81,  // Unlocked shield
             93,  // Unlocked flamethrower
             94,  // Unlocked portable obstacles
             231, // Unlocked heavy melee weapon

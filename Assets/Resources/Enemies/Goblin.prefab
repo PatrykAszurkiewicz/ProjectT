@@ -174,6 +174,9 @@ MonoBehaviour:
   energyDropChance: 0
   energyDropValue: -1
   canDropEnergy: 1
+  damageFlashDuration: 0.1
+  damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  currentMoveSpeedDebug: 0
 --- !u!114 &1608654102432218712
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -187,7 +190,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   detectRange: 3
-  attackRange: 1.5
+  attackRange: 2.3
   attackCooldown: 1
   avoidDistance: 1
   obstacleLayer:

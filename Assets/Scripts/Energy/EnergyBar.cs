@@ -63,8 +63,9 @@ public class EnergyBar : MonoBehaviour
         if (parentSpriteRenderer != null)
         {
             energyBarBackground.sortingLayerName = parentSpriteRenderer.sortingLayerName;
-            energyBarBackground.sortingOrder = parentSpriteRenderer.sortingOrder + 1;
         }
+        // Fixed high value so bars always render above grass Y-sort range (400-1600)
+        energyBarBackground.sortingOrder = 4000;
     }
 
     void CreateFillBar()
@@ -79,8 +80,9 @@ public class EnergyBar : MonoBehaviour
         if (parentSpriteRenderer != null)
         {
             energyBarFill.sortingLayerName = parentSpriteRenderer.sortingLayerName;
-            energyBarFill.sortingOrder = parentSpriteRenderer.sortingOrder + 2;
         }
+        // Above background (4000)
+        energyBarFill.sortingOrder = 4001;
     }
 
     void CreateEnergyText()
@@ -96,12 +98,13 @@ public class EnergyBar : MonoBehaviour
         energyText.anchor = TextAnchor.MiddleCenter;
         energyText.color = normalEnergyColor;
 
-        // Set text sorting order
         MeshRenderer textRenderer = textObj.GetComponent<MeshRenderer>();
-        if (textRenderer != null && parentSpriteRenderer != null)
+        if (textRenderer != null)
         {
-            textRenderer.sortingLayerName = parentSpriteRenderer.sortingLayerName;
-            textRenderer.sortingOrder = parentSpriteRenderer.sortingOrder + 3;
+            if (parentSpriteRenderer != null)
+                textRenderer.sortingLayerName = parentSpriteRenderer.sortingLayerName;
+            // Above fill (4001)
+            textRenderer.sortingOrder = 4002;
         }
     }
     #endregion

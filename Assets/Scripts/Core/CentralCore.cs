@@ -107,6 +107,14 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         spriteRenderer.sortingOrder = 0;
         spriteRenderer.sortingLayerName = "Default";
 
+        // Y-Sort: dynamically sort against grass based on Y position
+        if (GetComponent<YSortEntity>() == null)
+        {
+            var ysort = gameObject.AddComponent<YSortEntity>();
+            ysort.sortPrecision = 10f;
+            ysort.sortOrderBase = 1000;
+        }
+
         originalScale = Vector3.one * coreSize;
         originalPosition = transform.position;
         transform.localScale = originalScale;

@@ -25,6 +25,8 @@ MonoBehaviour:
       count: 2
     - enemyPrefab: {fileID: 3554655901426140020, guid: df8333252348a3b4ba98f15f72d87222, type: 3}
       count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+      count: 1
   - waveNumber: 0
     extraDelayBeforeStart: 5
     spawnDirections: 000000000200000001000000

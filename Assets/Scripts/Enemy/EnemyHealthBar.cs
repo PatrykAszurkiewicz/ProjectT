@@ -15,7 +15,22 @@ public class EnemyHealthBar : MonoBehaviour
         this.maxHealth = maxHealth;
 
         barUI.SetValue(maxHealth, maxHealth);
+
+        // Ensure the Canvas renders above grass Y-sort range (400-1600)
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = GetComponent<Canvas>();
+        if (canvas != null)
+        {
+            canvas.sortingOrder = 4000;
+        }
     }
+
+
+    public void SetOffset(Vector3 newOffset)
+    {
+        offset = newOffset;
+    }
+
     public void UpdateHealth(float currentHealth)
     {
         barUI.SetValue(currentHealth, maxHealth);

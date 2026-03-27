@@ -79,7 +79,7 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 78,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",{player_damage: -0.15},Reduce incoming damage to the Player by 15%,Resources/Sprites/Augments/78,Patryk,
 79,1,Lightning on dodge,Player,Legendary,lightning_dodge_damage=0.8,Row of lightning after dodge on the ground dealing 80% of base damage,Resources/Sprites/Augments/79,Kuba,Player
 80,1,Fire on dodge,Player,Legendary,"fire_dodge_damage=0.2,fire_dodge_dot=0.05,fire_dodge_duration=10",Row of fire after dodge on the ground with 20% initial damage plus 5% damage over time per second for 10 seconds,Resources/Sprites/Augments/80,Kuba,Player
-81,1,Increase fire defense,Player,"Common, Epic",{player_fire_defense: +0.15},Increased fire defense of the player by 15%,Resources/Sprites/Augments/81,Patryk,
+81,1,Unlock Shield,Player,Epic,NULL,Unlocks the Shield as an equippable weapon,Resources/Sprites/Augments/81,Kuba,Player
 82,1,Multi-Shot,Tower,Rare,{tower_projectile_count: 2},Towers fire 2 additional projectiles at reduced damage,Resources/Sprites/Augments/82,Kuba,
 83,1,Poison Coating,Tower,Common,"{tower_poison_damage_per_second: 0.05, tower_poison_duration: 8}",Tower attacks apply poison DoT (5% damage/sec for 8 seconds),Resources/Sprites/Augments/83,Kuba,
 84,1,Critical Towers,Tower,Epic,{tower_crit_chance: 0.15},15% chance for towers to deal 300% damage,Resources/Sprites/Augments/84,Kuba,
@@ -311,3 +311,4 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 310,2,Consciousness Backup Network,Central Core,Epic,{core_memory_redundancy: 3},Core maintains 3 backup copies of all critical data and consciousness,Resources/Sprites/Augments/310,Kuba,
 311,2,Interdimensional Communication,Central Core,Epic,NULL,Core can communicate with parallel universe versions for strategic advice,Resources/Sprites/Augments/311,Kuba,
 312,2,Genesis Protocol,Central Core,Legendary,NULL,If everything else fails core can restart civilization from stored genetic and cultural templates,Resources/Sprites/Augments/312,Kuba,
+313,1,Increase fire defense,Player,"Common, Epic",{player_fire_defense: +0.15},Increased fire defense of the player by 15%,Resources/Sprites/Augments/313,Patryk,

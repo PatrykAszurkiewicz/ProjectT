@@ -46,7 +46,16 @@ public class GremlinController : MonoBehaviour, IDamageable
         rb.freezeRotation = true;
 
         spriteRenderer.sortingLayerName = "Default";
-        spriteRenderer.sortingOrder = 15;
+        spriteRenderer.sortingOrder = 0; // Will be overridden by YSortEntity
+
+        // Y-Sort: dynamically sort against grass based on Y position
+        if (GetComponent<YSortEntity>() == null)
+        {
+            var ysort = gameObject.AddComponent<YSortEntity>();
+            ysort.sortPrecision = 10f;
+            ysort.sortOrderBase = 1000;
+            ysort.sortYOffset = -0.2f;
+        }
 
         gameObject.tag = "Enemy";
         gameObject.layer = LayerMask.NameToLayer("Enemy");
@@ -137,7 +146,7 @@ public class GremlinController : MonoBehaviour, IDamageable
         Color currentColor = spriteRenderer.color;
         currentColor.a = 1f;
         spriteRenderer.color = currentColor;
-        spriteRenderer.sortingOrder = 100;
+        // sortingOrder is managed by YSortEntity — don't override it here
     }
 
     void Update()
