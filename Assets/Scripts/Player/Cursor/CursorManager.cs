@@ -16,6 +16,14 @@ public class CursorManager : MonoBehaviour
     public string hookHighlightCursorPath = "Sprites/Cursors/cursor_spritesheet_hook_highlight";
     public string obstacleDrawerCursorPath = "Sprites/Cursors/cursor_spritesheet_obstacle_drawer";
     public string rangedCursorPath = "Sprites/Cursors/cursor_spritesheet_ranged";
+    public string flamethrowerCursorPath = "Sprites/Cursors/cursor_spritesheet_flamethrower";
+    public string bombLauncherCursorPath = "Sprites/Cursors/cursor_spritesheet_bomb";
+    public string trapCursorPath = "Sprites/Cursors/cursor_spritesheet_trap";
+    public string turretCursorPath = "Sprites/Cursors/cursor_spritesheet_turret";
+
+    [Header("Cursor Size")]
+    [Tooltip("Desired cursor size in world units. All cursor sprites will be normalized to this size.")]
+    public float targetCursorWorldSize = 1.6f;
 
     private Sprite defaultCursorSprite;
     private Sprite repairCursorSprite;
@@ -25,9 +33,17 @@ public class CursorManager : MonoBehaviour
     private Sprite rangedCursorSprite;
     private Sprite hookHighlightCursorSprite;
     private Sprite obstacleDrawerCursorSprite;
+    private Sprite flamethrowerCursorSprite;
+    private Sprite bombLauncherCursorSprite;
+    private Sprite trapCursorSprite;
+    private Sprite turretCursorSprite;
 
     private Sprite previousCursorSprite;
     private CursorType currentCursorType = CursorType.Default;
+
+    // The scale the cursor object had at startup, before we touch it.
+    private Vector3 baseScale = Vector3.one;
+    private bool baseScaleCaptured = false;
 
     public enum CursorType
     {
@@ -38,7 +54,11 @@ public class CursorManager : MonoBehaviour
         Hook,
         Ranged,
         HookHightlight,
-        ObstacleDrawer
+        ObstacleDrawer,
+        Flamethrower,
+        BombLauncher,
+        Trap,
+        Turret
     }
 
     void Awake()
@@ -51,6 +71,30 @@ public class CursorManager : MonoBehaviour
         else
         {
             Destroy(gameObject);
+        }
+    }
+
+    void Start()
+    {
+        CaptureBaseScale();
+    }
+
+    private void CaptureBaseScale()
+    {
+        if (baseScaleCaptured) return;
+        if (cursorSpriteRenderer != null)
+        {
+            baseScale = cursorSpriteRenderer.transform.localScale;
+            baseScaleCaptured = true;
+
+            // Auto-detect target size from the default sprite if not manually set.
+
+            if (defaultCursorSprite != null && targetCursorWorldSize <= 0f)
+            {
+                float defaultSpriteSize = Mathf.Max(defaultCursorSprite.bounds.size.x,
+                                                      defaultCursorSprite.bounds.size.y);
+                targetCursorWorldSize = defaultSpriteSize * Mathf.Max(baseScale.x, baseScale.y);
+            }
         }
     }
 
@@ -70,35 +114,21 @@ public class CursorManager : MonoBehaviour
         hookHighlightCursorSprite = Resources.Load<Sprite>(hookHighlightCursorPath);
         obstacleDrawerCursorSprite = Resources.Load<Sprite>(obstacleDrawerCursorPath);
         rangedCursorSprite = Resources.Load<Sprite>(rangedCursorPath);
-
-        // DEBUG LOGGING
-        /*
-        Debug.Log("========== CURSOR SPRITES LOADED ==========");
-        Debug.Log($"Repair: {(repairCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
-        Debug.Log($"Melee: {(meleeCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
-        Debug.Log($"Hook: {(hookCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
-        Debug.Log($"ObstacleDrawer: {(obstacleDrawerCursorSprite != null ? "✓ LOADED" : "✗ NULL")}");
-        Debug.Log($"Ranged: {(rangedCursorSprite != null ? "✓ LOADED" : "✗ NULL")} <- Path: '{rangedCursorPath}'");
-        Debug.Log("==========================================");
-
-        if (rangedCursorSprite == null)
-        {
-            Debug.LogError($"[CursorManager] RANGED CURSOR FAILED TO LOAD!");
-            Debug.LogError($"[CursorManager] Tried path: '{rangedCursorPath}'");
-            Debug.LogError($"[CursorManager] Full path should be: Assets/Resources/{rangedCursorPath}.png (or in spritesheet)");
-        }
-        */
+        flamethrowerCursorSprite = Resources.Load<Sprite>(flamethrowerCursorPath);
+        bombLauncherCursorSprite = Resources.Load<Sprite>(bombLauncherCursorPath);
+        trapCursorSprite = Resources.Load<Sprite>(trapCursorPath);
+        turretCursorSprite = Resources.Load<Sprite>(turretCursorPath);
     }
 
     public void SetCursor(CursorType cursorType)
     {
-        //Debug.Log($"[CursorManager] SetCursor called with: {cursorType}");
-
         if (cursorSpriteRenderer == null)
         {
             Debug.LogWarning("CursorManager: No SpriteRenderer assigned");
             return;
         }
+
+        CaptureBaseScale();
 
         bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
 
@@ -125,22 +155,41 @@ public class CursorManager : MonoBehaviour
             CursorType.Ranged => rangedCursorSprite,
             CursorType.HookHightlight => hookHighlightCursorSprite,
             CursorType.ObstacleDrawer => obstacleDrawerCursorSprite,
+            CursorType.Flamethrower => flamethrowerCursorSprite,
+            CursorType.BombLauncher => bombLauncherCursorSprite,
+            CursorType.Trap => trapCursorSprite ?? defaultCursorSprite,
+            CursorType.Turret => turretCursorSprite ?? defaultCursorSprite,
             _ => defaultCursorSprite
         };
-
-        //Debug.Log($"[CursorManager] Target sprite for {cursorType}: {(targetSprite != null ? targetSprite.name : "NULL")}");
 
         if (targetSprite != null)
         {
             cursorSpriteRenderer.sprite = targetSprite;
             cursorSpriteRenderer.color = Color.white;
             currentCursorType = cursorType;
-            //Debug.Log($"[CursorManager] ✓ Successfully set cursor to {cursorType} (sprite: {targetSprite.name})");
+
+            NormalizeCursorScale(targetSprite);
         }
         else
         {
-            Debug.LogError($"[CursorManager] ✗ {cursorType} cursor sprite is NULL! Cannot change cursor!");
+            Debug.LogError($"[CursorManager] {cursorType} cursor sprite is NULL! Cannot change cursor!");
         }
+    }
+
+    /// <summary>
+    /// Adjusts the SpriteRenderer's localScale so every cursor sprite renders
+    /// at the same world-space size regardless of pixel dimensions or PPU.
+    /// </summary>
+    private void NormalizeCursorScale(Sprite sprite)
+    {
+        if (sprite == null || cursorSpriteRenderer == null) return;
+
+        // sprite.bounds.size is the unscaled world size (pixels / pixelsPerUnit)
+        float spriteWorldSize = Mathf.Max(sprite.bounds.size.x, sprite.bounds.size.y);
+        if (spriteWorldSize < 0.001f) return;
+
+        float scaleFactor = targetCursorWorldSize / spriteWorldSize;
+        cursorSpriteRenderer.transform.localScale = baseScale * scaleFactor;
     }
 
     public void ReturnToPreviousCursor()
@@ -154,6 +203,8 @@ public class CursorManager : MonoBehaviour
         cursorSpriteRenderer.sprite = previousCursorSprite;
         cursorSpriteRenderer.color = Color.white;
         currentCursorType = CursorType.Default;
+
+        NormalizeCursorScale(previousCursorSprite);
     }
 
     public CursorType GetCurrentCursorType()

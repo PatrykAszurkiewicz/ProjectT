@@ -147,6 +147,7 @@ public class ObstacleDrawerSystem
 
         // Add DrawnObstacle component
         DrawnObstacle obstacle = obstacleObj.AddComponent<DrawnObstacle>();
+        obstacle.SetDrawColor(weaponData.drawLineColor);
         obstacle.InitializeObstacle(
             path,
             weaponData.solidifiedColor,
@@ -164,15 +165,10 @@ public class ObstacleDrawerSystem
             if (oldestObstacle != null)
             {
                 Object.Destroy(oldestObstacle);
-                //Debug.Log("[ObstacleDrawer] Removed oldest obstacle (max limit reached)");
             }
         }
 
-        // Play creation sound if available
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-        {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerCreation, playerTransform.position);
-        }
+        // Sound now plays inside DrawnObstacle after solidification completes
     }
 
     public bool IsDrawing()

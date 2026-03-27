@@ -80,7 +80,39 @@ public class LightningOnDodgeEffect : MonoBehaviour
             SpawnLightningBolt(boltPosition, dashAngle, lightningDamage);
         }
 
+        // Night mode: 2 lights covering the trail instead of one per bolt
+        SpawnLightningTrailNightLights(startPos, endPos);
+
         //Debug.Log($"[LIGHTNING_DODGE] Spawned {lightningBoltCount} lightning bolts at angle {dashAngle}°");
+    }
+
+    private void SpawnLightningTrailNightLights(Vector2 startPos, Vector2 endPos)
+    {
+        if (NightOverlay.Instance == null) return;
+
+        float trailLength = Vector2.Distance(startPos, endPos);
+        int count = 6;
+        float spacing = trailLength / (count - 1);
+        float lightRadius = Mathf.Max(spacing * 1.3f, 0.5f);
+
+        for (int i = 0; i < count; i++)
+        {
+            float t = i / (float)(count - 1);
+            Vector2 pos = Vector2.Lerp(startPos, endPos, t);
+
+            GameObject lightObj = new GameObject($"LightningTrailLight_{i}");
+            lightObj.transform.position = pos;
+
+            NightLight nl = lightObj.AddComponent<NightLight>();
+            nl.radius = lightRadius;
+            nl.intensity = 0.35f;
+            nl.lightColor = new Color(0.7f, 0.85f, 1f);
+            nl.warmTintStrength = 0.3f;
+            nl.flickerSpeed = 15f;
+            nl.flickerAmount = 0.06f;
+
+            Destroy(lightObj, lightningDuration);
+        }
     }
 
     private void SpawnLightningBolt(Vector2 position, float angle, float damage)

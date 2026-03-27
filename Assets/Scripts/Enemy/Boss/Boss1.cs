@@ -109,6 +109,10 @@ public class Boss1 : BaseBossStats //, IDamageable
     private Vector3 predictedTargetPosition;
     private float laserMarginCropUnits;
 
+    // Night-mode laser illumination — point lights along the beam
+    private System.Collections.Generic.List<GameObject> laserNightLights =
+        new System.Collections.Generic.List<GameObject>();
+
     // Warning telegraph 
     private LineRenderer laserWarningLine;
     private GameObject laserWarningObject;
@@ -378,7 +382,7 @@ public class Boss1 : BaseBossStats //, IDamageable
     {
         if (isDying) return;
 
-        Debug.Log($">>> Boss1.TakeDamage called! amount={amount}, armor={bossArmor}, health={currentHealth}");
+        //Debug.Log($">>> Boss1.TakeDamage called! amount={amount}, armor={bossArmor}, health={currentHealth}");
 
         if (!armorDestroyed && bossArmor > 0)
         {
@@ -415,7 +419,7 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
     private void ExecuteBossDeath()
     {
-        Debug.Log("[BOSS] ExecuteBossDeath called");
+        //Debug.Log("[BOSS] ExecuteBossDeath called");
 
         isDying = true;  // FIRST — before any checks
         if (!gameObject.scene.isLoaded) return;
@@ -441,6 +445,7 @@ public class Boss1 : BaseBossStats //, IDamageable
         isLaserActive = false;
         isPerformingLaserAttack = false;
         groundHitSoundPending = false;
+        CleanupLaserNightLights();
 
         if (laserRenderer != null) laserRenderer.enabled = false;
         if (laserWarningLine != null) laserWarningLine.enabled = false;
@@ -778,6 +783,9 @@ public class Boss1 : BaseBossStats //, IDamageable
         float fireFrameTime = laserFireDuration / 29f;
         float damagePerFrame = laserDamagePerSecond * fireFrameTime;
 
+        // Night mode: spawn point lights along the beam so it illuminates through darkness
+        SpawnLaserNightLights();
+
         for (int frame = 34; frame <= 62 && frame < laserSprites.Length; frame++)
         {
             if (isDying) yield break;
@@ -785,6 +793,9 @@ public class Boss1 : BaseBossStats //, IDamageable
             laserRenderer.sprite = laserSprites[frame];
             UpdateBossFlipForLaser();
             UpdateLaserTransform(true);
+
+            // Night mode: reposition lights along current beam direction
+            UpdateLaserNightLights();
 
             Vector3 damageDir = GetLaserDamageDirection();
             if (damageDir != Vector3.zero)
@@ -804,6 +815,7 @@ public class Boss1 : BaseBossStats //, IDamageable
             yield return new WaitForSeconds(fireFrameTime);
         }
 
+        CleanupLaserNightLights();
         laserRenderer.enabled = false;
         isLaserActive = false;
         lockedLaserDirection = Vector3.zero;
@@ -942,10 +954,63 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 
 
+    // NIGHT MODE — LASER ILLUMINATION
+
+    private void SpawnLaserNightLights()
+    {
+        CleanupLaserNightLights();
+        if (NightOverlay.Instance == null) return;
+
+        // Dense strip of small overlapping lights — reads as one continuous illuminated beam
+        int pointCount = 12;
+        for (int i = 0; i < pointCount; i++)
+        {
+            GameObject lightObj = new GameObject($"LaserNightLight_{i}");
+            NightLight nl = lightObj.AddComponent<NightLight>();
+            nl.radius = 1.0f;
+            nl.intensity = 0.7f;
+            nl.lightColor = new Color(1f, 0.3f, 0.15f); // red laser tint
+            nl.warmTintStrength = 0.6f;
+            nl.flickerSpeed = 8f;
+            nl.flickerAmount = 0.08f;
+            laserNightLights.Add(lightObj);
+        }
+
+        UpdateLaserNightLights();
+    }
+
+    private void UpdateLaserNightLights()
+    {
+        if (laserNightLights.Count == 0) return;
+
+        Vector3 spawnPos = GetLaserSpawnPosition();
+        Vector3 dir = GetLaserDamageDirection();
+        if (dir == Vector3.zero && currentTarget != null)
+            dir = (currentTarget.position - spawnPos).normalized;
+        if (dir == Vector3.zero) return;
+
+        int count = laserNightLights.Count;
+        for (int i = 0; i < count; i++)
+        {
+            if (laserNightLights[i] == null) continue;
+            float t = Mathf.Lerp(0.05f, 0.95f, i / (float)(count - 1));
+            laserNightLights[i].transform.position = spawnPos + dir * (laserRange * t);
+        }
+    }
+
+    private void CleanupLaserNightLights()
+    {
+        foreach (var go in laserNightLights)
+            if (go != null) Destroy(go);
+        laserNightLights.Clear();
+    }
+
+
     // CLEANUP
 
     private void OnDestroy()
     {
+        CleanupLaserNightLights();
         if (laserObject != null) Destroy(laserObject);
         if (laserWarningObject != null) Destroy(laserWarningObject);
         if (spawnedHead != null && spawnedHead.gameObject != null)
@@ -1109,3 +1174,4 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 #endif
 }
+

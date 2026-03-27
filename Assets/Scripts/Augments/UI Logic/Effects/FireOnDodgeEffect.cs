@@ -81,6 +81,40 @@ public class FireOnDodgeEffect : MonoBehaviour
 
             SpawnFire(firePosition, initialDamage, dotDamagePerSecond, i);
         }
+
+        // Night mode: 3 lights covering the whole trail (start, middle, end)
+        // instead of one per patch — keeps total light count low
+        SpawnFireTrailNightLights(startPos, endPos);
+    }
+
+    private void SpawnFireTrailNightLights(Vector2 startPos, Vector2 endPos)
+    {
+        if (NightOverlay.Instance == null) return;
+
+        float trailLength = Vector2.Distance(startPos, endPos);
+        int count = 8;
+        float spacing = trailLength / (count - 1);
+        // Radius large enough that each light deeply overlaps its neighbors
+        float lightRadius = Mathf.Max(spacing * 1.4f, 0.6f);
+
+        for (int i = 0; i < count; i++)
+        {
+            float t = i / (float)(count - 1);
+            Vector2 pos = Vector2.Lerp(startPos, endPos, t);
+
+            GameObject lightObj = new GameObject($"FireTrailLight_{i}");
+            lightObj.transform.position = pos;
+
+            NightLight nl = lightObj.AddComponent<NightLight>();
+            nl.radius = lightRadius;
+            nl.intensity = 0.4f;
+            nl.lightColor = new Color(1f, 0.55f, 0.1f);
+            nl.warmTintStrength = 0.6f;
+            nl.flickerSpeed = 4f;
+            nl.flickerAmount = 0.15f;
+
+            Destroy(lightObj, fireDuration);
+        }
     }
 
     private void SpawnFire(Vector2 position, float initialDamage, float dotDamage, int index)
@@ -485,3 +519,5 @@ public class BurningEffect : MonoBehaviour
         }
     }
 }
+
+

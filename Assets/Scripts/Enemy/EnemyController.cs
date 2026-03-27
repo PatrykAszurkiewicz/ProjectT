@@ -42,11 +42,11 @@ public class EnemyController : MonoBehaviour
     private Color originalColor;
     private SpriteRenderer spriteRenderer;
 
-
     private bool isAttackingCycle = false;
-
-    // Cached reference to animation controller
     private EnemyAnimationController animController;
+
+    // Knockback direct velocity
+    private Vector2 knockbackVelocity;
 
     public float GetAttackCooldown() => attackCooldown;
 
@@ -60,14 +60,12 @@ public class EnemyController : MonoBehaviour
         if (spriteRenderer != null)
             originalColor = spriteRenderer.color;
 
-        // Y-Sort: dynamically sort against grass based on Y position
         if (GetComponent<YSortEntity>() == null)
         {
             var ysort = gameObject.AddComponent<YSortEntity>();
             ysort.sortPrecision = 10f;
             ysort.sortOrderBase = 1000;
 
-            // Bosses are larger sprites — need bigger offset to avoid grass protruding
             bool isBoss = GetComponent<Boss1>() != null || GetComponent<BaseBossStats>() != null;
             ysort.sortYOffset = isBoss ? -1.0f : -0.2f;
         }
@@ -77,7 +75,6 @@ public class EnemyController : MonoBehaviour
             coreTarget = core.transform;
 
         currentTarget = coreTarget;
-
         InvokeRepeating(nameof(UpdateTarget), 0f, 0.5f);
     }
 
@@ -98,12 +95,15 @@ public class EnemyController : MonoBehaviour
             if (rb != null) rb.linearVelocity = Vector2.zero;
             return;
         }
+
         if (EnergyManager.Instance != null && EnergyManager.Instance.IsGameOver())
         {
             if (rb != null) rb.linearVelocity = Vector2.zero;
             return;
         }
-        // Don't move while Boss1 is performing laser attack
+
+
+
         var boss1 = GetComponent<Boss1>();
         if (boss1 != null)
         {
@@ -120,19 +120,41 @@ public class EnemyController : MonoBehaviour
             return;
         }
 
-        if (currentTarget == null || isKnockedBack || !IsValidTarget(currentTarget))
+        // Knockback direct velocity with decay
+        if (isKnockedBack)
         {
-            if (!isKnockedBack && !IsValidTarget(currentTarget))
+            if (rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
+            {
+                knockbackTimer -= Time.fixedDeltaTime;
+                knockbackVelocity *= 0.82f;
+                rb.linearVelocity = knockbackVelocity;
+
+                if (knockbackTimer <= 0f)
+                {
+                    isKnockedBack = false;
+                    rb.linearVelocity = Vector2.zero;
+                }
+            }
+            else
+            {
+                // Non-dynamic body 
+                isKnockedBack = false;
+            }
+            return;
+        }
+
+        if (currentTarget == null || !IsValidTarget(currentTarget))
+        {
+            if (!IsValidTarget(currentTarget))
                 UpdateTarget();
             return;
         }
 
         float distance = Vector2.Distance(transform.position, currentTarget.position);
 
-        // Stop moving when in attack range or mid-cycle
         if (distance <= attackRange || isAttackingCycle)
         {
-            if (!isKnockedBack) rb.linearVelocity = Vector2.zero;
+            rb.linearVelocity = Vector2.zero;
             return;
         }
 
@@ -279,7 +301,7 @@ public class EnemyController : MonoBehaviour
         }
 
         if (currentTarget != null && !isFrozen && !isAttackingCycle
-    && (EnergyManager.Instance == null || !EnergyManager.Instance.IsGameOver()))
+            && (EnergyManager.Instance == null || !EnergyManager.Instance.IsGameOver()))
         {
             float distance = Vector2.Distance(transform.position, currentTarget.position);
 
@@ -288,7 +310,6 @@ public class EnemyController : MonoBehaviour
                 attackTimer -= Time.deltaTime;
                 if (attackTimer <= 0f)
                 {
-
                     StartCoroutine(AttackCycle(currentTarget));
                 }
             }
@@ -299,61 +320,40 @@ public class EnemyController : MonoBehaviour
         }
     }
 
-    // Owns the entire attack cycle start to finish.
-    // No Attack() can fire again until this coroutine completes.
     private IEnumerator AttackCycle(Transform target)
     {
         isAttackingCycle = true;
 
-        // Tell animation controller to play the melee attack animation
         if (animController != null)
             animController.PlayMeleeAttackAnimation();
 
         var boss1 = GetComponent<Boss1>();
 
         if (boss1 != null)
-        {
-            // Boss1: delay both damage AND sound until the ground-hit frame.
-            // Boss1.OnMeleeAttackFired() handles sound and damage at correct frame
             boss1.OnMeleeAttackFired(target);
-        }
         else
-        {
-            // Regular enemies: hit + sound immediately
             PerformHit(target);
-        }
 
-        // Wait for the full attack animation to finish.
-        // The animation plays at enemyData.animationSpeed per frame
-        // for enemyData.attack.frameCount frames.
         float animDuration = 0f;
         if (stats != null && stats.enemyData != null)
             animDuration = stats.enemyData.animationSpeed * stats.enemyData.attack.frameCount;
 
-        // Wait the longer of: animation duration or attackCooldown.
-        // This guarantees the animation finishes AND the cooldown is respected.
         float waitTime = Mathf.Max(animDuration, attackCooldown);
         yield return new WaitForSeconds(waitTime);
 
-        // Tell animation controller the melee attack is done
         if (animController != null)
             animController.StopMeleeAttackAnimation();
 
         isAttackingCycle = false;
-
-        // Reset the cooldown timer so Update() waits a full cooldown period
-
         attackTimer = attackCooldown;
     }
 
-    /// Perform hit immediately, used by regular non-boss enemies.
     private void PerformHit(Transform target)
     {
         PlayAttackSound();
         ApplyDamageToTarget(target);
     }
 
-    /// Apply damage to target without playing any sound.
     public void ApplyDamageToTarget(Transform target)
     {
         if (target == null) return;
@@ -367,6 +367,8 @@ public class EnemyController : MonoBehaviour
             var playerStats = stats as PlayerStats;
             if (playerStats != null)
             {
+                CombatFeel.OnPlayerHurt();
+
                 var reflectionEffect = playerStats.GetComponent<DamageReflectionEffect>();
                 if (reflectionEffect != null)
                     reflectionEffect.ReflectDamage(damageAmount, gameObject);
@@ -432,11 +434,23 @@ public class EnemyController : MonoBehaviour
         return true;
     }
 
-    public void ApplyKnockback(Vector2 direction, float force, float duration = 0.2f)
+    /// <summary>
+    /// SAFE knockback — checks rigidbody type before setting velocity.
+    /// Bosses with static/kinematic bodies won't crash.
+    /// </summary>
+    public void ApplyKnockback(Vector2 direction, float force, float duration = 0.25f)
     {
+        if (rb == null || rb.bodyType != RigidbodyType2D.Dynamic)
+        {
+            Debug.Log($"[CombatFeel] KNOCKBACK SKIPPED on {gameObject.name} (non-dynamic rigidbody)");
+            return;
+        }
+
         isKnockedBack = true;
         knockbackTimer = duration;
-        rb.AddForce(direction.normalized * force, ForceMode2D.Impulse);
+        knockbackVelocity = direction.normalized * force;
+        rb.linearVelocity = knockbackVelocity;
+        Debug.Log($"[CombatFeel] KNOCKBACK {gameObject.name} dir={direction} force={force}");
     }
 
     private void OnDrawGizmosSelected()
@@ -456,3 +470,4 @@ public class EnemyController : MonoBehaviour
         Gizmos.DrawWireSphere(transform.position, avoidDistance);
     }
 }
+

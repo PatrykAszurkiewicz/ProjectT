@@ -36,8 +36,12 @@ public struct BiomeBackgroundDefaults
             case BiomeType.Marsh:
                 return new BiomeBackgroundDefaults { backgroundScale = 2.2f };
 
+            case BiomeType.Night:
+                return new BiomeBackgroundDefaults { backgroundScale = 1.0f };
+
             default:
                 return ForBiome(BiomeType.Grass);
         }
     }
 }
+

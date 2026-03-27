@@ -241,6 +241,10 @@ public class WeaponRollUI : MonoBehaviour
         string path;
         if (wd.isGrapplingHook) path = "Icons/WeaponIconGrapplingHook";
         else if (wd.isObstacleDrawer) path = "Icons/WeaponIconObstacleDrawer";
+        else if (wd.isFlamethrower) path = "Icons/WeaponIconFlamethrower";
+        else if (wd.isBombLauncher) path = "Icons/WeaponIconBomb";
+        else if (wd.isTrap) path = "Icons/WeaponIconTrap";
+        else if (wd.isTurret) path = "Icons/WeaponIconTurret";
         //TODO verify whether we can change to isShield
         else if (wd.armorBonus > 0f) path = "Icons/WeaponIconShield";
         else if (wd.isRanged) path = "Icons/WeaponIconRanged";

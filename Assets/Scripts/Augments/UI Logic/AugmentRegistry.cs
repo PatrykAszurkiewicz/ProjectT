@@ -2362,7 +2362,7 @@ public class AugmentRegistry : MonoBehaviour
 
                         if (debugMode)
                         {
-                            Debug.Log($"Loaded augment: ID={augment.ID}, Name={augment.Name}, Stats={augment.AffectedStats}, Targets={augment.TargetTypes}");
+                            //Debug.Log($"Loaded augment: ID={augment.ID}, Name={augment.Name}, Stats={augment.AffectedStats}, Targets={augment.TargetTypes}");
                         }
                     }
                     else
@@ -2381,7 +2381,7 @@ public class AugmentRegistry : MonoBehaviour
             }
         }
 
-        Debug.Log($"AugmentRegistry: Successfully loaded {loadedCount} augments from CSV");
+        //Debug.Log($"AugmentRegistry: Successfully loaded {loadedCount} augments from CSV");
     }
 
     private string[] ParseCSVLine(string line)
@@ -2495,7 +2495,7 @@ public class AugmentRegistry : MonoBehaviour
         // Special handling check if this is a multi-target synergy augment (affects both Player and Tower - like coordination)
         if (augmentData.AffectsPlayer && augmentData.AffectsTower)
         {
-            Debug.Log($"[AUGMENT] Detected multi-target synergy augment: {augmentData.Name}");
+            //Debug.Log($"[AUGMENT] Detected multi-target synergy augment: {augmentData.Name}");
 
             // Create a target with BOTH player and tower
             AugmentTarget target = CreateTargetForAugment(augmentData);
@@ -2579,13 +2579,13 @@ public class AugmentRegistry : MonoBehaviour
                 }
             }
 
-            Debug.Log($"Applied tower augment '{augmentData.Name}' to {successCount}/{allTowers.Length} existing towers");
+            //Debug.Log($"Applied tower augment '{augmentData.Name}' to {successCount}/{allTowers.Length} existing towers");
         }
 
         appliedAugments.Add(augmentID);
         OnAugmentApplied?.Invoke(augmentData);
 
-        Debug.Log($"Tower augment '{augmentData.Name}' will now apply to all future towers");
+        //Debug.Log($"Tower augment '{augmentData.Name}' will now apply to all future towers");
         return true;
     }
 
@@ -2596,7 +2596,7 @@ public class AugmentRegistry : MonoBehaviour
             .Where(a => a.Priority == 0)
             .ToList();
 
-        Debug.Log($"=== Testing {towerAugments.Count} Tower Augments ===");
+        //Debug.Log($"=== Testing {towerAugments.Count} Tower Augments ===");
 
         foreach (var augment in towerAugments)
         {
@@ -2606,9 +2606,9 @@ public class AugmentRegistry : MonoBehaviour
 
     public void TestSingleTowerAugment(AugmentData augment)
     {
-        Debug.Log($"\n--- Testing Tower Augment: {augment.Name} (ID: {augment.ID}) ---");
-        Debug.Log($"Affected Stats: {augment.AffectedStats}");
-        Debug.Log($"Target Types: {augment.TargetTypes}");
+        //Debug.Log($"\n--- Testing Tower Augment: {augment.Name} (ID: {augment.ID}) ---");
+        //Debug.Log($"Affected Stats: {augment.AffectedStats}");
+        //Debug.Log($"Target Types: {augment.TargetTypes}");
 
         // Handle NULL stats augments
         if (string.IsNullOrEmpty(augment.AffectedStats) || augment.AffectedStats == "NULL")
@@ -2633,12 +2633,12 @@ public class AugmentRegistry : MonoBehaviour
         bool allModificationsValid = true;
         foreach (var mod in augment.ParsedModifications)
         {
-            Debug.Log($"  Testing modification: {mod.StatName} {mod.OperationType} {mod.Value} (Target: {mod.TargetType})");
+            //Debug.Log($"  Testing modification: {mod.StatName} {mod.OperationType} {mod.Value} (Target: {mod.TargetType})");
 
             // Handle global repair cost effect
             if (mod.StatName == "tower_repair_cost")
             {
-                Debug.Log($"    ✅ Global repair cost effect (affects EnergyManager)");
+                //Debug.Log($"    ✅ Global repair cost effect (affects EnergyManager)");
                 continue;
             }
 
@@ -2678,7 +2678,7 @@ public class AugmentRegistry : MonoBehaviour
 
     private AugmentTarget CreateTargetForAugment(AugmentData augment)
     {
-        Debug.Log($"[CreateTargetForAugment] Augment={augment.Name}, TargetTypes={augment.TargetTypes}");
+        //Debug.Log($"[CreateTargetForAugment] Augment={augment.Name}, TargetTypes={augment.TargetTypes}");
 
         var target = new AugmentTarget(null as PlayerStats);
 
@@ -2703,7 +2703,7 @@ public class AugmentRegistry : MonoBehaviour
         {
             target.Tower = FindFirstObjectByType<Tower>();
             var allTowers = FindObjectsByType<Tower>(FindObjectsSortMode.None);
-            Debug.Log($"[CreateTargetForAugment] Found {allTowers.Length} towers in scene for augment: {augment.Name}");
+            //Debug.Log($"[CreateTargetForAugment] Found {allTowers.Length} towers in scene for augment: {augment.Name}");
         }
 
         if (augment.IsGlobal || augment.AffectedStats.Contains("repair_cost") || augment.AffectedStats.Contains("build_cost"))
@@ -2750,7 +2750,7 @@ public class AugmentRegistry : MonoBehaviour
                         try
                         {
                             effect.Apply(target);
-                            Debug.Log($"Applied existing augment '{augmentData.Name}' to new tower: {tower.towerName}");
+                            //Debug.Log($"Applied existing augment '{augmentData.Name}' to new tower: {tower.towerName}");
                         }
                         catch (System.Exception e)
                         {
@@ -2807,7 +2807,7 @@ public class AugmentTarget
 
     public static AugmentTarget ForWeapon()
     {
-        Debug.Log("[ForWeapon] Start szukania komponentu Weapon w scenie...");
+        //Debug.Log("[ForWeapon] Start szukania komponentu Weapon w scenie...");
 
         var weapon = UnityEngine.Object.FindFirstObjectByType<Weapon>();
         if (weapon == null)
@@ -2815,14 +2815,14 @@ public class AugmentTarget
             Debug.LogError("[ForWeapon] Nie znaleziono żadnego komponentu Weapon w scenie!");
             return null;
         }
-        Debug.Log("[ForWeapon] Weapon znaleziony na obiekcie: " + weapon.gameObject.name);
+        //Debug.Log("[ForWeapon] Weapon znaleziony na obiekcie: " + weapon.gameObject.name);
 
         if (weapon.GetWeaponData() == null)
         {
             Debug.LogError("[ForWeapon] Weapon znaleziony, ale pole weaponData jest PUSTE!");
             return null;
         }
-        Debug.Log("[ForWeapon] WeaponData poprawnie przypisane.");
+        //Debug.Log("[ForWeapon] WeaponData poprawnie przypisane.");
 
         return new AugmentTarget(weapon.GetWeaponData());
     }

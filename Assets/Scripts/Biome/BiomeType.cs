@@ -6,5 +6,6 @@ public enum BiomeType
     Wasteland,
     Stones,
     GrassCartoon,
-    Marsh
+    Marsh,
+    Night
 }

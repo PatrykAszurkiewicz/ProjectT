@@ -1,16 +1,8 @@
 using UnityEngine;
 
-/// <summary>
-/// Attach to ANY GameObject in the scene (e.g. the BiomeManager or Camera).
-/// On Awake, this forces the Transparency Sort Axis to Y=1 via script,
-/// which guarantees the setting is correct even if Project Settings get reset.
-///
-/// Also provides runtime diagnostics (enable debugLogging in Inspector)
-/// to verify sorting is working.
-///
-/// REMOVE THIS SCRIPT once sorting is confirmed working — the Project Settings
-/// approach is cleaner for production. This is a belt-and-suspenders safety net.
-/// </summary>
+
+// Attach to ANY GameObject in the scene (e.g. the BiomeManager or Camera).
+
 public class TransparencySortAxisEnforcer : MonoBehaviour
 {
     [Header("Sort Axis (should be 0, 1, 0 for Y-sorting)")]
@@ -29,8 +21,8 @@ public class TransparencySortAxisEnforcer : MonoBehaviour
         {
             cam.transparencySortMode = TransparencySortMode.CustomAxis;
             cam.transparencySortAxis = transparencySortAxis;
-            Debug.Log($"[TransparencySortAxisEnforcer] Set camera '{cam.name}' " +
-                      $"transparencySortMode=CustomAxis, axis={transparencySortAxis}");
+            //Debug.Log($"[TransparencySortAxisEnforcer] Set camera '{cam.name}' " +
+            //          $"transparencySortMode=CustomAxis, axis={transparencySortAxis}");
         }
         else
         {
@@ -62,8 +54,8 @@ public class TransparencySortAxisEnforcer : MonoBehaviour
         Camera cam = Camera.main;
         if (cam != null)
         {
-            Debug.Log($"[SortDiag] Camera sortMode={cam.transparencySortMode}, " +
-                      $"sortAxis={cam.transparencySortAxis}");
+            //Debug.Log($"[SortDiag] Camera sortMode={cam.transparencySortMode}, " +
+            //          $"sortAxis={cam.transparencySortAxis}");
         }
 
         // Find the player and log its sort state
@@ -73,9 +65,9 @@ public class TransparencySortAxisEnforcer : MonoBehaviour
             var sr = player.GetComponent<SpriteRenderer>();
             if (sr != null)
             {
-                Debug.Log($"[SortDiag] Player: pos.y={player.transform.position.y:F2}, " +
-                          $"sortingLayer='{sr.sortingLayerName}', sortingOrder={sr.sortingOrder}, " +
-                          $"sortPoint={sr.spriteSortPoint}");
+                //Debug.Log($"[SortDiag] Player: pos.y={player.transform.position.y:F2}, " +
+                //          $"sortingLayer='{sr.sortingLayerName}', sortingOrder={sr.sortingOrder}, " +
+                //          $"sortPoint={sr.spriteSortPoint}");
             }
         }
     }

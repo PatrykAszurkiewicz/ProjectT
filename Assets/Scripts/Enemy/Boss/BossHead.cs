@@ -262,8 +262,9 @@ public class BossHead : MonoBehaviour, IDamageable
 
     int GetGungeSortingOrder()
     {
-        // Gunge drops should always be above grass (400-1600) but below the head (2000)
-        return 1999;
+        // Gunge puddles sit ON the ground: above the background (~-1) but below
+        // grass, players, enemies and bosses (all Y-sorted from sortOrderBase 1000+).
+        return 5;
     }
 
     void DropGungeAt(Vector3 position, float scale)
@@ -292,6 +293,13 @@ public class BossHead : MonoBehaviour, IDamageable
         TimedDestroy td = drop.AddComponent<TimedDestroy>();
         td.lifetime = gungeLifetime + gungeFadeTime;
         td.fadeDelay = gungeLifetime;
+
+        // Night mode: gunge puddle glows through the darkness like a toxic light source
+        NightLight nl = drop.AddComponent<NightLight>();
+        nl.radius = 0.4f + scale * 0.5f;
+        nl.intensity = 0.3f;
+        nl.lightColor = new Color(0.91f, 0.33f, 0.96f);
+        nl.warmTintStrength = 0.5f;
 
         SceneGungeDrops.Add(drop);
     }
@@ -595,8 +603,6 @@ public class BossHead : MonoBehaviour, IDamageable
 
 
     // PULSE RINGS
-
-
     void BuildPulseRingSprite()
     {
         int size = 128;
@@ -695,8 +701,6 @@ public class BossHead : MonoBehaviour, IDamageable
 
 
     // DAMAGE and DEATH
-
-
     public bool TakeDamage(float damageAmount, GameObject damageSource = null)
     {
         if (isDestroyed) return false;
@@ -752,10 +756,7 @@ public class BossHead : MonoBehaviour, IDamageable
     public bool IsDestroyed() => isDestroyed;
 }
 
-
-
 // TimedDestroy 
-
 public class TimedDestroy : MonoBehaviour
 {
     public float lifetime = 20f;

@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ac12f27d2b7d024d81962101468dd6e, type: 3}
+  m_Name: BombLauncherTest
+  m_EditorClassIdentifier: 
+  weaponName: BombLauncher
+  sprite: {fileID: -7532500106441991009, guid: 9a120914f56b2db44865f8aa7b91f52c, type: 3}
+  damage: 0
+  attackCooldown: 0
+  armorBonus: 0
+  knockBack: 0
+  knockBackForce: 0
+  isRanged: 0
+  projectilePrefab: {fileID: 0}
+  projectileSpeed: 0
+  size: {x: 1, y: 1}
+  isGrapplingHook: 0
+  hookRange: 12
+  hookSpeed: 20
+  pullForce: 15
+  targetingAngle: 25
+  hookLineColor: {r: 0.6901961, g: 0.7686275, b: 0.8705883, a: 1}
+  targetHighlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  lineWidth: 0.08
+  isObstacleDrawer: 0
+  drawDuration: 0.3
+  obstacleWidth: 0.3
+  maxObstacles: 3
+  minDrawDistance: 0.1
+  drawLineColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
+  solidifiedColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+  obstacleHealth: 50
+  isBombLauncher: 1
+  bombMaxMines: 5
+  bombProximityRadius: 1.5
+  bombExplosionRadius: 3
+  bombFriendlyFire: 0
+  bombArmDelay: 0.5
+  isFlamethrower: 0
+  flameRange: 4.5
+  flameConeAngle: 45
+  flameDamageInterval: 0.15
+  flameSpeed: 6
+  flameFuelMax: 100
+  flameFuelDrain: 25
+  flameFuelRegen: 15
+  flameFuelRegenDelay: 0.8
+  flameParticlesPerSecond: 50
+  flameParticleLifetimeMin: 0.25
+  flameParticleLifetimeMax: 0.55

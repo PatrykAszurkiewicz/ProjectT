@@ -1437,6 +1437,10 @@ MonoBehaviour:
   - {fileID: 11400000, guid: e55ebc9d834ec5441ad8430220fe403b, type: 2}
   - {fileID: 11400000, guid: 3799f3ab7bf295b4583830c434bb1d2d, type: 2}
   - {fileID: 11400000, guid: 40d1aaa84d6447044afe59352c36c1dc, type: 2}
+  - {fileID: 11400000, guid: 8fafbb860d84e7b47a90a00f149993c2, type: 2}
+  - {fileID: 11400000, guid: a611138b6c2f34941aa2cf4036f6a5a7, type: 2}
+  - {fileID: 11400000, guid: f7504ecb6af6d71449fe364e4e606ea7, type: 2}
+  - {fileID: 11400000, guid: 17890ba350ffe4140840af38960596ba, type: 2}
 --- !u!114 &265518820
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2365,7 +2369,7 @@ MonoBehaviour:
   - {fileID: 2110909284}
   maxRerolls: 99
   debugMode: 1
-  forcedAugmentIDsList: 410000000400000042000000
+  forcedAugmentIDsList: 3a0100003b0100003d010000
   chosenAugmentsUI: {fileID: 1984759432}
 --- !u!1 &453391371 stripped
 GameObject:
@@ -2784,7 +2788,7 @@ MonoBehaviour:
   weaponData: {fileID: 0}
   attackCollider: {fileID: 549341035}
   visual: {fileID: 549341031}
-  defaultWeapon: {fileID: 11400000, guid: d2248ffdc90104e4ab0256a3018b224e, type: 2}
+  defaultWeapon: {fileID: 11400000, guid: 8fafbb860d84e7b47a90a00f149993c2, type: 2}
   grapplingDamage: 0
 --- !u!60 &549341035
 PolygonCollider2D:
@@ -3774,6 +3778,7 @@ RectTransform:
   - {fileID: 2035540613}
   - {fileID: 448482442}
   - {fileID: 1761470084}
+  - {fileID: 921845695}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -5189,6 +5194,60 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 920582221}
   m_CullTransparentMesh: 1
+--- !u!1 &921845694
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 921845695}
+  - component: {fileID: 921845696}
+  m_Layer: 5
+  m_Name: FlameThrowerFuel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &921845695
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 921845694}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 675493971}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &921845696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 921845694}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d751cfaa4b1d63c499eca513e9ccec3b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  position: {x: 66, y: 20}
+  barWidth: 110
+  barHeight: 20
+  fuelFull: {r: 1, g: 0.6, b: 0.1, a: 0.9}
+  fuelEmpty: {r: 0.4, g: 0.1, b: 0.05, a: 0.9}
+  barBackground: {r: 0.1, g: 0.1, b: 0.1, a: 0.7}
 --- !u!1 &933874273
 GameObject:
   m_ObjectHideFlags: 0
@@ -5625,6 +5684,11 @@ MonoBehaviour:
   hookHighlightCursorPath: Sprites/Cursors/cursor_spritesheet_hook_highlight
   obstacleDrawerCursorPath: Sprites/Cursors/cursor_spritesheet_obstacle_drawer
   rangedCursorPath: Sprites/Cursors/cursor_spritesheet_ranged
+  flamethrowerCursorPath: Sprites/Cursors/cursor_spritesheet_flamethrower
+  bombLauncherCursorPath: Sprites/Cursors/cursor_spritesheet_bomb
+  trapCursorPath: Sprites/Cursors/cursor_spritesheet_trap
+  turretCursorPath: Sprites/Cursors/cursor_spritesheet_turret
+  targetCursorWorldSize: 1.6
 --- !u!1 &1007241863
 GameObject:
   m_ObjectHideFlags: 0
@@ -6352,6 +6416,7 @@ GameObject:
   - component: {fileID: 1131375987}
   - component: {fileID: 1131375989}
   - component: {fileID: 1131375990}
+  - component: {fileID: 1131375991}
   m_Layer: 0
   m_Name: BiomeSetup
   m_TagString: Untagged
@@ -6403,6 +6468,7 @@ MonoBehaviour:
   backgroundScale: 1
   groundCoverageRadius: 80
   activeBiome: 5
+  enableNightMode: 0
   enableFog: 0
   applyBiomeFogDefaults: 1
   applyBiomeBackgroundDefaults: 1
@@ -6594,19 +6660,83 @@ MonoBehaviour:
   stonesDustMoteSpawnRadius: 60
   stonesWindStrength: 0.8
   stonesWindAngle: 5
-  grassCartoonInstanceCount: 25000
+  grassCartoonInstanceCount: 50000
   grassCartoonSpawnRadius: 50
   grassCartoonCoreExclusion: 0
   grassCartoonPrefab1: {fileID: 3529340004785745533, guid: f9d0bd9855bf4c24c89dc6c629c0dfe6, type: 3}
-  grassCartoonPrefab2: {fileID: 7253789670461475751, guid: 123cea73b6a40c344ac2ca81c2e4903a, type: 3}
-  grassCartoonPrefab3: {fileID: 3778974372923350033, guid: ce84b4ec23ebfc34a9534bb178177608, type: 3}
-  grassCartoonPrefab4: {fileID: 3997993523752458191, guid: 1078bcfa95c6254458dc3156ab6ab126, type: 3}
+  grassCartoonPrefab2: {fileID: 3997993523752458191, guid: 1078bcfa95c6254458dc3156ab6ab126, type: 3}
+  grassCartoonPrefab3: {fileID: 0}
+  grassCartoonPrefab4: {fileID: 0}
   grassCartoonPrefab5: {fileID: 0}
   grassCartoonPrefab6: {fileID: 0}
   grassCartoonPrefab7: {fileID: 0}
   grassCartoonPrefab8: {fileID: 0}
   grassCartoonBaseScale: 0.23
   grassCartoonScaleVariation: 0.353
+  borderGrassPrefab1: {fileID: 408427190094388651, guid: a76d898a34f2be442ae497c884a73cd9, type: 3}
+  borderGrassPrefab2: {fileID: 7939346509030747213, guid: 00d66a8b23a8cf443a4ce8e723c40fe8, type: 3}
+  borderGrassPrefab3: {fileID: 0}
+  borderGrassPrefab4: {fileID: 0}
+  borderGrassPrefab5: {fileID: 0}
+  borderGrassPrefab6: {fileID: 0}
+  borderGrassPreventOverlap: 0
+  borderGrassSpacing: 0.8
+  borderSnowPrefab1: {fileID: 7579178618603569814, guid: 704b78d0a3187c142a521d0580b2e5c1, type: 3}
+  borderSnowPrefab2: {fileID: 0}
+  borderSnowPrefab3: {fileID: 0}
+  borderSnowPrefab4: {fileID: 0}
+  borderSnowPrefab5: {fileID: 0}
+  borderSnowPrefab6: {fileID: 0}
+  borderSnowPreventOverlap: 0
+  borderSnowSpacing: 0.8
+  borderDesertPrefab1: {fileID: 7579178618603569814, guid: 704b78d0a3187c142a521d0580b2e5c1, type: 3}
+  borderDesertPrefab2: {fileID: 0}
+  borderDesertPrefab3: {fileID: 0}
+  borderDesertPrefab4: {fileID: 0}
+  borderDesertPrefab5: {fileID: 0}
+  borderDesertPrefab6: {fileID: 0}
+  borderDesertPreventOverlap: 1
+  borderDesertSpacing: 0.4
+  borderWastelandPrefab1: {fileID: 7579178618603569814, guid: 704b78d0a3187c142a521d0580b2e5c1, type: 3}
+  borderWastelandPrefab2: {fileID: 0}
+  borderWastelandPrefab3: {fileID: 0}
+  borderWastelandPrefab4: {fileID: 0}
+  borderWastelandPrefab5: {fileID: 0}
+  borderWastelandPrefab6: {fileID: 0}
+  borderWastelandPreventOverlap: 0
+  borderWastelandSpacing: 0.4
+  borderStonesPrefab1: {fileID: 7579178618603569814, guid: 704b78d0a3187c142a521d0580b2e5c1, type: 3}
+  borderStonesPrefab2: {fileID: 0}
+  borderStonesPrefab3: {fileID: 0}
+  borderStonesPrefab4: {fileID: 0}
+  borderStonesPrefab5: {fileID: 0}
+  borderStonesPrefab6: {fileID: 0}
+  borderStonesPreventOverlap: 1
+  borderStonesSpacing: 0.4
+  borderGrassCartoonPrefab1: {fileID: 408427190094388651, guid: a76d898a34f2be442ae497c884a73cd9, type: 3}
+  borderGrassCartoonPrefab2: {fileID: 0}
+  borderGrassCartoonPrefab3: {fileID: 0}
+  borderGrassCartoonPrefab4: {fileID: 0}
+  borderGrassCartoonPrefab5: {fileID: 0}
+  borderGrassCartoonPrefab6: {fileID: 0}
+  borderGrassCartoonPreventOverlap: 0
+  borderGrassCartoonSpacing: 0.8
+  borderMarshPrefab1: {fileID: 7939346509030747213, guid: 00d66a8b23a8cf443a4ce8e723c40fe8, type: 3}
+  borderMarshPrefab2: {fileID: 0}
+  borderMarshPrefab3: {fileID: 0}
+  borderMarshPrefab4: {fileID: 0}
+  borderMarshPrefab5: {fileID: 0}
+  borderMarshPrefab6: {fileID: 0}
+  borderMarshPreventOverlap: 0
+  borderMarshSpacing: 0.2
+  borderNightPrefab1: {fileID: 408427190094388651, guid: a76d898a34f2be442ae497c884a73cd9, type: 3}
+  borderNightPrefab2: {fileID: 0}
+  borderNightPrefab3: {fileID: 0}
+  borderNightPrefab4: {fileID: 0}
+  borderNightPrefab5: {fileID: 0}
+  borderNightPrefab6: {fileID: 0}
+  borderNightPreventOverlap: 0
+  borderNightSpacing: 0.8
   marshPuddleCount: 800
   marshSpawnRadius: 60
   marshCoreExclusion: 1.5
@@ -6615,9 +6745,15 @@ MonoBehaviour:
   marshFreeScatter: 0.15
   marshPuddleMinRadius: 0.15
   marshPuddleMaxRadius: 1.2
-  marshLargePuddleCount: 25
-  marshLargePuddleMinRadius: 1.5
-  marshLargePuddleMaxRadius: 3.5
+  marshMediumPuddleCount: 80
+  marshMediumMinRadius: 1.5
+  marshMediumMaxRadius: 3.5
+  marshWetlandChainCount: 25
+  marshWetlandMinLobes: 3
+  marshWetlandMaxLobes: 7
+  marshWetlandLobeMinRadius: 2
+  marshWetlandLobeMaxRadius: 5
+  marshWetlandLobeSpacing: 0.6
   marshPuddleSegments: 24
   marshShapeDistortion: 0.35
   marshMaxElongation: 2
@@ -6625,6 +6761,7 @@ MonoBehaviour:
   marshConcavityDepth: 0.35
   marshShoreBandWidth: 0.25
   marshWaterShallow: {r: 0.18, g: 0.32, b: 0.28, a: 0.55}
+  marshWaterMid: {r: 0.06, g: 0.15, b: 0.17, a: 0.88}
   marshWaterDeep: {r: 0.08, g: 0.18, b: 0.22, a: 0.78}
   marshWaterEdge: {r: 0.22, g: 0.38, b: 0.3, a: 0.25}
   marshReflectionColor: {r: 0.55, g: 0.68, b: 0.75, a: 0.35}
@@ -6632,18 +6769,27 @@ MonoBehaviour:
   marshMudDark: {r: 0.12, g: 0.1, b: 0.06, a: 0.7}
   marshMudLight: {r: 0.22, g: 0.18, b: 0.1, a: 0.45}
   marshWetGround: {r: 0.06, g: 0.15, b: 0.08, a: 0.4}
+  marshFoamColor: {r: 0.35, g: 0.38, b: 0.3, a: 0.45}
+  marshFoamWidth: 0.06
   marshEdgeWobbleStrength: 0.025
   marshEdgeWobbleSpeed: 1.5
   marshColorShimmerStrength: 0.06
   marshColorShimmerSpeed: 0.8
   marshBreatheStrength: 0.06
   marshBreatheSpeed: 0.5
+  marshWaveStrength: 0.012
+  marshWaveSpeed: 0.6
+  marshWaveScale: 3
   marshRipplesPerPuddle: 3
   marshRippleSpeed: 1.5
   marshRippleColor: {r: 0.65, g: 0.78, b: 0.85, a: 0.3}
+  marshDimpleSlots: 60
+  marshDimpleInterval: 2.5
   marshCausticCount: 1500
   marshCausticColor: {r: 0.75, g: 0.88, b: 0.8, a: 0.22}
   marshCausticDriftSpeed: 0.3
+  marshSedimentCount: 3000
+  marshFilmPatchCount: 50
   marshLilyPadCount: 60
   marshLilyPadColor: {r: 0.12, g: 0.38, b: 0.1, a: 0.85}
   marshLilyPadDark: {r: 0.06, g: 0.22, b: 0.05, a: 0.9}
@@ -6656,6 +6802,25 @@ MonoBehaviour:
   marshGrassMidBlade: {r: 0.1, g: 0.38, b: 0.1, a: 0.93}
   marshGrassBrightTip: {r: 0.2, g: 0.54, b: 0.16, a: 0.72}
   marshGrassGroundCover: {r: 0.05, g: 0.2, b: 0.05, a: 1}
+  nightPreset: 1
+  nightDarkness: 0.88
+  nightColor: {r: 0, g: 0, b: 0, a: 1}
+  nightAmbientLight: 0.08
+  nightPlayerGlowRadius: 1.8
+  nightPlayerGlowStrength: 0.35
+  nightTorchEnabled: 1
+  nightTorchRange: 8
+  nightTorchHalfAngle: 22
+  nightTorchEdgeSoftness: 0.35
+  nightTorchBrightness: 1
+  nightTorchWarmTint: {r: 1, g: 0.85, b: 0.55, a: 0.12}
+  nightFlickerSpeed: 3.5
+  nightFlickerIntensity: 0.06
+  nightGrassInstanceCount: 50000
+  nightGrassSpawnRadius: 50
+  nightGrassCoreExclusion: 1.5
+  nightGrassBaseScale: 0.2
+  nightGrassScaleVariation: 0.25
   fogDeepCount: 10
   fogDeepDensity: 0.6
   fogVisibilityReduction: 0.35
@@ -6678,6 +6843,35 @@ MonoBehaviour:
   fogNearWispDensity: 0.45
   fogNearWispDriftSpeed: 0.7
   fogMoistureCount: 600
+--- !u!114 &1131375991
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1131375986}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f2db9d50375b94d4b8a0f54088a653fc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  prefabs: []
+  innerRadius: -1
+  ringWidth: 9
+  overlapInward: 1.5
+  spacing: 0.8
+  jitter: 0.3
+  preventOverlap: 0
+  overlapPadding: 0.05
+  baseScale: 0.5
+  scaleVariation: 0.089
+  sortPrecision: 10
+  sortOrderBase: 1000
+  sortYOffset: -0.5
+  sortBandSize: 2
+  forceDefaultSpriteMaterial: 0
+  generateCollider: 1
+  colliderSegments: 64
 --- !u!1 &1187380058
 GameObject:
   m_ObjectHideFlags: 0
@@ -11157,6 +11351,7 @@ GameObject:
   - component: {fileID: 1898314639}
   - component: {fileID: 1898314638}
   - component: {fileID: 1898314637}
+  - component: {fileID: 1898314640}
   m_Layer: 0
   m_Name: CinemachineCamera
   m_TagString: Untagged
@@ -11253,6 +11448,30 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1898314640
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1898314636}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00b2d199b96b516448144ab30fb26aed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ApplyAfter: 2
+  ChannelMask: 1
+  Gain: 1
+  Use2DDistance: 0
+  UseCameraSpace: 1
+  SignalCombinationMode: 0
+  ReactionSettings:
+    m_SecondaryNoise: {fileID: 0}
+    AmplitudeGain: 1
+    FrequencyGain: 1
+    Duration: 1
+    m_NoiseOffsets: {x: 0, y: 0, z: 0}
 --- !u!1 &1920969493
 GameObject:
   m_ObjectHideFlags: 0

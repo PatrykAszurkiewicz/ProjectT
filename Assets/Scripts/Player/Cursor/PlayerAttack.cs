@@ -15,6 +15,20 @@ public class PlayerAttack : MonoBehaviour
         playerMovement = GetComponent<PlayerMovement>();
     }
 
+    void Update()
+    {
+        // Safety net for the flamethrower and obstacle drawer
+        if (isAttackButtonHeld && weapon != null)
+        {
+            bool mouseStillDown = Mouse.current != null && Mouse.current.leftButton.isPressed;
+            if (!mouseStillDown)
+            {
+                isAttackButtonHeld = false;
+                weapon.StopAttack();
+            }
+        }
+    }
+
     public void OnAttack(InputAction.CallbackContext context)
     {
         if (weapon == null) return;
@@ -26,15 +40,27 @@ public class PlayerAttack : MonoBehaviour
         {
             if (context.started)
             {
-                // Button pressed - start drawing
                 isAttackButtonHeld = true;
-                weapon.PerformAttack(); // This starts the drawing
+                weapon.PerformAttack();
             }
             else if (context.canceled)
             {
-                // Button released - stop drawing
                 isAttackButtonHeld = false;
-                weapon.StopAttack(); // This finalizes the obstacle
+                weapon.StopAttack();
+            }
+        }
+        // Handle flamethrower - hold to fire, release to stop
+        else if (weaponData != null && weaponData.isFlamethrower)
+        {
+            if (context.started)
+            {
+                isAttackButtonHeld = true;
+                weapon.PerformAttack();
+            }
+            else if (context.canceled)
+            {
+                isAttackButtonHeld = false;
+                weapon.StopAttack();
             }
         }
         else
@@ -49,37 +75,26 @@ public class PlayerAttack : MonoBehaviour
 
     private IEnumerator PerformAttackWithAnimation()
     {
-        // Determine attack type based on weapon data
         bool isRangedAttack = weapon.GetWeaponData().isRanged;
 
-        // Start appropriate animation
         if (playerMovement != null)
         {
             if (isRangedAttack)
-            {
                 playerMovement.StartRangedAttack();
-            }
             else
-            {
                 playerMovement.StartMeleeAttack();
-            }
         }
 
         weapon.PerformAttack();
 
-        // Wait for animation duration
         yield return new WaitForSeconds(attackAnimationDuration);
 
         if (playerMovement != null)
         {
             if (isRangedAttack)
-            {
                 playerMovement.EndRangedAttack();
-            }
             else
-            {
                 playerMovement.EndMeleeAttack();
-            }
         }
     }
 }

@@ -332,9 +332,15 @@ public class PlayerMovement : MonoBehaviour
 
     private void TryDash()
     {
+        // Guard against calls before everything is initialized
+        if (rb == null || pstats == null)
+            return;
+
         if (!isDashing && pstats.dashesLeft > 0 && Time.time - lastDashTime >= pstats.dashCooldown)
         {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.dashSound, rb.position);
+            if (AudioManager.instance != null && FMODEvents.instance != null)
+                AudioManager.instance.PlayOneShot(FMODEvents.instance.dashSound, rb.position);
+
             dashDirection = move.normalized;
             if (dashDirection == Vector2.zero)
                 dashDirection = Vector2.up;

@@ -58,6 +58,9 @@ public class WeaponProjectile : MonoBehaviour
             {
                 stats.TakeDamage(damage);
 
+                //  COMBAT FEEL — ranged hit 
+                CombatFeel.OnHitEnemy(other.gameObject, isMelee: false);
+
                 // Knockback (only for enemies that have a controller)
                 EnemyController enemyController = other.GetComponent<EnemyController>();
                 if (enemyController != null)
@@ -75,6 +78,10 @@ public class WeaponProjectile : MonoBehaviour
             if (damageable != null)
             {
                 damageable.TakeDamage(damage, gameObject);
+
+                //  COMBAT FEEL  ranged hit on IDamageable 
+                CombatFeel.OnHitEnemy(other.gameObject, isMelee: false);
+
                 Destroy(gameObject);
                 return;
             }

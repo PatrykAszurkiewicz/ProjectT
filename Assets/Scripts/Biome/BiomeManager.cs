@@ -13,6 +13,13 @@ public class BiomeManager : MonoBehaviour
     [Header("Active Biome")]
     public BiomeType activeBiome = BiomeType.Grass;
 
+    [Header("Universal Night Mode")]
+    [Tooltip("Enable night overlay on ANY biome — adds darkness, torch, and player glow on top of the current biome.")]
+    public bool enableNightMode = false;
+
+    [Tooltip("When true, switching night mode on/off at runtime will re-apply the biome with/without the night overlay.")]
+    private bool lastEnableNightMode = false;
+
     [Header("Fog Effect")]
     [Tooltip("Enable/disable fog overlay on top of any biome")]
     public bool enableFog = false;
@@ -346,21 +353,113 @@ public class BiomeManager : MonoBehaviour
     [Tooltip("Random size variation (0.15 = ±15%)")]
     public float grassCartoonScaleVariation = 0.25f;
 
+    // Border Ring — per-biome prefab slots (up to 6 each) + overlap toggle
+
+    [Header("Border Ring — Grass Biome")]
+    public GameObject borderGrassPrefab1;
+    public GameObject borderGrassPrefab2;
+    public GameObject borderGrassPrefab3;
+    public GameObject borderGrassPrefab4;
+    public GameObject borderGrassPrefab5;
+    public GameObject borderGrassPrefab6;
+    [Tooltip("When ON, border prefabs won't visually overlap (good for rocks). OFF = overlapping (good for trees).")]
+    public bool borderGrassPreventOverlap = false;
+    [Tooltip("Spacing between border prefabs for this biome (smaller = denser).")]
+    public float borderGrassSpacing = 0.8f;
+
+    [Header("Border Ring — Snow Biome")]
+    public GameObject borderSnowPrefab1;
+    public GameObject borderSnowPrefab2;
+    public GameObject borderSnowPrefab3;
+    public GameObject borderSnowPrefab4;
+    public GameObject borderSnowPrefab5;
+    public GameObject borderSnowPrefab6;
+    public bool borderSnowPreventOverlap = false;
+    public float borderSnowSpacing = 0.8f;
+
+    [Header("Border Ring — Desert Biome")]
+    public GameObject borderDesertPrefab1;
+    public GameObject borderDesertPrefab2;
+    public GameObject borderDesertPrefab3;
+    public GameObject borderDesertPrefab4;
+    public GameObject borderDesertPrefab5;
+    public GameObject borderDesertPrefab6;
+    public bool borderDesertPreventOverlap = true;
+    public float borderDesertSpacing = 0.4f;
+
+    [Header("Border Ring — Wasteland Biome")]
+    public GameObject borderWastelandPrefab1;
+    public GameObject borderWastelandPrefab2;
+    public GameObject borderWastelandPrefab3;
+    public GameObject borderWastelandPrefab4;
+    public GameObject borderWastelandPrefab5;
+    public GameObject borderWastelandPrefab6;
+    public bool borderWastelandPreventOverlap = true;
+    public float borderWastelandSpacing = 0.4f;
+
+    [Header("Border Ring — Stones Biome")]
+    public GameObject borderStonesPrefab1;
+    public GameObject borderStonesPrefab2;
+    public GameObject borderStonesPrefab3;
+    public GameObject borderStonesPrefab4;
+    public GameObject borderStonesPrefab5;
+    public GameObject borderStonesPrefab6;
+    public bool borderStonesPreventOverlap = true;
+    public float borderStonesSpacing = 0.4f;
+
+    [Header("Border Ring — GrassCartoon Biome")]
+    public GameObject borderGrassCartoonPrefab1;
+    public GameObject borderGrassCartoonPrefab2;
+    public GameObject borderGrassCartoonPrefab3;
+    public GameObject borderGrassCartoonPrefab4;
+    public GameObject borderGrassCartoonPrefab5;
+    public GameObject borderGrassCartoonPrefab6;
+    public bool borderGrassCartoonPreventOverlap = false;
+    public float borderGrassCartoonSpacing = 0.8f;
+
+    [Header("Border Ring — Marsh Biome")]
+    public GameObject borderMarshPrefab1;
+    public GameObject borderMarshPrefab2;
+    public GameObject borderMarshPrefab3;
+    public GameObject borderMarshPrefab4;
+    public GameObject borderMarshPrefab5;
+    public GameObject borderMarshPrefab6;
+    public bool borderMarshPreventOverlap = false;
+    public float borderMarshSpacing = 0.8f;
+
+    [Header("Border Ring — Night Biome")]
+    public GameObject borderNightPrefab1;
+    public GameObject borderNightPrefab2;
+    public GameObject borderNightPrefab3;
+    public GameObject borderNightPrefab4;
+    public GameObject borderNightPrefab5;
+    public GameObject borderNightPrefab6;
+    public bool borderNightPreventOverlap = false;
+    public float borderNightSpacing = 0.8f;
+
     // Marsh settings — water puddles under grass
     [Header("Marsh — Puddle Distribution")]
     public int marshPuddleCount = 900;
     public float marshSpawnRadius = 60f;
-    public float marshCoreExclusion = 1.5f;
+    public float marshCoreExclusion = 2.0f;
     public int marshClusterCount = 140;
     public float marshClusterSpread = 4.0f;
     [Range(0f, 1f)] public float marshFreeScatter = 0.12f;
 
-    [Header("Marsh — Puddle Size")]
-    public float marshPuddleMinRadius = 0.25f;
-    public float marshPuddleMaxRadius = 1.6f;
-    public int marshLargePuddleCount = 40;
-    public float marshLargePuddleMinRadius = 2.0f;
-    public float marshLargePuddleMaxRadius = 5.0f;
+    [Header("Marsh — Puddle Size — Small")]
+    public float marshPuddleMinRadius = 0.08f;
+    public float marshPuddleMaxRadius = 0.3f;
+    [Header("Marsh — Puddle Size — Medium")]
+    public int marshMediumPuddleCount = 80;
+    public float marshMediumMinRadius = 0.25f;
+    public float marshMediumMaxRadius = 0.7f;
+    [Header("Marsh — Wetland Chains")]
+    public int marshWetlandChainCount = 30;
+    public int marshWetlandMinLobes = 3;
+    public int marshWetlandMaxLobes = 5;
+    public float marshWetlandLobeMinRadius = 0.2f;
+    public float marshWetlandLobeMaxRadius = 0.6f;
+    public float marshWetlandLobeSpacing = 0.55f;
 
     [Header("Marsh — Puddle Shape")]
     [Range(8, 32)] public int marshPuddleSegments = 24;
@@ -372,6 +471,7 @@ public class BiomeManager : MonoBehaviour
 
     [Header("Marsh — Water Colors")]
     public Color marshWaterShallow = new Color(0.10f, 0.22f, 0.20f, 0.82f);
+    public Color marshWaterMid = new Color(0.06f, 0.15f, 0.17f, 0.88f);
     public Color marshWaterDeep = new Color(0.04f, 0.10f, 0.14f, 0.92f);
     public Color marshWaterEdge = new Color(0.08f, 0.18f, 0.14f, 0.50f);
     public Color marshReflectionColor = new Color(0.45f, 0.58f, 0.68f, 0.40f);
@@ -381,6 +481,8 @@ public class BiomeManager : MonoBehaviour
     public Color marshMudDark = new Color(0.08f, 0.06f, 0.03f, 0.80f);
     public Color marshMudLight = new Color(0.16f, 0.13f, 0.07f, 0.60f);
     public Color marshWetGround = new Color(0.04f, 0.12f, 0.06f, 0.55f);
+    public Color marshFoamColor = new Color(0.35f, 0.38f, 0.30f, 0.45f);
+    [Range(0.02f, 0.15f)] public float marshFoamWidth = 0.06f;
 
     [Header("Marsh — Water Animation")]
     public float marshEdgeWobbleStrength = 0.025f;
@@ -389,16 +491,29 @@ public class BiomeManager : MonoBehaviour
     public float marshColorShimmerSpeed = 0.8f;
     [Range(0f, 0.15f)] public float marshBreatheStrength = 0.06f;
     public float marshBreatheSpeed = 0.5f;
+    public float marshWaveStrength = 0.012f;
+    public float marshWaveSpeed = 0.6f;
+    public float marshWaveScale = 3.0f;
 
     [Header("Marsh — Ripples")]
     public int marshRipplesPerPuddle = 3;
     public float marshRippleSpeed = 1.2f;
     public Color marshRippleColor = new Color(0.50f, 0.65f, 0.72f, 0.45f);
 
+    [Header("Marsh — Insect Dimples")]
+    public int marshDimpleSlots = 60;
+    public float marshDimpleInterval = 2.5f;
+
     [Header("Marsh — Caustics")]
     public int marshCausticCount = 2000;
     public Color marshCausticColor = new Color(0.60f, 0.78f, 0.65f, 0.30f);
     public float marshCausticDriftSpeed = 0.25f;
+
+    [Header("Marsh — Sediment")]
+    public int marshSedimentCount = 3000;
+
+    [Header("Marsh — Surface Film")]
+    public int marshFilmPatchCount = 50;
 
     [Header("Marsh — Lily Pads")]
     public int marshLilyPadCount = 80;
@@ -417,6 +532,63 @@ public class BiomeManager : MonoBehaviour
     public Color marshGrassMidBlade = new Color(0.10f, 0.38f, 0.10f, 0.93f);
     public Color marshGrassBrightTip = new Color(0.20f, 0.54f, 0.16f, 0.72f);
     public Color marshGrassGroundCover = new Color(0.05f, 0.20f, 0.05f, 1.0f);
+
+    // Night overlay settings — used by universal night mode AND the legacy Night biome
+    [Header("Night — Darkness Preset")]
+    [Tooltip("Quick preset: Dusk (dim evening), Dark (proper night), PitchBlack (torch-only), Custom (manual).")]
+    public NightOverlay.NightPreset nightPreset = NightOverlay.NightPreset.Dark;
+
+    [Header("Night — Darkness (used when preset = Custom)")]
+    [Range(0f, 1f)]
+    [Tooltip("Master darkness. 1 = pitch black. Ignored unless preset is Custom.")]
+    public float nightDarkness = 0.92f;
+
+    [Tooltip("Base night color")]
+    public Color nightColor = new Color(0.02f, 0.02f, 0.06f, 1f);
+
+    [Range(0f, 0.3f)]
+    [Tooltip("Ambient visibility. 0 = truly black outside torch. Ignored unless preset is Custom.")]
+    public float nightAmbientLight = 0.04f;
+
+    [Header("Night — Player Glow (used when preset = Custom)")]
+    public float nightPlayerGlowRadius = 1.8f;
+
+    [Range(0f, 1f)]
+    [Tooltip("Glow strength. 0 = no glow at all (pitch black around player). Ignored unless preset is Custom.")]
+    public float nightPlayerGlowStrength = 0.35f;
+
+    [Header("Night — Torch")]
+    public bool nightTorchEnabled = true;
+
+    public float nightTorchRange = 8f;
+
+    [Range(5f, 60f)]
+    public float nightTorchHalfAngle = 22f;
+
+    [Range(0f, 1f)]
+    public float nightTorchEdgeSoftness = 0.35f;
+
+    [Range(0f, 1f)]
+    [Tooltip("How much the torch reveals. 0 = torch shows nothing, 1 = full reveal. Ignored unless preset is Custom.")]
+    public float nightTorchBrightness = 1.0f;
+
+    public Color nightTorchWarmTint = new Color(1.0f, 0.85f, 0.55f, 0.12f);
+
+    public float nightFlickerSpeed = 3.5f;
+
+    [Range(0f, 0.15f)]
+    public float nightFlickerIntensity = 0.06f;
+
+    // Legacy Night biome grass settings (kept for backwards compatibility with Night biome)
+    [Header("Night Biome — Grass Distribution (only used when activeBiome = Night)")]
+    public int nightGrassInstanceCount = 50000;
+    public float nightGrassSpawnRadius = 50f;
+    public float nightGrassCoreExclusion = 1.5f;
+
+    [Header("Night Biome — Grass Scale")]
+    public float nightGrassBaseScale = 0.2f;
+    [Range(0f, 0.5f)]
+    public float nightGrassScaleVariation = 0.25f;
 
     // Fog-specific settings exposed in BiomeManager
     [Header("Fog — Deep Field (visibility reduction)")]
@@ -476,7 +648,92 @@ public class BiomeManager : MonoBehaviour
             //case BiomeType.GrassCartoon: return "Backgrounds/BackgroundGrassDark";
             case BiomeType.GrassCartoon: return "Backgrounds/Background13";
             case BiomeType.Marsh: return "Backgrounds/Background8"; // Same grass background
+            case BiomeType.Night: return "Backgrounds/Background13"; // Same as GrassCartoon base
             default: return "Backgrounds/Background8";
+        }
+    }
+
+    /// Returns the 6-slot prefab array for the given biome's border ring.
+    GameObject[] GetBorderPrefabsForBiome(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Grass:
+                return new GameObject[] {
+                    borderGrassPrefab1, borderGrassPrefab2, borderGrassPrefab3,
+                    borderGrassPrefab4, borderGrassPrefab5, borderGrassPrefab6
+                };
+            case BiomeType.Snow:
+                return new GameObject[] {
+                    borderSnowPrefab1, borderSnowPrefab2, borderSnowPrefab3,
+                    borderSnowPrefab4, borderSnowPrefab5, borderSnowPrefab6
+                };
+            case BiomeType.Desert:
+                return new GameObject[] {
+                    borderDesertPrefab1, borderDesertPrefab2, borderDesertPrefab3,
+                    borderDesertPrefab4, borderDesertPrefab5, borderDesertPrefab6
+                };
+            case BiomeType.Wasteland:
+                return new GameObject[] {
+                    borderWastelandPrefab1, borderWastelandPrefab2, borderWastelandPrefab3,
+                    borderWastelandPrefab4, borderWastelandPrefab5, borderWastelandPrefab6
+                };
+            case BiomeType.Stones:
+                return new GameObject[] {
+                    borderStonesPrefab1, borderStonesPrefab2, borderStonesPrefab3,
+                    borderStonesPrefab4, borderStonesPrefab5, borderStonesPrefab6
+                };
+            case BiomeType.GrassCartoon:
+                return new GameObject[] {
+                    borderGrassCartoonPrefab1, borderGrassCartoonPrefab2, borderGrassCartoonPrefab3,
+                    borderGrassCartoonPrefab4, borderGrassCartoonPrefab5, borderGrassCartoonPrefab6
+                };
+            case BiomeType.Marsh:
+                return new GameObject[] {
+                    borderMarshPrefab1, borderMarshPrefab2, borderMarshPrefab3,
+                    borderMarshPrefab4, borderMarshPrefab5, borderMarshPrefab6
+                };
+            case BiomeType.Night:
+                return new GameObject[] {
+                    borderNightPrefab1, borderNightPrefab2, borderNightPrefab3,
+                    borderNightPrefab4, borderNightPrefab5, borderNightPrefab6
+                };
+            default:
+                return GetBorderPrefabsForBiome(BiomeType.Grass);
+        }
+    }
+
+    /// Returns whether the given biome's border should prevent overlap.
+    bool GetBorderPreventOverlap(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Grass: return borderGrassPreventOverlap;
+            case BiomeType.Snow: return borderSnowPreventOverlap;
+            case BiomeType.Desert: return borderDesertPreventOverlap;
+            case BiomeType.Wasteland: return borderWastelandPreventOverlap;
+            case BiomeType.Stones: return borderStonesPreventOverlap;
+            case BiomeType.GrassCartoon: return borderGrassCartoonPreventOverlap;
+            case BiomeType.Marsh: return borderMarshPreventOverlap;
+            case BiomeType.Night: return borderNightPreventOverlap;
+            default: return false;
+        }
+    }
+
+    /// Returns the per-biome spacing for the border ring.
+    float GetBorderSpacing(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Grass: return borderGrassSpacing;
+            case BiomeType.Snow: return borderSnowSpacing;
+            case BiomeType.Desert: return borderDesertSpacing;
+            case BiomeType.Wasteland: return borderWastelandSpacing;
+            case BiomeType.Stones: return borderStonesSpacing;
+            case BiomeType.GrassCartoon: return borderGrassCartoonSpacing;
+            case BiomeType.Marsh: return borderMarshSpacing;
+            case BiomeType.Night: return borderNightSpacing;
+            default: return 0.8f;
         }
     }
 
@@ -485,6 +742,7 @@ public class BiomeManager : MonoBehaviour
         lastUseGPUGrass = useGPUGrass;
         lastBackgroundScale = backgroundScale;
         lastGroundCoverage = groundCoverageRadius;
+        lastEnableNightMode = enableNightMode;
         PatchMapBackground();
     }
 
@@ -502,6 +760,14 @@ public class BiomeManager : MonoBehaviour
         if (activeBiome != lastAppliedBiome)
         {
             ApplyBiome();
+            return;
+        }
+
+        // Live night mode toggle detection
+        if (enableNightMode != lastEnableNightMode)
+        {
+            lastEnableNightMode = enableNightMode;
+            ApplyNightOverlay();
             return;
         }
 
@@ -565,6 +831,13 @@ public class BiomeManager : MonoBehaviour
         // Update() will detect the change and reapply
     }
 
+    /// Toggle universal night mode on/off at runtime.
+    public void SetNightMode(bool enabled)
+    {
+        enableNightMode = enabled;
+        // Update() will detect the change and reapply
+    }
+
     [ContextMenu("Toggle GPU/CPU Grass")]
     public void ToggleGrassMode()
     {
@@ -580,6 +853,14 @@ public class BiomeManager : MonoBehaviour
         Debug.LogWarning($"[BiomeManager] Fog toggled to: {(enableFog ? "ON" : "OFF")}");
     }
 
+    [ContextMenu("Toggle Night Mode")]
+    public void ToggleNightMode()
+    {
+        enableNightMode = !enableNightMode;
+        Debug.LogWarning($"[BiomeManager] Night mode toggled to: {(enableNightMode ? "ON" : "OFF")}");
+        // Update() will detect the change and reapply
+    }
+
     [ContextMenu("Reapply Current Biome")]
     public void ApplyBiome()
     {
@@ -592,9 +873,6 @@ public class BiomeManager : MonoBehaviour
             fogColor = defaults.fogColor;
             fogSmokeColor = defaults.smokeColor;
             fogSmokeDarkCore = defaults.smokeDarkCore;
-            Debug.Log($"[BiomeManager] Applied fog defaults for {activeBiome}: fog={enableFog}, density={fogDensity:F2}, " +
-                      $"fogColor=({fogColor.r:F2},{fogColor.g:F2},{fogColor.b:F2}), " +
-                      $"smokeColor=({fogSmokeColor.r:F2},{fogSmokeColor.g:F2},{fogSmokeColor.b:F2})");
         }
 
         // 0b. Apply biome-specific background defaults (if enabled)
@@ -603,7 +881,6 @@ public class BiomeManager : MonoBehaviour
             BiomeBackgroundDefaults bgDefaults = BiomeBackgroundDefaults.ForBiome(activeBiome);
             backgroundScale = bgDefaults.backgroundScale;
             lastBackgroundScale = backgroundScale;
-            Debug.Log($"[BiomeManager] Applied background defaults for {activeBiome}: scale={backgroundScale:F2}");
         }
 
         // 1. Remove previous overlays 
@@ -615,7 +892,9 @@ public class BiomeManager : MonoBehaviour
         RemoveOverlay<StonesOverlay>();
         RemoveOverlay<GrassCartoonOverlay>();
         RemoveOverlay<MarshWaterOverlay>();
+        RemoveOverlay<MarshFootstepRipples>();
         RemoveOverlay<FogOverlay>();
+        RemoveOverlay<NightOverlay>();
 
         // 2. Set background image + tile it
         SetupBackground();
@@ -650,20 +929,77 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.Marsh:
                 SetupMarshOverlay();
                 break;
+            case BiomeType.Night:
+                SetupNightBiome();
+                break;
         }
 
         // 5. Apply fog (or remove it if defaults turned it off)
         ApplyFog();
 
-        // 6. Sync all trackers so Update() only reacts to *subsequent* manual changes
+        // 6. Apply universal night overlay if enabled (works on ANY biome, including Night)
+        ApplyNightOverlay();
+
+        // 7. Generate border ring with per-biome prefabs, overlap, and spacing
+        BorderRingGenerator border = GetComponent<BorderRingGenerator>();
+        if (border != null)
+        {
+            border.prefabs = GetBorderPrefabsForBiome(activeBiome);
+            border.preventOverlap = GetBorderPreventOverlap(activeBiome);
+            border.spacing = GetBorderSpacing(activeBiome);
+            border.GenerateBorder();
+        }
+
+        // 8. Sync all trackers so Update() only reacts to *subsequent* manual changes
         lastAppliedBiome = activeBiome;
         lastUseGPUGrass = useGPUGrass;
         lastEnableFog = enableFog;
+        lastEnableNightMode = enableNightMode;
         lastFogDensity = fogDensity;
         lastFogColor = fogColor;
         lastFogSmokeColor = fogSmokeColor;
         lastFogSmokeDarkCore = fogSmokeDarkCore;
         initialized = true;
+    }
+
+    // Night overlay management — can be toggled independently of biome (like fog)
+
+    void ApplyNightOverlay()
+    {
+        RemoveOverlay<NightOverlay>();
+
+        if (!enableNightMode) return;
+
+        // Don't double-apply if the Night biome already set up its own NightOverlay
+        // (Night biome always gets its overlay via SetupNightBiome, but universal night
+        //  mode flag takes over — so we remove and re-add with the universal settings)
+
+        NightOverlay night = gameObject.AddComponent<NightOverlay>();
+
+        night.preset = nightPreset;
+
+        night.darkness = nightDarkness;
+        night.nightColor = nightColor;
+        night.ambientLight = nightAmbientLight;
+        night.playerGlowRadius = nightPlayerGlowRadius;
+        night.playerGlowStrength = nightPlayerGlowStrength;
+
+        night.torchEnabled = nightTorchEnabled;
+        night.torchRange = nightTorchRange;
+        night.torchHalfAngle = nightTorchHalfAngle;
+        night.torchEdgeSoftness = nightTorchEdgeSoftness;
+        night.torchBrightness = nightTorchBrightness;
+        night.torchWarmTint = nightTorchWarmTint;
+        night.flickerSpeed = nightFlickerSpeed;
+        night.flickerIntensity = nightFlickerIntensity;
+
+        night.sortingOrder = 6000;
+
+        night.GenerateNight();
+
+        Debug.LogWarning($"[BiomeManager] Night mode ON — preset={nightPreset}, " +
+                         $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
+                         $"biome={activeBiome}");
     }
 
     // Fog management — can be toggled independently of biome
@@ -1212,8 +1548,6 @@ public class BiomeManager : MonoBehaviour
         gc.sortOrderBase = 1000;
 
         gc.GenerateCartoonGrass();
-
-        //Debug.LogWarning($"[BiomeManager] GrassCartoon biome active — {grassCartoonInstanceCount:N0} instances from {validCount} prefab(s), radius={grassCartoonSpawnRadius}");
     }
 
     // Marsh overlay — water puddles UNDER grass
@@ -1234,9 +1568,15 @@ public class BiomeManager : MonoBehaviour
         // Puddle size
         mw.puddleMinRadius = marshPuddleMinRadius;
         mw.puddleMaxRadius = marshPuddleMaxRadius;
-        mw.largePuddleCount = marshLargePuddleCount;
-        mw.largePuddleMinRadius = marshLargePuddleMinRadius;
-        mw.largePuddleMaxRadius = marshLargePuddleMaxRadius;
+        mw.mediumPuddleCount = marshMediumPuddleCount;
+        mw.mediumMinRadius = marshMediumMinRadius;
+        mw.mediumMaxRadius = marshMediumMaxRadius;
+        mw.wetlandChainCount = marshWetlandChainCount;
+        mw.wetlandMinLobes = marshWetlandMinLobes;
+        mw.wetlandMaxLobes = marshWetlandMaxLobes;
+        mw.wetlandLobeMinRadius = marshWetlandLobeMinRadius;
+        mw.wetlandLobeMaxRadius = marshWetlandLobeMaxRadius;
+        mw.wetlandLobeSpacing = marshWetlandLobeSpacing;
 
         // Puddle shape
         mw.puddleSegments = marshPuddleSegments;
@@ -1246,17 +1586,20 @@ public class BiomeManager : MonoBehaviour
         mw.concavityDepth = marshConcavityDepth;
         mw.shoreBandWidth = marshShoreBandWidth;
 
-        // Water colours
+        // Water colours (4-ring gradient)
         mw.waterShallow = marshWaterShallow;
+        mw.waterMid = marshWaterMid;
         mw.waterDeep = marshWaterDeep;
         mw.waterEdge = marshWaterEdge;
         mw.reflectionColor = marshReflectionColor;
         mw.specularHighlight = marshSpecularHighlight;
 
-        // Mud / shore
+        // Mud / shore / foam
         mw.mudDark = marshMudDark;
         mw.mudLight = marshMudLight;
         mw.wetGround = marshWetGround;
+        mw.foamColor = marshFoamColor;
+        mw.foamWidth = marshFoamWidth;
 
         // Animation
         mw.edgeWobbleStrength = marshEdgeWobbleStrength;
@@ -1265,16 +1608,29 @@ public class BiomeManager : MonoBehaviour
         mw.colorShimmerSpeed = marshColorShimmerSpeed;
         mw.breatheStrength = marshBreatheStrength;
         mw.breatheSpeed = marshBreatheSpeed;
+        mw.waveStrength = marshWaveStrength;
+        mw.waveSpeed = marshWaveSpeed;
+        mw.waveScale = marshWaveScale;
 
         // Ripples
         mw.ripplesPerPuddle = marshRipplesPerPuddle;
         mw.rippleSpeed = marshRippleSpeed;
         mw.rippleColor = marshRippleColor;
 
+        // Insect dimples
+        mw.dimpleSlots = marshDimpleSlots;
+        mw.dimpleInterval = marshDimpleInterval;
+
         // Caustics
         mw.causticCount = marshCausticCount;
         mw.causticColor = marshCausticColor;
         mw.causticDriftSpeed = marshCausticDriftSpeed;
+
+        // Sediment
+        mw.sedimentCount = marshSedimentCount;
+
+        // Surface film
+        mw.filmPatchCount = marshFilmPatchCount;
 
         // Lily pads
         mw.lilyPadCount = marshLilyPadCount;
@@ -1291,13 +1647,18 @@ public class BiomeManager : MonoBehaviour
         mw.sortingOrder = 1; // Above background (0), below game elements
         mw.GenerateWater();
 
+        // 1b. Footstep ripples (player/enemy movement creates ripples on water)
+        MarshFootstepRipples mfr = gameObject.AddComponent<MarshFootstepRipples>();
+        mfr.sortingOrder = mw.sortingOrder + 12; // above all water sub-layers (reeds = +10)
+        mfr.Init(mw);
+
         // 2. Then spawn grass ON TOP with darker/wetter tint
         if (useGPUGrass)
             SetupMarshGrassGPU();
         else
             SetupMarshGrassCPU();
 
-        Debug.LogWarning($"[BiomeManager] Marsh biome active — {marshPuddleCount} puddles + {marshLargePuddleCount} ponds, " +
+        Debug.LogWarning($"[BiomeManager] Marsh biome active — {marshWetlandChainCount} wetland chains + {marshMediumPuddleCount} medium + {marshPuddleCount} small puddles, " +
                          $"grass mode={(useGPUGrass ? "GPU" : "CPU")}");
     }
 
@@ -1407,5 +1768,83 @@ public class BiomeManager : MonoBehaviour
         g.sortingOrder = -1;
         g.GenerateGrass();
     }
+
+    // Night biome (legacy) — GrassCartoon base + darkness + directional torch
+    // This is the dedicated Night biome entry. Universal night mode (enableNightMode)
+    // adds the darkness overlay on top of ANY biome and is handled separately in ApplyNightOverlay().
+
+    void SetupNightBiome()
+    {
+        // 1. Spawn the same GrassCartoon prefab grass underneath
+        GameObject[] allSlots = new GameObject[]
+        {
+            grassCartoonPrefab1, grassCartoonPrefab2,
+            grassCartoonPrefab3, grassCartoonPrefab4,
+            grassCartoonPrefab5, grassCartoonPrefab6,
+            grassCartoonPrefab7, grassCartoonPrefab8
+        };
+
+        int validCount = 0;
+        foreach (var p in allSlots)
+            if (p != null) validCount++;
+
+        if (validCount == 0)
+        {
+            Debug.LogWarning("[BiomeManager] Night biome: no GrassCartoon prefabs assigned — " +
+                             "skipping grass layer. Drag prefabs into 'GrassCartoon — Prefab Slots'.");
+        }
+        else
+        {
+            GrassCartoonOverlay gc = gameObject.AddComponent<GrassCartoonOverlay>();
+
+            gc.instanceCount = nightGrassInstanceCount;
+            gc.spawnRadius = nightGrassSpawnRadius;
+            gc.coreExclusionRadius = nightGrassCoreExclusion;
+
+            gc.prefabs = allSlots;
+
+            gc.baseScale = nightGrassBaseScale;
+            gc.scaleVariation = nightGrassScaleVariation;
+
+            gc.sortPrecision = 10f;
+            gc.sortOrderBase = 1000;
+
+            gc.GenerateCartoonGrass();
+        }
+
+        // 2. If universal night mode is NOT enabled, spawn the night overlay here
+        //    (if enableNightMode is ON, ApplyNightOverlay() will handle it after this method)
+        if (!enableNightMode)
+        {
+            NightOverlay night = gameObject.AddComponent<NightOverlay>();
+
+            night.preset = nightPreset;
+            night.darkness = nightDarkness;
+            night.nightColor = nightColor;
+            night.ambientLight = nightAmbientLight;
+            night.playerGlowRadius = nightPlayerGlowRadius;
+            night.playerGlowStrength = nightPlayerGlowStrength;
+
+            night.torchEnabled = nightTorchEnabled;
+            night.torchRange = nightTorchRange;
+            night.torchHalfAngle = nightTorchHalfAngle;
+            night.torchEdgeSoftness = nightTorchEdgeSoftness;
+            night.torchBrightness = nightTorchBrightness;
+            night.torchWarmTint = nightTorchWarmTint;
+            night.flickerSpeed = nightFlickerSpeed;
+            night.flickerIntensity = nightFlickerIntensity;
+
+            night.sortingOrder = 6000;
+            night.GenerateNight();
+        }
+
+        Debug.LogWarning($"[BiomeManager] Night biome active — preset={nightPreset}, " +
+                         $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
+                         $"grass instances={nightGrassInstanceCount:N0}");
+    }
 }
+
+
+
+
 

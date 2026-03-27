@@ -7,11 +7,15 @@ public class WeaponUnlockRegistry : MonoBehaviour
 
     private static readonly Dictionary<int, int> AugmentToSlot = new Dictionary<int, int>
     {
-        { 2,  0 },
-        { 66, 1 },
-        { 65, 2 },
-        { 81, 3 },
-        { 4,  4 },
+        { 2,  0 },   // Melee
+        { 66, 1 },   // Ranged
+        { 65, 2 },   // Grappling Hook
+        { 81, 3 },   // Shield
+        { 4,  4 },   // Obstacle Drawer
+        { 93, 5 },   // Flamethrower
+        { 314, 6 },   // BombLauncher
+        { 315, 7 },   // Trap
+        { 317, 8 },   // Turret
     };
 
     private readonly HashSet<int> _unlocked = new HashSet<int>();

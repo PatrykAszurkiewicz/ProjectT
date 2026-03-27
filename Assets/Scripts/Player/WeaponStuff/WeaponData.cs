@@ -44,6 +44,44 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isObstacleDrawer")] public Color solidifiedColor = new Color(0.2f, 0.2f, 0.2f); // dark grey
     [ConditionalField("isObstacleDrawer")] public float obstacleHealth = 50f;
 
+    [Header("Bomb Launcher Settings")]
+    public bool isBombLauncher = false;
+    [ConditionalField("isBombLauncher")] public int bombMaxMines = 5;
+    [ConditionalField("isBombLauncher")] public float bombProximityRadius = 1.5f;
+    [ConditionalField("isBombLauncher")] public float bombExplosionRadius = 3f;
+    [ConditionalField("isBombLauncher")] public bool bombFriendlyFire = false;
+    [ConditionalField("isBombLauncher")] public float bombArmDelay = 0.5f;
+
+    [Header("Trap Settings")]
+    public bool isTrap = false;
+    [ConditionalField("isTrap")] public int trapMaxCount = 3;
+    [ConditionalField("isTrap")] public float trapHoldDuration = 8f;
+    [ConditionalField("isTrap")] public float trapBossHoldDuration = 3f;
+    [ConditionalField("isTrap")] public float trapProximityRadius = 1.2f;
+    [ConditionalField("isTrap")] public float trapArmDelay = 0.4f;
+
+    [Header("Turret Settings")]
+    public bool isTurret = false;
+    [ConditionalField("isTurret")] public float turretRange = 5f;
+    [ConditionalField("isTurret")] public float turretFireRate = 3f;
+    [ConditionalField("isTurret")] public float turretProjectileSpeed = 12f;
+    [ConditionalField("isTurret")] public float turretArmDelay = 0.4f;
+    [ConditionalField("isTurret")] public float turretRotationSpeed = 300f;
+
+    [Header("Flamethrower Settings")]
+    public bool isFlamethrower = false;
+    [ConditionalField("isFlamethrower")] public float flameRange = 4.5f;
+    [ConditionalField("isFlamethrower")] public float flameConeAngle = 45f;
+    [ConditionalField("isFlamethrower")] public float flameDamageInterval = 0.15f;
+    [ConditionalField("isFlamethrower")] public float flameSpeed = 6f;
+    [ConditionalField("isFlamethrower")] public float flameFuelMax = 100f;
+    [ConditionalField("isFlamethrower")] public float flameFuelDrain = 25f;
+    [ConditionalField("isFlamethrower")] public float flameFuelRegen = 15f;
+    [ConditionalField("isFlamethrower")] public float flameFuelRegenDelay = 0.8f;
+    [ConditionalField("isFlamethrower")] public float flameParticlesPerSecond = 50f;
+    [ConditionalField("isFlamethrower")] public float flameParticleLifetimeMin = 0.25f;
+    [ConditionalField("isFlamethrower")] public float flameParticleLifetimeMax = 0.55f;
+
     public WeaponData CreateRuntimeCopy()
     {
         WeaponData copy = ScriptableObject.CreateInstance<WeaponData>();
@@ -79,6 +117,44 @@ public class WeaponData : ScriptableObject
         copy.solidifiedColor = this.solidifiedColor;
         copy.obstacleHealth = this.obstacleHealth;
 
+        // Bomb Launcher
+        copy.isBombLauncher = this.isBombLauncher;
+        copy.bombMaxMines = this.bombMaxMines;
+        copy.bombProximityRadius = this.bombProximityRadius;
+        copy.bombExplosionRadius = this.bombExplosionRadius;
+        copy.bombFriendlyFire = this.bombFriendlyFire;
+        copy.bombArmDelay = this.bombArmDelay;
+
+        // Trap
+        copy.isTrap = this.isTrap;
+        copy.trapMaxCount = this.trapMaxCount;
+        copy.trapHoldDuration = this.trapHoldDuration;
+        copy.trapBossHoldDuration = this.trapBossHoldDuration;
+        copy.trapProximityRadius = this.trapProximityRadius;
+        copy.trapArmDelay = this.trapArmDelay;
+
+        // Turret
+        copy.isTurret = this.isTurret;
+        copy.turretRange = this.turretRange;
+        copy.turretFireRate = this.turretFireRate;
+        copy.turretProjectileSpeed = this.turretProjectileSpeed;
+        copy.turretArmDelay = this.turretArmDelay;
+        copy.turretRotationSpeed = this.turretRotationSpeed;
+
+        // Flamethrower
+        copy.isFlamethrower = this.isFlamethrower;
+        copy.flameRange = this.flameRange;
+        copy.flameConeAngle = this.flameConeAngle;
+        copy.flameDamageInterval = this.flameDamageInterval;
+        copy.flameSpeed = this.flameSpeed;
+        copy.flameFuelMax = this.flameFuelMax;
+        copy.flameFuelDrain = this.flameFuelDrain;
+        copy.flameFuelRegen = this.flameFuelRegen;
+        copy.flameFuelRegenDelay = this.flameFuelRegenDelay;
+        copy.flameParticlesPerSecond = this.flameParticlesPerSecond;
+        copy.flameParticleLifetimeMin = this.flameParticleLifetimeMin;
+        copy.flameParticleLifetimeMax = this.flameParticleLifetimeMax;
+
         return copy;
     }
 
@@ -89,12 +165,64 @@ public class WeaponData : ScriptableObject
             isRanged = false;
             projectilePrefab = null;
             isObstacleDrawer = false;
+            isFlamethrower = false;
+            isBombLauncher = false;
+            isTrap = false;
+            isTurret = false;
         }
 
         if (isObstacleDrawer)
         {
             isRanged = false;
             isGrapplingHook = false;
+            projectilePrefab = null;
+            isFlamethrower = false;
+            isBombLauncher = false;
+            isTrap = false;
+            isTurret = false;
+        }
+
+        if (isFlamethrower)
+        {
+            isRanged = false;
+            isGrapplingHook = false;
+            isObstacleDrawer = false;
+            isBombLauncher = false;
+            isTrap = false;
+            isTurret = false;
+            projectilePrefab = null;
+        }
+
+        if (isBombLauncher)
+        {
+            isRanged = false;
+            isGrapplingHook = false;
+            isObstacleDrawer = false;
+            isFlamethrower = false;
+            isTrap = false;
+            isTurret = false;
+            projectilePrefab = null;
+        }
+
+        if (isTrap)
+        {
+            isRanged = false;
+            isGrapplingHook = false;
+            isObstacleDrawer = false;
+            isFlamethrower = false;
+            isBombLauncher = false;
+            isTurret = false;
+            projectilePrefab = null;
+        }
+
+        if (isTurret)
+        {
+            isRanged = false;
+            isGrapplingHook = false;
+            isObstacleDrawer = false;
+            isFlamethrower = false;
+            isBombLauncher = false;
+            isTrap = false;
             projectilePrefab = null;
         }
     }

@@ -53,9 +53,7 @@ public class GrassProfiler : MonoBehaviour
         }
     }
 
-    // ─────────────────────────────────────────────
     //  CPU GRASS (GrassOverlay — mesh-based)
-    // ─────────────────────────────────────────────
 
     void ProfileCPUGrass()
     {

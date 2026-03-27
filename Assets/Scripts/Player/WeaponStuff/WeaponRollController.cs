@@ -4,8 +4,8 @@ using System.Collections.Generic;
 
 public class WeaponRollController : MonoBehaviour
 {
-    [Header("Slots 0-4: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer")]
-    public WeaponData[] allWeaponSlots = new WeaponData[5];
+    [Header("Slots 0-8: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret")]
+    public WeaponData[] allWeaponSlots = new WeaponData[9];
 
     Weapon _weapon;
     WeaponRollUI _ui;
@@ -72,6 +72,10 @@ public class WeaponRollController : MonoBehaviour
             if (Keyboard.current.digit3Key.wasPressedThisFrame) Pick(2);
             if (Keyboard.current.digit4Key.wasPressedThisFrame) Pick(3);
             if (Keyboard.current.digit5Key.wasPressedThisFrame) Pick(4);
+            if (Keyboard.current.digit6Key.wasPressedThisFrame) Pick(5);
+            if (Keyboard.current.digit7Key.wasPressedThisFrame) Pick(6);
+            if (Keyboard.current.digit8Key.wasPressedThisFrame) Pick(7);
+            if (Keyboard.current.digit9Key.wasPressedThisFrame) Pick(8);
         }
     }
 

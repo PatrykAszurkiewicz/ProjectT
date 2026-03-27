@@ -96,6 +96,17 @@ public struct BiomeFogDefaults
                     smokeDarkCore = new Color(0.50f, 0.55f, 0.62f, 1.0f),
                 };
 
+
+            case BiomeType.Night:
+                return new BiomeFogDefaults
+                {
+                    fogEnabled = false,
+                    fogDensity = 0f,
+                    fogColor = new Color(0.05f, 0.05f, 0.12f, 1f),
+                    smokeColor = new Color(0.03f, 0.03f, 0.08f, 1f),
+                    smokeDarkCore = new Color(0.01f, 0.01f, 0.04f, 1f)
+                };
+
             case BiomeType.Marsh:
                 return new BiomeFogDefaults
                 {

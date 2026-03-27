@@ -13,53 +13,95 @@ public class Weapon : MonoBehaviour
     private PlayerStats playerStats;
     private bool isOnCooldown = false;
     public WeaponData defaultWeapon;
-    public float grapplingDamage = 0f; // Damage dealt by grappling hook
+    public float grapplingDamage = 0f;
 
-    // Grappling Hook System
+    // Input buffering 
+    private bool attackBuffered = false;
+    private float bufferTimer = 0f;
+    private const float BUFFER_WINDOW = 0.15f;
+
     private GrapplingHookSystem grapplingSystem;
-
-    // Obstacle Drawer System
     private ObstacleDrawerSystem obstacleDrawerSystem;
+    private FlamethrowerSystem flamethrowerSystem;
+    private BombLauncherSystem bombLauncherSystem;
+    private TrapLauncherSystem trapLauncherSystem;
+    private TurretLauncherSystem turretLauncherSystem;
+
+    // Persist flamethrower fuel across weapon swaps 
+    private float savedFlamethrowerFuel = -1f;
 
     public WeaponData GetWeaponData() => weaponData;
+
+
+    // Returns 0..1 fuel level for the flamethrower. Returns 1 if not a flamethrower.
+    // Used by FlamethrowerFuelUI.
+
+    public float GetFlamethrowerFuelNormalized()
+    {
+        if (flamethrowerSystem == null) return 1f;
+        return flamethrowerSystem.FuelNormalized;
+    }
+
     public void HotSwapWeapon(WeaponData newData)
     {
         if (newData == null) return;
 
-        // Tear down old sub-systems
         if (obstacleDrawerSystem != null) { obstacleDrawerSystem.Cleanup(); obstacleDrawerSystem = null; }
         if (grapplingSystem != null) { grapplingSystem.Cleanup(); grapplingSystem = null; }
+        if (bombLauncherSystem != null) { bombLauncherSystem.Cleanup(); bombLauncherSystem = null; }
+        if (trapLauncherSystem != null) { trapLauncherSystem.Cleanup(); trapLauncherSystem = null; }
+        if (turretLauncherSystem != null) { turretLauncherSystem.Cleanup(); turretLauncherSystem = null; }
 
-        // Undo old armor bonus
+        // Save flamethrower fuel before destroying the system
+        if (flamethrowerSystem != null)
+        {
+            savedFlamethrowerFuel = flamethrowerSystem.CurrentFuel;
+            flamethrowerSystem.Cleanup();
+            flamethrowerSystem = null;
+        }
+
         if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
             playerStats.currentArmor -= weaponData.armorBonus;
 
-        // Swap to fresh runtime copy
         weaponData = newData.CreateRuntimeCopy();
 
-        // Apply new armor bonus
         if (weaponData.armorBonus > 0 && playerStats != null)
             playerStats.currentArmor += weaponData.armorBonus;
 
-        // Update sprite
         var sr = visual.GetComponent<SpriteRenderer>();
         if (sr != null && weaponData.sprite != null)
             sr.sprite = weaponData.sprite;
 
         ResizeCollider();
 
-        // Start new sub-systems
         if (weaponData.isGrapplingHook) grapplingSystem = new GrapplingHookSystem(this, weaponData);
         if (weaponData.isObstacleDrawer) obstacleDrawerSystem = new ObstacleDrawerSystem(this, weaponData);
+        if (weaponData.isFlamethrower)
+        {
+            flamethrowerSystem = new FlamethrowerSystem(this, weaponData);
+            // Restore saved fuel if we had one (not first equip)
+            if (savedFlamethrowerFuel >= 0f)
+                flamethrowerSystem.SetFuel(savedFlamethrowerFuel);
+        }
+        if (weaponData.isBombLauncher)
+            bombLauncherSystem = new BombLauncherSystem(this, weaponData);
+        if (weaponData.isTrap)
+            trapLauncherSystem = new TrapLauncherSystem(this, weaponData);
+        if (weaponData.isTurret)
+            turretLauncherSystem = new TurretLauncherSystem(this, weaponData);
+
         if (CursorManager.Instance != null)
         {
             if (weaponData.isGrapplingHook) CursorManager.Instance.SetCursor(CursorManager.CursorType.Hook);
             else if (weaponData.isObstacleDrawer) CursorManager.Instance.SetCursor(CursorManager.CursorType.ObstacleDrawer);
+            else if (weaponData.isFlamethrower) CursorManager.Instance.SetCursor(CursorManager.CursorType.Flamethrower);
+            else if (weaponData.isBombLauncher) CursorManager.Instance.SetCursor(CursorManager.CursorType.BombLauncher);
+            else if (weaponData.isTrap) CursorManager.Instance.SetCursor(CursorManager.CursorType.Trap);
+            else if (weaponData.isTurret) CursorManager.Instance.SetCursor(CursorManager.CursorType.Turret);
             else if (weaponData.armorBonus > 0f) CursorManager.Instance.SetCursor(CursorManager.CursorType.Shield);
             else if (weaponData.isRanged) CursorManager.Instance.SetCursor(CursorManager.CursorType.Ranged);
             else CursorManager.Instance.SetCursor(CursorManager.CursorType.Melee);
         }
-        //Debug.Log($"[Weapon] Swapped to: {weaponData.weaponName}");
     }
 
     private void Awake()
@@ -75,31 +117,19 @@ public class Weapon : MonoBehaviour
         WeaponData sourceData = null;
         if (WeaponSelectionManager.Instance != null)
             sourceData = WeaponSelectionManager.Instance.GetChosenWeapon();
-
-        if (sourceData == null)
-            sourceData = originalWeaponData;
-
-        if (sourceData == null)
-            sourceData = defaultWeapon;
+        if (sourceData == null) sourceData = originalWeaponData;
+        if (sourceData == null) sourceData = defaultWeapon;
 
         if (sourceData != null)
-        {
-            // Runtime copy
             weaponData = sourceData.CreateRuntimeCopy();
-            //Debug.Log($"Created runtime copy of weapon: {weaponData.weaponName}");
-        }
         else
-        {
             Debug.LogError("No weapon data available for runtime copy!");
-        }
     }
 
     private void InitializeWeaponData()
     {
         if (weaponData == null)
-        {
             Debug.LogError("Runtime weapon data is null!");
-        }
     }
 
     private void SetupWeapon()
@@ -108,61 +138,98 @@ public class Weapon : MonoBehaviour
 
         playerStats = GetComponentInParent<PlayerStats>();
 
-        // Apply armor bonus
         if (weaponData.armorBonus > 0 && playerStats != null)
             playerStats.currentArmor += weaponData.armorBonus;
 
-        // Set visual sprite
         var spriteRenderer = visual.GetComponent<SpriteRenderer>();
         if (spriteRenderer != null && weaponData.sprite != null)
             spriteRenderer.sprite = weaponData.sprite;
 
         ResizeCollider();
 
-        // Initialize grappling hook system
         if (weaponData.isGrapplingHook)
             grapplingSystem = new GrapplingHookSystem(this, weaponData);
-
-        // Initialize obstacle drawer system
         if (weaponData.isObstacleDrawer)
             obstacleDrawerSystem = new ObstacleDrawerSystem(this, weaponData);
+        if (weaponData.isFlamethrower)
+            flamethrowerSystem = new FlamethrowerSystem(this, weaponData);
+        if (weaponData.isBombLauncher)
+            bombLauncherSystem = new BombLauncherSystem(this, weaponData);
+        if (weaponData.isTrap)
+            trapLauncherSystem = new TrapLauncherSystem(this, weaponData);
+        if (weaponData.isTurret)
+            turretLauncherSystem = new TurretLauncherSystem(this, weaponData);
     }
 
     public void ResetToOriginalStats()
     {
         if (originalWeaponData != null)
-        {
             weaponData = originalWeaponData.CreateRuntimeCopy();
-            //Debug.Log($"Reset weapon stats to original values: {weaponData.weaponName}");
-        }
     }
 
     private void Update()
     {
         UpdateGrapplingSystem();
         UpdateObstacleDrawerSystem();
+        UpdateFlamethrowerSystem();
+        UpdateBombLauncherSystem();
+        UpdateTrapSystem();
+        UpdateTurretSystem();
+
+        // Input buffer — only fire once, then clear
+        if (attackBuffered)
+        {
+            bufferTimer -= Time.deltaTime;
+            if (bufferTimer <= 0f)
+            {
+                attackBuffered = false;
+            }
+            else if (!isOnCooldown)
+            {
+                attackBuffered = false;
+                ExecuteAttack();
+            }
+        }
     }
 
     private void UpdateGrapplingSystem()
     {
         if (weaponData?.isGrapplingHook != true || grapplingSystem == null) return;
-
         bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
-
         grapplingSystem.SetActive(!inPlacementMode);
-
-        if (!inPlacementMode)
-            grapplingSystem.Update();
+        if (!inPlacementMode) grapplingSystem.Update();
     }
 
     private void UpdateObstacleDrawerSystem()
     {
         if (weaponData?.isObstacleDrawer != true || obstacleDrawerSystem == null) return;
-
         bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
+        if (!inPlacementMode) obstacleDrawerSystem.Update();
+    }
 
-        if (!inPlacementMode)
-            obstacleDrawerSystem.Update();
+    private void UpdateFlamethrowerSystem()
+    {
+        if (weaponData?.isFlamethrower != true || flamethrowerSystem == null) return;
+        bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
+        if (!inPlacementMode) flamethrowerSystem.Update();
+    }
+
+    private void UpdateBombLauncherSystem()
+    {
+        if (weaponData?.isBombLauncher != true || bombLauncherSystem == null) return;
+        bombLauncherSystem.Update();
+    }
+
+    private void UpdateTrapSystem()
+    {
+        if (weaponData?.isTrap != true || trapLauncherSystem == null) return;
+        trapLauncherSystem.Update();
+    }
+
+    private void UpdateTurretSystem()
+    {
+        if (weaponData?.isTurret != true || turretLauncherSystem == null) return;
+        turretLauncherSystem.Update();
     }
 
     private void ResizeCollider()
@@ -173,22 +240,62 @@ public class Weapon : MonoBehaviour
 
     public void PerformAttack()
     {
-        if (isOnCooldown) return;
+        if (isOnCooldown)
+        {
+            // Buffer only if not already buffered 
+            if (!attackBuffered)
+            {
+                attackBuffered = true;
+                bufferTimer = BUFFER_WINDOW;
+            }
+            return;
+        }
+        ExecuteAttack();
+    }
 
+    private void ExecuteAttack()
+    {
         if (weaponData.isObstacleDrawer)
         {
-            // Starting to draw
             if (obstacleDrawerSystem != null && !obstacleDrawerSystem.IsDrawing())
-            {
                 obstacleDrawerSystem.StartDrawing();
-            }
         }
         else if (weaponData.isGrapplingHook)
         {
-            // Grappling hooks only use the grappling system
             if (grapplingSystem?.CanFire() == true)
             {
                 grapplingSystem.FireHook();
+                StartCoroutine(CooldownRoutine());
+            }
+        }
+        else if (weaponData.isFlamethrower)
+        {
+            if (flamethrowerSystem != null && flamethrowerSystem.CanFire())
+            {
+                flamethrowerSystem.StartFiring();
+            }
+        }
+        else if (weaponData.isBombLauncher)
+        {
+            if (bombLauncherSystem != null)
+            {
+                bombLauncherSystem.PlaceMine();
+                StartCoroutine(CooldownRoutine());
+            }
+        }
+        else if (weaponData.isTrap)
+        {
+            if (trapLauncherSystem != null)
+            {
+                trapLauncherSystem.PlaceTrap();
+                StartCoroutine(CooldownRoutine());
+            }
+        }
+        else if (weaponData.isTurret)
+        {
+            if (turretLauncherSystem != null)
+            {
+                turretLauncherSystem.PlaceTurret();
                 StartCoroutine(CooldownRoutine());
             }
         }
@@ -214,6 +321,14 @@ public class Weapon : MonoBehaviour
                 StartCoroutine(CooldownRoutine());
             }
         }
+
+        if (weaponData?.isFlamethrower == true && flamethrowerSystem != null)
+        {
+            if (flamethrowerSystem.IsFiring)
+            {
+                flamethrowerSystem.StopFiring();
+            }
+        }
     }
 
     private IEnumerator CooldownRoutine()
@@ -230,7 +345,6 @@ public class Weapon : MonoBehaviour
 
         GameObject projectile = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
         var weaponProjectile = projectile.GetComponent<WeaponProjectile>();
-
         weaponProjectile?.Initialize(direction, weaponData.damage, weaponData.projectileSpeed, weaponData.knockBackForce);
     }
 
@@ -248,24 +362,22 @@ public class Weapon : MonoBehaviour
 
         var enemy = other.GetComponent<EnemyStats>();
         if (enemy == null || hitEnemies.Contains(enemy)) return;
-        //Debug.Log($"[WEAPON] Hitting: {other.gameObject.name}, root: {other.transform.root.gameObject.name}, component: {enemy.GetType().Name}");
 
         hitEnemies.Add(enemy);
 
-        // Deal damage
         if (weaponData.damage > 0)
         {
-            var stats = other.GetComponent<CharacterStats>(); // TODO verify if it doesn't break any augments
-            if (stats != null) // TODO verify if it doesn't break any aguemnts
+            var stats = other.GetComponent<CharacterStats>();
+            if (stats != null)
                 stats.TakeDamage(weaponData.damage);
 
-            // Energy vampire effect
             var vampireEffect = playerStats?.GetComponent<EnergyVampireTouchEffect>();
             if (vampireEffect != null)
                 vampireEffect.DrainEnergy();
+
+            CombatFeel.OnHitEnemy(other.gameObject, isMelee: true);
         }
 
-        // Apply knockback
         if (weaponData.knockBack)
             ApplyKnockback(enemy);
     }
@@ -274,30 +386,27 @@ public class Weapon : MonoBehaviour
     {
         Vector2 direction = GetKnockbackDirection(enemy.transform.position);
         var enemyController = enemy.GetComponent<EnemyController>();
-
         enemyController?.ApplyKnockback(direction, weaponData.knockBackForce);
     }
 
     private Vector2 GetKnockbackDirection(Vector3 enemyPosition)
     {
         Vector2 direction = (enemyPosition - playerStats.transform.position).normalized;
-
         if (direction.sqrMagnitude < 1e-4f)
         {
             direction = (enemyPosition - transform.position).normalized;
             if (direction.sqrMagnitude < 1e-4f)
                 direction = Random.insideUnitCircle.normalized;
         }
-
         return direction;
     }
 
     void OnDestroy()
     {
-        // Clean up obstacle drawer system
-        if (obstacleDrawerSystem != null)
-        {
-            obstacleDrawerSystem.Cleanup();
-        }
+        if (obstacleDrawerSystem != null) obstacleDrawerSystem.Cleanup();
+        if (flamethrowerSystem != null) flamethrowerSystem.Cleanup();
+        if (bombLauncherSystem != null) bombLauncherSystem.Cleanup();
+        if (trapLauncherSystem != null) trapLauncherSystem.Cleanup();
+        if (turretLauncherSystem != null) turretLauncherSystem.Cleanup();
     }
 }
