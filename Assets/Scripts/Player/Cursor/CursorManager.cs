@@ -20,6 +20,8 @@ public class CursorManager : MonoBehaviour
     public string bombLauncherCursorPath = "Sprites/Cursors/cursor_spritesheet_bomb";
     public string trapCursorPath = "Sprites/Cursors/cursor_spritesheet_trap";
     public string turretCursorPath = "Sprites/Cursors/cursor_spritesheet_turret";
+    public string decoyCursorPath = "Sprites/Cursors/cursor_spritesheet_decoy";
+    public string boomerangCursorPath = "Sprites/Cursors/cursor_spritesheet_boomerang";
 
     [Header("Cursor Size")]
     [Tooltip("Desired cursor size in world units. All cursor sprites will be normalized to this size.")]
@@ -37,6 +39,8 @@ public class CursorManager : MonoBehaviour
     private Sprite bombLauncherCursorSprite;
     private Sprite trapCursorSprite;
     private Sprite turretCursorSprite;
+    private Sprite decoyCursorSprite;
+    private Sprite boomerangCursorSprite;
 
     private Sprite previousCursorSprite;
     private CursorType currentCursorType = CursorType.Default;
@@ -58,7 +62,9 @@ public class CursorManager : MonoBehaviour
         Flamethrower,
         BombLauncher,
         Trap,
-        Turret
+        Turret,
+        Decoy,
+        Boomerang
     }
 
     void Awake()
@@ -118,6 +124,8 @@ public class CursorManager : MonoBehaviour
         bombLauncherCursorSprite = Resources.Load<Sprite>(bombLauncherCursorPath);
         trapCursorSprite = Resources.Load<Sprite>(trapCursorPath);
         turretCursorSprite = Resources.Load<Sprite>(turretCursorPath);
+        decoyCursorSprite = Resources.Load<Sprite>(decoyCursorPath);
+        boomerangCursorSprite = Resources.Load<Sprite>(boomerangCursorPath);
     }
 
     public void SetCursor(CursorType cursorType)
@@ -159,6 +167,8 @@ public class CursorManager : MonoBehaviour
             CursorType.BombLauncher => bombLauncherCursorSprite,
             CursorType.Trap => trapCursorSprite ?? defaultCursorSprite,
             CursorType.Turret => turretCursorSprite ?? defaultCursorSprite,
+            CursorType.Decoy => decoyCursorSprite ?? defaultCursorSprite,
+            CursorType.Boomerang => boomerangCursorSprite ?? rangedCursorSprite ?? defaultCursorSprite,
             _ => defaultCursorSprite
         };
 

@@ -13,9 +13,11 @@ public class WeaponUnlockRegistry : MonoBehaviour
         { 81, 3 },   // Shield
         { 4,  4 },   // Obstacle Drawer
         { 93, 5 },   // Flamethrower
-        { 314, 6 },   // BombLauncher
-        { 315, 7 },   // Trap
-        { 317, 8 },   // Turret
+        { 314, 6 },  // BombLauncher
+        { 315, 7 },  // Trap
+        { 317, 8 },  // Turret
+        { 316, 9 },  // Decoy
+        { 318, 10 }, // Boomerang
     };
 
     private readonly HashSet<int> _unlocked = new HashSet<int>();

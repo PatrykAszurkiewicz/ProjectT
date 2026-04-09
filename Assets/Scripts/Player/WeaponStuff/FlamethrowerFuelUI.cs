@@ -5,7 +5,7 @@ using UnityEngine.UI;
 public class FlamethrowerFuelUI : MonoBehaviour
 {
     [Header("Layout")]
-    public Vector2 position = new Vector2(66f, 20f);
+    public Vector2 position = new Vector2(66f, 40f);
     public float barWidth = 110f;
     public float barHeight = 20f;
 

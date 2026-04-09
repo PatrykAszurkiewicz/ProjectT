@@ -35,7 +35,7 @@ public class EnemyAnimationController : MonoBehaviour
     /// Called by EnemyController.AttackCycle() to start the melee attack animation
     public void PlayMeleeAttackAnimation()
     {
-        if (isDying || isLaserAttacking) return;
+        if (isDying || isLaserAttacking || isAnimationFrozen) return;
         isMeleeAttacking = true;
 
         if (currentState != AnimationState.Attack)
@@ -114,6 +114,38 @@ public class EnemyAnimationController : MonoBehaviour
 
     public bool IsPlayingLaserAttack() => isLaserAttacking;
     public bool IsPlayingMeleeAttack() => isMeleeAttacking;
+
+    //  Animation Freeze (used by ParryStunEffect) 
+    private bool isAnimationFrozen = false;
+
+    // Freezes the animation on the current frame. Stops all animation coroutines. The sprite stays on whatever frame it was showing when frozen.
+    public void FreezeAnimation()
+    {
+        isAnimationFrozen = true;
+        if (currentAnimationCoroutine != null)
+        {
+            StopCoroutine(currentAnimationCoroutine);
+            currentAnimationCoroutine = null;
+        }
+    }
+
+    // Unfreezes the animation, allowing it to resume. Returns to idle if not in an active attack state.
+
+    public void UnfreezeAnimation()
+    {
+        if (!isAnimationFrozen) return;
+        isAnimationFrozen = false;
+
+        // Don't try to start coroutines on inactive/destroyed objects
+        if (this == null || !gameObject.activeInHierarchy) return;
+
+        // If no attack is active, return to idle
+        if (!isMeleeAttacking && !isLaserAttacking)
+        {
+            currentState = AnimationState.Attack; // force reset so PlayIdleAnimation works
+            PlayIdleAnimation();
+        }
+    }
 
 
     // LIFECYCLE
@@ -208,9 +240,17 @@ public class EnemyAnimationController : MonoBehaviour
     {
         if (sprites == null || isDying) return;
 
+        // When animation is frozen (parry stun), skip all updates
+        if (isAnimationFrozen) return;
+
         // Update sprite orientation (skip during laser attack)
         if (!isLaserAttacking)
-            UpdateSpriteOrientation();
+        {
+            if (isMeleeAttacking)
+                FaceAttackTarget();  // Face the target during melee attacks
+            else
+                UpdateSpriteOrientation();
+        }
         else
             transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.identity,
                 Time.deltaTime * orientationSmoothSpeed);
@@ -229,6 +269,43 @@ public class EnemyAnimationController : MonoBehaviour
             if (isAttacking) PlayAttackAnimation();
             else PlayIdleAnimation();
         }
+    }
+
+    // During melee attacks, face the nearest valid target (player, tower, or core). This ensures the sprite doesn't face backwards while attacking.
+    private void FaceAttackTarget()
+    {
+        if (spriteRenderer == null) return;
+
+        // Find the most likely attack target
+        Transform target = null;
+
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null)
+        {
+            float dist = Vector2.Distance(transform.position, player.transform.position);
+            if (dist < 5f) // reasonable melee range check
+                target = player.transform;
+        }
+
+        if (target == null)
+        {
+            GameObject core = GameObject.FindGameObjectWithTag("Core");
+            if (core != null)
+                target = core.transform;
+        }
+
+        if (target != null)
+        {
+            float dx = target.position.x - transform.position.x;
+            if (dx < -0.1f)
+                spriteRenderer.flipX = true;
+            else if (dx > 0.1f)
+                spriteRenderer.flipX = false;
+        }
+
+        // Reset rotation during attack
+        transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.identity,
+            Time.deltaTime * orientationSmoothSpeed);
     }
 
     private void UpdateSpriteOrientation()
@@ -273,7 +350,7 @@ public class EnemyAnimationController : MonoBehaviour
 
     private void PlayIdleAnimation()
     {
-        if (currentState == AnimationState.Idle || isDying) return;
+        if (currentState == AnimationState.Idle || isDying || isAnimationFrozen) return;
         currentState = AnimationState.Idle;
 
         if (currentAnimationCoroutine != null)
@@ -288,7 +365,7 @@ public class EnemyAnimationController : MonoBehaviour
 
     private void PlayAttackAnimation()
     {
-        if (currentState == AnimationState.Attack || isDying) return;
+        if (currentState == AnimationState.Attack || isDying || isAnimationFrozen) return;
         currentState = AnimationState.Attack;
 
         if (currentAnimationCoroutine != null)

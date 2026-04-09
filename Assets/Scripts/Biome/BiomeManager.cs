@@ -360,8 +360,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderGrassPrefab2;
     public GameObject borderGrassPrefab3;
     public GameObject borderGrassPrefab4;
-    public GameObject borderGrassPrefab5;
-    public GameObject borderGrassPrefab6;
     [Tooltip("When ON, border prefabs won't visually overlap (good for rocks). OFF = overlapping (good for trees).")]
     public bool borderGrassPreventOverlap = false;
     [Tooltip("Spacing between border prefabs for this biome (smaller = denser).")]
@@ -372,8 +370,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderSnowPrefab2;
     public GameObject borderSnowPrefab3;
     public GameObject borderSnowPrefab4;
-    public GameObject borderSnowPrefab5;
-    public GameObject borderSnowPrefab6;
     public bool borderSnowPreventOverlap = false;
     public float borderSnowSpacing = 0.8f;
 
@@ -382,8 +378,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderDesertPrefab2;
     public GameObject borderDesertPrefab3;
     public GameObject borderDesertPrefab4;
-    public GameObject borderDesertPrefab5;
-    public GameObject borderDesertPrefab6;
     public bool borderDesertPreventOverlap = true;
     public float borderDesertSpacing = 0.4f;
 
@@ -392,8 +386,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderWastelandPrefab2;
     public GameObject borderWastelandPrefab3;
     public GameObject borderWastelandPrefab4;
-    public GameObject borderWastelandPrefab5;
-    public GameObject borderWastelandPrefab6;
     public bool borderWastelandPreventOverlap = true;
     public float borderWastelandSpacing = 0.4f;
 
@@ -402,8 +394,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderStonesPrefab2;
     public GameObject borderStonesPrefab3;
     public GameObject borderStonesPrefab4;
-    public GameObject borderStonesPrefab5;
-    public GameObject borderStonesPrefab6;
     public bool borderStonesPreventOverlap = true;
     public float borderStonesSpacing = 0.4f;
 
@@ -412,8 +402,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderGrassCartoonPrefab2;
     public GameObject borderGrassCartoonPrefab3;
     public GameObject borderGrassCartoonPrefab4;
-    public GameObject borderGrassCartoonPrefab5;
-    public GameObject borderGrassCartoonPrefab6;
     public bool borderGrassCartoonPreventOverlap = false;
     public float borderGrassCartoonSpacing = 0.8f;
 
@@ -422,8 +410,6 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderMarshPrefab2;
     public GameObject borderMarshPrefab3;
     public GameObject borderMarshPrefab4;
-    public GameObject borderMarshPrefab5;
-    public GameObject borderMarshPrefab6;
     public bool borderMarshPreventOverlap = false;
     public float borderMarshSpacing = 0.8f;
 
@@ -432,10 +418,56 @@ public class BiomeManager : MonoBehaviour
     public GameObject borderNightPrefab2;
     public GameObject borderNightPrefab3;
     public GameObject borderNightPrefab4;
-    public GameObject borderNightPrefab5;
-    public GameObject borderNightPrefab6;
     public bool borderNightPreventOverlap = false;
     public float borderNightSpacing = 0.8f;
+
+    // Obstacle Generation — per-biome prefab slots (up to 3 each)
+    // All other obstacle settings (count, scale, clustering, etc.) are on the ObstacleGenerator component directly.
+
+    [Header("Obstacles — Custom Cluster Blueprints (optional)")]
+    [Tooltip("Drag ObstacleClusterBlueprint assets here to override built-in compositions. " +
+             "Leave empty to use the 8 built-in templates (TreeGrove, RockOutcrop, etc.).")]
+    public ObstacleClusterBlueprint[] obstacleCustomBlueprints;
+
+    [Header("Obstacles — Grass Biome (drag up to 3 prefabs)")]
+    public GameObject obstacleGrassPrefab1;
+    public GameObject obstacleGrassPrefab2;
+    public GameObject obstacleGrassPrefab3;
+
+    [Header("Obstacles — Snow Biome")]
+    public GameObject obstacleSnowPrefab1;
+    public GameObject obstacleSnowPrefab2;
+    public GameObject obstacleSnowPrefab3;
+
+    [Header("Obstacles — Desert Biome")]
+    public GameObject obstacleDesertPrefab1;
+    public GameObject obstacleDesertPrefab2;
+    public GameObject obstacleDesertPrefab3;
+
+    [Header("Obstacles — Wasteland Biome")]
+    public GameObject obstacleWastelandPrefab1;
+    public GameObject obstacleWastelandPrefab2;
+    public GameObject obstacleWastelandPrefab3;
+
+    [Header("Obstacles — Stones Biome")]
+    public GameObject obstacleStonesPrefab1;
+    public GameObject obstacleStonesPrefab2;
+    public GameObject obstacleStonesPrefab3;
+
+    [Header("Obstacles — GrassCartoon Biome")]
+    public GameObject obstacleGrassCartoonPrefab1;
+    public GameObject obstacleGrassCartoonPrefab2;
+    public GameObject obstacleGrassCartoonPrefab3;
+
+    [Header("Obstacles — Marsh Biome")]
+    public GameObject obstacleMarshPrefab1;
+    public GameObject obstacleMarshPrefab2;
+    public GameObject obstacleMarshPrefab3;
+
+    [Header("Obstacles — Night Biome")]
+    public GameObject obstacleNightPrefab1;
+    public GameObject obstacleNightPrefab2;
+    public GameObject obstacleNightPrefab3;
 
     // Marsh settings — water puddles under grass
     [Header("Marsh — Puddle Distribution")]
@@ -653,57 +685,57 @@ public class BiomeManager : MonoBehaviour
         }
     }
 
-    /// Returns the 6-slot prefab array for the given biome's border ring.
+    /// Returns the 4-slot prefab array for the given biome's border ring.
     GameObject[] GetBorderPrefabsForBiome(BiomeType biome)
     {
         switch (biome)
         {
             case BiomeType.Grass:
                 return new GameObject[] {
-                    borderGrassPrefab1, borderGrassPrefab2, borderGrassPrefab3,
-                    borderGrassPrefab4, borderGrassPrefab5, borderGrassPrefab6
+                    borderGrassPrefab1, borderGrassPrefab2,
+                    borderGrassPrefab3, borderGrassPrefab4
                 };
             case BiomeType.Snow:
                 return new GameObject[] {
-                    borderSnowPrefab1, borderSnowPrefab2, borderSnowPrefab3,
-                    borderSnowPrefab4, borderSnowPrefab5, borderSnowPrefab6
+                    borderSnowPrefab1, borderSnowPrefab2,
+                    borderSnowPrefab3, borderSnowPrefab4
                 };
             case BiomeType.Desert:
                 return new GameObject[] {
-                    borderDesertPrefab1, borderDesertPrefab2, borderDesertPrefab3,
-                    borderDesertPrefab4, borderDesertPrefab5, borderDesertPrefab6
+                    borderDesertPrefab1, borderDesertPrefab2,
+                    borderDesertPrefab3, borderDesertPrefab4
                 };
             case BiomeType.Wasteland:
                 return new GameObject[] {
-                    borderWastelandPrefab1, borderWastelandPrefab2, borderWastelandPrefab3,
-                    borderWastelandPrefab4, borderWastelandPrefab5, borderWastelandPrefab6
+                    borderWastelandPrefab1, borderWastelandPrefab2,
+                    borderWastelandPrefab3, borderWastelandPrefab4
                 };
             case BiomeType.Stones:
                 return new GameObject[] {
-                    borderStonesPrefab1, borderStonesPrefab2, borderStonesPrefab3,
-                    borderStonesPrefab4, borderStonesPrefab5, borderStonesPrefab6
+                    borderStonesPrefab1, borderStonesPrefab2,
+                    borderStonesPrefab3, borderStonesPrefab4
                 };
             case BiomeType.GrassCartoon:
                 return new GameObject[] {
-                    borderGrassCartoonPrefab1, borderGrassCartoonPrefab2, borderGrassCartoonPrefab3,
-                    borderGrassCartoonPrefab4, borderGrassCartoonPrefab5, borderGrassCartoonPrefab6
+                    borderGrassCartoonPrefab1, borderGrassCartoonPrefab2,
+                    borderGrassCartoonPrefab3, borderGrassCartoonPrefab4
                 };
             case BiomeType.Marsh:
                 return new GameObject[] {
-                    borderMarshPrefab1, borderMarshPrefab2, borderMarshPrefab3,
-                    borderMarshPrefab4, borderMarshPrefab5, borderMarshPrefab6
+                    borderMarshPrefab1, borderMarshPrefab2,
+                    borderMarshPrefab3, borderMarshPrefab4
                 };
             case BiomeType.Night:
                 return new GameObject[] {
-                    borderNightPrefab1, borderNightPrefab2, borderNightPrefab3,
-                    borderNightPrefab4, borderNightPrefab5, borderNightPrefab6
+                    borderNightPrefab1, borderNightPrefab2,
+                    borderNightPrefab3, borderNightPrefab4
                 };
             default:
                 return GetBorderPrefabsForBiome(BiomeType.Grass);
         }
     }
 
-    /// Returns whether the given biome's border should prevent overlap.
+    // Returns whether the given biome's border should prevent overlap.
     bool GetBorderPreventOverlap(BiomeType biome)
     {
         switch (biome)
@@ -720,7 +752,7 @@ public class BiomeManager : MonoBehaviour
         }
     }
 
-    /// Returns the per-biome spacing for the border ring.
+    // Returns the per-biome spacing for the border ring.
     float GetBorderSpacing(BiomeType biome)
     {
         switch (biome)
@@ -734,6 +766,32 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.Marsh: return borderMarshSpacing;
             case BiomeType.Night: return borderNightSpacing;
             default: return 0.8f;
+        }
+    }
+
+    // Returns the 3-slot prefab array for the given biome's obstacle generation.
+    public GameObject[] GetObstaclePrefabsForBiome(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Grass:
+                return new GameObject[] { obstacleGrassPrefab1, obstacleGrassPrefab2, obstacleGrassPrefab3 };
+            case BiomeType.Snow:
+                return new GameObject[] { obstacleSnowPrefab1, obstacleSnowPrefab2, obstacleSnowPrefab3 };
+            case BiomeType.Desert:
+                return new GameObject[] { obstacleDesertPrefab1, obstacleDesertPrefab2, obstacleDesertPrefab3 };
+            case BiomeType.Wasteland:
+                return new GameObject[] { obstacleWastelandPrefab1, obstacleWastelandPrefab2, obstacleWastelandPrefab3 };
+            case BiomeType.Stones:
+                return new GameObject[] { obstacleStonesPrefab1, obstacleStonesPrefab2, obstacleStonesPrefab3 };
+            case BiomeType.GrassCartoon:
+                return new GameObject[] { obstacleGrassCartoonPrefab1, obstacleGrassCartoonPrefab2, obstacleGrassCartoonPrefab3 };
+            case BiomeType.Marsh:
+                return new GameObject[] { obstacleMarshPrefab1, obstacleMarshPrefab2, obstacleMarshPrefab3 };
+            case BiomeType.Night:
+                return new GameObject[] { obstacleNightPrefab1, obstacleNightPrefab2, obstacleNightPrefab3 };
+            default:
+                return GetObstaclePrefabsForBiome(BiomeType.Grass);
         }
     }
 
@@ -948,6 +1006,24 @@ public class BiomeManager : MonoBehaviour
             border.preventOverlap = GetBorderPreventOverlap(activeBiome);
             border.spacing = GetBorderSpacing(activeBiome);
             border.GenerateBorder();
+        }
+
+        // 7b. Generate random obstacles within the playable area
+        ObstacleGenerator obsGen = GetComponent<ObstacleGenerator>();
+        if (obsGen == null)
+            obsGen = FindFirstObjectByType<ObstacleGenerator>();
+        if (obsGen != null)
+        {
+            // Only push per-biome prefabs and blueprints — all other settings
+            // (count, scale, clustering, etc.) live on ObstacleGenerator's own inspector.
+            obsGen.obstaclePrefabs = GetObstaclePrefabsForBiome(activeBiome);
+            obsGen.customBlueprints = obstacleCustomBlueprints;
+            obsGen.GenerateObstacles();
+        }
+        else
+        {
+            Debug.LogWarning("[BiomeManager] No ObstacleGenerator found in scene — skipping obstacle generation. " +
+                             "Add an ObstacleGenerator component to any GameObject.");
         }
 
         // 8. Sync all trackers so Update() only reacts to *subsequent* manual changes
@@ -1843,8 +1919,5 @@ public class BiomeManager : MonoBehaviour
                          $"grass instances={nightGrassInstanceCount:N0}");
     }
 }
-
-
-
 
 

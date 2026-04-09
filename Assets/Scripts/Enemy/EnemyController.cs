@@ -18,6 +18,19 @@ public class EnemyController : MonoBehaviour
     [SerializeField] private float attackCooldown = 1f;
     private float attackTimer = 0f;
 
+    [Header("Attack Hit Timing")]
+    [Tooltip("Which frame in the attack animation deals damage (0-based relative to attack start). " +
+             "-1 = use frame 0 (instant, legacy behavior).")]
+    [SerializeField] private int attackHitFrame = -1;
+
+    [Header("Parry Window")]
+    [Tooltip("First attack frame (0-based) that can be parried. " +
+             "Player must raise shield during these frames to trigger a parry.")]
+    [SerializeField] private int parryFrameStart = 0;
+    [Tooltip("Last attack frame (0-based) that can be parried (inclusive). " +
+             "Set equal to attackHitFrame for a tight parry, or wider for easier parry.")]
+    [SerializeField] private int parryFrameEnd = 0;
+
     [Header("Obstacle Avoidance")]
     [SerializeField] private float avoidDistance = 1f;
     [SerializeField] private LayerMask obstacleLayer;
@@ -47,6 +60,24 @@ public class EnemyController : MonoBehaviour
 
     // Knockback direct velocity
     private Vector2 knockbackVelocity;
+
+    // ─── Attack hit timing state ───
+    private bool isWaitingForHitFrame = false;
+    private float attackCycleStartTime = -999f; // Time.time when current attack cycle began
+
+    /// <summary>
+    /// The Time.time when the current attack cycle started.
+    /// Used by ParryIndicator to synchronize timing with IsInParryWindow().
+    /// </summary>
+    public float AttackCycleStartTime => attackCycleStartTime;
+    public bool IsAttacking => isAttackingCycle;
+
+    // ─── Decoy lure system ───
+    private Transform decoyTarget;
+    private bool isLuredByDecoy = false;
+
+    // How close to the decoy the enemy will walk before stopping
+    private const float DECOY_STOP_DISTANCE = 0.6f;
 
     public float GetAttackCooldown() => attackCooldown;
 
@@ -78,6 +109,30 @@ public class EnemyController : MonoBehaviour
         InvokeRepeating(nameof(UpdateTarget), 0f, 0.5f);
     }
 
+    //  Decoy target API (called by DecoyDevice) 
+
+    // Called by DecoyDevice to lure this enemy towards the decoy.
+    // While lured, normal target selection is overridden.
+
+    public void SetDecoyTarget(Transform decoy)
+    {
+        decoyTarget = decoy;
+        isLuredByDecoy = true;
+        currentTarget = decoy;
+    }
+
+    // Called by DecoyDevice when the decoy expires or is replaced.
+    // Enemy returns to normal target selection.
+    public void ClearDecoyTarget()
+    {
+        decoyTarget = null;
+        isLuredByDecoy = false;
+        currentTarget = coreTarget;
+        UpdateTarget();
+    }
+
+    public bool IsLuredByDecoy() => isLuredByDecoy;
+
     public void SetGrapplingState(bool isGrappled, float duration = 2f)
     {
         isBeingGrappled = isGrappled;
@@ -96,13 +151,18 @@ public class EnemyController : MonoBehaviour
             return;
         }
 
-        if (EnergyManager.Instance != null && EnergyManager.Instance.IsGameOver())
+        // Parry stun — completely freeze movement
+        if (GetComponent<ParryStunEffect>() != null)
         {
             if (rb != null) rb.linearVelocity = Vector2.zero;
             return;
         }
 
-
+        if (EnergyManager.Instance != null && EnergyManager.Instance.IsGameOver())
+        {
+            if (rb != null) rb.linearVelocity = Vector2.zero;
+            return;
+        }
 
         var boss1 = GetComponent<Boss1>();
         if (boss1 != null)
@@ -137,10 +197,22 @@ public class EnemyController : MonoBehaviour
             }
             else
             {
-                // Non-dynamic body 
                 isKnockedBack = false;
             }
             return;
+        }
+
+        // If lured by decoy, validate the decoy still exists
+        if (isLuredByDecoy)
+        {
+            if (decoyTarget == null || decoyTarget.gameObject == null || !decoyTarget.gameObject.activeInHierarchy)
+            {
+                ClearDecoyTarget();
+            }
+            else
+            {
+                currentTarget = decoyTarget;
+            }
         }
 
         if (currentTarget == null || !IsValidTarget(currentTarget))
@@ -152,7 +224,16 @@ public class EnemyController : MonoBehaviour
 
         float distance = Vector2.Distance(transform.position, currentTarget.position);
 
-        if (distance <= attackRange || isAttackingCycle)
+        // When lured by decoy, use a much tighter stop distance so they cluster around it
+        if (isLuredByDecoy && currentTarget == decoyTarget)
+        {
+            if (distance <= DECOY_STOP_DISTANCE)
+            {
+                rb.linearVelocity = Vector2.zero;
+                return;
+            }
+        }
+        else if (distance <= attackRange || isAttackingCycle)
         {
             rb.linearVelocity = Vector2.zero;
             return;
@@ -161,7 +242,10 @@ public class EnemyController : MonoBehaviour
         HandleStuckDetection();
         Vector2 direction = (currentTarget.position - transform.position).normalized;
         direction = GetOptimalMovementDirection(direction);
-        rb.linearVelocity = direction.normalized * stats.MoveSpeed;
+
+        // Lured enemies move slightly slower (confused)
+        float speedMultiplier = isLuredByDecoy ? 0.8f : 1f;
+        rb.linearVelocity = direction.normalized * stats.MoveSpeed * speedMultiplier;
     }
 
     public bool IsBeingGrappled() => isBeingGrappled;
@@ -238,6 +322,17 @@ public class EnemyController : MonoBehaviour
 
     private void UpdateTarget()
     {
+        // If lured by decoy, don't change target
+        if (isLuredByDecoy && decoyTarget != null && decoyTarget.gameObject != null && decoyTarget.gameObject.activeInHierarchy)
+        {
+            currentTarget = decoyTarget;
+            return;
+        }
+
+        // If decoy reference went stale, clear it
+        if (isLuredByDecoy)
+            ClearDecoyTarget();
+
         if (currentTarget != null &&
             (currentTarget.gameObject == null || !currentTarget.gameObject.activeInHierarchy))
             currentTarget = null;
@@ -301,12 +396,17 @@ public class EnemyController : MonoBehaviour
         }
 
         if (currentTarget != null && !isFrozen && !isAttackingCycle
+            && GetComponent<ParryStunEffect>() == null
             && (EnergyManager.Instance == null || !EnergyManager.Instance.IsGameOver()))
         {
             float distance = Vector2.Distance(transform.position, currentTarget.position);
 
             if (distance <= attackRange)
             {
+                // Don't attack the decoy — just mill around it
+                if (isLuredByDecoy && currentTarget == decoyTarget)
+                    return;
+
                 attackTimer -= Time.deltaTime;
                 if (attackTimer <= 0f)
                 {
@@ -323,29 +423,128 @@ public class EnemyController : MonoBehaviour
     private IEnumerator AttackCycle(Transform target)
     {
         isAttackingCycle = true;
+        attackCycleStartTime = Time.time;
 
         if (animController != null)
             animController.PlayMeleeAttackAnimation();
 
+        // Calculate attack timing
+        float animDuration = 0f;
+        float animSpeed = 0f;
+        if (stats != null && stats.enemyData != null)
+        {
+            animSpeed = stats.enemyData.animationSpeed;
+            animDuration = animSpeed * stats.enemyData.attack.frameCount;
+        }
+
+        float hitDelay = 0f;
+        if (attackHitFrame > 0 && animSpeed > 0f)
+            hitDelay = animSpeed * attackHitFrame;
+
         var boss1 = GetComponent<Boss1>();
 
         if (boss1 != null)
+        {
+            // Boss1 has its own delayed hit system
             boss1.OnMeleeAttackFired(target);
-        else
-            PerformHit(target);
+        }
+        else if (hitDelay > 0f)
+        {
+            // Delayed hit: wait for the hit frame, then deal damage
+            isWaitingForHitFrame = true;
+            yield return new WaitForSeconds(hitDelay);
+            isWaitingForHitFrame = false;
 
-        float animDuration = 0f;
-        if (stats != null && stats.enemyData != null)
-            animDuration = stats.enemyData.animationSpeed * stats.enemyData.attack.frameCount;
+            // Target could have moved/died during wind-up
+            if (target != null)
+            {
+                PerformHit(target);
+            }
+        }
+        else
+        {
+            // Legacy: instant damage at animation start
+            PerformHit(target);
+        }
 
         float waitTime = Mathf.Max(animDuration, attackCooldown);
-        yield return new WaitForSeconds(waitTime);
+        float remainingWait = waitTime - hitDelay;
+        if (remainingWait > 0f)
+            yield return new WaitForSeconds(remainingWait);
 
         if (animController != null)
             animController.StopMeleeAttackAnimation();
 
         isAttackingCycle = false;
         attackTimer = attackCooldown;
+    }
+
+    // Returns true if the player's parry attempt overlaps this enemy's parry window for the current attack cycle.
+    // A parry succeeds if EITHER: The shield was RAISED (right-click pressed) during the parry frames, OR The shield is currently held AND the hit lands during the parry frames.
+    // Called by ShieldSystem.TryBlockOrParry().
+
+    public bool IsInParryWindow(float shieldRaiseTime)
+    {
+        if (!isAttackingCycle || attackCycleStartTime < 0f) return false;
+        if (stats == null || stats.enemyData == null) return false;
+
+        float animSpeed = stats.enemyData.animationSpeed;
+        if (animSpeed <= 0f) return false;
+
+        int pStart = parryFrameStart;
+        int pEnd = parryFrameEnd;
+        int hit = Mathf.Max(attackHitFrame, 0);
+
+        // If nothing configured, use a default 0.2s window before hit
+        if (pStart == 0 && pEnd == 0 && hit == 0)
+        {
+            // Fallback: parry if shield was raised within 0.2s
+            return (Time.time - shieldRaiseTime) <= 0.2f;
+        }
+
+        // Calculate absolute times for parry window
+        float parryWindowStart = attackCycleStartTime + pStart * animSpeed;
+        float parryWindowEnd = attackCycleStartTime + (pEnd + 1) * animSpeed;
+
+        // (a) Shield was pressed (raised) during the parry window
+        bool raisedDuringWindow = shieldRaiseTime >= parryWindowStart && shieldRaiseTime <= parryWindowEnd;
+
+        // (b) Shield is currently held AND the current time (hit moment) is
+        //     within the parry window — this covers the case where the player
+        //     was already holding the shield when the parry frames arrived,
+        //     but pressed right-click BEFORE the window opened.
+        bool heldDuringWindow = shieldRaiseTime <= parryWindowEnd && Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
+
+        bool isParry = raisedDuringWindow || heldDuringWindow;
+
+        Debug.Log($"[PARRY CHECK] {gameObject.name}: shieldRaise={shieldRaiseTime:F3} now={Time.time:F3} " +
+                  $"parryWindow=[{parryWindowStart:F3}-{parryWindowEnd:F3}] " +
+                  $"frames={pStart}-{pEnd} hit={hit} " +
+                  $"raisedDuring={raisedDuringWindow} heldDuring={heldDuringWindow} => {(isParry ? "PARRY!" : "BLOCK")}");
+
+        return isParry;
+    }
+
+    // Returns true if this enemy is currently mid-attack and the current time falls within its parry frames. 
+
+    public bool IsCurrentlyInParryFrames()
+    {
+        if (!isAttackingCycle || attackCycleStartTime < 0f) return false;
+        if (stats == null || stats.enemyData == null) return false;
+
+        float animSpeed = stats.enemyData.animationSpeed;
+        if (animSpeed <= 0f) return false;
+
+        int pStart = parryFrameStart;
+        int pEnd = parryFrameEnd;
+        int hit = Mathf.Max(attackHitFrame, 0);
+
+        if (pStart == 0 && pEnd == 0 && hit == 0) return false;
+
+        float parryWindowStart = attackCycleStartTime + pStart * animSpeed;
+        float parryWindowEnd = attackCycleStartTime + (pEnd + 1) * animSpeed;
+
+        return Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
     }
 
     private void PerformHit(Transform target)
@@ -358,13 +557,30 @@ public class EnemyController : MonoBehaviour
     {
         if (target == null) return;
 
+        //  Shield block / parry check 
+        // If the target is the player and they have an active shield, check blocking.
+        var playerStats = target.GetComponent<PlayerStats>();
+        if (playerStats != null)
+        {
+            // Check for parry stun — if this enemy is stunned, skip the attack entirely
+            var parryStun = GetComponent<ParryStunEffect>();
+            if (parryStun != null) return;
+
+            var weapon = target.GetComponentInChildren<Weapon>();
+            if (weapon != null)
+            {
+                var shield = weapon.GetShieldSystem();
+                if (shield != null && shield.TryBlockOrParry(gameObject))
+                    return; // Attack was blocked or parried — no damage applied
+            }
+        }
+
         var stats = target.GetComponent<CharacterStats>();
         if (stats != null)
         {
             float damageAmount = this.stats.Damage;
             stats.TakeDamage(damageAmount);
 
-            var playerStats = stats as PlayerStats;
             if (playerStats != null)
             {
                 CombatFeel.OnPlayerHurt();
@@ -434,10 +650,8 @@ public class EnemyController : MonoBehaviour
         return true;
     }
 
-    /// <summary>
     /// SAFE knockback — checks rigidbody type before setting velocity.
     /// Bosses with static/kinematic bodies won't crash.
-    /// </summary>
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.25f)
     {
         if (rb == null || rb.bodyType != RigidbodyType2D.Dynamic)
@@ -469,5 +683,5 @@ public class EnemyController : MonoBehaviour
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, avoidDistance);
     }
-}
 
+}

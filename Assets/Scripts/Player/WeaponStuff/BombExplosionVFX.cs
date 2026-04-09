@@ -448,7 +448,7 @@ public class BombExplosionVFX : MonoBehaviour
 }
 
 
-/// Fades and destroys a scorch mark over time.
+// Fades and destroys a scorch mark over time.
 
 public class ScorchFader : MonoBehaviour
 {

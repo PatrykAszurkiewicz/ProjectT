@@ -15,6 +15,8 @@ GameObject:
   - component: {fileID: 1235146779362298109}
   - component: {fileID: 1608654102432218712}
   - component: {fileID: 7095944704209832952}
+  - component: {fileID: 7932242476479118238}
+  - component: {fileID: 494122911128716204}
   m_Layer: 0
   m_Name: Slime
   m_TagString: Enemy
@@ -193,6 +195,9 @@ MonoBehaviour:
   detectRange: 3
   attackRange: 2.3
   attackCooldown: 1
+  attackHitFrame: 12
+  parryFrameStart: 8
+  parryFrameEnd: 12
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -213,3 +218,29 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+--- !u!114 &7932242476479118238
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7018fd51b9a8ccf4480dc80f6798d731, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &494122911128716204
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd272415469425c4e8b200168b461381, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  yOffset: 1.8
+  indicatorSize: 0.5

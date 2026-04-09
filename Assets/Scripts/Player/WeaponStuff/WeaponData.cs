@@ -39,9 +39,9 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isObstacleDrawer")] public float drawDuration = 0.3f;
     [ConditionalField("isObstacleDrawer")] public float obstacleWidth = 0.3f;
     [ConditionalField("isObstacleDrawer")] public int maxObstacles = 3;
-    [ConditionalField("isObstacleDrawer")] public float minDrawDistance = 0.1f; // Minimum distance between points
-    [ConditionalField("isObstacleDrawer")] public Color drawLineColor = new Color(0.8f, 0.8f, 0.8f); // light grey
-    [ConditionalField("isObstacleDrawer")] public Color solidifiedColor = new Color(0.2f, 0.2f, 0.2f); // dark grey
+    [ConditionalField("isObstacleDrawer")] public float minDrawDistance = 0.1f;
+    [ConditionalField("isObstacleDrawer")] public Color drawLineColor = new Color(0.8f, 0.8f, 0.8f);
+    [ConditionalField("isObstacleDrawer")] public Color solidifiedColor = new Color(0.2f, 0.2f, 0.2f);
     [ConditionalField("isObstacleDrawer")] public float obstacleHealth = 50f;
 
     [Header("Bomb Launcher Settings")]
@@ -82,11 +82,37 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isFlamethrower")] public float flameParticleLifetimeMin = 0.25f;
     [ConditionalField("isFlamethrower")] public float flameParticleLifetimeMax = 0.55f;
 
+    [Header("Decoy Settings")]
+    public bool isDecoy = false;
+    [ConditionalField("isDecoy")] public float decoyAttractRadius = 5f;
+    [ConditionalField("isDecoy")] public float decoyDuration = 7f;
+    [ConditionalField("isDecoy")] public float decoyBossDuration = 3f;
+    [ConditionalField("isDecoy")] public float decoyArmDelay = 0.3f;
+    [ConditionalField("isDecoy")] public Vector2 decoyBossVFXOffset = new Vector2(-1f, 2f);
+
+    [Header("Boomerang Settings")]
+    public bool isBoomerang = false;
+    [ConditionalField("isBoomerang")] public float boomerangRange = 6f;
+    [ConditionalField("isBoomerang")] public float boomerangCurve = 2.5f;
+
+
+    // Returns true if this weapon data represents a tool (right-hand / right-click slot).
+    // Tools: GrapplingHook, ObstacleDrawer, Shield (armorBonus > 0), BombLauncher, Trap, Turret, Decoy.
+    // Weapons (left-hand / left-click): Melee, Ranged, Flamethrower, Boomerang.
+
+    public bool IsTool
+    {
+        get
+        {
+            return isGrapplingHook || isObstacleDrawer || isBombLauncher
+                || isTrap || isTurret || isDecoy || armorBonus > 0f;
+        }
+    }
+
     public WeaponData CreateRuntimeCopy()
     {
         WeaponData copy = ScriptableObject.CreateInstance<WeaponData>();
 
-        // copy all variables
         copy.weaponName = this.weaponName;
         copy.sprite = this.sprite;
         copy.damage = this.damage;
@@ -107,7 +133,6 @@ public class WeaponData : ScriptableObject
         copy.targetHighlightColor = this.targetHighlightColor;
         copy.lineWidth = this.lineWidth;
 
-        // Obstacle drawer
         copy.isObstacleDrawer = this.isObstacleDrawer;
         copy.drawDuration = this.drawDuration;
         copy.obstacleWidth = this.obstacleWidth;
@@ -117,7 +142,6 @@ public class WeaponData : ScriptableObject
         copy.solidifiedColor = this.solidifiedColor;
         copy.obstacleHealth = this.obstacleHealth;
 
-        // Bomb Launcher
         copy.isBombLauncher = this.isBombLauncher;
         copy.bombMaxMines = this.bombMaxMines;
         copy.bombProximityRadius = this.bombProximityRadius;
@@ -125,7 +149,6 @@ public class WeaponData : ScriptableObject
         copy.bombFriendlyFire = this.bombFriendlyFire;
         copy.bombArmDelay = this.bombArmDelay;
 
-        // Trap
         copy.isTrap = this.isTrap;
         copy.trapMaxCount = this.trapMaxCount;
         copy.trapHoldDuration = this.trapHoldDuration;
@@ -133,7 +156,6 @@ public class WeaponData : ScriptableObject
         copy.trapProximityRadius = this.trapProximityRadius;
         copy.trapArmDelay = this.trapArmDelay;
 
-        // Turret
         copy.isTurret = this.isTurret;
         copy.turretRange = this.turretRange;
         copy.turretFireRate = this.turretFireRate;
@@ -141,7 +163,6 @@ public class WeaponData : ScriptableObject
         copy.turretArmDelay = this.turretArmDelay;
         copy.turretRotationSpeed = this.turretRotationSpeed;
 
-        // Flamethrower
         copy.isFlamethrower = this.isFlamethrower;
         copy.flameRange = this.flameRange;
         copy.flameConeAngle = this.flameConeAngle;
@@ -155,6 +176,17 @@ public class WeaponData : ScriptableObject
         copy.flameParticleLifetimeMin = this.flameParticleLifetimeMin;
         copy.flameParticleLifetimeMax = this.flameParticleLifetimeMax;
 
+        copy.isDecoy = this.isDecoy;
+        copy.decoyAttractRadius = this.decoyAttractRadius;
+        copy.decoyDuration = this.decoyDuration;
+        copy.decoyBossDuration = this.decoyBossDuration;
+        copy.decoyArmDelay = this.decoyArmDelay;
+        copy.decoyBossVFXOffset = this.decoyBossVFXOffset;
+
+        copy.isBoomerang = this.isBoomerang;
+        copy.boomerangRange = this.boomerangRange;
+        copy.boomerangCurve = this.boomerangCurve;
+
         return copy;
     }
 
@@ -162,68 +194,52 @@ public class WeaponData : ScriptableObject
     {
         if (isGrapplingHook)
         {
-            isRanged = false;
-            projectilePrefab = null;
-            isObstacleDrawer = false;
-            isFlamethrower = false;
-            isBombLauncher = false;
-            isTrap = false;
-            isTurret = false;
+            isRanged = false; projectilePrefab = null;
+            isObstacleDrawer = false; isFlamethrower = false;
+            isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
+            isBoomerang = false;
         }
-
         if (isObstacleDrawer)
         {
-            isRanged = false;
-            isGrapplingHook = false;
-            projectilePrefab = null;
-            isFlamethrower = false;
-            isBombLauncher = false;
-            isTrap = false;
-            isTurret = false;
+            isRanged = false; isGrapplingHook = false; projectilePrefab = null;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
+            isBoomerang = false;
         }
-
         if (isFlamethrower)
         {
-            isRanged = false;
-            isGrapplingHook = false;
-            isObstacleDrawer = false;
-            isBombLauncher = false;
-            isTrap = false;
-            isTurret = false;
-            projectilePrefab = null;
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false; projectilePrefab = null;
+            isBoomerang = false;
         }
-
         if (isBombLauncher)
         {
-            isRanged = false;
-            isGrapplingHook = false;
-            isObstacleDrawer = false;
-            isFlamethrower = false;
-            isTrap = false;
-            isTurret = false;
-            projectilePrefab = null;
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isTrap = false; isTurret = false; isDecoy = false; projectilePrefab = null;
+            isBoomerang = false;
         }
-
         if (isTrap)
         {
-            isRanged = false;
-            isGrapplingHook = false;
-            isObstacleDrawer = false;
-            isFlamethrower = false;
-            isBombLauncher = false;
-            isTurret = false;
-            projectilePrefab = null;
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTurret = false; isDecoy = false; projectilePrefab = null;
+            isBoomerang = false;
         }
-
         if (isTurret)
         {
-            isRanged = false;
-            isGrapplingHook = false;
-            isObstacleDrawer = false;
-            isFlamethrower = false;
-            isBombLauncher = false;
-            isTrap = false;
-            projectilePrefab = null;
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isDecoy = false; projectilePrefab = null;
+            isBoomerang = false;
+        }
+        if (isDecoy)
+        {
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; projectilePrefab = null;
+            isBoomerang = false;
+        }
+        if (isBoomerang)
+        {
+            isRanged = true; // Boomerang uses ranged attack path but with custom projectile
+            isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
         }
     }
 }

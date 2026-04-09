@@ -15,8 +15,6 @@ public class AugmentEffectHandler : MonoBehaviour
     {
         switch (augmentId)
         {
-
-
             case 3:
                 if (obstacleGenerator != null)
                 {
@@ -24,45 +22,55 @@ public class AugmentEffectHandler : MonoBehaviour
                 }
                 break;
 
+            //  Weapons (left-click slot) 
             case 2:
                 ApplyWeaponSwap("MeleeTest", "Melee");
                 break;
-            case 4:
-                ApplyWeaponSwap("ObstacleTest", "ObstacleDrawer");
-                break;
-
-            case 65:
-                ApplyWeaponSwap("HookTest", "Hook");
-                break;
-
             case 66:
                 ApplyWeaponSwap("RangeTest", "Ranged");
                 break;
-
-            case 81:
-                ApplyWeaponSwap("ShieldTest", "Shield");
-                break;
-
             case 93:
                 ApplyWeaponSwap("FlamethrowerTest", "Flamethrower");
+                break;
+            case 318:
+                if (WeaponUnlockRegistry.Instance != null)
+                    WeaponUnlockRegistry.Instance.TryUnlock(318);
+                ApplyWeaponSwap("BoomerangTest", "Boomerang");
+                break;
+
+            //  Tools (right-click slot) 
+            case 4:
+                ApplyToolSwap("ObstacleTest", "ObstacleDrawer");
+                break;
+            case 65:
+                ApplyToolSwap("HookTest", "Hook");
+                break;
+            case 81:
+                ApplyToolSwap("ShieldTest", "Shield");
                 break;
 
             case 314:
                 if (WeaponUnlockRegistry.Instance != null)
                     WeaponUnlockRegistry.Instance.TryUnlock(314);
-                ApplyWeaponSwap("BombLauncherTest", "BombLauncher");
+                ApplyToolSwap("BombLauncherTest", "BombLauncher");
                 break;
 
             case 315:
                 if (WeaponUnlockRegistry.Instance != null)
                     WeaponUnlockRegistry.Instance.TryUnlock(315);
-                ApplyWeaponSwap("TrapTest", "Trap");
+                ApplyToolSwap("TrapTest", "Trap");
+                break;
+
+            case 316:
+                if (WeaponUnlockRegistry.Instance != null)
+                    WeaponUnlockRegistry.Instance.TryUnlock(316);
+                ApplyToolSwap("DecoyTest", "Decoy");
                 break;
 
             case 317:
                 if (WeaponUnlockRegistry.Instance != null)
                     WeaponUnlockRegistry.Instance.TryUnlock(317);
-                ApplyWeaponSwap("TurretTest", "Turret");
+                ApplyToolSwap("TurretTest", "Turret");
                 break;
 
             case 11:
@@ -90,7 +98,6 @@ public class AugmentEffectHandler : MonoBehaviour
 
         var playerObj = playerStats.gameObject;
 
-        // Check if already exists
         var existing = playerObj.GetComponent<QuickReviveEffect>();
         if (existing != null)
         {
@@ -98,15 +105,11 @@ public class AugmentEffectHandler : MonoBehaviour
             return;
         }
 
-        // Add Quick Revive effect
         var quickRevive = playerObj.AddComponent<QuickReviveEffect>();
-
-        //Debug.Log($"[AUGMENT] Added Quick Revive effect Player will revive once per wave with 50% HP");
     }
+
     private void ApplyImmunityPhases()
     {
-        //Debug.Log("[AUGMENT] ========== ApplyImmunityPhases CALLED ==========");
-
         PlayerStats playerStats = FindAnyObjectByType<PlayerStats>();
         if (playerStats == null)
         {
@@ -114,11 +117,8 @@ public class AugmentEffectHandler : MonoBehaviour
             return;
         }
 
-        //Debug.Log($"[AUGMENT] Found PlayerStats on: {playerStats.gameObject.name}");
-
         var playerObj = playerStats.gameObject;
 
-        // Check if already exists
         var existing = playerObj.GetComponent<ImmunityPhasesEffect>();
         if (existing != null)
         {
@@ -126,15 +126,14 @@ public class AugmentEffectHandler : MonoBehaviour
             return;
         }
 
-        // Add immunity phases effect - values are set in component's Awake
         var immunity = playerObj.AddComponent<ImmunityPhasesEffect>();
-
-        //Debug.Log($"[AUGMENT] ✓✓✓ ADDED ImmunityPhasesEffect component! Duration: {immunity.immunityDuration}s, Cooldown: {immunity.immunityCooldown}s");
     }
+
+
+    // Swap weapon in the left-click (weapon) slot.
 
     private void ApplyWeaponSwap(string weaponAssetName, string cursorType)
     {
-        // Find weapon
         Weapon weapon = FindAnyObjectByType<Weapon>();
         if (weapon == null)
         {
@@ -142,105 +141,41 @@ public class AugmentEffectHandler : MonoBehaviour
             return;
         }
 
-        // Load weapon data - try multiple paths including Weapons folder
         WeaponData newWeaponData = Resources.Load<WeaponData>("Weapons/" + weaponAssetName);
-
         if (newWeaponData == null)
         {
             Debug.LogError($"[AUGMENT] Could not load {weaponAssetName}! Move it to Assets/Resources/Weapons/{weaponAssetName}.asset");
             return;
         }
 
-        // Get player stats
-        PlayerStats playerStats = weapon.GetComponentInParent<PlayerStats>();
-        WeaponData oldWeaponData = weapon.GetWeaponData();
-
-        // Remove old armor bonus
-        if (oldWeaponData != null && oldWeaponData.armorBonus > 0 && playerStats != null)
-        {
-            playerStats.currentArmor -= oldWeaponData.armorBonus;
-        }
+        // Use HotSwapWeapon which routes to the weapon slot
+        weapon.HotSwapWeapon(newWeaponData);
 
         // Update WeaponSelectionManager for persistence
         if (WeaponSelectionManager.Instance != null)
-        {
             WeaponSelectionManager.Instance.SelectedWeapon = newWeaponData;
-        }
+    }
 
-        // Use reflection to swap weapon data
-        var weaponDataField = typeof(Weapon).GetField("weaponData", BindingFlags.NonPublic | BindingFlags.Instance);
-        var originalWeaponDataField = typeof(Weapon).GetField("originalWeaponData", BindingFlags.Public | BindingFlags.Instance);
 
-        if (weaponDataField != null && originalWeaponDataField != null)
+    // Swap tool in the right-click (tool) slot.
+
+    private void ApplyToolSwap(string toolAssetName, string cursorType)
+    {
+        Weapon weapon = FindAnyObjectByType<Weapon>();
+        if (weapon == null)
         {
-            // Create runtime copy
-            WeaponData runtimeWeaponData = newWeaponData.CreateRuntimeCopy();
-
-            // Set both fields
-            originalWeaponDataField.SetValue(weapon, newWeaponData);
-            weaponDataField.SetValue(weapon, runtimeWeaponData);
-
-            // Apply new armor bonus
-            if (runtimeWeaponData.armorBonus > 0 && playerStats != null)
-            {
-                playerStats.currentArmor += runtimeWeaponData.armorBonus;
-            }
-
-            // Re-initialize weapon (visuals, collider, etc.)
-            var setupWeaponMethod = typeof(Weapon).GetMethod("SetupWeapon", BindingFlags.NonPublic | BindingFlags.Instance);
-            if (setupWeaponMethod != null)
-            {
-                setupWeaponMethod.Invoke(weapon, null);
-            }
-
-            //Debug.Log($"[AUGMENT] Successfully swapped to weapon: {runtimeWeaponData.weaponName}");
+            Debug.LogError($"[AUGMENT] Could not find Weapon component!");
+            return;
         }
-        else
+
+        WeaponData newToolData = Resources.Load<WeaponData>("Weapons/" + toolAssetName);
+        if (newToolData == null)
         {
-            Debug.LogError($"[AUGMENT] Failed to access weapon fields via reflection!");
+            Debug.LogError($"[AUGMENT] Could not load {toolAssetName}! Move it to Assets/Resources/Weapons/{toolAssetName}.asset");
+            return;
         }
 
-        // Update cursor based on weapon type
-        if (CursorManager.Instance != null)
-        {
-            switch (cursorType)
-            {
-                case "Melee":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Melee);
-                    break;
-                case "Hook":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Hook);
-                    break;
-                case "ObstacleDrawer":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.ObstacleDrawer);
-                    break;
-                case "Shield":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Shield);
-                    break;
-                case "Ranged":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Ranged);
-                    break;
-                case "Flamethrower":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Flamethrower);
-                    break;
-                case "BombLauncher":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.BombLauncher);
-                    break;
-                case "Trap":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Trap);
-                    break;
-                case "Turret":
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Turret);
-                    break;
-                case "Default":
-                default:
-                    CursorManager.Instance.SetCursor(CursorManager.CursorType.Default);
-                    break;
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[AUGMENT] CursorManager.Instance is null - cursor not updated");
-        }
+        // Equip into the tool slot directly
+        weapon.HotSwapTool(newToolData);
     }
 }

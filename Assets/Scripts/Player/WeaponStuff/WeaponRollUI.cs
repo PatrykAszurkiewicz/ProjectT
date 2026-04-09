@@ -6,16 +6,19 @@ using UnityEngine.UI;
 public class WeaponRollUI : MonoBehaviour
 {
     [Header("Layout")]
-    public Vector2 bottomLeftPadding = new Vector2(70f, 70f);
+    public Vector2 bottomLeftPadding = new Vector2(70f, 150f);
     public float circleSize = 153f;
-    public float stepUp = 85f;
+    public float gapBetweenRolls = 16f;
+    public float rollStep = 85f;
     public float shrinkPerStep = 0.80f;
 
     [Header("Colours")]
-    public Color activeBg = new Color(0.18f, 0.54f, 0.44f, 1f);
+    public Color weaponActiveBg = new Color(0.18f, 0.54f, 0.44f, 1f);
+    public Color toolActiveBg = new Color(0.44f, 0.28f, 0.58f, 1f);
     public Color inactiveBg = new Color(0.10f, 0.10f, 0.10f, 0.88f);
     public Color activeIcon = Color.white;
     public Color inactiveIcon = new Color(1f, 1f, 1f, 0.50f);
+    public Color emptyToolBg = new Color(0.15f, 0.15f, 0.15f, 0.55f);
 
     [Header("Animation")]
     public float scrollSpeed = 0.16f;
@@ -23,51 +26,44 @@ public class WeaponRollUI : MonoBehaviour
 
     WeaponRollController _ctrl;
     Canvas _canvas;
-    RectTransform _root;
 
-    readonly List<RectTransform> _rects = new List<RectTransform>();
-    readonly List<Image> _bgs = new List<Image>();
-    readonly List<Image> _icons = new List<Image>();
+    RectTransform _weaponRoot;
+    readonly List<RectTransform> _weaponRects = new List<RectTransform>();
+    readonly List<Image> _weaponBgs = new List<Image>();
+    readonly List<Image> _weaponIcons = new List<Image>();
 
-    Coroutine _scrollCo;
+    RectTransform _toolRoot;
+    readonly List<RectTransform> _toolRects = new List<RectTransform>();
+    readonly List<Image> _toolBgs = new List<Image>();
+    readonly List<Image> _toolIcons = new List<Image>();
 
-    void Start()
-    {
-        StartCoroutine(Init());
-    }
+    RectTransform _emptyToolRect;
+    Image _emptyToolBg;
+
+    Coroutine _weaponScrollCo;
+    Coroutine _toolScrollCo;
+
+    const int VisibleRadius = 2;
+
+    void Start() => StartCoroutine(Init());
 
     IEnumerator Init()
     {
         yield return null;
-
         _ctrl = FindFirstObjectByType<WeaponRollController>();
-        if (_ctrl == null) { Debug.LogWarning("[WeaponRollUI] WeaponRollController not found."); yield break; }
-
+        if (_ctrl == null) yield break;
         BuildCanvas();
-
         if (WeaponUnlockRegistry.Instance != null)
             WeaponUnlockRegistry.Instance.OnUnlocksChanged += OnUnlocks;
-
-        RebuildSlots();
-        SnapLayout();
+        RebuildAll();
+        SnapAll();
     }
 
     void OnDestroy()
     {
         if (WeaponUnlockRegistry.Instance != null)
             WeaponUnlockRegistry.Instance.OnUnlocksChanged -= OnUnlocks;
-        if (_canvas != null)
-            Destroy(_canvas.gameObject);
-    }
-
-    public void Refresh(int newIndex, bool animate)
-    {
-        if (_canvas == null) return;
-        if (_ctrl != null && _rects.Count != _ctrl.ActiveCount)
-            RebuildSlots();
-        UpdateVisuals();
-        if (animate) StartScrollAnim();
-        else SnapLayout();
+        if (_canvas != null) Destroy(_canvas.gameObject);
     }
 
     void BuildCanvas()
@@ -79,50 +75,124 @@ public class WeaponRollUI : MonoBehaviour
         go.AddComponent<CanvasScaler>();
         go.AddComponent<GraphicRaycaster>();
 
-        var rootGo = new GameObject("SlotRoot", typeof(RectTransform));
-        rootGo.transform.SetParent(_canvas.transform, false);
-        _root = rootGo.GetComponent<RectTransform>();
-        _root.anchorMin = _root.anchorMax = _root.pivot = Vector2.zero;
-        _root.anchoredPosition = bottomLeftPadding;
+        // Weapon root: active icon at Y=0 (top of weapon roll), inactive go DOWN
+        var wGo = new GameObject("WeaponRoot", typeof(RectTransform));
+        wGo.transform.SetParent(_canvas.transform, false);
+        _weaponRoot = wGo.GetComponent<RectTransform>();
+        _weaponRoot.anchorMin = _weaponRoot.anchorMax = _weaponRoot.pivot = Vector2.zero;
+        _weaponRoot.anchoredPosition = bottomLeftPadding;
+
+        // Tool root: active icon at Y=0 (bottom of tool roll), inactive go UP
+        var tGo = new GameObject("ToolRoot", typeof(RectTransform));
+        tGo.transform.SetParent(_canvas.transform, false);
+        _toolRoot = tGo.GetComponent<RectTransform>();
+        _toolRoot.anchorMin = _toolRoot.anchorMax = _toolRoot.pivot = Vector2.zero;
+        _toolRoot.anchoredPosition = new Vector2(
+            bottomLeftPadding.x,
+            bottomLeftPadding.y + circleSize + gapBetweenRolls
+        );
+    }
+
+    //  REFRESH
+    public void Refresh(int weaponIndex, int toolIndex, ScrollTarget scrollTarget)
+    {
+        if (_canvas == null || _ctrl == null) return;
+
+        if (_weaponRects.Count != _ctrl.WeaponCount || _toolRects.Count != _ctrl.ToolCount)
+            RebuildAll();
+
+        UpdateWeaponVisuals();
+        UpdateToolVisuals();
+
+        if (scrollTarget == ScrollTarget.Weapon)
+        {
+            StartWeaponScrollAnim();
+            SnapToolPositions();
+        }
+        else if (scrollTarget == ScrollTarget.Tool)
+        {
+            SnapWeaponPositions();
+            StartToolScrollAnim();
+        }
+        else
+        {
+            SnapAll();
+        }
+    }
+
+    public void Refresh(int newIndex, bool animate)
+    {
+        int toolIdx = _ctrl != null ? _ctrl.CurrentToolIndex : 0;
+        Refresh(newIndex, toolIdx, animate ? ScrollTarget.Weapon : ScrollTarget.None);
     }
 
     void OnUnlocks()
     {
         if (_canvas == null) return;
-        int before = _rects.Count;
-        RebuildSlots();
-        SnapLayout();
-        for (int i = before; i < _rects.Count; i++)
-            StartCoroutine(PopSlot(i));
+        int bW = _weaponRects.Count, bT = _toolRects.Count;
+        RebuildAll();
+        SnapAll();
+        for (int i = bW; i < _weaponRects.Count; i++) StartCoroutine(PopRect(_weaponRects[i]));
+        for (int i = bT; i < _toolRects.Count; i++) StartCoroutine(PopRect(_toolRects[i]));
     }
 
-    void RebuildSlots()
+    //  BUILD SLOTS
+    void RebuildAll()
     {
-        foreach (var rt in _rects) if (rt) Destroy(rt.gameObject);
-        _rects.Clear(); _bgs.Clear(); _icons.Clear();
+        foreach (var rt in _weaponRects) if (rt) Destroy(rt.gameObject);
+        _weaponRects.Clear(); _weaponBgs.Clear(); _weaponIcons.Clear();
+        foreach (var rt in _toolRects) if (rt) Destroy(rt.gameObject);
+        _toolRects.Clear(); _toolBgs.Clear(); _toolIcons.Clear();
+        if (_emptyToolRect != null) { Destroy(_emptyToolRect.gameObject); _emptyToolRect = null; }
         if (_ctrl == null) return;
-        for (int i = 0; i < _ctrl.ActiveCount; i++)
-            MakeSlot(i);
+
+        for (int i = 0; i < _ctrl.WeaponCount; i++)
+            MakeSlot(_weaponRoot, $"W{i}", LoadIconForData(_ctrl.WeaponDataAt(i)),
+                _weaponRects, _weaponBgs, _weaponIcons);
+
+        if (_ctrl.ToolCount > 0)
+        {
+            for (int i = 0; i < _ctrl.ToolCount; i++)
+                MakeSlot(_toolRoot, $"T{i}", LoadIconForData(_ctrl.ToolDataAt(i)),
+                    _toolRects, _toolBgs, _toolIcons);
+        }
+        else
+            BuildEmptyToolPlaceholder();
     }
 
-    void MakeSlot(int i)
+    void MakeSlot(RectTransform parent, string name, Sprite iconSprite,
+        List<RectTransform> rects, List<Image> bgs, List<Image> icons)
     {
-        var go = new GameObject($"Slot{i}", typeof(RectTransform));
-        go.transform.SetParent(_root, false);
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0f);
         rt.sizeDelta = Vector2.one * circleSize;
-        _rects.Add(rt);
+        rects.Add(rt);
 
         var bg = MakeImg(go, "BG", CircleSprite());
         bg.color = inactiveBg;
         bg.rectTransform.sizeDelta = Vector2.one * circleSize;
-        _bgs.Add(bg);
+        bgs.Add(bg);
 
-        var ic = MakeImg(go, "Icon", LoadIcon(i));
+        var ic = MakeImg(go, "Icon", iconSprite);
         ic.preserveAspect = true;
         ic.rectTransform.sizeDelta = Vector2.one * (circleSize * 0.58f);
-        _icons.Add(ic);
+        icons.Add(ic);
+    }
+
+    void BuildEmptyToolPlaceholder()
+    {
+        float sz = circleSize * 0.7f;
+        var go = new GameObject("EmptyTool", typeof(RectTransform));
+        go.transform.SetParent(_toolRoot, false);
+        _emptyToolRect = go.GetComponent<RectTransform>();
+        _emptyToolRect.anchorMin = _emptyToolRect.anchorMax = _emptyToolRect.pivot = new Vector2(0.5f, 0f);
+        _emptyToolRect.sizeDelta = Vector2.one * sz;
+        _emptyToolRect.anchoredPosition = Vector2.zero;
+        _emptyToolBg = MakeImg(go, "BG", CircleSprite());
+        _emptyToolBg.color = emptyToolBg;
+        _emptyToolBg.rectTransform.sizeDelta = Vector2.one * sz;
     }
 
     Image MakeImg(GameObject parent, string name, Sprite sprite)
@@ -138,105 +208,194 @@ public class WeaponRollUI : MonoBehaviour
         return img;
     }
 
-    // Layout
-    // Circular delta
-    static int CircularDelta(int slotIndex, int selected, int n)
+    //  RANK COMPUTATION
+    int[] WeaponRanks(int sel, int n)
     {
-        int d = slotIndex - selected;
-        // Wrap to the shortest arc
-        while (d > n / 2) d -= n;
-        while (d < -n / 2) d += n;
-        // For even counts, force the halfway slot to go upward
-        if (n > 1 && Mathf.Abs(d) == n / 2 && n % 2 == 0) d = n / 2;
-        return d;
-    }
-
-    // How many neighbours to show each side — beyond this they're invisible
-    const int VisibleRadius = 2;
-
-    void UpdateVisuals()
-    {
-        int n = _rects.Count, sel = _ctrl.CurrentActiveIndex;
+        int[] rank = new int[n];
         for (int i = 0; i < n; i++)
         {
-            int d = CircularDelta(i, sel, n);
-            int absd = Mathf.Abs(d);
-            bool on = d == 0;
+            int d = i - sel;
+            if (d < 0) d += n;
+            rank[i] = d;
+        }
+        return rank;
+    }
 
-            // Fade and shrink with distance
-            float visibility = absd <= VisibleRadius ? 1f : 0f;
-            float sz = circleSize * Mathf.Pow(shrinkPerStep, absd) * visibility;
-            float alpha = visibility * (on ? 1f : Mathf.Pow(shrinkPerStep, absd));
+    int[] ToolRanks(int sel, int n)
+    {
+        int[] rank = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            int d = sel - i;
+            if (d < 0) d += n;
+            rank[i] = d;
+        }
+        return rank;
+    }
 
-            Color bg = on ? activeBg : inactiveBg;
+    float WeaponYForRank(int rank) => -rank * rollStep;
+    float ToolYForRank(int rank) => rank * rollStep;
+
+    //  WEAPON VISUALS
+    void UpdateWeaponVisuals()
+    {
+        int n = _weaponRects.Count, sel = _ctrl.CurrentWeaponIndex;
+        int[] ranks = WeaponRanks(sel, n);
+
+        for (int i = 0; i < n; i++)
+        {
+            int r = ranks[i];
+            bool on = r == 0;
+            bool visible = r <= VisibleRadius;
+            float sz = visible ? circleSize * Mathf.Pow(shrinkPerStep, r) : 0f;
+            float alpha = visible ? (on ? 1f : Mathf.Pow(shrinkPerStep, r)) : 0f;
+
+            Color bg = on ? weaponActiveBg : inactiveBg;
             Color ico = on ? activeIcon : inactiveIcon;
-            bg.a = alpha;
-            ico.a = alpha;
+            bg.a = alpha; ico.a = alpha;
 
-            _bgs[i].color = bg;
-            _icons[i].color = ico;
-            _bgs[i].rectTransform.sizeDelta = Vector2.one * sz;
-            _icons[i].rectTransform.sizeDelta = Vector2.one * (sz * 0.58f);
-
-            // Selected on top, farther slots deeper
-            _rects[i].SetSiblingIndex(Mathf.Max(0, n - 1 - absd));
-            _rects[i].gameObject.SetActive(visibility > 0f);
+            _weaponBgs[i].color = bg;
+            _weaponIcons[i].color = ico;
+            _weaponBgs[i].rectTransform.sizeDelta = Vector2.one * sz;
+            _weaponIcons[i].rectTransform.sizeDelta = Vector2.one * (sz * 0.58f);
+            _weaponRects[i].SetSiblingIndex(Mathf.Max(0, n - 1 - r));
+            _weaponRects[i].gameObject.SetActive(visible);
         }
     }
 
-    void SnapLayout()
+    //  TOOL VISUALS
+    void UpdateToolVisuals()
     {
-        if (_ctrl == null || _rects.Count == 0) return;
-        UpdateVisuals();
-        int n = _rects.Count, sel = _ctrl.CurrentActiveIndex;
+        int n = _toolRects.Count, sel = _ctrl.CurrentToolIndex;
+        int[] ranks = ToolRanks(sel, n);
+
         for (int i = 0; i < n; i++)
-            _rects[i].anchoredPosition = new Vector2(0f, CircularDelta(i, sel, n) * stepUp);
+        {
+            int r = ranks[i];
+            bool on = r == 0;
+            bool visible = r <= VisibleRadius;
+            float sz = visible ? circleSize * Mathf.Pow(shrinkPerStep, r) : 0f;
+            float alpha = visible ? (on ? 1f : Mathf.Pow(shrinkPerStep, r)) : 0f;
+
+            Color bg = on ? toolActiveBg : inactiveBg;
+            Color ico = on ? activeIcon : inactiveIcon;
+            bg.a = alpha; ico.a = alpha;
+
+            _toolBgs[i].color = bg;
+            _toolIcons[i].color = ico;
+            _toolBgs[i].rectTransform.sizeDelta = Vector2.one * sz;
+            _toolIcons[i].rectTransform.sizeDelta = Vector2.one * (sz * 0.58f);
+            _toolRects[i].SetSiblingIndex(Mathf.Max(0, n - 1 - r));
+            _toolRects[i].gameObject.SetActive(visible);
+        }
     }
 
-    void StartScrollAnim()
+    //  SNAP POSITIONS
+    void SnapWeaponPositions()
     {
-        if (_scrollCo != null) StopCoroutine(_scrollCo);
-        _scrollCo = StartCoroutine(ScrollCo());
+        int n = _weaponRects.Count, sel = _ctrl.CurrentWeaponIndex;
+        int[] ranks = WeaponRanks(sel, n);
+        for (int i = 0; i < n; i++)
+            _weaponRects[i].anchoredPosition = new Vector2(0f, WeaponYForRank(ranks[i]));
     }
 
-    IEnumerator ScrollCo()
+    void SnapToolPositions()
     {
-        int n = _rects.Count, sel = _ctrl.CurrentActiveIndex;
+        int n = _toolRects.Count, sel = _ctrl.CurrentToolIndex;
+        int[] ranks = ToolRanks(sel, n);
+        for (int i = 0; i < n; i++)
+            _toolRects[i].anchoredPosition = new Vector2(0f, ToolYForRank(ranks[i]));
+    }
+
+    void SnapAll()
+    {
+        UpdateWeaponVisuals();
+        SnapWeaponPositions();
+        UpdateToolVisuals();
+        SnapToolPositions();
+    }
+
+    //  SCROLL ANIMATIONS
+    void StartWeaponScrollAnim()
+    {
+        if (_weaponScrollCo != null) StopCoroutine(_weaponScrollCo);
+        _weaponScrollCo = StartCoroutine(AnimateWeaponScroll());
+    }
+
+    void StartToolScrollAnim()
+    {
+        if (_toolScrollCo != null) StopCoroutine(_toolScrollCo);
+        _toolScrollCo = StartCoroutine(AnimateToolScroll());
+    }
+
+    IEnumerator AnimateWeaponScroll()
+    {
+        int n = _weaponRects.Count, sel = _ctrl.CurrentWeaponIndex;
+        if (n == 0) yield break;
+
+        int[] ranks = WeaponRanks(sel, n);
         float[] from = new float[n], to = new float[n];
         for (int i = 0; i < n; i++)
         {
-            from[i] = _rects[i].anchoredPosition.y;
-            to[i] = CircularDelta(i, sel, n) * stepUp;
+            from[i] = _weaponRects[i].anchoredPosition.y;
+            to[i] = WeaponYForRank(ranks[i]);
         }
+
         float t = 0f;
         while (t < 1f)
         {
             t += Time.unscaledDeltaTime / scrollSpeed;
             float e = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
             for (int i = 0; i < n; i++)
-                _rects[i].anchoredPosition = new Vector2(0f, Mathf.Lerp(from[i], to[i], e));
+                _weaponRects[i].anchoredPosition = new Vector2(0f, Mathf.Lerp(from[i], to[i], e));
             yield return null;
         }
-        SnapLayout();
+        SnapWeaponPositions();
     }
 
-    IEnumerator PopSlot(int idx)
+    IEnumerator AnimateToolScroll()
     {
-        if (idx >= _rects.Count) yield break;
-        _rects[idx].localScale = Vector3.zero;
+        int n = _toolRects.Count, sel = _ctrl.CurrentToolIndex;
+        if (n == 0) yield break;
+
+        int[] ranks = ToolRanks(sel, n);
+        float[] from = new float[n], to = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            from[i] = _toolRects[i].anchoredPosition.y;
+            to[i] = ToolYForRank(ranks[i]);
+        }
+
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / scrollSpeed;
+            float e = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
+            for (int i = 0; i < n; i++)
+                _toolRects[i].anchoredPosition = new Vector2(0f, Mathf.Lerp(from[i], to[i], e));
+            yield return null;
+        }
+        SnapToolPositions();
+    }
+
+    //  POP
+    IEnumerator PopRect(RectTransform rt)
+    {
+        if (rt == null) yield break;
+        rt.localScale = Vector3.zero;
         float t = 0f;
         while (t < 1f)
         {
             t += Time.unscaledDeltaTime / popSpeed;
-            _rects[idx].localScale = Vector3.one * EaseOutBack(Mathf.Clamp01(t));
+            rt.localScale = Vector3.one * EaseOutBack(Mathf.Clamp01(t));
             yield return null;
         }
-        _rects[idx].localScale = Vector3.one;
+        rt.localScale = Vector3.one;
     }
 
-    Sprite LoadIcon(int pos)
+    //  HELPERS
+    Sprite LoadIconForData(WeaponData wd)
     {
-        WeaponData wd = _ctrl?.DataAt(pos);
         if (wd == null) return null;
         string path;
         if (wd.isGrapplingHook) path = "Icons/WeaponIconGrapplingHook";
@@ -245,8 +404,9 @@ public class WeaponRollUI : MonoBehaviour
         else if (wd.isBombLauncher) path = "Icons/WeaponIconBomb";
         else if (wd.isTrap) path = "Icons/WeaponIconTrap";
         else if (wd.isTurret) path = "Icons/WeaponIconTurret";
-        //TODO verify whether we can change to isShield
+        else if (wd.isDecoy) path = "Icons/WeaponIconDecoy";
         else if (wd.armorBonus > 0f) path = "Icons/WeaponIconShield";
+        else if (wd.isBoomerang) path = "Icons/WeaponIconBoomerang";
         else if (wd.isRanged) path = "Icons/WeaponIconRanged";
         else path = "Icons/WeaponIconMelee";
         return Resources.Load<Sprite>(path)
@@ -259,8 +419,10 @@ public class WeaponRollUI : MonoBehaviour
         return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
     }
 
+    static Sprite _cachedCircle;
     static Sprite CircleSprite()
     {
+        if (_cachedCircle != null) return _cachedCircle;
         const int S = 128;
         var tex = new Texture2D(S, S, TextureFormat.ARGB32, false) { filterMode = FilterMode.Bilinear };
         var px = new Color[S * S];
@@ -271,6 +433,7 @@ public class WeaponRollUI : MonoBehaviour
                 px[y * S + x] = new Color(1, 1, 1,
                     1f - Mathf.Clamp01(Vector2.Distance(new Vector2(x, y), c) - (r - 1f)));
         tex.SetPixels(px); tex.Apply();
-        return Sprite.Create(tex, new Rect(0, 0, S, S), Vector2.one * .5f, S);
+        _cachedCircle = Sprite.Create(tex, new Rect(0, 0, S, S), Vector2.one * .5f, S);
+        return _cachedCircle;
     }
 }
