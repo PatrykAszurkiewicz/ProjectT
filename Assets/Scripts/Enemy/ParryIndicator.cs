@@ -4,7 +4,7 @@ using UnityEngine;
 // PARRY INDICATOR
 // Shows a "!" above the enemy's head during parry-able frames when the player has a shield equipped.
 // Should be added to enemy prefabs. 
-// Reads parryFrameStart / parryFrameEnd / attackHitFrame from EnemyController and animationSpeed from EnemyStats.enemyData.
+// Now reads frame config from EnemyData (with fallback to EnemyController fields via reflection).
 
 public class ParryIndicator : MonoBehaviour
 {
@@ -28,15 +28,13 @@ public class ParryIndicator : MonoBehaviour
 
     // State
     private bool isShowingIndicator = false;
-    private float attackStartTime = -999f;
     private bool wasAttacking = false;
     private bool playerHasShield = false;
     private float nextShieldCheck = 0f;
 
-    // Read from EnemyController
+    // Read from EnemyData or EnemyController
     private int parryStart;
     private int parryEnd;
-    private float animSpeed;
 
     // Procedural sprite
     private static Sprite _exclamSprite;
@@ -74,8 +72,6 @@ public class ParryIndicator : MonoBehaviour
             return;
         }
 
-        // Use EnemyController's attack state and timing directly
-        // so the indicator is perfectly synchronized with IsInParryWindow().
         bool attacking = enemyController != null && enemyController.IsAttacking;
 
         if (attacking && !wasAttacking)
@@ -90,17 +86,26 @@ public class ParryIndicator : MonoBehaviour
             return;
         }
 
-        // Check if we're in parry frames — use the SAME timing as IsInParryWindow()
-        if (animSpeed <= 0f || enemyController == null)
-        {
-            if (isShowingIndicator) SetVisible(false);
-            return;
-        }
+        // Use CurrentAttackFrame from the animation controller for pixel-perfect sync
+        bool inParryWindow = false;
 
-        float cycleStart = enemyController.AttackCycleStartTime;
-        float parryWindowStart = cycleStart + parryStart * animSpeed;
-        float parryWindowEnd = cycleStart + (parryEnd + 1) * animSpeed;
-        bool inParryWindow = Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
+        if (animController != null && animController.CurrentAttackFrame >= 0)
+        {
+            int currentFrame = animController.CurrentAttackFrame;
+            inParryWindow = currentFrame >= parryStart && currentFrame <= parryEnd;
+        }
+        else
+        {
+            // Fallback to time-based check (same as IsInParryWindow logic)
+            float animSpeed = (enemyStats != null && enemyStats.enemyData != null) ? enemyStats.enemyData.AttackAnimSpeed : 0f;
+            if (animSpeed > 0f && enemyController != null)
+            {
+                float cycleStart = enemyController.AttackCycleStartTime;
+                float parryWindowStart = cycleStart + parryStart * animSpeed;
+                float parryWindowEnd = cycleStart + (parryEnd + 1) * animSpeed;
+                inParryWindow = Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
+            }
+        }
 
         if (inParryWindow && !isShowingIndicator)
             SetVisible(true);
@@ -109,7 +114,10 @@ public class ParryIndicator : MonoBehaviour
 
         // Animate while visible
         if (isShowingIndicator)
-            AnimateIndicator(Time.time - cycleStart);
+        {
+            float elapsed = Time.time - enemyController.AttackCycleStartTime;
+            AnimateIndicator(elapsed);
+        }
     }
 
 
@@ -135,21 +143,15 @@ public class ParryIndicator : MonoBehaviour
     {
         parryStart = 0;
         parryEnd = 0;
-        animSpeed = 0f;
 
+        // Read from EnemyData (single source of truth)
         if (enemyStats != null && enemyStats.enemyData != null)
-            animSpeed = enemyStats.enemyData.animationSpeed;
-
-        if (enemyController == null) return;
-
-        var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-        var ps = typeof(EnemyController).GetField("parryFrameStart", flags);
-        var pe = typeof(EnemyController).GetField("parryFrameEnd", flags);
-
-        if (ps != null) parryStart = Mathf.Max((int)ps.GetValue(enemyController), 0);
-        if (pe != null) parryEnd = Mathf.Max((int)pe.GetValue(enemyController), 0);
-
-        if (parryEnd < parryStart) parryEnd = parryStart;
+        {
+            var data = enemyStats.enemyData;
+            parryStart = Mathf.Max(data.parryFrameStart, 0);
+            parryEnd = Mathf.Max(data.parryFrameEnd, 0);
+            if (parryEnd < parryStart) parryEnd = parryStart;
+        }
     }
 
     private void BuildIndicator()

@@ -215,6 +215,10 @@ public class Weapon : MonoBehaviour
 
         // Stop any running weapon cooldown coroutine — the swap cooldown replaces it
         StopAllCoroutines();
+
+        if (attackCollider != null)
+            attackCollider.enabled = false;
+        hitEnemies.Clear();
     }
 
     //  INITIALIZATION

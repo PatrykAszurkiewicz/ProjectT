@@ -18,19 +18,6 @@ public class EnemyController : MonoBehaviour
     [SerializeField] private float attackCooldown = 1f;
     private float attackTimer = 0f;
 
-    [Header("Attack Hit Timing")]
-    [Tooltip("Which frame in the attack animation deals damage (0-based relative to attack start). " +
-             "-1 = use frame 0 (instant, legacy behavior).")]
-    [SerializeField] private int attackHitFrame = -1;
-
-    [Header("Parry Window")]
-    [Tooltip("First attack frame (0-based) that can be parried. " +
-             "Player must raise shield during these frames to trigger a parry.")]
-    [SerializeField] private int parryFrameStart = 0;
-    [Tooltip("Last attack frame (0-based) that can be parried (inclusive). " +
-             "Set equal to attackHitFrame for a tight parry, or wider for easier parry.")]
-    [SerializeField] private int parryFrameEnd = 0;
-
     [Header("Obstacle Avoidance")]
     [SerializeField] private float avoidDistance = 1f;
     [SerializeField] private LayerMask obstacleLayer;
@@ -61,18 +48,20 @@ public class EnemyController : MonoBehaviour
     // Knockback direct velocity
     private Vector2 knockbackVelocity;
 
-    // ─── Attack hit timing state ───
-    private bool isWaitingForHitFrame = false;
+    //  Attack timing state 
     private float attackCycleStartTime = -999f; // Time.time when current attack cycle began
 
-    /// <summary>
+    //  Resolved frame config (from EnemyData) 
+    private int resolvedHitFrame;
+    private int resolvedParryStart;
+    private int resolvedParryEnd;
+
     /// The Time.time when the current attack cycle started.
     /// Used by ParryIndicator to synchronize timing with IsInParryWindow().
-    /// </summary>
     public float AttackCycleStartTime => attackCycleStartTime;
     public bool IsAttacking => isAttackingCycle;
 
-    // ─── Decoy lure system ───
+    //  Decoy lure system 
     private Transform decoyTarget;
     private bool isLuredByDecoy = false;
 
@@ -107,10 +96,38 @@ public class EnemyController : MonoBehaviour
 
         currentTarget = coreTarget;
         InvokeRepeating(nameof(UpdateTarget), 0f, 0.5f);
+
+        // Resolve frame config once at start
+        ResolveFrameConfig();
+    }
+
+    private void OnDestroy()
+    {
+    }
+
+    /// Reads frame config from EnemyData. All hit/parry frame configuration lives on the EnemyData ScriptableObject — one place, no duplication.
+    private void ResolveFrameConfig()
+    {
+        EnemyData data = stats?.enemyData;
+
+        if (data != null)
+        {
+            resolvedHitFrame = Mathf.Max(data.hitFrame, 0);
+            resolvedParryStart = Mathf.Max(data.parryFrameStart, 0);
+            resolvedParryEnd = Mathf.Max(data.parryFrameEnd, 0);
+        }
+        else
+        {
+            resolvedHitFrame = 0;
+            resolvedParryStart = 0;
+            resolvedParryEnd = 0;
+        }
+
+        if (resolvedParryEnd < resolvedParryStart)
+            resolvedParryEnd = resolvedParryStart;
     }
 
     //  Decoy target API (called by DecoyDevice) 
-
     // Called by DecoyDevice to lure this enemy towards the decoy.
     // While lured, normal target selection is overridden.
 
@@ -424,59 +441,67 @@ public class EnemyController : MonoBehaviour
     {
         isAttackingCycle = true;
         attackCycleStartTime = Time.time;
+        bool hitDelivered = false;
 
-        if (animController != null)
-            animController.PlayMeleeAttackAnimation();
-
-        // Calculate attack timing
+        // Calculate attack timing from EnemyData
         float animDuration = 0f;
         float animSpeed = 0f;
         if (stats != null && stats.enemyData != null)
         {
-            animSpeed = stats.enemyData.animationSpeed;
-            animDuration = animSpeed * stats.enemyData.attack.frameCount;
+            animDuration = stats.enemyData.AttackDuration;
+            animSpeed = stats.enemyData.AttackAnimSpeed;
         }
 
-        float hitDelay = 0f;
-        if (attackHitFrame > 0 && animSpeed > 0f)
-            hitDelay = animSpeed * attackHitFrame;
-
-        var boss1 = GetComponent<Boss1>();
-
-        if (boss1 != null)
+        if (animController != null && resolvedHitFrame > 0)
         {
-            // Boss1 has its own delayed hit system
-            boss1.OnMeleeAttackFired(target);
-        }
-        else if (hitDelay > 0f)
-        {
-            // Delayed hit: wait for the hit frame, then deal damage
-            isWaitingForHitFrame = true;
-            yield return new WaitForSeconds(hitDelay);
-            isWaitingForHitFrame = false;
-
-            // Target could have moved/died during wind-up
-            if (target != null)
+            // Frame-driven hit: the animation coroutine calls PerformHit
+            // synchronously when it reaches the hit frame. One coroutine,
+            // one timeline, no drift between sprite and damage.
+            animController.PlayMeleeAttackAnimation(resolvedHitFrame, () =>
             {
+                if (!hitDelivered && target != null)
+                {
+                    hitDelivered = true;
+                    PerformHit(target);
+                }
+            });
+
+            // Safety fallback: if animation gets interrupted (freeze, stun, death)
+            // and the callback never fired, deliver hit at the expected time via timer.
+            float hitDelay = animSpeed * resolvedHitFrame;
+            yield return new WaitForSeconds(hitDelay);
+
+            if (!hitDelivered && target != null)
+            {
+                hitDelivered = true;
                 PerformHit(target);
             }
+
+            // Wait remaining time
+            //float remainingWait = Mathf.Max(animDuration, attackCooldown) - hitDelay;
+            float remainingWait = animDuration - hitDelay;
+
+            if (remainingWait > 0f)
+                yield return new WaitForSeconds(remainingWait);
         }
         else
         {
-            // Legacy: instant damage at animation start
+            // Instant damage at animation start (hitFrame = 0)
+            if (animController != null)
+                animController.PlayMeleeAttackAnimation();
             PerformHit(target);
-        }
+            hitDelivered = true;
 
-        float waitTime = Mathf.Max(animDuration, attackCooldown);
-        float remainingWait = waitTime - hitDelay;
-        if (remainingWait > 0f)
-            yield return new WaitForSeconds(remainingWait);
+            float waitTime = Mathf.Max(animDuration, attackCooldown);
+            yield return new WaitForSeconds(waitTime);
+        }
 
         if (animController != null)
             animController.StopMeleeAttackAnimation();
 
         isAttackingCycle = false;
         attackTimer = attackCooldown;
+
     }
 
     // Returns true if the player's parry attempt overlaps this enemy's parry window for the current attack cycle.
@@ -488,12 +513,12 @@ public class EnemyController : MonoBehaviour
         if (!isAttackingCycle || attackCycleStartTime < 0f) return false;
         if (stats == null || stats.enemyData == null) return false;
 
-        float animSpeed = stats.enemyData.animationSpeed;
+        float animSpeed = stats.enemyData.AttackAnimSpeed;
         if (animSpeed <= 0f) return false;
 
-        int pStart = parryFrameStart;
-        int pEnd = parryFrameEnd;
-        int hit = Mathf.Max(attackHitFrame, 0);
+        int pStart = resolvedParryStart;
+        int pEnd = resolvedParryEnd;
+        int hit = resolvedHitFrame;
 
         // If nothing configured, use a default 0.2s window before hit
         if (pStart == 0 && pEnd == 0 && hit == 0)
@@ -509,18 +534,14 @@ public class EnemyController : MonoBehaviour
         // (a) Shield was pressed (raised) during the parry window
         bool raisedDuringWindow = shieldRaiseTime >= parryWindowStart && shieldRaiseTime <= parryWindowEnd;
 
-        // (b) Shield is currently held AND the current time (hit moment) is
-        //     within the parry window — this covers the case where the player
-        //     was already holding the shield when the parry frames arrived,
-        //     but pressed right-click BEFORE the window opened.
-        bool heldDuringWindow = shieldRaiseTime <= parryWindowEnd && Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
-
-        bool isParry = raisedDuringWindow || heldDuringWindow;
+        // Parry = shield was PRESSED (raised) during the parry window.
+        // Holding shield from before the window is just a block, not a parry.
+        bool isParry = raisedDuringWindow;
 
         Debug.Log($"[PARRY CHECK] {gameObject.name}: shieldRaise={shieldRaiseTime:F3} now={Time.time:F3} " +
                   $"parryWindow=[{parryWindowStart:F3}-{parryWindowEnd:F3}] " +
                   $"frames={pStart}-{pEnd} hit={hit} " +
-                  $"raisedDuring={raisedDuringWindow} heldDuring={heldDuringWindow} => {(isParry ? "PARRY!" : "BLOCK")}");
+                  $"raisedDuring={raisedDuringWindow} => {(isParry ? "PARRY!" : "BLOCK")}");
 
         return isParry;
     }
@@ -532,12 +553,12 @@ public class EnemyController : MonoBehaviour
         if (!isAttackingCycle || attackCycleStartTime < 0f) return false;
         if (stats == null || stats.enemyData == null) return false;
 
-        float animSpeed = stats.enemyData.animationSpeed;
+        float animSpeed = stats.enemyData.AttackAnimSpeed;
         if (animSpeed <= 0f) return false;
 
-        int pStart = parryFrameStart;
-        int pEnd = parryFrameEnd;
-        int hit = Mathf.Max(attackHitFrame, 0);
+        int pStart = resolvedParryStart;
+        int pEnd = resolvedParryEnd;
+        int hit = resolvedHitFrame;
 
         if (pStart == 0 && pEnd == 0 && hit == 0) return false;
 
@@ -550,6 +571,12 @@ public class EnemyController : MonoBehaviour
     private void PerformHit(Transform target)
     {
         PlayAttackSound();
+
+        // Boss1 plays an additional ground-hit sound on melee connect
+        var boss1 = GetComponent<Boss1>();
+        if (boss1 != null)
+            boss1.PlayGroundHitSound();
+
         ApplyDamageToTarget(target);
     }
 

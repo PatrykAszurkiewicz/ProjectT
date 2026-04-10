@@ -673,7 +673,7 @@ public class BiomeManager : MonoBehaviour
         switch (biome)
         {
             case BiomeType.Grass: return "Backgrounds/Background8";
-            case BiomeType.Snow: return "Backgrounds/Background9";
+            case BiomeType.Snow: return "Backgrounds/BackgroundSnow";// "Backgrounds/Background9";
             case BiomeType.Desert: return "Backgrounds/Background10";
             case BiomeType.Wasteland: return "Backgrounds/Background11";
             case BiomeType.Stones: return "Backgrounds/Background12";

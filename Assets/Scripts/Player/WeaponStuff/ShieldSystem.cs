@@ -39,9 +39,7 @@ public class ShieldSystem
 
     private const float QUICK_PRESS_GRACE = 0.6f;
 
-    // Track which enemies we've already registered a parry attempt 
 
-    private HashSet<int> parryAttemptedEnemies = new HashSet<int>();
 
     // Visual objects
     private GameObject arcObject;
@@ -86,7 +84,6 @@ public class ShieldSystem
         if (isRaised) return;
         isRaised = true;
         raiseTime = Time.time;
-        parryAttemptedEnemies.Clear();
         SetArcVisible(true);
     }
 
@@ -108,31 +105,6 @@ public class ShieldSystem
 
         if (arcLine != null)
             UpdateArcTransform();
-
-        // Proactively scan nearby enemies: if any are currently in their parry window while we have the shield raised, record the parry attempt
-
-        RecordParryAttempts();
-    }
-
-
-    // Scans all nearby EnemyControllers. 
-
-    private void RecordParryAttempts()
-    {
-        // Use a reasonable search — only enemies that could be attacking us
-        var enemies = Object.FindObjectsByType<EnemyController>(FindObjectsSortMode.None);
-        foreach (var ec in enemies)
-        {
-            if (ec == null) continue;
-            int id = ec.GetInstanceID();
-            if (parryAttemptedEnemies.Contains(id)) continue;
-
-            // Check if this enemy is currently in its parry window
-            if (ec.IsCurrentlyInParryFrames())
-            {
-                parryAttemptedEnemies.Add(id);
-            }
-        }
     }
 
 
@@ -165,23 +137,15 @@ public class ShieldSystem
             return false;
         }
 
-        // Check for parry using multiple methods:
-        // 1. Was a parry attempt recorded (shield was up during this enemy's parry frames)?
-        // 2. Is the shield raise time inside the parry window right now?
-        // 3. Is the enemy currently in its parry frames while shield is held?
+        // Parry check: only a fresh right-click PRESS during the parry window counts.
+        // Holding the shield from before the window is just a block, not a parry.
         bool isParry = false;
         var ec = attackerGO.GetComponent<EnemyController>();
         if (ec != null)
         {
-            int enemyId = ec.GetInstanceID();
-            bool recordedAttempt = parryAttemptedEnemies.Contains(enemyId);
-            bool raiseTimeInWindow = ec.IsInParryWindow(raiseTime);
-            bool currentlyInParryFrames = currentlyRaised && ec.IsCurrentlyInParryFrames();
+            isParry = ec.IsInParryWindow(raiseTime);
 
-            isParry = recordedAttempt || raiseTimeInWindow || currentlyInParryFrames;
-
-            //Debug.Log($"[PARRY EVAL] {attackerGO.name}: recorded={recordedAttempt} " +
-            //          $"raiseInWindow={raiseTimeInWindow} currentInFrames={currentlyInParryFrames} " +
+            //Debug.Log($"[PARRY EVAL] {attackerGO.name}: raiseInWindow={isParry} " +
             //          $"=> {(isParry ? "PARRY!" : "BLOCK")}");
         }
         else
@@ -522,4 +486,3 @@ public class ParryVFXHost : MonoBehaviour
         return _burstDot;
     }
 }
-

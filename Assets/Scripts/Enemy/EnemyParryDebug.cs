@@ -3,7 +3,7 @@ using UnityEngine;
 
 // PARRY CALIBRATION OVERLAY
 // Add to enemy prefab. Shows large readable debug info above enemy.
-// Reads attackHitFrame, parryFrameStart, parryFrameEnd from EnemyController.
+// Now reads frame config from EnemyData first, falls back to EnemyController reflection.
 
 public class EnemyParryDebug : MonoBehaviour
 {
@@ -36,10 +36,11 @@ public class EnemyParryDebug : MonoBehaviour
     private bool wasAttacking;
     private float atkStartTime = -1f;
 
-    // Read from EnemyController
+    // Read from EnemyData or EnemyController
     private int hitFrame;
     private int parryStart;
     private int parryEnd;
+    private string configSource = ""; // "EnemyData" or "EnemyController"
 
     private static Sprite _px;
 
@@ -77,17 +78,16 @@ public class EnemyParryDebug : MonoBehaviour
         hitFrame = 0;
         parryStart = 0;
         parryEnd = 0;
+        configSource = "EnemyData";
 
-        if (enemyController == null) return;
-
-        var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-        var hf = typeof(EnemyController).GetField("attackHitFrame", flags);
-        var ps = typeof(EnemyController).GetField("parryFrameStart", flags);
-        var pe = typeof(EnemyController).GetField("parryFrameEnd", flags);
-
-        if (hf != null) hitFrame = Mathf.Max((int)hf.GetValue(enemyController), 0);
-        if (ps != null) parryStart = Mathf.Max((int)ps.GetValue(enemyController), 0);
-        if (pe != null) parryEnd = Mathf.Max((int)pe.GetValue(enemyController), 0);
+        // Read from EnemyData (single source of truth)
+        if (enemyStats != null && enemyStats.enemyData != null)
+        {
+            var data = enemyStats.enemyData;
+            hitFrame = Mathf.Max(data.hitFrame, 0);
+            parryStart = Mathf.Max(data.parryFrameStart, 0);
+            parryEnd = Mathf.Max(data.parryFrameEnd, 0);
+        }
 
         // Ensure parryEnd >= parryStart
         if (parryEnd < parryStart) parryEnd = parryStart;
@@ -119,7 +119,7 @@ public class EnemyParryDebug : MonoBehaviour
 
         line2 = Txt("L2", new Vector3(0, BAR_Y + 0.6f, 0), Color.yellow);
         line2.text = $"ATK sprites {atkS}-{atkE} ({fc}f @ {ed.animationSpeed:F2}s)   " +
-                     $"HIT=sprite {hitAbs}   PARRY={parryStartAbs}-{parryEndAbs}";
+                     $"HIT=sprite {hitAbs}   PARRY={parryStartAbs}-{parryEndAbs}   [{configSource}]";
 
         line3 = Txt("L3", new Vector3(0, BAR_Y + 0.38f, 0), Color.white);
         line3.text = "";
@@ -127,7 +127,7 @@ public class EnemyParryDebug : MonoBehaviour
         line4 = Txt("L4", new Vector3(0, BAR_Y + 0.2f, 0), new Color(0.8f, 0.8f, 0.8f));
         line4.fontSize = 60;
         if (parryStart == 0 && parryEnd == 0 && hitFrame == 0)
-            line4.text = "SET attackHitFrame + parryFrameStart/End on EnemyController!";
+            line4.text = "SET hitFrame + parryFrameStart/End on EnemyData!";
         else
             line4.text = $"Parry window = {(parryEnd - parryStart + 1) * ed.animationSpeed:F2}s " +
                          $"({parryEnd - parryStart + 1} frames)";
@@ -244,41 +244,53 @@ public class EnemyParryDebug : MonoBehaviour
         }
 
         barCursor.enabled = true;
-        float elapsed = Time.time - atkStartTime;
-        float totalDur = ed.animationSpeed * fc;
-        if (totalDur <= 0) return;
 
-        float t = Mathf.Clamp01(elapsed / totalDur);
-        float cf = elapsed / ed.animationSpeed;
-        int cfi = Mathf.FloorToInt(cf);
+        // Use CurrentAttackFrame from animation controller when available
+        int cfi;
+        float cf;
 
+        if (animController != null && animController.CurrentAttackFrame >= 0)
+        {
+            cfi = animController.CurrentAttackFrame;
+            cf = cfi; // exact frame
+        }
+        else
+        {
+            float elapsed = Time.time - atkStartTime;
+            float totalDur = ed.animationSpeed * fc;
+            if (totalDur <= 0) return;
+            cf = elapsed / ed.animationSpeed;
+            cfi = Mathf.FloorToInt(cf);
+        }
+
+        float t = Mathf.Clamp01((float)(cfi + 0.5f) / fc);
         barCursor.transform.localPosition = new Vector3(-half + t * BAR_W, BAR_Y, 0);
 
         // Phase
         bool inParry = cfi >= parryStart && cfi <= parryEnd;
-        bool atHit = Mathf.Abs(cf - hitFrame) < 0.5f;
+        bool atHit = cfi == hitFrame;
 
         if (atHit)
         {
-            line3.text = $">>> DAMAGE <<<   frame {cf:F1} / {fc}";
+            line3.text = $">>> DAMAGE <<<   frame {cfi} / {fc}";
             line3.color = Color.red;
             barCursor.color = Color.red;
         }
         else if (inParry)
         {
-            line3.text = $"PARRY WINDOW   frame {cf:F1} / {fc}   press RMB!";
+            line3.text = $"PARRY WINDOW   frame {cfi} / {fc}   press RMB!";
             line3.color = new Color(0.3f, 0.7f, 1f);
             barCursor.color = new Color(0.3f, 0.7f, 1f);
         }
-        else if (cf < parryStart)
+        else if (cfi < parryStart)
         {
-            line3.text = $"wind-up (too early)   frame {cf:F1} / {fc}";
+            line3.text = $"wind-up (too early)   frame {cfi} / {fc}";
             line3.color = new Color(0.6f, 0.6f, 0.6f);
             barCursor.color = Color.white;
         }
         else
         {
-            line3.text = $"recovery (too late)   frame {cf:F1} / {fc}";
+            line3.text = $"recovery (too late)   frame {cfi} / {fc}";
             line3.color = new Color(0.6f, 0.6f, 0.6f);
             barCursor.color = Color.white;
         }

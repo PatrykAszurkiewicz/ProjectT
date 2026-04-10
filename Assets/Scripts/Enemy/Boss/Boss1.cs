@@ -3,7 +3,7 @@ using System.Collections;
 
 /// Boss1 Features: Laser attack, Detachable Head armor system.
 /// Melee attacks and movement are handled by EnemyController.
-/// Boss1 hooks into EnemyController.Attack() via OnMeleeAttackFired()
+/// Melee hit timing is driven by EnemyData.hitFrame through the unified system.
 
 public class Boss1 : BaseBossStats //, IDamageable
 {
@@ -71,10 +71,6 @@ public class Boss1 : BaseBossStats //, IDamageable
 
     [Header("Attack Behavior")]
     [SerializeField] private float attackRange = 8f;
-
-    [Header("Ground Hit Audio")]
-    [Tooltip("Frames from attack start (frame 25) to hit frame (frame 43)")]
-    [SerializeField] private int groundHitFrameOffset = 18;
 
     [Header("Head System")]
     [SerializeField] private bool spawnDetachableHead = true;
@@ -522,37 +518,17 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 
 
-    // GROUND HIT — MELEE ATTACK SYNCHRONIZATION
-    // Called once per attack cycle by EnemyController.AttackCycle().
+    // GROUND HIT SOUND
+    // Called by EnemyController.PerformHit() when the boss's melee hit connects.
+    // The hit timing is now driven by EnemyData.hitFrame through the unified system.
 
-    public void OnMeleeAttackFired(Transform target)
+    public void PlayGroundHitSound()
     {
         if (isDying) return;
-        StartCoroutine(DelayedGroundHit(target));
-    }
 
-    private IEnumerator DelayedGroundHit(Transform target)
-    {
-        // Wait from attack animation start (frame 25) to hit frame (frame 43)
-        // = groundHitFrameOffset frames × animationSpeed seconds per frame
-        float delay = enemyData != null
-            ? enemyData.animationSpeed * groundHitFrameOffset
-            : 0f;
-
-        if (delay > 0f)
-            yield return new WaitForSeconds(delay);
-
-        if (isDying) yield break;
-
-        // Play the ground hit sound
         if (AudioManager.instance != null && FMODEvents.instance != null)
             AudioManager.instance.PlayOneShot(
                 FMODEvents.instance.bossGroundHit, transform.position);
-
-        // Apply damage exactly now (synchronized with the sound)
-        var ec = GetComponent<EnemyController>();
-        if (ec != null && target != null)
-            ec.ApplyDamageToTarget(target);
     }
 
 
@@ -1174,4 +1150,3 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 #endif
 }
-

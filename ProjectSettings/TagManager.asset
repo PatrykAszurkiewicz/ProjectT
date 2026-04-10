@@ -46,5 +46,8 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: ParticlesEffect
+    uniqueID: 3252211629
+    locked: 0
   m_RenderingLayers:
   - Default

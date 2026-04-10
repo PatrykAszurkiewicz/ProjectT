@@ -30,10 +30,25 @@ public class EnemyAnimationController : MonoBehaviour
 
     private Quaternion targetRotation = Quaternion.identity;
 
+    // FRAME EVENT CALLBACK
+    // Fired once per frame during attack animation with the current 0-based
+    // frame index (relative to attack.startFrame). EnemyController subscribes
+    // to this to know exactly when the hit frame / parry window is reached.
 
-    // MELEE ATTACK (called by EnemyController)
-    /// Called by EnemyController.AttackCycle() to start the melee attack animation
-    public void PlayMeleeAttackAnimation()
+    /// Invoked each frame of the attack animation with the 0-based frame index
+    /// relative to the attack range. Subscribe in EnemyController to react to
+    /// specific frames (hit, parry open, parry close, etc.).
+    public System.Action<int> OnAttackFrame;
+
+    /// The 0-based frame index currently being displayed during an attack animation.
+    /// -1 when not attacking. Used by debug overlays and ParryIndicator.
+    public int CurrentAttackFrame { get; private set; } = -1;
+
+
+    /// Called by EnemyController.AttackCycle() to start the melee attack animation.
+    /// hitFrame: which 0-based frame to fire the onHitFrame callback on (-1 = no callback).
+    /// onHitFrame: called synchronously when the animation reaches hitFrame.
+    public void PlayMeleeAttackAnimation(int hitFrame = -1, System.Action onHitFrame = null)
     {
         if (isDying || isLaserAttacking || isAnimationFrozen) return;
         isMeleeAttacking = true;
@@ -44,7 +59,7 @@ public class EnemyAnimationController : MonoBehaviour
             if (currentAnimationCoroutine != null)
                 StopCoroutine(currentAnimationCoroutine);
 
-            currentAnimationCoroutine = StartCoroutine(PlayMeleeAttackOnce());
+            currentAnimationCoroutine = StartCoroutine(PlayMeleeAttackOnce(hitFrame, onHitFrame));
         }
     }
 
@@ -55,23 +70,44 @@ public class EnemyAnimationController : MonoBehaviour
 
     }
 
-    private IEnumerator PlayMeleeAttackOnce()
+    private IEnumerator PlayMeleeAttackOnce(int hitFrame, System.Action onHitFrame)
     {
-        // Play the full attack animation once
+        bool hitFired = false;
+
+        // Play the full attack animation once, firing frame events
         for (int i = 0; i < enemyData.attack.frameCount; i++)
         {
             int frameIndex = enemyData.attack.startFrame + i;
             if (frameIndex < sprites.Length)
                 spriteRenderer.sprite = sprites[frameIndex];
-            yield return new WaitForSeconds(enemyData.animationSpeed);
+
+            // Track current attack frame and fire generic event
+            CurrentAttackFrame = i;
+            OnAttackFrame?.Invoke(i);
+
+            // Fire hit callback at the exact frame — same coroutine, no drift
+            if (!hitFired && hitFrame >= 0 && i == hitFrame)
+            {
+                hitFired = true;
+                onHitFrame?.Invoke();
+            }
+
+            yield return new WaitForSeconds(enemyData.GetAnimSpeed(enemyData.attack));
         }
 
-        // Hold on last frame until EnemyController calls StopMeleeAttackAnimation().
+        CurrentAttackFrame = -1;
+
+        // Show idle sprite so we don't freeze on last attack frame
+        int idleFrame = enemyData.idle.startFrame;
+        if (idleFrame < sprites.Length)
+            spriteRenderer.sprite = sprites[idleFrame];
+
+        // Hold until EnemyController calls StopMeleeAttackAnimation()
+        // Keeping currentState as Attack blocks auto-detection for non-boss enemies
         while (isMeleeAttacking)
             yield return null;
 
-        // Return to idle only after the flag is cleared
-        currentState = AnimationState.Idle; // force reset so PlayIdleAnimation works
+        currentState = AnimationState.Attack;
         PlayIdleAnimation();
     }
 
@@ -98,7 +134,7 @@ public class EnemyAnimationController : MonoBehaviour
             int frameIndex = enemyData.laserAttack.startFrame + i;
             if (frameIndex < sprites.Length)
                 spriteRenderer.sprite = sprites[frameIndex];
-            yield return new WaitForSeconds(enemyData.animationSpeed);
+            yield return new WaitForSeconds(enemyData.GetAnimSpeed(enemyData.laserAttack));
         }
 
         while (isLaserAttacking)
@@ -352,6 +388,7 @@ public class EnemyAnimationController : MonoBehaviour
     {
         if (currentState == AnimationState.Idle || isDying || isAnimationFrozen) return;
         currentState = AnimationState.Idle;
+        CurrentAttackFrame = -1;
 
         if (currentAnimationCoroutine != null)
             StopCoroutine(currentAnimationCoroutine);
@@ -360,7 +397,7 @@ public class EnemyAnimationController : MonoBehaviour
             spriteRenderer, sprites, true,
             enemyData.idle.frameCount,
             enemyData.idle.startFrame,
-            enemyData.animationSpeed));
+            enemyData.GetAnimSpeed(enemyData.idle)));
     }
 
     private void PlayAttackAnimation()
@@ -375,7 +412,7 @@ public class EnemyAnimationController : MonoBehaviour
             spriteRenderer, sprites, true,
             enemyData.attack.frameCount,
             enemyData.attack.startFrame,
-            enemyData.animationSpeed));
+            enemyData.GetAnimSpeed(enemyData.attack)));
     }
 
     public void PlayDeathAnimation()
@@ -383,6 +420,7 @@ public class EnemyAnimationController : MonoBehaviour
         if (isDying) return;
         isDying = true;
         currentState = AnimationState.Death;
+        CurrentAttackFrame = -1;
         if (currentAnimationCoroutine != null)
             StopCoroutine(currentAnimationCoroutine);
         transform.rotation = Quaternion.identity;
@@ -396,7 +434,12 @@ public class EnemyAnimationController : MonoBehaviour
             int frameIndex = enemyData.death.startFrame + i;
             if (frameIndex < sprites.Length)
                 spriteRenderer.sprite = sprites[frameIndex];
-            yield return new WaitForSeconds(enemyData.animationSpeed);
+            yield return new WaitForSeconds(enemyData.GetAnimSpeed(enemyData.death));
         }
+    }
+
+    void OnDisable()
+    {
+        CurrentAttackFrame = -1;
     }
 }

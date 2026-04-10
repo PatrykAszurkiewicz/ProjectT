@@ -20,13 +20,23 @@ MonoBehaviour:
   mass: 25
   spriteFolderPath: Sprites/EnemySprites/Slime
   animationSpeed: 0.1
+  laserAttack:
+    startFrame: 57
+    frameCount: 11
+    speedOverride: 0
   idle:
     startFrame: 0
     frameCount: 14
+    speedOverride: 0
   attack:
     startFrame: 14
     frameCount: 19
+    speedOverride: 0
   death:
     startFrame: 33
     frameCount: 12
+    speedOverride: 0
   deathAnimationDuration: 1.2
+  hitFrame: 12
+  parryFrameStart: 8
+  parryFrameEnd: 12

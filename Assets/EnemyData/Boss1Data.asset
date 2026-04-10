@@ -23,13 +23,20 @@ MonoBehaviour:
   laserAttack:
     startFrame: 57
     frameCount: 11
+    speedOverride: 0
   idle:
     startFrame: 0
     frameCount: 25
+    speedOverride: 0
   attack:
     startFrame: 25
     frameCount: 31
+    speedOverride: 0
   death:
     startFrame: 0
     frameCount: 1
+    speedOverride: 0
   deathAnimationDuration: 1.2
+  hitFrame: 18
+  parryFrameStart: 0
+  parryFrameEnd: 0
