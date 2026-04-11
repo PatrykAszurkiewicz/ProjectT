@@ -111,7 +111,7 @@ Shader "Custom/SmokeColumn2D"
                 v2f o;
                 float t = _Time.y;
                 float heightT = v.uv.y;
-                float phase = v.uv2.y + _Phase;
+                float phase = _Phase;
 
                 // ── Billowing vertex displacement ──────────
                 float billowPhase = t * _BillowSpeed + heightT * 4.0 + phase;

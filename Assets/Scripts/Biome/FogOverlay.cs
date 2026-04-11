@@ -335,12 +335,16 @@ public class FogOverlay : MonoBehaviour
 
     //  SMOKE COLUMNS (batched into 1 draw call)
 
+    // Horizontal subdivisions for smoke columns — more columns = softer edges.
+    // The old value of 2 (left + right only) caused sharp triangular edges.
+    private const int SMOKE_H_SUBDIVS = 5;
+
     void GenerateSmokeColumns()
     {
         int count = smokeColumnCount;
         int segments = 12;
-        int vertsPerCol = (segments + 1) * 2;
-        int trisPerCol = segments * 6;
+        int vertsPerCol = (segments + 1) * SMOKE_H_SUBDIVS;
+        int trisPerCol = segments * (SMOKE_H_SUBDIVS - 1) * 6;
         int totalVerts = count * vertsPerCol;
         int totalTris = count * trisPerCol;
 
@@ -371,35 +375,47 @@ public class FogOverlay : MonoBehaviour
                 float halfW = widthAtH * 0.5f;
                 float y = t * height;
 
-                int vi = vBase + s * 2;
-                verts[vi + 0] = new Vector3(basePos.x - halfW, basePos.y + y, 0f);
-                verts[vi + 1] = new Vector3(basePos.x + halfW, basePos.y + y, 0f);
-
-                uvs[vi + 0] = new Vector2(0f, t);
-                uvs[vi + 1] = new Vector2(1f, t);
-
-                uv2s[vi + 0] = new Vector2(widthAtH, phase);
-                uv2s[vi + 1] = new Vector2(widthAtH, phase);
-
+                // Vertical alpha (fade in at bottom, solid middle, fade out at top)
                 float vertAlpha;
                 if (t < 0.1f) vertAlpha = t / 0.1f;
                 else if (t < 0.75f) vertAlpha = 1.0f;
                 else vertAlpha = 1.0f - (t - 0.75f) / 0.25f;
                 vertAlpha = Mathf.Clamp01(vertAlpha);
 
-                cols[vi + 0] = new Color(1f, 1f, 1f, vertAlpha);
-                cols[vi + 1] = new Color(1f, 1f, 1f, vertAlpha);
+                for (int h = 0; h < SMOKE_H_SUBDIVS; h++)
+                {
+                    float fx = (float)h / (SMOKE_H_SUBDIVS - 1); // 0..1 across width
+                    int vi = vBase + s * SMOKE_H_SUBDIVS + h;
+
+                    verts[vi] = new Vector3(
+                        basePos.x + (fx - 0.5f) * widthAtH,
+                        basePos.y + y,
+                        0f
+                    );
+
+                    uvs[vi] = new Vector2(fx, t);
+                    uv2s[vi] = new Vector2(widthAtH, phase);
+
+                    // Horizontal edge falloff — smooth fade at left/right edges
+                    float horzDist = Mathf.Abs(fx - 0.5f) * 2f; // 0 at center, 1 at edge
+                    float horzAlpha = 1f - Mathf.SmoothStep(0.4f, 1.0f, horzDist);
+
+                    cols[vi] = new Color(1f, 1f, 1f, vertAlpha * horzAlpha);
+                }
             }
 
             int ti = tBase;
             for (int s = 0; s < segments; s++)
             {
-                int bl = vBase + s * 2;
-                int br = bl + 1;
-                int tl = bl + 2;
-                int tr = bl + 3;
-                tris[ti++] = bl; tris[ti++] = tl; tris[ti++] = br;
-                tris[ti++] = br; tris[ti++] = tl; tris[ti++] = tr;
+                for (int h = 0; h < SMOKE_H_SUBDIVS - 1; h++)
+                {
+                    int bl = vBase + s * SMOKE_H_SUBDIVS + h;
+                    int br = bl + 1;
+                    int tl = bl + SMOKE_H_SUBDIVS;
+                    int tr = tl + 1;
+                    tris[ti++] = bl; tris[ti++] = tl; tris[ti++] = br;
+                    tris[ti++] = br; tris[ti++] = tl; tris[ti++] = tr;
+                }
             }
         }
 

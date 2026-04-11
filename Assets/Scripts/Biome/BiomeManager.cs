@@ -32,6 +32,23 @@ public class BiomeManager : MonoBehaviour
              "You can still override manually in the editor afterwards.")]
     public bool applyBiomeBackgroundDefaults = true;
 
+    //Weather — particle effect references (children of Main Camera)
+    [Header("Weather Particles")]
+    [Tooltip("When true, switching biomes auto-applies that biome's default rain/snow particles.")]
+    public bool applyBiomeWeatherDefaults = true;
+
+    [Tooltip("Enable/disable rain particle effect")]
+    public bool enableRain = false;
+
+    [Tooltip("Enable/disable snow particle effect")]
+    public bool enableSnow = false;
+
+    [Tooltip("Drag the ParticleRain GameObject here (child of Main Camera)")]
+    public GameObject particleRain;
+
+    [Tooltip("Drag the ParticleSnow GameObject here (child of Main Camera)")]
+    public GameObject particleSnow;
+
     [Range(0f, 2f)]
     [Tooltip("Master fog density (0 = clear, 1 = moderate, 2 = very dense)")]
     public float fogDensity = 0.25f;
@@ -665,6 +682,8 @@ public class BiomeManager : MonoBehaviour
     private Color lastFogSmokeDarkCore;
     private float lastBackgroundScale = -1f;
     private float lastGroundCoverage = -1f;
+    private bool lastEnableRain = false;   //Weather
+    private bool lastEnableSnow = false;   //Weather
     private bool initialized = false;
 
     // Map background paths per biome 
@@ -860,6 +879,14 @@ public class BiomeManager : MonoBehaviour
             lastFogSmokeDarkCore = fogSmokeDarkCore;
             ApplyFog();
         }
+
+        // Live toggle detection — weather particles (rain/snow) //Weather
+        if (enableRain != lastEnableRain || enableSnow != lastEnableSnow)
+        {
+            lastEnableRain = enableRain;
+            lastEnableSnow = enableSnow;
+            ApplyWeather();
+        }
     }
 
     private System.Collections.IEnumerator ApplyBiomeDeferred()
@@ -941,6 +968,14 @@ public class BiomeManager : MonoBehaviour
             lastBackgroundScale = backgroundScale;
         }
 
+        // 0c. Apply biome-specific weather defaults (if enabled) //Weather
+        if (applyBiomeWeatherDefaults)
+        {
+            BiomeWeatherDefaults weatherDefaults = BiomeWeatherDefaults.ForBiome(activeBiome);
+            enableRain = weatherDefaults.rainEnabled;
+            enableSnow = weatherDefaults.snowEnabled;
+        }
+
         // 1. Remove previous overlays 
         RemoveOverlay<GrassOverlay>();
         RemoveOverlay<GrassOverlayGPU>();
@@ -995,6 +1030,9 @@ public class BiomeManager : MonoBehaviour
         // 5. Apply fog (or remove it if defaults turned it off)
         ApplyFog();
 
+        // 5b. Apply weather particles (rain/snow) //Weather
+        ApplyWeather();
+
         // 6. Apply universal night overlay if enabled (works on ANY biome, including Night)
         ApplyNightOverlay();
 
@@ -1035,6 +1073,8 @@ public class BiomeManager : MonoBehaviour
         lastFogColor = fogColor;
         lastFogSmokeColor = fogSmokeColor;
         lastFogSmokeDarkCore = fogSmokeDarkCore;
+        lastEnableRain = enableRain;     //Weather
+        lastEnableSnow = enableSnow;     //Weather
         initialized = true;
     }
 
@@ -1136,6 +1176,21 @@ public class BiomeManager : MonoBehaviour
 
         Debug.LogWarning($"[BiomeManager] Fog enabled — density {fogDensity:F2}, smoke color ({fogSmokeColor.r:F2},{fogSmokeColor.g:F2},{fogSmokeColor.b:F2}), " +
                          $"{fogBankCount} banks, {fogSmokeColumnCount} smoke columns");
+    }
+
+    // Weather particle management — activates/deactivates ParticleRain & ParticleSnow //Weather
+
+    void ApplyWeather()
+    {
+        if (particleRain != null)
+            particleRain.SetActive(enableRain);
+        else if (enableRain)
+            Debug.LogWarning("[BiomeManager] enableRain is ON but particleRain reference is not assigned.");
+
+        if (particleSnow != null)
+            particleSnow.SetActive(enableSnow);
+        else if (enableSnow)
+            Debug.LogWarning("[BiomeManager] enableSnow is ON but particleSnow reference is not assigned.");
     }
 
     // Background 
@@ -1919,5 +1974,3 @@ public class BiomeManager : MonoBehaviour
                          $"grass instances={nightGrassInstanceCount:N0}");
     }
 }
-
-

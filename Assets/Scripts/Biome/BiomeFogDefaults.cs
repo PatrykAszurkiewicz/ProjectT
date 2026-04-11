@@ -25,7 +25,7 @@ public struct BiomeFogDefaults
                 return new BiomeFogDefaults
                 {
                     fogEnabled = true,
-                    fogDensity = 0.90f,
+                    fogDensity = 0.80f,
                     fogColor = new Color(0.78f, 0.82f, 0.85f, 1.0f),
                     fogColorDeep = new Color(0.58f, 0.63f, 0.70f, 1.0f),
                     smokeColor = new Color(0.75f, 0.80f, 0.85f, 1.0f),
@@ -58,7 +58,7 @@ public struct BiomeFogDefaults
                 return new BiomeFogDefaults
                 {
                     fogEnabled = true,
-                    fogDensity = 1.70f,
+                    fogDensity = 0.80f,
                     // Grey smoke
                     // fogColor = new Color(0.45f, 0.42f, 0.38f, 1.0f),
                     // fogColorDeep = new Color(0.30f, 0.28f, 0.25f, 1.0f),
@@ -77,7 +77,7 @@ public struct BiomeFogDefaults
                 return new BiomeFogDefaults
                 {
                     fogEnabled = true,
-                    fogDensity = 1.70f,
+                    fogDensity = 0.70f,
                     fogColor = new Color(0.55f, 0.62f, 0.52f, 1.0f),
                     fogColorDeep = new Color(0.38f, 0.46f, 0.36f, 1.0f),
                     smokeColor = new Color(0.42f, 0.58f, 0.38f, 1.0f),
@@ -89,7 +89,7 @@ public struct BiomeFogDefaults
                 return new BiomeFogDefaults
                 {
                     fogEnabled = true,
-                    fogDensity = 0.90f,
+                    fogDensity = 0.80f,
                     fogColor = new Color(0.78f, 0.82f, 0.85f, 1.0f),
                     fogColorDeep = new Color(0.58f, 0.63f, 0.70f, 1.0f),
                     smokeColor = new Color(0.75f, 0.80f, 0.85f, 1.0f),
@@ -111,7 +111,7 @@ public struct BiomeFogDefaults
                 return new BiomeFogDefaults
                 {
                     fogEnabled = true,
-                    fogDensity = 1.20f,
+                    fogDensity = 0.80f,
                     fogColor = new Color(0.62f, 0.72f, 0.65f, 1.0f),
                     fogColorDeep = new Color(0.40f, 0.52f, 0.45f, 1.0f),
                     smokeColor = new Color(0.55f, 0.65f, 0.58f, 1.0f),
