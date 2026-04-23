@@ -4,6 +4,7 @@ using System.Collections;
 public class EnemyAnimationController : MonoBehaviour
 {
     private SpriteRenderer spriteRenderer;
+    private SmoothSpriteFlip smoothFlip;
     private EnemyStats enemyStats;
     private EnemyData enemyData;
     private Sprite[] sprites;
@@ -48,7 +49,7 @@ public class EnemyAnimationController : MonoBehaviour
     /// Called by EnemyController.AttackCycle() to start the melee attack animation.
     /// hitFrame: which 0-based frame to fire the onHitFrame callback on (-1 = no callback).
     /// onHitFrame: called synchronously when the animation reaches hitFrame.
-    public void PlayMeleeAttackAnimation(int hitFrame = -1, System.Action onHitFrame = null)
+    public void PlayMeleeAttackAnimationOLD(int hitFrame = -1, System.Action onHitFrame = null)
     {
         if (isDying || isLaserAttacking || isAnimationFrozen) return;
         isMeleeAttacking = true;
@@ -61,6 +62,22 @@ public class EnemyAnimationController : MonoBehaviour
 
             currentAnimationCoroutine = StartCoroutine(PlayMeleeAttackOnce(hitFrame, onHitFrame));
         }
+    }
+
+
+    public void PlayMeleeAttackAnimation(int hitFrame = -1, System.Action onHitFrame = null)
+    {
+        if (isDying || isLaserAttacking || isAnimationFrozen) return;
+
+        // If we are already in the middle of a melee attack coroutine, stop it to start the new one from frame 0.
+        if (currentAnimationCoroutine != null)
+        {
+            StopCoroutine(currentAnimationCoroutine);
+        }
+
+        isMeleeAttacking = true;
+        currentState = AnimationState.Attack;
+        currentAnimationCoroutine = StartCoroutine(PlayMeleeAttackOnce(hitFrame, onHitFrame));
     }
 
     // Called by EnemyController when the attack cycle ends.
@@ -107,14 +124,13 @@ public class EnemyAnimationController : MonoBehaviour
         while (isMeleeAttacking)
             yield return null;
 
-        currentState = AnimationState.Attack;
+        // Transition back to idle (no need to set currentState here —
+        // PlayIdleAnimation handles it, and currentState is already Attack)
         PlayIdleAnimation();
     }
 
 
     // LASER ATTACK
-
-
     public void PlayLaserAttackAnimation()
     {
         if (currentState == AnimationState.LaserAttack || isDying) return;
@@ -185,11 +201,12 @@ public class EnemyAnimationController : MonoBehaviour
 
 
     // LIFECYCLE
-
-
     void Start()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        smoothFlip = GetComponent<SmoothSpriteFlip>();
+        if (smoothFlip == null)
+            smoothFlip = gameObject.AddComponent<SmoothSpriteFlip>();
         enemyStats = GetComponent<EnemyStats>();
 
         if (enemyStats == null || enemyStats.enemyData == null)
@@ -334,9 +351,9 @@ public class EnemyAnimationController : MonoBehaviour
         {
             float dx = target.position.x - transform.position.x;
             if (dx < -0.1f)
-                spriteRenderer.flipX = true;
+                smoothFlip.SetFacingLeft(true);
             else if (dx > 0.1f)
-                spriteRenderer.flipX = false;
+                smoothFlip.SetFacingLeft(false);
         }
 
         // Reset rotation during attack
@@ -360,16 +377,16 @@ public class EnemyAnimationController : MonoBehaviour
         }
 
         if (velocity.x < -0.1f)
-            spriteRenderer.flipX = true;
+            smoothFlip.SetFacingLeft(true);
         else if (velocity.x > 0.1f)
-            spriteRenderer.flipX = false;
+            smoothFlip.SetFacingLeft(false);
 
         float angle = 0f;
         if (Mathf.Abs(velocity.x) > 0.1f || Mathf.Abs(velocity.y) > 0.1f)
         {
             angle = Mathf.Atan2(velocity.y, Mathf.Abs(velocity.x)) * Mathf.Rad2Deg;
             angle = Mathf.Clamp(angle, -maxRotationAngle, maxRotationAngle);
-            if (spriteRenderer.flipX)
+            if (smoothFlip.IsFacingLeft)
                 angle = -angle;
         }
 

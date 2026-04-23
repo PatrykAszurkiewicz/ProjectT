@@ -12,12 +12,16 @@ public class PauseMenuController : MonoBehaviour
     }
     public void ActivatePauseMenu()
     {
-        if(activated == false)
+        if (activated == false)
         {
             activated = true;
             Time.timeScale = 0f;
             Cursor.visible = true;
             pauseMenu.SetActive(true);
+            PlayerAttack.InputSuppressed = true;
+
+            // Kill any in-flight shake so the menu doesn't wobble.
+            CombatJuice.StopAllShake();
         }
         else
         {
@@ -25,6 +29,7 @@ public class PauseMenuController : MonoBehaviour
             Time.timeScale = 1f;
             Cursor.visible = false;
             pauseMenu.SetActive(false);
+            PlayerAttack.InputSuppressed = false;
         }
     }
 }

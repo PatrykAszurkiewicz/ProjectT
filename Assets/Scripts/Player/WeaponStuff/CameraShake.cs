@@ -47,6 +47,19 @@ public class CameraShake : MonoBehaviour
         shakeCoroutine = StartCoroutine(ShakeRoutine(duration));
     }
 
+    // Immediately cancels any active shake and snaps the camera back to its
+    // resting local position. Call this when opening menus, transitions, etc.
+    public void StopShake()
+    {
+        if (shakeCoroutine != null)
+        {
+            StopCoroutine(shakeCoroutine);
+            shakeCoroutine = null;
+        }
+        currentIntensity = 0f;
+        transform.localPosition = originalLocalPosition;
+    }
+
     private IEnumerator ShakeRoutine(float duration)
     {
         float elapsed = 0f;
@@ -87,4 +100,3 @@ public class CameraShake : MonoBehaviour
         }
     }
 }
-

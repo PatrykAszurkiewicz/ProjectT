@@ -68,4 +68,17 @@ public static class CombatJuice
         if (CameraShake.Instance != null)
             CameraShake.Instance.Shake(0.15f, 0.2f);
     }
+
+
+    // Immediately cancels any active camera shake from BOTH shake systems
+    // (CameraShake singleton and CombatFeelSystem's CameraShaker).
+    // Call this when pausing, opening the augment menu, or starting a stage transition.
+    public static void StopAllShake()
+    {
+        if (CameraShake.Instance != null)
+            CameraShake.Instance.StopShake();
+
+        if (CombatFeelManager.Instance != null)
+            CombatFeelManager.Instance.StopShake();
+    }
 }

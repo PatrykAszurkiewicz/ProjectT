@@ -9,18 +9,20 @@ public class Boss1 : BaseBossStats //, IDamageable
 {
     [Header("Boss Collider")]
     [SerializeField] private float bossColliderRadius = 4f;
-    [SerializeField] private float bossColliderOffsetXFacingRight = -1.7f;
-    [SerializeField] private float bossColliderOffsetXFacingLeft = 1.7f;
-    [SerializeField] private float bossColliderOffsetY = -1f;
+    [SerializeField] private float bossColliderOffsetXFacingRight = 0f;
+    [SerializeField] private float bossColliderOffsetXFacingLeft = 0f;
+    [SerializeField] private float bossColliderOffsetY = 0f;
 
     [Header("Health Bar")]
-    [SerializeField] private float healthBarXOffset = -1f;
+    [SerializeField] private float healthBarXOffset = 0f;
     [SerializeField] private float healthBarYReduction = 1.5f; // how much to lower from sprite top
     private float healthBarYOffset = 0f;
 
     [Header("Grappling Hook Offsets")]
-    [Tooltip("X offset for the grapple attach point (flips with sprite)")]
-    [SerializeField] private float grapplePointXOffset = -1f;
+    [Tooltip("X offset for the grapple attach point (flips with sprite). " +
+             "Pivot is already at the visual center — leave 0 unless you want " +
+             "the grapple point somewhere specific (e.g. the glowing orb).")]
+    [SerializeField] private float grapplePointXOffset = 0f;
     [Tooltip("Y offset for the grapple attach point relative to collider center")]
     [SerializeField] private float grapplePointYOffset = 0f;
     [Tooltip("Extra Y padding above the health bar for the hook indicator icon")]
@@ -42,13 +44,14 @@ public class Boss1 : BaseBossStats //, IDamageable
     [SerializeField] private float laserChargeDuration = 1.1f;
     [SerializeField] private float laserFireDuration = 1.0f;
     [SerializeField] private float laserCooldown = 6f;
-    [SerializeField] private Vector2 laserSpawnLocalOffset = new Vector2(-0.5f, 0f);
+    [SerializeField] private Vector2 laserSpawnLocalOffset = new Vector2(0f, 0f);
     [SerializeField] private string laserSpritePath = "Sprites/EnemySprites/LaserBeam";
     [SerializeField] private float laserBeamStartFraction = 0.1056f;
     [SerializeField] private LayerMask laserTargetLayers;
     [SerializeField] private float meleeOnlyRange = 3f;
 
     private SpriteRenderer bossSprite;
+    private SmoothSpriteFlip bossSmoothFlip;
 
     [Header("Laser Tracking Behavior")]
     [SerializeField] private LaserTrackingMode trackingMode = LaserTrackingMode.DelayedTracking;
@@ -156,6 +159,14 @@ public class Boss1 : BaseBossStats //, IDamageable
     {
         base.Start();
         bossSprite = GetComponent<SpriteRenderer>();
+        bossSmoothFlip = GetComponent<SmoothSpriteFlip>();
+        if (bossSmoothFlip == null)
+            bossSmoothFlip = gameObject.AddComponent<SmoothSpriteFlip>();
+        // Minimal mode: skip color writes and motion trail. Boss has
+        // other scripts reading flipX (collider offset, health bar, grapple
+        // point) and writing color (armor-break flash, damage flash) — a
+        // minimal flip avoids stepping on them.
+        bossSmoothFlip.SetMinimalMode(true);
         animController = GetComponent<EnemyAnimationController>();
         // Instantiate health bar (same as EnemyStats.Start())
         //if (healthBarPrefab != null)
@@ -247,7 +258,6 @@ public class Boss1 : BaseBossStats //, IDamageable
         float xOff = (bossSprite != null && bossSprite.flipX) ? -healthBarXOffset : healthBarXOffset;
         HealthBar.SetOffset(new Vector3(xOff, healthBarYOffset, 0f));
     }
-
     private void InitializeLaser()
     {
         laserSprites = Resources.LoadAll<Sprite>(laserSpritePath);
@@ -267,7 +277,8 @@ public class Boss1 : BaseBossStats //, IDamageable
 
         laserObject = new GameObject("Boss1_Laser");
         laserRenderer = laserObject.AddComponent<SpriteRenderer>();
-        laserRenderer.sortingOrder = 100;
+        laserRenderer.sortingLayerName = bossSprite != null ? bossSprite.sortingLayerName : "Default";
+        laserRenderer.sortingOrder = (bossSprite != null ? bossSprite.sortingOrder : 0) + 10;
         laserRenderer.enabled = false;
 
         if (showWarningTelegraph)
@@ -281,17 +292,26 @@ public class Boss1 : BaseBossStats //, IDamageable
             laserWarningLine.startWidth = 0.15f;
             laserWarningLine.endWidth = 0.15f;
             laserWarningLine.positionCount = 2;
-            laserWarningLine.sortingOrder = 99;
+            laserWarningLine.sortingLayerName = bossSprite != null ? bossSprite.sortingLayerName : "Default";
+            laserWarningLine.sortingOrder = (bossSprite != null ? bossSprite.sortingOrder : 0) + 9;
             laserWarningLine.enabled = false;
         }
     }
 
-    private Vector3 GetLaserSpawnPosition()
+    private Vector3 GetLaserSpawnPositionOLD()
     {
         if (bossSprite == null) return transform.position;
         Vector2 offset = laserSpawnLocalOffset;
         if (bossSprite.flipX) offset.x = -offset.x;
         return transform.position + (Vector3)offset;
+    }
+    private Vector3 GetLaserSpawnPosition()
+    {
+        if (bossSprite == null) return transform.position;
+        Vector2 offset = laserSpawnLocalOffset;
+        if (bossSprite.flipX) offset.x = -offset.x;
+        // TransformPoint respects rotation AND scale, not just position
+        return transform.TransformPoint(offset);
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -814,23 +834,34 @@ public class Boss1 : BaseBossStats //, IDamageable
     {
         if (bossSprite == null || currentTarget == null) return;
         float dx = currentTarget.position.x - transform.position.x;
-        if (dx < -0.1f) bossSprite.flipX = true;
-        else if (dx > 0.1f) bossSprite.flipX = false;
+        // Deadband: don't flip when the target is near the centerline.
+        // This laser coroutine runs this method every sprite frame (~60/s);
+        // without a deadband, jitter near dx = 0 would oscillate the flip
+        // direction. 0.5 world units is safely outside normal movement jitter.
+        const float flipDeadband = 0.5f;
+        if (dx < -flipDeadband) bossSmoothFlip.SetFacingLeft(true);
+        else if (dx > flipDeadband) bossSmoothFlip.SetFacingLeft(false);
+        // Inside the deadband: hold current facing.
     }
 
     private void RestoreBossFlipAfterLaser()
     {
         if (bossSprite == null) return;
         if (currentTarget != null)
-            bossSprite.flipX = currentTarget.position.x - transform.position.x < 0;
+            bossSmoothFlip.SetFacingLeft(currentTarget.position.x - transform.position.x < 0);
         else
-            bossSprite.flipX = wasFlippedBeforeLaser;
+            bossSmoothFlip.SetFacingLeft(wasFlippedBeforeLaser);
     }
 
     private void UpdateWarningLine()
     {
         if (currentTarget == null || laserWarningLine == null) return;
-
+        // Stay above boss as YSortEntity updates each frame
+        if (bossSprite != null)
+        {
+            laserWarningLine.sortingLayerID = bossSprite.sortingLayerID;
+            laserWarningLine.sortingOrder = bossSprite.sortingOrder + 9;
+        }
         Vector3 spawnPos = GetLaserSpawnPosition();
         Vector3 direction = (currentTarget.position - spawnPos).normalized;
 
@@ -868,7 +899,12 @@ public class Boss1 : BaseBossStats //, IDamageable
     private void UpdateLaserTransform(bool isFiring)
     {
         if (currentTarget == null || laserRenderer.sprite == null) return;
-
+        // Keep laser drawn above the boss even as YSortEntity updates boss sorting order each frame
+        if (bossSprite != null)
+        {
+            laserRenderer.sortingLayerID = bossSprite.sortingLayerID;
+            laserRenderer.sortingOrder = bossSprite.sortingOrder + 10;
+        }
         Vector3 laserSpawnPos = GetLaserSpawnPosition();
         Vector3 directionToUse;
 

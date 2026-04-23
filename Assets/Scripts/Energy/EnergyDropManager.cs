@@ -97,6 +97,48 @@ public class EnergyDropManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Spawn a drop from a regular enemy using stage-scaled values from RunConfig.
+    /// Call this from your enemy death handler instead of TrySpawnEnergyDrop.
+    /// </summary>
+    public static void TrySpawnEnemyDrop(Vector3 position, int stageIndex)
+    {
+        if (Instance == null)
+        {
+            var go = new GameObject("EnergyDropManager");
+            go.AddComponent<EnergyDropManager>();
+        }
+
+        RunConfig cfg = GameOrchestrator.Instance?.runConfig;
+        int value = StageEnergyScaling.EnemyDropValue(cfg, stageIndex);
+        float chance = cfg != null ? Instance.globalDropChance : Instance.globalDropChance;
+        Instance.SpawnEnergyDropInternal(position, chance, value);
+    }
+
+    /// <summary>
+    /// Spawn a burst of drops from a boss using stage-scaled values from RunConfig.
+    /// Call this from BaseBossStats / boss death handler.
+    /// </summary>
+    public static void SpawnBossDrop(Vector3 position, int stageIndex)
+    {
+        if (Instance == null)
+        {
+            var go = new GameObject("EnergyDropManager");
+            go.AddComponent<EnergyDropManager>();
+        }
+
+        RunConfig cfg = GameOrchestrator.Instance?.runConfig;
+        int totalValue = StageEnergyScaling.BossDropValue(cfg, stageIndex);
+        int count = cfg != null ? cfg.bossDropCount : 5;
+        int perDrop = Mathf.Max(1, Mathf.RoundToInt((float)totalValue / count));
+
+        for (int i = 0; i < count; i++)
+        {
+            // Always spawn boss drops (chance = 1)
+            Instance.SpawnEnergyDropInternal(position, 1f, perDrop);
+        }
+    }
+
     public static void TrySpawnEnergyDrop(Vector3 position, float customDropChance = -1f, int customEnergyValue = -1)
     {
         if (Instance == null)
@@ -219,13 +261,14 @@ public class EnergyDropManager : MonoBehaviour
     void OnGUI()
     {
         if (!Application.isPlaying) return;
-
+        /*
         GUILayout.BeginArea(new Rect(10, 10, 300, 100));
         GUILayout.Label($"Energy Drops Spawned: {totalDropsSpawned}");
         GUILayout.Label($"Total Energy Spawned: {totalEnergySpawned}");
         GUILayout.Label($"Active Drops: {activeDrops.Count}");
         GUILayout.Label($"Player Found: {(playerTransform != null ? "Yes" : "No")}");
         GUILayout.EndArea();
+        */
     }
 #endif
 }

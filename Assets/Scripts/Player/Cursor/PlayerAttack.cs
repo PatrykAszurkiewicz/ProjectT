@@ -6,10 +6,14 @@ public class PlayerAttack : MonoBehaviour
 {
     [SerializeField] private Weapon weapon;
     [SerializeField] private float attackAnimationDuration = 0.3f;
+    public static bool InputSuppressed { get; set; } = false;
 
     private PlayerMovement playerMovement;
     private bool isWeaponButtonHeld = false;
     private bool isToolButtonHeld = false;
+
+    private int activeAttackCount = 0;
+    private const int MAX_BUFFERED_ATTACKS = 2;
 
     void Start()
     {
@@ -49,7 +53,7 @@ public class PlayerAttack : MonoBehaviour
     // Called by the existing Attack action which has both Left Button and Right Button bindings.
     public void OnAttack(InputAction.CallbackContext context)
     {
-        if (weapon == null) return;
+        if (weapon == null || InputSuppressed) return;
 
         // Determine which mouse button triggered this callback
         bool isRightClick = false;
@@ -91,7 +95,8 @@ public class PlayerAttack : MonoBehaviour
             // Regular weapons (melee, ranged) — single press
             if (context.performed)
             {
-                StartCoroutine(PerformWeaponAttackWithAnimation());
+                if (activeAttackCount < MAX_BUFFERED_ATTACKS)
+                    StartCoroutine(PerformWeaponAttackWithAnimation());
             }
         }
     }
@@ -163,6 +168,8 @@ public class PlayerAttack : MonoBehaviour
         WeaponData wd = weapon.GetWeaponData();
         bool isRangedAttack = wd != null && wd.isRanged;
 
+        activeAttackCount++;
+
         if (playerMovement != null)
         {
             if (isRangedAttack)
@@ -175,12 +182,18 @@ public class PlayerAttack : MonoBehaviour
 
         yield return new WaitForSeconds(attackAnimationDuration);
 
-        if (playerMovement != null)
+        activeAttackCount--;
+
+        if (activeAttackCount <= 0)
         {
-            if (isRangedAttack)
-                playerMovement.EndRangedAttack();
-            else
-                playerMovement.EndMeleeAttack();
+            activeAttackCount = 0;
+            if (playerMovement != null)
+            {
+                if (isRangedAttack)
+                    playerMovement.EndRangedAttack();
+                else
+                    playerMovement.EndMeleeAttack();
+            }
         }
     }
 }

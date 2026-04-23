@@ -102,6 +102,13 @@ public class CombatFeelManager : MonoBehaviour
         if (cameraShaker != null)
             cameraShaker.Shake(intensity, duration);
     }
+
+    // Immediately cancels any active shake.
+    public void StopShake()
+    {
+        if (cameraShaker != null)
+            cameraShaker.StopShake();
+    }
 }
 
 
@@ -136,6 +143,16 @@ public class CameraShaker : MonoBehaviour
         shakeDuration = duration;
         shakeElapsed = 0f;
         isShaking = true;
+    }
+
+    // Immediately cancels any active shake. Safe to call even if not shaking.
+    // We don't reset transform.position because Cinemachine (or whatever drives
+    // the camera) will overwrite it on the next frame anyway.
+    public void StopShake()
+    {
+        isShaking = false;
+        shakeIntensity = 0f;
+        shakeElapsed = 0f;
     }
 
     void LateUpdate()

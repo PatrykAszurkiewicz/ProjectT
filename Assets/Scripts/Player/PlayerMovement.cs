@@ -51,7 +51,9 @@ public class PlayerMovement : MonoBehaviour
         Dying
     }
 
-    private AnimationState currentAnimationState = AnimationState.Idle;
+    //private AnimationState currentAnimationState = AnimationState.Idle;
+    private AnimationState currentAnimationState = (AnimationState)(-1); // force first animation to play
+
     private Coroutine currentAnimationCoroutine;
     private bool isMeleeAttacking = false;
     private bool isRangedAttacking = false;
@@ -86,7 +88,8 @@ public class PlayerMovement : MonoBehaviour
         transform.localScale = new Vector3(playerScale, playerScale, 1f);
 
         // Start the Idle animation
-        StartCoroutine(DelayedStartAnimation());
+        //StartCoroutine(DelayedStartAnimation());
+        PlayIdleAnimation();
     }
 
     private IEnumerator DelayedStartAnimation()

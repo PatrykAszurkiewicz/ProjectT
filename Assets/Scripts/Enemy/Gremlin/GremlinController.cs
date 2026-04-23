@@ -302,7 +302,9 @@ public class GremlinController : MonoBehaviour, IDamageable
         for (int i = 0; i < energyDropCount; i++)
         {
             Vector3 spawnPos = transform.position + (Vector3)Random.insideUnitCircle * 0.5f;
-            EnergyDropManager.TrySpawnEnergyDrop(spawnPos, 1f, energyDropValue);
+            //EnergyDropManager.TrySpawnEnergyDrop(spawnPos, 1f, energyDropValue);
+            EnergyDropManager.TrySpawnEnemyDrop(spawnPos, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+
         }
 
         float fadeTime = 0.5f;

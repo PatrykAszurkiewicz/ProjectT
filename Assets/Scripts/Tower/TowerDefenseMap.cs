@@ -379,7 +379,8 @@ public class TowerDefenseMap : MonoBehaviour
     private void OnCoreEnergyDepleted()
     {
         Debug.Log("Core energy depleted! Game Over");
-        // TODO: Handle Game Over in Orchestrator
+        if (GameOrchestrator.Instance != null)
+            GameOrchestrator.Instance.TriggerGameOver();
     }
 
     // Public API for runtime modifications

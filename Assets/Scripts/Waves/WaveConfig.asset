@@ -28,24 +28,11 @@ MonoBehaviour:
     - enemyPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
       count: 1
   - waveNumber: 0
-    extraDelayBeforeStart: 5
+    extraDelayBeforeStart: 2
     spawnDirections: 000000000200000001000000
     oneDirectionForAllEnemies: 1
-    minSpawnDelay: 2
-    maxSpawnDelay: 3
+    minSpawnDelay: 1
+    maxSpawnDelay: 2
     enemies:
-    - enemyPrefab: {fileID: 3554655901426140020, guid: 39c47a9911052f342ad7214ed2462cf8, type: 3}
-      count: 15
     - enemyPrefab: {fileID: 2505257184126395638, guid: 3915daee017becf44bca645570578686, type: 3}
-      count: 8
-  - waveNumber: 0
-    extraDelayBeforeStart: 5
-    spawnDirections: 000000000200000001000000
-    oneDirectionForAllEnemies: 1
-    minSpawnDelay: 2
-    maxSpawnDelay: 3
-    enemies:
-    - enemyPrefab: {fileID: 3554655901426140020, guid: 39c47a9911052f342ad7214ed2462cf8, type: 3}
-      count: 15
-    - enemyPrefab: {fileID: 2505257184126395638, guid: 3915daee017becf44bca645570578686, type: 3}
-      count: 8
+      count: 2

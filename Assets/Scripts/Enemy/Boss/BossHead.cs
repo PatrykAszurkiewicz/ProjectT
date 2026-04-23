@@ -82,6 +82,9 @@ public class BossHead : MonoBehaviour, IDamageable
     // Cached head sprite renderer
     private SpriteRenderer headSR;
 
+    // Night mode — cache once at Start so we don't repeatedly query
+    private bool isNightMode;
+
 
     public void Initialize(BaseBossStats boss) => bossStats = boss;
 
@@ -94,10 +97,6 @@ public class BossHead : MonoBehaviour, IDamageable
         mapMinX = mapMinY = mapBoundsMin;
         mapMaxX = mapMaxY = mapBoundsMax;
     }
-
-
-
-    // LIFECYCLE
 
 
     void Start()
@@ -123,6 +122,8 @@ public class BossHead : MonoBehaviour, IDamageable
         BuildDripSprite();
         BuildPulseRingSprite();
 
+        isNightMode = NightGlow.IsNightActive();
+
         StartCoroutine(StaggeredPulseLoop());
     }
 
@@ -135,8 +136,6 @@ public class BossHead : MonoBehaviour, IDamageable
 
 
     // FLOATING MOVEMENT
-
-
     void UpdateFloatMovement()
     {
         directionTimer -= Time.deltaTime;
@@ -202,8 +201,6 @@ public class BossHead : MonoBehaviour, IDamageable
 
 
     // GUNGE TRAIL
-
-
     void BuildGungeSplatSprite()
     {
         int size = 64;
@@ -273,7 +270,22 @@ public class BossHead : MonoBehaviour, IDamageable
 
         while (SceneGungeDrops.Count >= maxGungeDrops)
         {
-            if (SceneGungeDrops[0] != null) Destroy(SceneGungeDrops[0]);
+            // Instead of instant destroy, trigger a quick fade-out so the
+            // NightLight doesn't pop off abruptly (the blinking artifact).
+            if (SceneGungeDrops[0] != null)
+            {
+                TimedDestroy oldTd = SceneGungeDrops[0].GetComponent<TimedDestroy>();
+                if (oldTd != null)
+                {
+                    oldTd.fadeDelay = 0f;
+                    oldTd.lifetime = 0.5f;
+                    oldTd.ResetElapsed();
+                }
+                else
+                {
+                    Destroy(SceneGungeDrops[0]);
+                }
+            }
             SceneGungeDrops.RemoveAt(0);
         }
 
@@ -300,6 +312,7 @@ public class BossHead : MonoBehaviour, IDamageable
         nl.intensity = 0.3f;
         nl.lightColor = new Color(0.91f, 0.33f, 0.96f);
         nl.warmTintStrength = 0.5f;
+        nl.fadeInDuration = 0.5f;
 
         SceneGungeDrops.Add(drop);
     }
@@ -547,10 +560,23 @@ public class BossHead : MonoBehaviour, IDamageable
                 0.95f);     // standard range
         sr.color = dripColor;
 
+        // During night mode, darken drip sprites so they don't bleed
+        // through the semi-transparent darkness overlay as visible flashes.
+        if (isNightMode)
+        {
+            dripColor.r *= 0.15f;
+            dripColor.g *= 0.15f;
+            dripColor.b *= 0.15f;
+            sr.color = dripColor;
+        }
+
         // Glow halo — child object behind the drip
+        // Skipped during night mode: the bright sprite bleeds through the
+        // semi-transparent darkness overlay causing visible circular blinks.
+        // Gunge splats already have proper NightLight components for illumination.
         GameObject glowGo = null;
         SpriteRenderer glowSr = null;
-        if (dripGlowSprite != null)
+        if (dripGlowSprite != null && !isNightMode)
         {
             glowGo = new GameObject("BossHead_DripGlow");
             glowGo.transform.position = spawnPos;
@@ -661,11 +687,36 @@ public class BossHead : MonoBehaviour, IDamageable
         ringObj.transform.position = origin;
         activeRings.Add(ringObj);
 
-        SpriteRenderer sr = ringObj.AddComponent<SpriteRenderer>();
-        sr.sprite = pulseRingSprite;
-        sr.sortingLayerName = "Default";
-        sr.sortingOrder = 3000; // Above grass (~1600 max), below fog (5000)
-        sr.color = new Color(0.91f, 0.33f, 0.96f, 1f); // light purple 
+        // In night mode, suppress the visual sprite (it bleeds through the overlay)
+        // and drive a ring of NightLight points that expand with the pulse instead.
+        SpriteRenderer sr = null;
+        if (!isNightMode)
+        {
+            sr = ringObj.AddComponent<SpriteRenderer>();
+            sr.sprite = pulseRingSprite;
+            sr.sortingLayerName = "Default";
+            sr.sortingOrder = 3000;
+            sr.color = new Color(0.91f, 0.33f, 0.96f, 1f);
+        }
+
+        // Night mode: create a dense ring of small point lights that expand outward.
+        // Use enough lights that their radii overlap into a continuous circumference band.
+        NightOverlay.NightLightHandle[] pulseLights = null;
+        int nightLightCount = 0;
+        if (isNightMode && NightOverlay.Instance != null)
+        {
+            // Scale count with max pulse radius so the ring stays seamless as it expands.
+            // Arc spacing ≈ 2π·maxRadius / count; we want that ≈ lightRadius so they merge.
+            // Capped at 32 to stay within the 64-light shader limit (gunge splats use some too).
+            nightLightCount = Mathf.Clamp(Mathf.RoundToInt(pulseMaxRadius * 2.5f), 20, 32);
+            pulseLights = new NightOverlay.NightLightHandle[nightLightCount];
+            for (int i = 0; i < nightLightCount; i++)
+            {
+                pulseLights[i] = NightOverlay.RegisterLight(
+                    origin, 0.1f, 0f,
+                    new Color(0.91f, 0.33f, 0.96f), 0.35f);
+            }
+        }
 
         const float spriteWorldSize = 4f;
         float startScale = 0.08f;
@@ -682,14 +733,50 @@ public class BossHead : MonoBehaviour, IDamageable
             float t = Mathf.Clamp01(elapsed / safeDuration);
 
             float scale = Mathf.Lerp(startScale, safeEndScale, 1f - Mathf.Pow(1f - t, 2.2f));
-            ringObj.transform.localScale = Vector3.one * scale;
+            float currentRadius = scale * spriteWorldSize * 0.5f;
 
-            float fadeIn = Mathf.Clamp01(t / 0.15f);
-            float fadeOut = Mathf.Pow(1f - t, 1.5f);
-            float alpha = pulseAlphaPeak * fadeIn * fadeOut;
-            sr.color = new Color(0.91f, 0.33f, 0.96f, Mathf.Max(0f, alpha));
+            if (sr != null)
+            {
+                ringObj.transform.localScale = Vector3.one * scale;
+                float fadeIn = Mathf.Clamp01(t / 0.15f);
+                float fadeOut = Mathf.Pow(1f - t, 1.5f);
+                float alpha = pulseAlphaPeak * fadeIn * fadeOut;
+                sr.color = new Color(0.91f, 0.33f, 0.96f, Mathf.Max(0f, alpha));
+            }
+
+            // Update night light ring positions and intensity
+            if (pulseLights != null)
+            {
+                float fadeIn = Mathf.Clamp01(t / 0.15f);
+                float fadeOut = Mathf.Pow(1f - t, 1.5f);
+                float lightIntensity = 0.2f * fadeIn * fadeOut;
+
+                // Set each light's radius to match the arc gap so they merge
+                // into a continuous band rather than showing individual circles.
+                float circumference = 2f * Mathf.PI * Mathf.Max(currentRadius, 0.1f);
+                float arcSpacing = circumference / nightLightCount;
+                float lightRadius = arcSpacing * 1.3f; // slight overlap for smoothness
+
+                for (int i = 0; i < nightLightCount; i++)
+                {
+                    if (pulseLights[i] == null || !pulseLights[i].alive) continue;
+                    float angle = (i / (float)nightLightCount) * Mathf.PI * 2f;
+                    pulseLights[i].position = (Vector2)origin +
+                        new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * currentRadius;
+                    pulseLights[i].intensity = lightIntensity;
+                    pulseLights[i].radius = lightRadius;
+                }
+            }
 
             yield return null;
+        }
+
+        // Cleanup
+        if (pulseLights != null)
+        {
+            for (int i = 0; i < nightLightCount; i++)
+                if (pulseLights[i] != null)
+                    NightOverlay.UnregisterLight(pulseLights[i]);
         }
 
         if (ringObj != null)
@@ -713,6 +800,14 @@ public class BossHead : MonoBehaviour, IDamageable
 
         CleanupAllDrips();
         CleanupAllRings();
+
+        // Night mode: flash of light at death position.
+        // Must run on an independent object because EnemyDeathVFX disables
+        // all MonoBehaviours on this gameObject.
+        if (isNightMode && NightOverlay.Instance != null)
+        {
+            SpawnNightDeathFlash(transform.position);
+        }
 
         // Death VFX 
         EnemyDeathVFX.Trigger(
@@ -754,6 +849,68 @@ public class BossHead : MonoBehaviour, IDamageable
     public float GetMaxHealth() => 100f;
     public float GetHealthPercentage() => isDestroyed ? 0f : 1f;
     public bool IsDestroyed() => isDestroyed;
+
+    /// Spawns a brief independent night light flash at the given position.
+    private static void SpawnNightDeathFlash(Vector3 position)
+    {
+        if (NightOverlay.Instance == null) return;
+
+        var handle = NightOverlay.RegisterLight(
+            position, 4f, 0f,
+            new Color(0.91f, 0.33f, 0.96f), 0.4f);
+        if (handle == null) return;
+
+        GameObject host = new GameObject("BossHead_DeathFlash");
+        host.transform.position = position;
+        var flash = host.AddComponent<NightDeathFlashHost>();
+        flash.handle = handle;
+        flash.duration = 0.6f;
+        flash.peakIntensity = 0.6f;
+        flash.startRadius = 4f;
+    }
+}
+
+// Independent MonoBehaviour that drives a NightLight death flash and self-destructs.
+public class NightDeathFlashHost : MonoBehaviour
+{
+    public NightOverlay.NightLightHandle handle;
+    public float duration = 0.6f;
+    public float peakIntensity = 0.6f;
+    public float startRadius = 4f;
+    private float elapsed;
+
+    void Update()
+    {
+        if (handle == null || !handle.alive)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        elapsed += Time.deltaTime;
+        float t = Mathf.Clamp01(elapsed / duration);
+
+        // Sharp rise, smooth decay
+        float envelope = t < 0.15f
+            ? Mathf.Clamp01(t / 0.15f)
+            : Mathf.Pow(1f - (t - 0.15f) / 0.85f, 2f);
+
+        handle.intensity = peakIntensity * envelope;
+        handle.radius = startRadius * (1f + t * 0.3f);
+
+        if (elapsed >= duration)
+        {
+            NightOverlay.UnregisterLight(handle);
+            handle = null;
+            Destroy(gameObject);
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (handle != null && handle.alive)
+            NightOverlay.UnregisterLight(handle);
+    }
 }
 
 // TimedDestroy 
@@ -763,20 +920,44 @@ public class TimedDestroy : MonoBehaviour
     public float fadeDelay = 15f;
 
     private SpriteRenderer sr;
+    private NightLight nightLight;
+    private float nightLightBaseIntensity;
     private float elapsed;
 
-    void Start() => sr = GetComponent<SpriteRenderer>();
+    void Start()
+    {
+        sr = GetComponent<SpriteRenderer>();
+        nightLight = GetComponent<NightLight>();
+        if (nightLight != null)
+            nightLightBaseIntensity = nightLight.intensity;
+    }
+
+    /// Reset the timer (used when reconfiguring for a quick fade-out eviction).
+    public void ResetElapsed()
+    {
+        elapsed = 0f;
+        if (nightLight != null)
+            nightLightBaseIntensity = nightLight.intensity;
+    }
 
     void Update()
     {
         elapsed += Time.deltaTime;
 
-        if (elapsed >= fadeDelay && sr != null)
+        if (elapsed >= fadeDelay)
         {
             float t = (elapsed - fadeDelay) / (lifetime - fadeDelay);
-            Color c = sr.color;
-            c.a = Mathf.Lerp(1f, 0f, t);
-            sr.color = c;
+
+            if (sr != null)
+            {
+                Color c = sr.color;
+                c.a = Mathf.Lerp(1f, 0f, t);
+                sr.color = c;
+            }
+
+            // Fade the night light in sync so it doesn't pop off abruptly
+            if (nightLight != null)
+                nightLight.intensity = Mathf.Lerp(nightLightBaseIntensity, 0f, t);
         }
 
         if (elapsed >= lifetime)

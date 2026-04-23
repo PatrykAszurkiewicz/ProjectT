@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 
 public class BiomeManager : MonoBehaviour
@@ -19,6 +21,81 @@ public class BiomeManager : MonoBehaviour
 
     [Tooltip("When true, switching night mode on/off at runtime will re-apply the biome with/without the night overlay.")]
     private bool lastEnableNightMode = false;
+
+    [Header("Night Balloons")]
+    [Tooltip("Spawn procedural medieval hot-air balloons with lantern light sources that drift over the map. " +
+             "Only active while Night Mode is on (or the Night biome is active).")]
+    public bool enableNightBalloons = false;
+
+    [Tooltip("How many balloons can be in the sky at once.")]
+    [Range(1, 10)]
+    public int nightBalloonMaxCount = 3;
+
+    [Tooltip("Average seconds between balloon spawn attempts (actual interval is randomized ±50%).")]
+    public float nightBalloonSpawnInterval = 8f;
+
+    [Tooltip("Balloons enter the map from this radius outward.")]
+    public float nightBalloonSpawnRadius = 35f;
+
+    [Tooltip("Balloons will fly past the central core, offset by between min and max distance from center. " +
+             "Setting both low = balloons fly close to the core. Setting both high = balloons stay on the outskirts.")]
+    public float nightBalloonMinCoreDistance = 3f;
+
+    public float nightBalloonMaxCoreDistance = 12f;
+
+    [Tooltip("Drift speed (world units per second).")]
+    public float nightBalloonFlightSpeed = 4f;
+
+    [Tooltip("Visual scale. Player sprite is ~1 world unit; 1.0 = roughly player-sized.")]
+    public float nightBalloonScale = 1.0f;
+
+    [Tooltip("Radius of the lantern light cone reaching the ground below.")]
+    public float nightBalloonLightRadius = 4f;
+
+    [Tooltip("Brightness of each balloon's lantern (higher = brighter).")]
+    [Range(0f, 2f)]
+    public float nightBalloonLightIntensity = 1.0f;
+
+    [Tooltip("Warm lantern color tint.")]
+    public Color nightBalloonLightColor = new Color(1.0f, 0.92f, 0.75f, 1f);
+
+    [Tooltip("How strongly the lantern color tints the night darkness around it.")]
+    [Range(0f, 1f)]
+    public float nightBalloonWarmTintStrength = 0.35f;
+
+    [Tooltip("Flicker speed of the lantern (0 = steady, higher = more rapid flicker).")]
+    public float nightBalloonFlickerSpeed = 1.2f;
+
+    [Tooltip("How strongly the light radius wavers due to flicker.")]
+    [Range(0f, 0.5f)]
+    public float nightBalloonFlickerAmount = 0.08f;
+
+    [Tooltip("When ON, balloons cast a sweeping directional searchlight beam with a cone + ground spot. " +
+             "When OFF, balloons emit only a soft radial lantern glow (original behaviour).")]
+    public bool nightBalloonEnableSweep = true;
+
+    [Tooltip("Length of the searchlight beam from balloon to ground (world units).")]
+    public float nightBalloonSweepBeamLength = 3.5f;
+
+    [Tooltip("Sweep rotation speed in degrees per second. Positive = clockwise, negative = counter-clockwise.")]
+    public float nightBalloonSweepSpeed = 20f;
+
+    [Tooltip("Total sweep arc in degrees. 360 = full rotation, 90 = quarter-circle pendulum.")]
+    [Range(30f, 360f)]
+    public float nightBalloonSweepArc = 100f;
+
+    [Tooltip("Width of the beam cone at its base on the ground (world units).")]
+    public float nightBalloonSweepBeamWidth = 1.8f;
+
+    [Tooltip("Opacity of the visible beam cone.")]
+    [Range(0f, 1f)]
+    public float nightBalloonSweepBeamOpacity = 0.75f;
+
+    [Tooltip("Opacity of the bright ground spot where the beam hits.")]
+    [Range(0f, 1f)]
+    public float nightBalloonSweepGroundSpotOpacity = 0.85f;
+
+    private bool lastEnableNightBalloons = false;
 
     [Header("Fog Effect")]
     [Tooltip("Enable/disable fog overlay on top of any biome")]
@@ -48,6 +125,57 @@ public class BiomeManager : MonoBehaviour
 
     [Tooltip("Drag the ParticleSnow GameObject here (child of Main Camera)")]
     public GameObject particleSnow;
+
+    //Shadow — per-biome shadow overlay
+    [Header("Shadow Overlay")]
+    [Tooltip("When true, switching biomes auto-applies that biome's shadow prefab.")]
+    public bool applyBiomeShadowDefaults = true;
+
+    [Tooltip("Enable/disable the shadow overlay")]
+    public bool enableShadow = true;
+
+    [Tooltip("Shadow prefab slots. Slot 0 is the default used by all biomes. " +
+             "Add more slots for per-biome shadows in the future.")]
+    public GameObject[] shadowPrefabs;
+
+    // Global Volume — per-biome post-processing & illumination
+    [Header("Global Volume / Illumination")]
+    [Tooltip("When true, switching biomes auto-applies that biome's volume defaults (bloom, vignette, color, light).")]
+    public bool applyBiomeVolumeDefaults = true;
+
+    [Tooltip("Enable/disable the Global Volume post-processing")]
+    public bool enableVolume = true;
+
+    [Tooltip("Volume weight (0 = no effect, 1 = full effect)")]
+    [Range(0f, 1f)]
+    public float volumeWeight = 1f;
+
+    [Header("Volume — Bloom")]
+    public bool volumeBloomEnabled = true;
+    [Range(0f, 20f)] public float volumeBloomIntensity = 1.5f;
+    [Range(0f, 2f)] public float volumeBloomThreshold = 0.9f;
+    [Range(0f, 1f)] public float volumeBloomScatter = 0.4f;
+    public Color volumeBloomTint = new Color(0.80f, 0.95f, 1.0f, 1f);
+
+    [Header("Volume — Vignette")]
+    public bool volumeVignetteEnabled = true;
+    [Range(0f, 1f)] public float volumeVignetteIntensity = 0.25f;
+    [Range(0f, 1f)] public float volumeVignetteSmoothness = 0.3f;
+    public bool volumeVignetteRounded = true;
+    public Color volumeVignetteColor = new Color(0.50f, 0.35f, 0.60f, 1f);
+
+    [Header("Volume — Color Adjustments")]
+    public bool volumeColorAdjustmentsEnabled = false;
+    [Range(-3f, 3f)] public float volumePostExposure = 0f;
+    [Range(-100f, 100f)] public float volumeContrast = 0f;
+    [Range(-100f, 100f)] public float volumeSaturation = 0f;
+    public Color volumeColorFilter = Color.white;
+
+    [Header("Volume — Global Light 2D")]
+    [Tooltip("Override the scene's Global Light 2D intensity and color")]
+    public bool volumeGlobalLightOverride = false;
+    [Range(0f, 3f)] public float volumeGlobalLightIntensity = 1f;
+    public Color volumeGlobalLightColor = Color.white;
 
     [Range(0f, 2f)]
     [Tooltip("Master fog density (0 = clear, 1 = moderate, 2 = very dense)")]
@@ -438,7 +566,7 @@ public class BiomeManager : MonoBehaviour
     public bool borderNightPreventOverlap = false;
     public float borderNightSpacing = 0.8f;
 
-    // Obstacle Generation — per-biome prefab slots (up to 3 each)
+    // Obstacle Generation — per-biome prefab slots (up to 3 cluster + solo)
     // All other obstacle settings (count, scale, clustering, etc.) are on the ObstacleGenerator component directly.
 
     [Header("Obstacles — Custom Cluster Blueprints (optional)")]
@@ -450,41 +578,57 @@ public class BiomeManager : MonoBehaviour
     public GameObject obstacleGrassPrefab1;
     public GameObject obstacleGrassPrefab2;
     public GameObject obstacleGrassPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleGrassSoloPrefab;
 
     [Header("Obstacles — Snow Biome")]
     public GameObject obstacleSnowPrefab1;
     public GameObject obstacleSnowPrefab2;
     public GameObject obstacleSnowPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleSnowSoloPrefab;
 
     [Header("Obstacles — Desert Biome")]
     public GameObject obstacleDesertPrefab1;
     public GameObject obstacleDesertPrefab2;
     public GameObject obstacleDesertPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleDesertSoloPrefab;
 
     [Header("Obstacles — Wasteland Biome")]
     public GameObject obstacleWastelandPrefab1;
     public GameObject obstacleWastelandPrefab2;
     public GameObject obstacleWastelandPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleWastelandSoloPrefab;
 
     [Header("Obstacles — Stones Biome")]
     public GameObject obstacleStonesPrefab1;
     public GameObject obstacleStonesPrefab2;
     public GameObject obstacleStonesPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleStonesSoloPrefab;
 
     [Header("Obstacles — GrassCartoon Biome")]
     public GameObject obstacleGrassCartoonPrefab1;
     public GameObject obstacleGrassCartoonPrefab2;
     public GameObject obstacleGrassCartoonPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleGrassCartoonSoloPrefab;
 
     [Header("Obstacles — Marsh Biome")]
     public GameObject obstacleMarshPrefab1;
     public GameObject obstacleMarshPrefab2;
     public GameObject obstacleMarshPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleMarshSoloPrefab;
 
     [Header("Obstacles — Night Biome")]
     public GameObject obstacleNightPrefab1;
     public GameObject obstacleNightPrefab2;
     public GameObject obstacleNightPrefab3;
+    [Tooltip("Solo-only obstacle (e.g. fireplace). Always spawned individually, never in clusters.")]
+    public GameObject obstacleNightSoloPrefab;
 
     // Marsh settings — water puddles under grass
     [Header("Marsh — Puddle Distribution")]
@@ -674,6 +818,7 @@ public class BiomeManager : MonoBehaviour
 
     // Internal references 
     private BiomeType lastAppliedBiome = (BiomeType)(-1);
+    private GameObject activeShadowInstance; //Shadow
     private bool lastUseGPUGrass = true;
     private bool lastEnableFog = false;
     private float lastFogDensity = -1f;
@@ -684,7 +829,27 @@ public class BiomeManager : MonoBehaviour
     private float lastGroundCoverage = -1f;
     private bool lastEnableRain = false;   //Weather
     private bool lastEnableSnow = false;   //Weather
+    private bool lastEnableShadow = false; //Shadow
+    private bool lastEnableVolume = false; //Volume
+    private float lastVolumeWeight = -1f;
+    private float lastVolumeBloomIntensity = -1f;
+    private float lastVolumeBloomThreshold = -1f;
+    private float lastVolumeBloomScatter = -1f;
+    private bool lastVolumeBloomEnabled = false;
+    private bool lastVolumeVignetteEnabled = false;
+    private float lastVolumeVignetteIntensity = -1f;
+    private bool lastVolumeColorAdjEnabled = false;
+    private float lastVolumePostExposure = -99f;
+    private float lastVolumeContrast = -999f;
+    private float lastVolumeSaturation = -999f;
+    private bool lastVolumeGlobalLightOverride = false;
+    private float lastVolumeGlobalLightIntensity = -1f;
     private bool initialized = false;
+
+    // Volume runtime references
+    private GameObject activeVolumeInstance;
+    private Volume activeVolumeComponent;
+    private Light2D activeGlobalLight;
 
     // Map background paths per biome 
     private string GetBackgroundPath(BiomeType biome)
@@ -693,7 +858,7 @@ public class BiomeManager : MonoBehaviour
         {
             case BiomeType.Grass: return "Backgrounds/Background8";
             case BiomeType.Snow: return "Backgrounds/BackgroundSnow";// "Backgrounds/Background9";
-            case BiomeType.Desert: return "Backgrounds/Background10";
+            case BiomeType.Desert: return "Backgrounds/BackgroundDesert"; // "Backgrounds/Background10"; 
             case BiomeType.Wasteland: return "Backgrounds/Background11";
             case BiomeType.Stones: return "Backgrounds/Background12";
             //case BiomeType.GrassCartoon: return "Backgrounds/BackgroundGrassDark";
@@ -814,12 +979,43 @@ public class BiomeManager : MonoBehaviour
         }
     }
 
+    // Returns solo-only prefabs for the given biome (never placed in clusters).
+    public GameObject[] GetObstacleSoloPrefabsForBiome(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Grass: return new GameObject[] { obstacleGrassSoloPrefab };
+            case BiomeType.Snow: return new GameObject[] { obstacleSnowSoloPrefab };
+            case BiomeType.Desert: return new GameObject[] { obstacleDesertSoloPrefab };
+            case BiomeType.Wasteland: return new GameObject[] { obstacleWastelandSoloPrefab };
+            case BiomeType.Stones: return new GameObject[] { obstacleStonesSoloPrefab };
+            case BiomeType.GrassCartoon: return new GameObject[] { obstacleGrassCartoonSoloPrefab };
+            case BiomeType.Marsh: return new GameObject[] { obstacleMarshSoloPrefab };
+            case BiomeType.Night: return new GameObject[] { obstacleNightSoloPrefab };
+            default: return GetObstacleSoloPrefabsForBiome(BiomeType.Grass);
+        }
+    }
+
     void Awake()
     {
         lastUseGPUGrass = useGPUGrass;
         lastBackgroundScale = backgroundScale;
         lastGroundCoverage = groundCoverageRadius;
         lastEnableNightMode = enableNightMode;
+        lastEnableVolume = enableVolume;
+        lastVolumeWeight = volumeWeight;
+        lastVolumeBloomEnabled = volumeBloomEnabled;
+        lastVolumeBloomIntensity = volumeBloomIntensity;
+        lastVolumeBloomThreshold = volumeBloomThreshold;
+        lastVolumeBloomScatter = volumeBloomScatter;
+        lastVolumeVignetteEnabled = volumeVignetteEnabled;
+        lastVolumeVignetteIntensity = volumeVignetteIntensity;
+        lastVolumeColorAdjEnabled = volumeColorAdjustmentsEnabled;
+        lastVolumePostExposure = volumePostExposure;
+        lastVolumeContrast = volumeContrast;
+        lastVolumeSaturation = volumeSaturation;
+        lastVolumeGlobalLightOverride = volumeGlobalLightOverride;
+        lastVolumeGlobalLightIntensity = volumeGlobalLightIntensity;
         PatchMapBackground();
     }
 
@@ -845,6 +1041,16 @@ public class BiomeManager : MonoBehaviour
         {
             lastEnableNightMode = enableNightMode;
             ApplyNightOverlay();
+            // Balloons depend on night being active — refresh them too
+            ApplyNightBalloons();
+            return;
+        }
+
+        // Live night balloons toggle detection
+        if (enableNightBalloons != lastEnableNightBalloons)
+        {
+            lastEnableNightBalloons = enableNightBalloons;
+            ApplyNightBalloons();
             return;
         }
 
@@ -886,6 +1092,35 @@ public class BiomeManager : MonoBehaviour
             lastEnableRain = enableRain;
             lastEnableSnow = enableSnow;
             ApplyWeather();
+        }
+
+        // Live toggle detection — shadow overlay //Shadow
+        if (enableShadow != lastEnableShadow)
+        {
+            lastEnableShadow = enableShadow;
+            ApplyShadow();
+        }
+
+        // Live toggle detection — volume on/off or any parameter change //Volume
+        if (enableVolume != lastEnableVolume ||
+            (enableVolume && (
+                Mathf.Abs(volumeWeight - lastVolumeWeight) > 0.01f ||
+                volumeBloomEnabled != lastVolumeBloomEnabled ||
+                Mathf.Abs(volumeBloomIntensity - lastVolumeBloomIntensity) > 0.01f ||
+                Mathf.Abs(volumeBloomThreshold - lastVolumeBloomThreshold) > 0.01f ||
+                Mathf.Abs(volumeBloomScatter - lastVolumeBloomScatter) > 0.01f ||
+                volumeVignetteEnabled != lastVolumeVignetteEnabled ||
+                Mathf.Abs(volumeVignetteIntensity - lastVolumeVignetteIntensity) > 0.01f ||
+                volumeColorAdjustmentsEnabled != lastVolumeColorAdjEnabled ||
+                Mathf.Abs(volumePostExposure - lastVolumePostExposure) > 0.01f ||
+                Mathf.Abs(volumeContrast - lastVolumeContrast) > 0.1f ||
+                Mathf.Abs(volumeSaturation - lastVolumeSaturation) > 0.1f ||
+                volumeGlobalLightOverride != lastVolumeGlobalLightOverride ||
+                Mathf.Abs(volumeGlobalLightIntensity - lastVolumeGlobalLightIntensity) > 0.01f
+            )))
+        {
+            SyncVolumeTrackers();
+            ApplyVolume();
         }
     }
 
@@ -935,15 +1170,29 @@ public class BiomeManager : MonoBehaviour
     public void ToggleFog()
     {
         enableFog = !enableFog;
-        Debug.LogWarning($"[BiomeManager] Fog toggled to: {(enableFog ? "ON" : "OFF")}");
+        //Debug.LogWarning($"[BiomeManager] Fog toggled to: {(enableFog ? "ON" : "OFF")}");
     }
 
     [ContextMenu("Toggle Night Mode")]
     public void ToggleNightMode()
     {
         enableNightMode = !enableNightMode;
-        Debug.LogWarning($"[BiomeManager] Night mode toggled to: {(enableNightMode ? "ON" : "OFF")}");
+        //Debug.LogWarning($"[BiomeManager] Night mode toggled to: {(enableNightMode ? "ON" : "OFF")}");
         // Update() will detect the change and reapply
+    }
+
+    /// Toggle Global Volume on/off at runtime.
+    public void SetVolume(bool enabled)
+    {
+        enableVolume = enabled;
+        // Update() will detect the change and reapply
+    }
+
+    [ContextMenu("Toggle Volume")]
+    public void ToggleVolume()
+    {
+        enableVolume = !enableVolume;
+        //Debug.LogWarning($"[BiomeManager] Volume toggled to: {(enableVolume ? "ON" : "OFF")}");
     }
 
     [ContextMenu("Reapply Current Biome")]
@@ -976,6 +1225,43 @@ public class BiomeManager : MonoBehaviour
             enableSnow = weatherDefaults.snowEnabled;
         }
 
+        // 0d. Apply biome-specific shadow defaults (if enabled) //Shadow
+        if (applyBiomeShadowDefaults)
+        {
+            BiomeShadowDefaults shadowDefaults = BiomeShadowDefaults.ForBiome(activeBiome);
+            enableShadow = shadowDefaults.shadowEnabled;
+        }
+
+        // 0e. Apply biome-specific volume/illumination defaults (if enabled) //Volume
+        if (applyBiomeVolumeDefaults)
+        {
+            BiomeVolumeDefaults volDefaults = BiomeVolumeDefaults.ForBiome(activeBiome);
+            enableVolume = volDefaults.volumeEnabled;
+            volumeWeight = volDefaults.volumeWeight;
+
+            volumeBloomEnabled = volDefaults.bloomEnabled;
+            volumeBloomIntensity = volDefaults.bloomIntensity;
+            volumeBloomThreshold = volDefaults.bloomThreshold;
+            volumeBloomScatter = volDefaults.bloomScatter;
+            volumeBloomTint = volDefaults.bloomTint;
+
+            volumeVignetteEnabled = volDefaults.vignetteEnabled;
+            volumeVignetteIntensity = volDefaults.vignetteIntensity;
+            volumeVignetteSmoothness = volDefaults.vignetteSmoothness;
+            volumeVignetteRounded = volDefaults.vignetteRounded;
+            volumeVignetteColor = volDefaults.vignetteColor;
+
+            volumeColorAdjustmentsEnabled = volDefaults.colorAdjustmentsEnabled;
+            volumePostExposure = volDefaults.postExposure;
+            volumeContrast = volDefaults.contrast;
+            volumeSaturation = volDefaults.saturation;
+            volumeColorFilter = volDefaults.colorFilter;
+
+            volumeGlobalLightOverride = volDefaults.globalLightOverride;
+            volumeGlobalLightIntensity = volDefaults.globalLightIntensity;
+            volumeGlobalLightColor = volDefaults.globalLightColor;
+        }
+
         // 1. Remove previous overlays 
         RemoveOverlay<GrassOverlay>();
         RemoveOverlay<GrassOverlayGPU>();
@@ -988,6 +1274,7 @@ public class BiomeManager : MonoBehaviour
         RemoveOverlay<MarshFootstepRipples>();
         RemoveOverlay<FogOverlay>();
         RemoveOverlay<NightOverlay>();
+        RemoveOverlay<NightBalloonController>();
 
         // 2. Set background image + tile it
         SetupBackground();
@@ -1033,8 +1320,17 @@ public class BiomeManager : MonoBehaviour
         // 5b. Apply weather particles (rain/snow) //Weather
         ApplyWeather();
 
+        // 5c. Apply shadow overlay //Shadow
+        ApplyShadow();
+
+        // 5d. Apply Global Volume / illumination //Volume
+        ApplyVolume();
+
         // 6. Apply universal night overlay if enabled (works on ANY biome, including Night)
         ApplyNightOverlay();
+
+        // 6b. Apply night balloons (requires night overlay to be visible)
+        ApplyNightBalloons();
 
         // 7. Generate border ring with per-biome prefabs, overlap, and spacing
         BorderRingGenerator border = GetComponent<BorderRingGenerator>();
@@ -1055,6 +1351,7 @@ public class BiomeManager : MonoBehaviour
             // Only push per-biome prefabs and blueprints — all other settings
             // (count, scale, clustering, etc.) live on ObstacleGenerator's own inspector.
             obsGen.obstaclePrefabs = GetObstaclePrefabsForBiome(activeBiome);
+            obsGen.soloPrefabs = GetObstacleSoloPrefabsForBiome(activeBiome);
             obsGen.customBlueprints = obstacleCustomBlueprints;
             obsGen.GenerateObstacles();
         }
@@ -1069,12 +1366,15 @@ public class BiomeManager : MonoBehaviour
         lastUseGPUGrass = useGPUGrass;
         lastEnableFog = enableFog;
         lastEnableNightMode = enableNightMode;
+        lastEnableNightBalloons = enableNightBalloons;
         lastFogDensity = fogDensity;
         lastFogColor = fogColor;
         lastFogSmokeColor = fogSmokeColor;
         lastFogSmokeDarkCore = fogSmokeDarkCore;
         lastEnableRain = enableRain;     //Weather
         lastEnableSnow = enableSnow;     //Weather
+        lastEnableShadow = enableShadow; //Shadow
+        SyncVolumeTrackers(); //Volume
         initialized = true;
     }
 
@@ -1108,14 +1408,65 @@ public class BiomeManager : MonoBehaviour
         night.torchWarmTint = nightTorchWarmTint;
         night.flickerSpeed = nightFlickerSpeed;
         night.flickerIntensity = nightFlickerIntensity;
-
         night.sortingOrder = 6000;
-
         night.GenerateNight();
+        //Debug.LogWarning($"[BiomeManager] Night mode ON — preset={nightPreset}, " +
+        //                 $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
+        //                 $"biome={activeBiome}");
+    }
 
-        Debug.LogWarning($"[BiomeManager] Night mode ON — preset={nightPreset}, " +
-                         $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
-                         $"biome={activeBiome}");
+    // Night balloon management — hot-air lanterns that drift over the map at night.
+    // Only meaningful when some form of NightOverlay is active (universal night mode
+    // or the dedicated Night biome); otherwise the balloons still spawn but their
+    // lanterns have nothing to illuminate through.
+
+    void ApplyNightBalloons()
+    {
+        RemoveOverlay<NightBalloonController>();
+
+        // Balloons only make sense alongside an active NightOverlay.
+        bool nightActive = enableNightMode || activeBiome == BiomeType.Night;
+
+        Debug.Log($"[BiomeManager] ApplyNightBalloons — enabled={enableNightBalloons}, " +
+                  $"nightMode={enableNightMode}, biome={activeBiome}, nightActive={nightActive}");
+
+        if (!enableNightBalloons || !nightActive)
+        {
+            if (enableNightBalloons && !nightActive)
+                Debug.Log("[BiomeManager] Balloons requested but night is not active — skipping.");
+            return;
+        }
+
+        NightBalloonController bc = gameObject.AddComponent<NightBalloonController>();
+
+        bc.maxBalloons = nightBalloonMaxCount;
+        bc.spawnInterval = nightBalloonSpawnInterval;
+        bc.spawnRadius = nightBalloonSpawnRadius;
+        bc.minCoreDistance = nightBalloonMinCoreDistance;
+        bc.maxCoreDistance = nightBalloonMaxCoreDistance;
+
+        bc.flightSpeed = nightBalloonFlightSpeed;
+        bc.balloonScale = nightBalloonScale;
+
+        bc.lightRadius = nightBalloonLightRadius;
+        bc.lightIntensity = nightBalloonLightIntensity;
+        bc.lightColor = nightBalloonLightColor;
+        bc.warmTintStrength = nightBalloonWarmTintStrength;
+        bc.flickerSpeed = nightBalloonFlickerSpeed;
+        bc.flickerAmount = nightBalloonFlickerAmount;
+
+        bc.enableLightSweep = nightBalloonEnableSweep;
+        bc.sweepBeamLength = nightBalloonSweepBeamLength;
+        bc.sweepSpeed = nightBalloonSweepSpeed;
+        bc.sweepArc = nightBalloonSweepArc;
+        bc.sweepBeamWidth = nightBalloonSweepBeamWidth;
+        bc.sweepBeamOpacity = nightBalloonSweepBeamOpacity;
+        bc.sweepGroundSpotOpacity = nightBalloonSweepGroundSpotOpacity;
+
+        // Above ground/entities, below the NightOverlay which is at 6000
+        bc.sortingOrder = 4000;
+
+        bc.GenerateBalloons();
     }
 
     // Fog management — can be toggled independently of biome
@@ -1174,8 +1525,8 @@ public class BiomeManager : MonoBehaviour
 
         f.GenerateFog();
 
-        Debug.LogWarning($"[BiomeManager] Fog enabled — density {fogDensity:F2}, smoke color ({fogSmokeColor.r:F2},{fogSmokeColor.g:F2},{fogSmokeColor.b:F2}), " +
-                         $"{fogBankCount} banks, {fogSmokeColumnCount} smoke columns");
+        //Debug.LogWarning($"[BiomeManager] Fog enabled — density {fogDensity:F2}, smoke color ({fogSmokeColor.r:F2},{fogSmokeColor.g:F2},{fogSmokeColor.b:F2}), " +
+        //                 $"{fogBankCount} banks, {fogSmokeColumnCount} smoke columns");
     }
 
     // Weather particle management — activates/deactivates ParticleRain & ParticleSnow //Weather
@@ -1186,11 +1537,192 @@ public class BiomeManager : MonoBehaviour
             particleRain.SetActive(enableRain);
         else if (enableRain)
             Debug.LogWarning("[BiomeManager] enableRain is ON but particleRain reference is not assigned.");
-
         if (particleSnow != null)
             particleSnow.SetActive(enableSnow);
         else if (enableSnow)
             Debug.LogWarning("[BiomeManager] enableSnow is ON but particleSnow reference is not assigned.");
+    }
+
+    // Shadow overlay management — instantiates/destroys shadow prefab per biome //Shadow
+    void ApplyShadow()
+    {
+        // Destroy previous shadow instance
+        if (activeShadowInstance != null)
+        {
+            if (Application.isPlaying) Destroy(activeShadowInstance);
+            else DestroyImmediate(activeShadowInstance);
+            activeShadowInstance = null;
+        }
+
+        if (!enableShadow) return;
+
+        // Determine which prefab to use
+        BiomeShadowDefaults shadowDefaults = BiomeShadowDefaults.ForBiome(activeBiome);
+        int prefabIndex = shadowDefaults.shadowPrefabIndex;
+
+        if (shadowPrefabs == null || shadowPrefabs.Length == 0)
+        {
+            Debug.LogWarning("[BiomeManager] enableShadow is ON but no shadow prefabs assigned.");
+            return;
+        }
+
+        if (prefabIndex < 0 || prefabIndex >= shadowPrefabs.Length || shadowPrefabs[prefabIndex] == null)
+        {
+            Debug.LogWarning($"[BiomeManager] Shadow prefab index {prefabIndex} is invalid or null.");
+            return;
+        }
+
+        activeShadowInstance = Instantiate(shadowPrefabs[prefabIndex]);
+        activeShadowInstance.name = "Shadow_BiomeInstance";
+
+        // Place shadow above all biome overlays (grass Y-sort range ~400–1600) but below fog (5000) and night (6000)
+        SpriteRenderer sr = activeShadowInstance.GetComponent<SpriteRenderer>();
+        if (sr != null)
+            sr.sortingOrder = 4000;
+    }
+
+    // Volume / illumination management — creates a runtime Volume with VolumeProfile //Volume
+
+    void SyncVolumeTrackers()
+    {
+        lastEnableVolume = enableVolume;
+        lastVolumeWeight = volumeWeight;
+        lastVolumeBloomEnabled = volumeBloomEnabled;
+        lastVolumeBloomIntensity = volumeBloomIntensity;
+        lastVolumeBloomThreshold = volumeBloomThreshold;
+        lastVolumeBloomScatter = volumeBloomScatter;
+        lastVolumeVignetteEnabled = volumeVignetteEnabled;
+        lastVolumeVignetteIntensity = volumeVignetteIntensity;
+        lastVolumeColorAdjEnabled = volumeColorAdjustmentsEnabled;
+        lastVolumePostExposure = volumePostExposure;
+        lastVolumeContrast = volumeContrast;
+        lastVolumeSaturation = volumeSaturation;
+        lastVolumeGlobalLightOverride = volumeGlobalLightOverride;
+        lastVolumeGlobalLightIntensity = volumeGlobalLightIntensity;
+    }
+
+    void ApplyVolume()
+    {
+        // Destroy previous volume instance
+        if (activeVolumeInstance != null)
+        {
+            if (Application.isPlaying) Destroy(activeVolumeInstance);
+            else DestroyImmediate(activeVolumeInstance);
+            activeVolumeInstance = null;
+            activeVolumeComponent = null;
+        }
+
+        if (!enableVolume) return;
+
+        // Create a new GameObject with a Volume component
+        activeVolumeInstance = new GameObject("GlobalVolume_BiomeInstance");
+        activeVolumeInstance.transform.SetParent(null);
+        activeVolumeInstance.transform.position = Vector3.zero;
+
+        activeVolumeComponent = activeVolumeInstance.AddComponent<Volume>();
+        activeVolumeComponent.isGlobal = true;
+        activeVolumeComponent.priority = 1; // Override the default prefab volume
+        activeVolumeComponent.weight = volumeWeight;
+
+        // Create a runtime VolumeProfile (no asset needed)
+        VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
+        activeVolumeComponent.profile = profile;
+
+        //  Bloom 
+        if (volumeBloomEnabled)
+        {
+            Bloom bloom = profile.Add<Bloom>(true);
+            bloom.intensity.overrideState = true;
+            bloom.intensity.value = volumeBloomIntensity;
+            bloom.threshold.overrideState = true;
+            bloom.threshold.value = volumeBloomThreshold;
+            bloom.scatter.overrideState = true;
+            bloom.scatter.value = volumeBloomScatter;
+            bloom.tint.overrideState = true;
+            bloom.tint.value = volumeBloomTint;
+        }
+
+        //  Vignette 
+        if (volumeVignetteEnabled)
+        {
+            Vignette vignette = profile.Add<Vignette>(true);
+            vignette.intensity.overrideState = true;
+            vignette.intensity.value = volumeVignetteIntensity;
+            vignette.smoothness.overrideState = true;
+            vignette.smoothness.value = volumeVignetteSmoothness;
+            vignette.rounded.overrideState = true;
+            vignette.rounded.value = volumeVignetteRounded;
+            vignette.color.overrideState = true;
+            vignette.color.value = volumeVignetteColor;
+        }
+
+        //  Color Adjustments 
+        if (volumeColorAdjustmentsEnabled)
+        {
+            ColorAdjustments ca = profile.Add<ColorAdjustments>(true);
+            ca.postExposure.overrideState = true;
+            ca.postExposure.value = volumePostExposure;
+            ca.contrast.overrideState = true;
+            ca.contrast.value = volumeContrast;
+            ca.saturation.overrideState = true;
+            ca.saturation.value = volumeSaturation;
+            ca.colorFilter.overrideState = true;
+            ca.colorFilter.value = volumeColorFilter;
+        }
+
+        //  Global Light 2D 
+        if (volumeGlobalLightOverride)
+        {
+            ApplyGlobalLight2D();
+        }
+        else
+        {
+            ResetGlobalLight2D();
+        }
+
+        //Debug.LogWarning($"[BiomeManager] Volume applied — weight={volumeWeight:F2}, " +
+        //                 $"bloom={(volumeBloomEnabled ? $"ON i={volumeBloomIntensity:F2}" : "OFF")}, " +
+        //                 $"vignette={(volumeVignetteEnabled ? $"ON i={volumeVignetteIntensity:F2}" : "OFF")}, " +
+        //                 $"colorAdj={(volumeColorAdjustmentsEnabled ? $"ON exp={volumePostExposure:F2}" : "OFF")}, " +
+        //                 $"light2D={(volumeGlobalLightOverride ? $"ON i={volumeGlobalLightIntensity:F2}" : "OFF")}");
+    }
+
+    /// Finds the scene's Global Light 2D and overrides its intensity/color.
+    void ApplyGlobalLight2D()
+    {
+        if (activeGlobalLight == null)
+        {
+            // Find the existing Global Light 2D in scene
+            Light2D[] allLights = FindObjectsByType<Light2D>(FindObjectsSortMode.None);
+            foreach (var light in allLights)
+            {
+                if (light.lightType == Light2D.LightType.Global)
+                {
+                    activeGlobalLight = light;
+                    break;
+                }
+            }
+        }
+
+        if (activeGlobalLight != null)
+        {
+            activeGlobalLight.intensity = volumeGlobalLightIntensity;
+            activeGlobalLight.color = volumeGlobalLightColor;
+        }
+        else
+        {
+            Debug.LogWarning("[BiomeManager] volumeGlobalLightOverride is ON but no Global Light 2D found in scene.");
+        }
+    }
+
+    // Resets the Global Light 2D to default daylight values.
+    void ResetGlobalLight2D()
+    {
+        if (activeGlobalLight != null)
+        {
+            activeGlobalLight.intensity = 1f;
+            activeGlobalLight.color = Color.white;
+        }
     }
 
     // Background 
@@ -1325,7 +1857,7 @@ public class BiomeManager : MonoBehaviour
         g.sortingOrder = -1;
         g.GenerateGrass();
 
-        Debug.LogWarning($"[BiomeManager] GPU grass active — {grassBladeCount:N0} blades, {grassClumpCount:N0} clumps");
+        //Debug.LogWarning($"[BiomeManager] GPU grass active — {grassBladeCount:N0} blades, {grassClumpCount:N0} clumps");
     }
 
 
@@ -1382,11 +1914,9 @@ public class BiomeManager : MonoBehaviour
         g.windColorShift = grassWindColorShift;
         g.patchScale = grassPatchScale;
         g.patchStrength = grassPatchStrength;
-
         g.sortingOrder = -1;
         g.GenerateGrass();
-
-        Debug.LogWarning($"[BiomeManager] CPU grass active — {cpuGrassBladeCount:N0} blades, {cpuGrassClumpCount:N0} clumps (low-end preview)");
+        //Debug.LogWarning($"[BiomeManager] CPU grass active — {cpuGrassBladeCount:N0} blades, {cpuGrassClumpCount:N0} clumps (low-end preview)");
     }
 
     // Snow overlay
@@ -1623,17 +2153,13 @@ public class BiomeManager : MonoBehaviour
         st.groundElementCount = stonesGroundCount;
         st.groundRadius = stonesGroundRadius;
         st.groundCoreExclusion = stonesCoreExclusion;
-
         st.dustMoteCount = stonesDustMoteCount;
         st.dustMoteSpawnRadius = stonesDustMoteSpawnRadius;
-
         st.windStrength = stonesWindStrength;
         st.windAngle = stonesWindAngle;
-
         st.sortingOrder = -1;
         st.GenerateStones();
-
-        Debug.LogWarning($"[BiomeManager] Stones biome active — {stonesGroundCount:N0} ground elements, {stonesDustMoteCount:N0} dust motes");
+        //Debug.LogWarning($"[BiomeManager] Stones biome active — {stonesGroundCount:N0} ground elements, {stonesDustMoteCount:N0} dust motes");
     }
 
     // GrassCartoon overlay
@@ -1685,9 +2211,8 @@ public class BiomeManager : MonoBehaviour
 
     void SetupMarshOverlay()
     {
-        // 1. First spawn water puddles (rendered above background, below grass)
+        // Spawn water puddles (rendered above background, below grass)
         MarshWaterOverlay mw = gameObject.AddComponent<MarshWaterOverlay>();
-
         // Distribution
         mw.puddleCount = marshPuddleCount;
         mw.spawnRadius = marshSpawnRadius;
@@ -1695,7 +2220,6 @@ public class BiomeManager : MonoBehaviour
         mw.clusterCount = marshClusterCount;
         mw.clusterSpread = marshClusterSpread;
         mw.freeScatterRatio = marshFreeScatter;
-
         // Puddle size
         mw.puddleMinRadius = marshPuddleMinRadius;
         mw.puddleMaxRadius = marshPuddleMaxRadius;
@@ -1708,7 +2232,6 @@ public class BiomeManager : MonoBehaviour
         mw.wetlandLobeMinRadius = marshWetlandLobeMinRadius;
         mw.wetlandLobeMaxRadius = marshWetlandLobeMaxRadius;
         mw.wetlandLobeSpacing = marshWetlandLobeSpacing;
-
         // Puddle shape
         mw.puddleSegments = marshPuddleSegments;
         mw.shapeDistortion = marshShapeDistortion;
@@ -1716,7 +2239,6 @@ public class BiomeManager : MonoBehaviour
         mw.concavityChance = marshConcavityChance;
         mw.concavityDepth = marshConcavityDepth;
         mw.shoreBandWidth = marshShoreBandWidth;
-
         // Water colours (4-ring gradient)
         mw.waterShallow = marshWaterShallow;
         mw.waterMid = marshWaterMid;
@@ -1724,14 +2246,12 @@ public class BiomeManager : MonoBehaviour
         mw.waterEdge = marshWaterEdge;
         mw.reflectionColor = marshReflectionColor;
         mw.specularHighlight = marshSpecularHighlight;
-
         // Mud / shore / foam
         mw.mudDark = marshMudDark;
         mw.mudLight = marshMudLight;
         mw.wetGround = marshWetGround;
         mw.foamColor = marshFoamColor;
         mw.foamWidth = marshFoamWidth;
-
         // Animation
         mw.edgeWobbleStrength = marshEdgeWobbleStrength;
         mw.edgeWobbleSpeed = marshEdgeWobbleSpeed;
@@ -1742,27 +2262,21 @@ public class BiomeManager : MonoBehaviour
         mw.waveStrength = marshWaveStrength;
         mw.waveSpeed = marshWaveSpeed;
         mw.waveScale = marshWaveScale;
-
         // Ripples
         mw.ripplesPerPuddle = marshRipplesPerPuddle;
         mw.rippleSpeed = marshRippleSpeed;
         mw.rippleColor = marshRippleColor;
-
         // Insect dimples
         mw.dimpleSlots = marshDimpleSlots;
         mw.dimpleInterval = marshDimpleInterval;
-
         // Caustics
         mw.causticCount = marshCausticCount;
         mw.causticColor = marshCausticColor;
         mw.causticDriftSpeed = marshCausticDriftSpeed;
-
         // Sediment
         mw.sedimentCount = marshSedimentCount;
-
         // Surface film
         mw.filmPatchCount = marshFilmPatchCount;
-
         // Lily pads
         mw.lilyPadCount = marshLilyPadCount;
         mw.lilyPadColor = marshLilyPadColor;
@@ -1778,19 +2292,17 @@ public class BiomeManager : MonoBehaviour
         mw.sortingOrder = 1; // Above background (0), below game elements
         mw.GenerateWater();
 
-        // 1b. Footstep ripples (player/enemy movement creates ripples on water)
+        // Footstep ripples (player/enemy movement creates ripples on water)
         MarshFootstepRipples mfr = gameObject.AddComponent<MarshFootstepRipples>();
         mfr.sortingOrder = mw.sortingOrder + 12; // above all water sub-layers (reeds = +10)
         mfr.Init(mw);
-
-        // 2. Then spawn grass ON TOP with darker/wetter tint
+        // Then spawn grass ON TOP with darker/wetter tint
         if (useGPUGrass)
             SetupMarshGrassGPU();
         else
             SetupMarshGrassCPU();
-
-        Debug.LogWarning($"[BiomeManager] Marsh biome active — {marshWetlandChainCount} wetland chains + {marshMediumPuddleCount} medium + {marshPuddleCount} small puddles, " +
-                         $"grass mode={(useGPUGrass ? "GPU" : "CPU")}");
+        //Debug.LogWarning($"[BiomeManager] Marsh biome active — {marshWetlandChainCount} wetland chains + {marshMediumPuddleCount} medium + {marshPuddleCount} small puddles, " +
+        //                 $"grass mode={(useGPUGrass ? "GPU" : "CPU")}");
     }
 
     void SetupMarshGrassGPU()
@@ -1969,8 +2481,9 @@ public class BiomeManager : MonoBehaviour
             night.GenerateNight();
         }
 
-        Debug.LogWarning($"[BiomeManager] Night biome active — preset={nightPreset}, " +
-                         $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
-                         $"grass instances={nightGrassInstanceCount:N0}");
+        //Debug.LogWarning($"[BiomeManager] Night biome active — preset={nightPreset}, " +
+        //                 $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
+        //                 $"grass instances={nightGrassInstanceCount:N0}");
     }
 }
+

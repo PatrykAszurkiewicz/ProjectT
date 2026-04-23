@@ -139,20 +139,19 @@ public class ResourceDepositSpawner : MonoBehaviour
 
     void SpawnEnergyCluster(Vector3 centerPosition)
     {
+        int stageIndex = GameOrchestrator.Instance?.CurrentStageIndex ?? 0;
+        int scaledValue = StageEnergyScaling.EnemyDropValue(
+            GameOrchestrator.Instance?.runConfig, stageIndex);
+
         for (int i = 0; i < energyDropsPerDeposit; i++)
         {
-            // Arrange drops in a circle around the center
             float angle = (360f / energyDropsPerDeposit) * i * Mathf.Deg2Rad;
             Vector3 offset = new Vector3(
                 Mathf.Cos(angle) * depositRadius,
                 Mathf.Sin(angle) * depositRadius,
                 0f
             );
-
-            Vector3 dropPosition = centerPosition + offset;
-
-            // Spawn energy drop with 100% chance
-            EnergyDropManager.TrySpawnEnergyDrop(dropPosition, 1f, energyValuePerDrop);
+            EnergyDropManager.TrySpawnEnergyDrop(centerPosition + offset, 1f, scaledValue);
         }
     }
 

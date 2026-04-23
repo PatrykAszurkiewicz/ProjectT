@@ -215,13 +215,13 @@ MonoBehaviour:
   currentMoveSpeedDebug: 0
   maxArmor: 3
   bossColliderRadius: 4
-  bossColliderOffsetXFacingRight: -1.7
-  bossColliderOffsetXFacingLeft: 1.7
-  bossColliderOffsetY: -1
-  healthBarXOffset: -1
+  bossColliderOffsetXFacingRight: 0
+  bossColliderOffsetXFacingLeft: 0
+  bossColliderOffsetY: 0
+  healthBarXOffset: 0
   healthBarYReduction: 1.9
-  grapplePointXOffset: -1
-  grapplePointYOffset: -0.5
+  grapplePointXOffset: 0
+  grapplePointYOffset: 0
   hookIndicatorYAboveHealthBar: -0.7
   bossMaxArmor: 3
   bossMaxHealth: 3
@@ -230,7 +230,7 @@ MonoBehaviour:
   laserChargeDuration: 1.1
   laserFireDuration: 1
   laserCooldown: 5
-  laserSpawnLocalOffset: {x: -0.6, y: -0.5}
+  laserSpawnLocalOffset: {x: 0.7, y: 0}
   laserSpritePath: Sprites/EnemySprites/LaserBeam
   laserBeamStartFraction: 0.1056
   laserTargetLayers:
@@ -244,7 +244,6 @@ MonoBehaviour:
   warningLineColor: {r: 1, g: 0, b: 0, a: 0.5}
   playLaserChargeSound: 1
   attackRange: 8
-  groundHitFrameOffset: 18
   spawnDetachableHead: 1
   headSpawnMinDistance: 10
   headSpawnMaxDistance: 20

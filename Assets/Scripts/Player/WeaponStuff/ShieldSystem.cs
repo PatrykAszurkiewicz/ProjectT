@@ -23,6 +23,7 @@ public class ShieldSystem
     private const float ARC_RADIUS = 1.0f;
     private const int ARC_SEGMENTS = 16;
     private const float ARC_WIDTH = 0.08f;
+    private const float VISUAL_ARC_DEGREES = BLOCK_ARC_DEGREES * 0.70f; // visual is shorter than hitbox
 
     //  State 
     private readonly Weapon weapon;
@@ -78,6 +79,9 @@ public class ShieldSystem
     //  Public API 
 
     public bool IsRaised => isRaised;
+
+    /// Expose the arc LineRenderer for visual feedback (ShieldFeedback uses this).
+    public LineRenderer ArcLineRenderer => arcLine;
 
     public void RaiseShield()
     {
@@ -170,32 +174,14 @@ public class ShieldSystem
             ApplyParry(attackerGO);
             SpawnParryVFX();
 
-            if (AudioManager.instance != null && FMODEvents.instance != null)
-            {
-                try
-                {
-                    //TODO add audio
-                    //AudioManager.instance.PlayOneShot( FMODEvents.instance.shieldParry, playerTransform.position);
-                }
-                catch { }
-            }
+            // ── Visual + audio feedback (parry) ──
+            ShieldFeedback.OnParry(playerTransform, attackerGO.transform.position);
         }
         else
         {
-            // Regular block (shield held, but not in parry window)
-            if (AudioManager.instance != null && FMODEvents.instance != null)
-            {
-                try
-                {
-                    //TODO add audio
-                    //AudioManager.instance.PlayOneShot( FMODEvents.instance.shieldBlock, playerTransform.position);
-                }
-                catch { }
-            }
+            // ── Visual + audio feedback (block) ──
+            ShieldFeedback.OnBlock(playerTransform, attackerGO.transform.position, arcLine);
         }
-
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.Shake(isParry ? 0.12f : 0.05f, isParry ? 0.12f : 0.06f);
 
         return true;
     }
@@ -271,14 +257,14 @@ public class ShieldSystem
 
         Vector2 cursorDir = GetCursorDirection();
         float centerAngle = Mathf.Atan2(cursorDir.y, cursorDir.x) * Mathf.Rad2Deg;
-        float halfArc = BLOCK_ARC_DEGREES * 0.5f;
+        float halfArc = VISUAL_ARC_DEGREES * 0.5f;
 
         Vector3 center = playerTransform.position;
 
         for (int i = 0; i <= ARC_SEGMENTS; i++)
         {
             float t = (float)i / ARC_SEGMENTS;
-            float angle = (centerAngle - halfArc + t * BLOCK_ARC_DEGREES) * Mathf.Deg2Rad;
+            float angle = (centerAngle - halfArc + t * VISUAL_ARC_DEGREES) * Mathf.Deg2Rad;
             Vector3 pos = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * ARC_RADIUS;
             arcLine.SetPosition(i, pos);
         }

@@ -135,47 +135,124 @@ public class GrapplingHookSystem
 
         hookHeadObject = new GameObject("GrapplingHookHead");
 
-        const int texSize = 64;
+        // Render a small 3-prong grappling claw. Sprite "up" (positive Y in
+        // texture space) points along the direction of travel, with the rope
+        // attachment pivot at the bottom center.
+        const int texSize = 96;
         Texture2D tex = new Texture2D(texSize, texSize, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
         Color[] pixels = new Color[texSize * texSize];
-        Color dark = new Color(0.12f, 0.10f, 0.10f, 1f);
+
+        Color metalDark = new Color(0.11f, 0.09f, 0.09f, 1f); // outline / shadow
+        Color metalMid = new Color(0.18f, 0.16f, 0.15f, 1f); // main body
+        Color metalHi = new Color(0.32f, 0.29f, 0.26f, 1f); // highlight edge
+
+        // Clear
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = Color.clear;
 
         float cx = texSize * 0.5f;
-        float cy = texSize * 0.5f;
-        float radius = texSize * 0.45f;
 
-        for (int y = 0; y < texSize; y++)
+        // --- Central shaft (vertical neck where the rope attaches) ---
+        // Sits low in the sprite so the claws can curve above it.
+        float shaftHalfW = texSize * 0.06f;
+        float shaftBottom = texSize * 0.05f;
+        float shaftTop = texSize * 0.42f;
+        for (int y = (int)shaftBottom; y <= (int)shaftTop; y++)
         {
-            for (int x = 0; x < texSize; x++)
+            for (int x = (int)(cx - shaftHalfW - 1.5f); x <= (int)(cx + shaftHalfW + 1.5f); x++)
             {
-                float dx = x - cx;
-                float dy = y - cy;
-                float dist = Mathf.Sqrt(dx * dx + dy * dy);
-
-                if (dist <= radius && dy >= 0f)
+                if (x < 0 || x >= texSize || y < 0 || y >= texSize) continue;
+                float dx = Mathf.Abs(x - cx);
+                if (dx <= shaftHalfW)
                 {
-                    float edgeFade = Mathf.Clamp01((radius - dist) / 2f);
-                    pixels[y * texSize + x] = new Color(dark.r, dark.g, dark.b, edgeFade);
+                    // Center highlight strip on the shaft
+                    Color c = (dx < shaftHalfW * 0.35f) ? metalHi : metalMid;
+                    pixels[y * texSize + x] = c;
                 }
-                else
+                else if (dx <= shaftHalfW + 1.2f)
                 {
-                    pixels[y * texSize + x] = Color.clear;
+                    pixels[y * texSize + x] = metalDark; // outline
                 }
             }
         }
 
+        // --- Three curved prongs ---
+        // Center prong points straight up, side prongs splay outward.
+        // Each prong is a sampled curve with a thickness, drawn as disks.
+        DrawProng(pixels, texSize, cx, texSize * 0.38f, 0f, texSize * 0.48f, metalMid, metalDark, metalHi);
+        DrawProng(pixels, texSize, cx, texSize * 0.38f, -0.85f, texSize * 0.44f, metalMid, metalDark, metalHi);
+        DrawProng(pixels, texSize, cx, texSize * 0.38f, 0.85f, texSize * 0.44f, metalMid, metalDark, metalHi);
+
         tex.SetPixels(pixels);
         tex.Apply();
 
-        Sprite halfCircle = Sprite.Create(tex, new Rect(0, 0, texSize, texSize), new Vector2(0.5f, 0f), 100f);
+        // Pivot at bottom-center so rotating around Z pivots on the rope end.
+        Sprite hookClaw = Sprite.Create(tex, new Rect(0, 0, texSize, texSize), new Vector2(0.5f, 0.08f), 100f);
 
         hookHeadRenderer = hookHeadObject.AddComponent<SpriteRenderer>();
-        hookHeadRenderer.sprite = halfCircle;
+        hookHeadRenderer.sprite = hookClaw;
         hookHeadRenderer.sortingOrder = 3000;
         hookHeadRenderer.enabled = false;
 
-        hookHeadObject.transform.localScale = Vector3.one * 0.7f;
+        // Small, natural-looking tip.
+        hookHeadObject.transform.localScale = Vector3.one * 0.35f;
+    }
+
+    /// Draws a curved prong from (baseX, baseY) arcing outward. `splay` is
+    /// the horizontal bias: 0 = straight up, negative = curves left,
+    /// positive = curves right. `length` is prong length in pixels.
+    private void DrawProng(Color[] pixels, int texSize, float baseX, float baseY,
+                           float splay, float length,
+                           Color body, Color outline, Color highlight)
+    {
+        const int samples = 28;
+        for (int i = 0; i < samples; i++)
+        {
+            float t = i / (float)(samples - 1); // 0..1 from base to tip
+
+            // Quadratic curve: base -> control point -> tip.
+            // Tip hooks inward slightly (opposite splay near the very tip)
+            // for the classic claw shape.
+            float ctrlX = baseX + splay * length * 0.55f;
+            float ctrlY = baseY + length * 0.55f;
+            float tipX = baseX + splay * length * 0.95f - splay * length * 0.25f;
+            float tipY = baseY + length * 0.95f;
+
+            float omt = 1f - t;
+            float px = omt * omt * baseX + 2f * omt * t * ctrlX + t * t * tipX;
+            float py = omt * omt * baseY + 2f * omt * t * ctrlY + t * t * tipY;
+
+            // Thickness tapers from thick at base to a sharp point at tip.
+            float thickness = Mathf.Lerp(texSize * 0.065f, texSize * 0.012f, t);
+
+            DrawDisk(pixels, texSize, px, py, thickness + 1.2f, outline);
+            DrawDisk(pixels, texSize, px, py, thickness, body);
+
+            // Inner highlight on the leading edge (side opposite the splay curve).
+            float hx = px - Mathf.Sign(splay == 0f ? 1f : splay) * thickness * 0.35f;
+            float hy = py + thickness * 0.15f;
+            DrawDisk(pixels, texSize, hx, hy, thickness * 0.35f, highlight);
+        }
+    }
+
+    private void DrawDisk(Color[] pixels, int texSize, float cx, float cy, float radius, Color color)
+    {
+        int x0 = Mathf.Max(0, (int)(cx - radius - 1));
+        int x1 = Mathf.Min(texSize - 1, (int)(cx + radius + 1));
+        int y0 = Mathf.Max(0, (int)(cy - radius - 1));
+        int y1 = Mathf.Min(texSize - 1, (int)(cy + radius + 1));
+        float r2 = radius * radius;
+
+        for (int y = y0; y <= y1; y++)
+        {
+            for (int x = x0; x <= x1; x++)
+            {
+                float dx = x - cx;
+                float dy = y - cy;
+                if (dx * dx + dy * dy <= r2)
+                    pixels[y * texSize + x] = color;
+            }
+        }
     }
 
     private void ShowHookHead(Vector3 position, Vector3 direction)
@@ -1085,5 +1162,3 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, pullVelocity, 1.0f);
     }
 }
-
-

@@ -144,6 +144,10 @@ public class EnemyDeathVFX : MonoBehaviour
                 worldPos, sortOrder, sortLayerName,
                 worldBounds.extents.magnitude * 2.5f));
 
+        // Night mode: brief burst of light at the death position
+        if (NightOverlay.Instance != null)
+            vfx.StartCoroutine(vfx.DoNightDeathFlash(worldPos, isBoss));
+
         //Debug.Log("[VFX-TRACE-6b] Trigger() complete — host Update() will animate from next frame.");
     }
 
@@ -563,6 +567,42 @@ public class EnemyDeathVFX : MonoBehaviour
         }
         if (go != null) Destroy(go);
         //Debug.Log("[VFX-SHOCKWAVE] DoShockwave complete.");
+    }
+
+    /// Brief burst of illumination through the night overlay when an enemy disintegrates.
+    private IEnumerator DoNightDeathFlash(Vector3 origin, bool isBoss)
+    {
+        if (NightOverlay.Instance == null) yield break;
+
+        float flashRadius = isBoss ? 5f : 2.5f;
+        float peakIntensity = isBoss ? 0.7f : 0.4f;
+        float duration = isBoss ? 0.5f : 0.3f;
+        Color flashColor = isBoss
+            ? new Color(1f, 0.55f, 0.08f)    // warm orange for boss
+            : new Color(1f, 0.7f, 0.3f);      // softer warm for regular
+
+        var handle = NightOverlay.RegisterLight(
+            origin, flashRadius, 0f, flashColor, 0.5f);
+
+        if (handle == null) yield break;
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            // Sharp rise, smooth decay
+            float envelope = t < 0.15f
+                ? Mathf.Clamp01(t / 0.15f)
+                : Mathf.Pow(1f - (t - 0.15f) / 0.85f, 2f);
+
+            handle.intensity = peakIntensity * envelope;
+            handle.radius = flashRadius * (1f + t * 0.3f);  // slight expansion
+            yield return null;
+        }
+
+        NightOverlay.UnregisterLight(handle);
     }
 
 

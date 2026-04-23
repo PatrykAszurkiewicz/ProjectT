@@ -52,7 +52,7 @@ public class BoomerangProjectile : MonoBehaviour
         BuildVisuals();
         initialized = true;
 
-        Debug.Log($"[Boomerang] Initialized — dir={launchDir} spd={speed} range={maxRange} dmg={damage}");
+        //Debug.Log($"[Boomerang] Initialized — dir={launchDir} spd={speed} range={maxRange} dmg={damage}");
     }
 
     //  MOVEMENT  (position-based, rotation-independent)
@@ -193,6 +193,11 @@ public class BoomerangProjectile : MonoBehaviour
         go.transform.SetParent(transform, false);
 
         var ps = go.AddComponent<ParticleSystem>();
+        // Disable unused velocity module that spams console
+        var vel = ps.velocityOverLifetime;
+        vel.enabled = false;
+
+
         var main = ps.main;
         main.loop = true;
         main.startLifetime = 0.25f;

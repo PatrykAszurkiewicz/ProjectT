@@ -204,7 +204,11 @@ public class EnemyStats : CharacterStats
 
         if (canDropEnergy)
         {
-            EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);
+            //EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);
+            EnergyDropManager.TrySpawnEnemyDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+            // If this is a boss, also spawn the boss burst on top
+            if (GetComponent<BaseBossStats>() != null)
+                EnergyDropManager.SpawnBossDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
         }
 
         if (healthBar != null)

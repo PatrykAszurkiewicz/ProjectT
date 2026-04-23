@@ -58,7 +58,7 @@ public struct BiomeFogDefaults
                 return new BiomeFogDefaults
                 {
                     fogEnabled = true,
-                    fogDensity = 0.80f,
+                    fogDensity = 1.10f,
                     // Grey smoke
                     // fogColor = new Color(0.45f, 0.42f, 0.38f, 1.0f),
                     // fogColorDeep = new Color(0.30f, 0.28f, 0.25f, 1.0f),

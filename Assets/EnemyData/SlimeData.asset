@@ -37,6 +37,6 @@ MonoBehaviour:
     frameCount: 12
     speedOverride: 0
   deathAnimationDuration: 1.2
-  hitFrame: 12
-  parryFrameStart: 8
-  parryFrameEnd: 12
+  hitFrame: 6
+  parryFrameStart: 3
+  parryFrameEnd: 6

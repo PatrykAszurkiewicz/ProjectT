@@ -29,16 +29,22 @@ public class NightLight : MonoBehaviour
     [Range(0f, 0.5f)]
     public float flickerAmount = 0f;
 
+    [Tooltip("Time in seconds to fade in from zero to full intensity (0 = instant).")]
+    public float fadeInDuration = 0f;
+
     private NightOverlay.NightLightHandle handle;
     private float flickerPhase;
+    private float fadeInElapsed;
+    private bool registeredOnce;
 
     void OnEnable()
     {
         flickerPhase = Random.Range(0f, 100f);
-        TryRegister();
+        fadeInElapsed = 0f;
+        registeredOnce = false;
     }
 
-    /// Immediately register with NightOverlay if night is active.
+    // Immediately register with NightOverlay if night is active.
 
     private void TryRegister()
     {
@@ -48,7 +54,7 @@ public class NightLight : MonoBehaviour
         handle = NightOverlay.RegisterLight(
             transform.position,
             radius,
-            intensity,
+            fadeInDuration > 0f ? 0f : intensity,
             lightColor,
             warmTintStrength);
     }
@@ -59,8 +65,9 @@ public class NightLight : MonoBehaviour
 
         if (nightActive && (handle == null || !handle.alive))
         {
-            // Night just turned on, or NightOverlay was recreated — register
+            // First frame after AddComponent, or night just turned on / recreated
             TryRegister();
+            registeredOnce = true;
         }
         else if (!nightActive && handle != null)
         {
@@ -71,11 +78,19 @@ public class NightLight : MonoBehaviour
 
         if (handle == null) return;
 
+        // Fade-in ramp
+        float fadeMultiplier = 1f;
+        if (fadeInDuration > 0f)
+        {
+            fadeInElapsed += Time.deltaTime;
+            fadeMultiplier = Mathf.Clamp01(fadeInElapsed / fadeInDuration);
+        }
+
         // Sync position/params every frame (for moving objects)
         handle.position = transform.position;
         handle.color = lightColor;
         handle.warmTintStrength = warmTintStrength;
-        handle.intensity = intensity;
+        handle.intensity = intensity * fadeMultiplier;
 
         // Flicker
         if (flickerSpeed > 0f && flickerAmount > 0f)
@@ -108,4 +123,3 @@ public class NightLight : MonoBehaviour
         }
     }
 }
-

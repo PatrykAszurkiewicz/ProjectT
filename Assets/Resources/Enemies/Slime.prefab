@@ -194,10 +194,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   detectRange: 3
   attackRange: 2.3
-  attackCooldown: 1
-  attackHitFrame: 12
-  parryFrameStart: 8
-  parryFrameEnd: 12
+  attackCooldown: 0
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -225,7 +222,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3554655901426140020}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7018fd51b9a8ccf4480dc80f6798d731, type: 3}
   m_Name: 

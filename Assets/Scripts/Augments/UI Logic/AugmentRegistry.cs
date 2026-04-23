@@ -208,7 +208,8 @@ public static class StatParser
 
         if (!match.Success)
         {
-            Debug.LogWarning($"StatParser: Could not parse stat expression: '{expression}'");
+            //TODO uncomment
+            //Debug.LogWarning($"StatParser: Could not parse stat expression: '{expression}'");
             return null;
         }
 
@@ -216,20 +217,22 @@ public static class StatParser
 
         if (StatAliases.TryGetValue(statName, out string actualStatName))
         {
-            Debug.Log($"StatParser: Mapping '{statName}' to '{actualStatName}'");
+            //Debug.Log($"StatParser: Mapping '{statName}' to '{actualStatName}'");
             statName = actualStatName;
         }
 
         string operatorStr = match.Groups[2].Value;
         if (!float.TryParse(match.Groups[3].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float value))
         {
-            Debug.LogWarning($"StatParser: Could not parse numeric value in expression: '{expression}'");
+            //TODO uncomment
+            //Debug.LogWarning($"StatParser: Could not parse numeric value in expression: '{expression}'");
             return null;
         }
 
         if (!OperatorMap.TryGetValue(operatorStr, out var operationType))
         {
-            Debug.LogWarning($"StatParser: Unknown operator '{operatorStr}' in expression: '{expression}'");
+            //TODO uncomment
+            //Debug.LogWarning($"StatParser: Unknown operator '{operatorStr}' in expression: '{expression}'");
             return null;
         }
 
@@ -2045,7 +2048,7 @@ public class RarityAwareAugmentEffect : IAugmentEffect
         {
             if (string.IsNullOrEmpty(augmentData.AffectedStats) || augmentData.AffectedStats == "NULL")
             {
-                Debug.LogWarning($"Augment '{augmentData.Name}' has NULL stats - no automatic implementation available");
+                Debug.Log($"Augment '{augmentData.Name}' has NULL stats, no stat modifications needed, handled by AugmentEffectHandler (unlocks, special abilities, etc.)  ");
                 return;
             }
             else

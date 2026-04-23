@@ -4,6 +4,20 @@ using System.Collections.Generic;
 using UnityEngine;
 using FMODUnity;
 
+/// <summary>
+/// WAVE SPAWNER
+/// 
+/// MODE 1 (STANDALONE): Works exactly like before — auto-advances waves.
+/// MODE 2 (ORCHESTRATOR-DRIVEN): Orchestrator calls SpawnEnemyPublic().
+///
+/// GREMLIN FIX:
+/// - SpawnEnemy() adds a WaveEnemy marker to every wave-spawned enemy
+/// - WaveEnemy.OnDestroy() notifies the orchestrator when that enemy is destroyed
+/// - OnEnemyDeath() here does NOT touch the orchestrator at all
+/// - Result: Gremlins dying can't mess up the wave count
+/// 
+/// YOU DO NOT NEED TO CHANGE EnemyStats.
+/// </summary>
 public class WaveSpawner : MonoBehaviour
 {
     [Header("Spawn areas (Top/Bottom/Left/Right)")]
@@ -20,25 +34,25 @@ public class WaveSpawner : MonoBehaviour
     private int enemiesAlive = 0;
     private float countdown;
 
-    // Preloaded resources 
     private bool resourcesPreloaded = false;
+
+    public bool IsOrchestratorMode =>
+        GameOrchestrator.Instance != null &&
+        GameOrchestrator.Instance.CurrentState != GameOrchestrator.RunState.Idle;
 
     void Start()
     {
         if (waveConfig == null)
         {
-            Debug.LogError("No assigned WaveConfig for the WaveSpawner!");
+            if (!IsOrchestratorMode)
+                Debug.LogError("No assigned WaveConfig for the WaveSpawner!");
             return;
         }
 
         countdown = GetModifiedWaveDelay();
-
-        // Preload all enemy prefab resources on Start so Instantiate doesn't trigger
         StartCoroutine(PreloadEnemyResources());
     }
 
-
-    /// Pre-warm all enemy prefabs by instantiating them once (off-screen, disabled),
     private IEnumerator PreloadEnemyResources()
     {
         if (waveConfig == null || waveConfig.waves == null)
@@ -55,25 +69,16 @@ public class WaveSpawner : MonoBehaviour
             foreach (var group in wave.enemies)
             {
                 if (group != null && group.enemyPrefab != null)
-                {
                     uniquePrefabs.Add(group.enemyPrefab);
-                }
             }
         }
 
         foreach (var prefab in uniquePrefabs)
         {
-            // Instantiate disabled, far off-screen
             GameObject warmup = Instantiate(prefab, new Vector3(-9999f, -9999f, 0f), Quaternion.identity);
-            warmup.SetActive(true); // Briefly activate to trigger Awake/Start resource loading
-
-            // Wait a frame so each prefab's loading is spread across frames
+            warmup.SetActive(true);
             yield return null;
-
-            // Destroy the warmup instance
             Destroy(warmup);
-
-            // Wait another frame for cleanup
             yield return null;
         }
 
@@ -82,8 +87,12 @@ public class WaveSpawner : MonoBehaviour
 
     void Update()
     {
+        // ORCHESTRATOR MODE: don't auto-advance
+        if (IsOrchestratorMode) return;
+
+        // STANDALONE MODE: original behavior
         if (waveConfig == null) return;
-        if (!resourcesPreloaded) return; // Don't start waves until resources are ready
+        if (!resourcesPreloaded) return;
         if (enemiesAlive > 0) return;
         if (currentWaveIndex >= waveConfig.waves.Count) return;
 
@@ -128,9 +137,7 @@ public class WaveSpawner : MonoBehaviour
                 int modifiedCount = Mathf.Max(1, Mathf.RoundToInt(group.count * enemySpawnCountMultiplier));
 
                 for (int i = 0; i < modifiedCount; i++)
-                {
                     enemyPrefabsToSpawn.Add(group.enemyPrefab);
-                }
             }
         }
 
@@ -141,31 +148,23 @@ public class WaveSpawner : MonoBehaviour
             AudioManager.instance.EnsureMusicReady();
             AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
             if (AudioManager.instance.enableDebugLogs)
-            {
                 Debug.Log($"Wave {currentWaveIndex}: Music switched to Intense.");
-            }
         }
 
         SpawnDirection chosenDir = SpawnDirection.Top;
         if (wave.oneDirectionForAllEnemies && wave.spawnDirections != null && wave.spawnDirections.Count > 0)
-        {
             chosenDir = wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
-        }
 
         foreach (var prefab in enemyPrefabsToSpawn)
         {
             SpawnDirection dir;
 
             if (wave.spawnDirections == null || wave.spawnDirections.Count == 0)
-            {
                 dir = chosenDir;
-            }
             else
-            {
                 dir = wave.oneDirectionForAllEnemies
                     ? chosenDir
                     : wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
-            }
 
             SpawnEnemy(prefab, dir);
 
@@ -176,15 +175,19 @@ public class WaveSpawner : MonoBehaviour
         currentWaveIndex++;
     }
 
+    /// <summary>
+    /// Called by EnemyStats.PerformDeath() for ALL enemies (wave + gremlins + anything).
+    /// This ONLY manages the spawner's internal count and music.
+    /// It does NOT notify the orchestrator — WaveEnemy.OnDestroy() handles that.
+    /// </summary>
     public void OnEnemyDeath()
     {
         enemiesAlive--;
+
         if (enemiesAlive <= 0)
         {
             if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
-            {
                 AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
-            }
         }
     }
 
@@ -230,6 +233,9 @@ public class WaveSpawner : MonoBehaviour
         Vector2 spawnPosition = GetRandomPositionInArea(direction);
         GameObject enemyObj = Instantiate(prefab, spawnPosition, Quaternion.identity);
 
+        // ★ Mark as wave enemy — WaveEnemy.OnDestroy() will notify orchestrator
+        enemyObj.AddComponent<WaveEnemy>();
+
         EnemyStats stats = enemyObj.GetComponent<EnemyStats>();
         if (stats != null)
         {
@@ -238,6 +244,22 @@ public class WaveSpawner : MonoBehaviour
 
         enemiesAlive++;
     }
+
+    // ═══════════════════════════════════════════════
+    //  PUBLIC API FOR ORCHESTRATOR
+    // ═══════════════════════════════════════════════
+
+    public void SpawnEnemyPublic(GameObject prefab, SpawnDirection direction)
+    {
+        SpawnEnemy(prefab, direction);
+    }
+
+    public void ShowWaveIndicatorsPublic(List<SpawnDirection> dirs)
+    {
+        ShowWaveIndicators(dirs);
+    }
+
+    // ═══════════════════════════════════════════════
 
     void Shuffle<T>(List<T> list)
     {

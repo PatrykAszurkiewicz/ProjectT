@@ -683,7 +683,7 @@ public class EnemyController : MonoBehaviour
     {
         if (rb == null || rb.bodyType != RigidbodyType2D.Dynamic)
         {
-            Debug.Log($"[CombatFeel] KNOCKBACK SKIPPED on {gameObject.name} (non-dynamic rigidbody)");
+            //Debug.Log($"[CombatFeel] KNOCKBACK SKIPPED on {gameObject.name} (non-dynamic rigidbody)");
             return;
         }
 
@@ -691,7 +691,7 @@ public class EnemyController : MonoBehaviour
         knockbackTimer = duration;
         knockbackVelocity = direction.normalized * force;
         rb.linearVelocity = knockbackVelocity;
-        Debug.Log($"[CombatFeel] KNOCKBACK {gameObject.name} dir={direction} force={force}");
+        //Debug.Log($"[CombatFeel] KNOCKBACK {gameObject.name} dir={direction} force={force}");
     }
 
     private void OnDrawGizmosSelected()

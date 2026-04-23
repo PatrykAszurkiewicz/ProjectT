@@ -685,7 +685,7 @@ public class TowerPlacementManager : MonoBehaviour
     public void TogglePlacementMode()
     {
         isPlacementMode = !isPlacementMode;
-
+        PlayerAttack.InputSuppressed = isPlacementMode;
         if (CursorManager.Instance != null)
         {
             if (isPlacementMode)

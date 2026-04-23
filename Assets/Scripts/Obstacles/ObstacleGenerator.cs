@@ -15,9 +15,17 @@ public class ObstacleGenerator : MonoBehaviour
     [Header("Prefabs (assigned by BiomeManager per biome — don't edit)")]
     public GameObject[] obstaclePrefabs;
 
+    [Header("Solo-Only Prefabs (assigned by BiomeManager — never clustered)")]
+    [Tooltip("Prefabs that are always placed individually, never grouped into clusters (e.g. fireplaces).")]
+    public GameObject[] soloPrefabs;
+
+    [Tooltip("Number of solo-only obstacles to place (each spawned individually, never clustered).")]
+    public int soloCount = 30;
+
     [Header("Distribution")]
     [Tooltip("Total number of placements (each is a solo obstacle or a cluster).")]
-    public int obstacleCount = 15;
+    public int obstacleCount = 70;
+
 
     [Tooltip("Minimum distance from map center. -1 = auto-detect from outermost tower ring.")]
     public float minDistanceFromCenter = -1f;
@@ -132,6 +140,12 @@ public class ObstacleGenerator : MonoBehaviour
                 obstaclePrefabs = bm.GetObstaclePrefabsForBiome(bm.activeBiome);
         }
 
+        // Check if we have solo prefabs
+        bool hasSolo = false;
+        if (soloPrefabs != null)
+            foreach (var p in soloPrefabs)
+                if (p != null) { hasSolo = true; break; }
+
         // Separate prefabs by role
         List<GameObject> allValid = new List<GameObject>();
         List<GameObject> heroPrefabs = new List<GameObject>();
@@ -148,20 +162,19 @@ public class ObstacleGenerator : MonoBehaviour
             }
         }
 
-        if (allValid.Count == 0)
+        if (allValid.Count == 0 && !hasSolo)
         {
             Debug.LogWarning("[ObstacleGenerator] No obstacle prefabs assigned — skipping.");
             return;
         }
         if (heroPrefabs.Count == 0) heroPrefabs.AddRange(allValid);
         if (accentPrefabs.Count == 0) accentPrefabs.AddRange(allValid);
-        if (obstacleCount <= 0) return;
 
         float innerRadius = ResolveInnerRadius();
         float outerRadius = ResolveOuterRadius();
 
         Debug.Log($"[ObstacleGenerator] Zone: inner={innerRadius:F1}, outer={outerRadius:F1}, " +
-                  $"count={obstacleCount}, prefabs={allValid.Count}");
+                  $"count={obstacleCount}, prefabs={allValid.Count}, solo={hasSolo}");
 
         if (outerRadius <= innerRadius)
         {
@@ -177,47 +190,106 @@ public class ObstacleGenerator : MonoBehaviour
         // Not using Physics2D.OverlapCircle because our own spawned colliders
         List<Vector2> anchors = new List<Vector2>();
         int placedCount = 0, totalSprites = 0, clusters = 0;
-        int maxAttempts = Mathf.Min(obstacleCount * 20, 50000); // cap to prevent hangs
 
-        for (int attempt = 0; attempt < maxAttempts && placedCount < obstacleCount; attempt++)
+        // Main cluster/solo loop (only if we have regular prefabs)
+        if (allValid.Count > 0 && obstacleCount > 0)
         {
-            // Random anchor in annular zone
-            float angle = Random.Range(0f, 2f * Mathf.PI);
-            float dist = Mathf.Sqrt(Random.Range(innerRadius * innerRadius, outerRadius * outerRadius));
-            Vector2 anchor = new Vector2(Mathf.Cos(angle) * dist, Mathf.Sin(angle) * dist);
+            int maxAttempts = Mathf.Min(obstacleCount * 20, 50000); // cap to prevent hangs
 
-            // Distance check against our own previously placed anchors only
-            bool tooClose = false;
-            for (int i = 0; i < anchors.Count; i++)
+            for (int attempt = 0; attempt < maxAttempts && placedCount < obstacleCount; attempt++)
             {
-                if (Vector2.Distance(anchor, anchors[i]) < minDistanceBetweenObstacles)
-                { tooClose = true; break; }
-            }
-            if (tooClose) continue;
+                // Random anchor in annular zone
+                float angle = Random.Range(0f, 2f * Mathf.PI);
+                float dist = Mathf.Sqrt(Random.Range(innerRadius * innerRadius, outerRadius * outerRadius));
+                Vector2 anchor = new Vector2(Mathf.Cos(angle) * dist, Mathf.Sin(angle) * dist);
 
-            bool makeCluster = enableClusters && Random.value < clusterChance;
+                // Distance check against our own previously placed anchors only
+                bool tooClose = false;
+                for (int i = 0; i < anchors.Count; i++)
+                {
+                    if (Vector2.Distance(anchor, anchors[i]) < minDistanceBetweenObstacles)
+                    { tooClose = true; break; }
+                }
+                if (tooClose) continue;
 
-            if (makeCluster)
-            {
-                int spawned = SpawnComposedCluster(anchor, allValid, heroPrefabs, accentPrefabs,
-                                                   innerRadius, outerRadius);
-                totalSprites += spawned;
-                if (spawned > 0) clusters++;
-            }
-            else
-            {
-                GameObject prefab = allValid[Random.Range(0, allValid.Count)];
-                float s = baseScale * Random.Range(1f - scaleVariation, 1f + scaleVariation);
-                SpawnSinglePrefab(prefab, anchor, s);
-                totalSprites++;
-            }
+                bool makeCluster = enableClusters && Random.value < clusterChance;
 
-            anchors.Add(anchor);
-            placedCount++;
+                if (makeCluster)
+                {
+                    int spawned = SpawnComposedCluster(anchor, allValid, heroPrefabs, accentPrefabs,
+                                                       innerRadius, outerRadius);
+                    totalSprites += spawned;
+                    if (spawned > 0) clusters++;
+                }
+                else
+                {
+                    GameObject prefab = allValid[Random.Range(0, allValid.Count)];
+                    float s = baseScale * Random.Range(1f - scaleVariation, 1f + scaleVariation);
+                    SpawnSinglePrefab(prefab, anchor, s);
+                    totalSprites++;
+                }
+
+                anchors.Add(anchor);
+                placedCount++;
+            }
         }
 
         Debug.Log($"[ObstacleGenerator] {placedCount} placements ({clusters} clusters, " +
                   $"{placedCount - clusters} solo) = {totalSprites} sprites.");
+
+        // Solo-only prefabs — always spawned individually, never in clusters
+        int soloSpawned = SpawnSoloOnlyPrefabs(anchors, innerRadius, outerRadius);
+        if (soloSpawned > 0)
+            Debug.Log($"[ObstacleGenerator] + {soloSpawned} solo-only obstacles.");
+    }
+
+    //  Solo-only prefab spawning (never clustered) 
+
+    private int SpawnSoloOnlyPrefabs(List<Vector2> anchors, float zoneInner, float zoneOuter)
+    {
+        // Collect valid solo prefabs
+        List<GameObject> validSolo = new List<GameObject>();
+        if (soloPrefabs != null)
+            foreach (var p in soloPrefabs)
+                if (p != null) validSolo.Add(p);
+
+        if (validSolo.Count == 0) return 0;
+
+        // Guard against soloCount being 0 (e.g. Unity serialized old default).
+        // If solo prefabs are assigned, spawn at least 10.
+        int count = soloCount > 0 ? soloCount : 10;
+
+        int spawned = 0;
+        int maxAttempts = count * 20;
+
+        for (int i = 0; i < count; i++)
+        {
+            bool placed = false;
+            for (int attempt = 0; attempt < maxAttempts && !placed; attempt++)
+            {
+                float angle = Random.Range(0f, 2f * Mathf.PI);
+                float dist = Mathf.Sqrt(Random.Range(zoneInner * zoneInner, zoneOuter * zoneOuter));
+                Vector2 pos = new Vector2(Mathf.Cos(angle) * dist, Mathf.Sin(angle) * dist);
+
+                // Distance check against all existing anchors (clusters + solos)
+                bool tooClose = false;
+                for (int a = 0; a < anchors.Count; a++)
+                {
+                    if (Vector2.Distance(pos, anchors[a]) < minDistanceBetweenObstacles)
+                    { tooClose = true; break; }
+                }
+                if (tooClose) continue;
+
+                GameObject prefab = validSolo[Random.Range(0, validSolo.Count)];
+                float s = baseScale * Random.Range(1f - scaleVariation, 1f + scaleVariation);
+                SpawnSinglePrefab(prefab, pos, s);
+
+                anchors.Add(pos);
+                spawned++;
+                placed = true;
+            }
+        }
+        return spawned;
     }
 
     //  Composed cluster spawning 

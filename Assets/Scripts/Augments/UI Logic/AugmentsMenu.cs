@@ -447,6 +447,7 @@ public class AugmentsMenu : MonoBehaviour
             Cursor.visible = true;
             Time.timeScale = 0f;
             isMenuActive = true;
+            PlayerAttack.InputSuppressed = true;
 
             // Force regeneration of augments each time menu opens
             //Debug.Log("🔄 [MENU] Forcing augment regeneration");
@@ -573,6 +574,7 @@ public class AugmentsMenu : MonoBehaviour
         Cursor.visible = false;
         Time.timeScale = 1f;
         isMenuActive = false;
+        PlayerAttack.InputSuppressed = false;
 
         if (debugMode) Debug.Log("AugmentsMenu: Menu closed");
     }
