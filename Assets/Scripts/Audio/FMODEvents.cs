@@ -30,6 +30,17 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Grappling Hook SFX")]
     [field: SerializeField] public EventReference grapplingHookShoot { get; private set; }
 
+    [field: Header("Bomb Launcher SFX")]
+    [field: SerializeField] public EventReference proximityMine { get; private set; }
+    [field: SerializeField] public EventReference proximityMineExplode { get; private set; }
+
+    [field: Header("Flamethrower SFX")]
+    [field: SerializeField] public EventReference flamethrower { get; private set; }
+
+    [field: Header("Turret SFX")]
+    [field: SerializeField] public EventReference turretRotate { get; private set; }
+    [field: SerializeField] public EventReference turretShot { get; private set; }
+
     [field: Header("Tower Melee SFX")]
     [field: SerializeField] public EventReference towerMeleeHit { get; private set; }
 
@@ -57,6 +68,10 @@ public class FMODEvents : MonoBehaviour
 
     [field: Header("Enemy SFX")]
     [field: SerializeField] public EventReference enemyAttack { get; private set; }
+
+    [field: Header("Shield SFX")]
+    [field: SerializeField] public EventReference shieldBlock { get; private set; }
+    [field: SerializeField] public EventReference shieldParry { get; private set; }
 
     [field: Header("Boss SFX")]
     [field: SerializeField] public EventReference bossLaserShot { get; private set; }

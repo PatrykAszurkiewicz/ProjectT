@@ -21,6 +21,11 @@ public class TurretUnit : MonoBehaviour
     private float fireCooldown = 0f;
     private Transform currentTarget;
 
+    // Audio
+    private float rotateSfxCooldown = 0f;
+    private const float ROTATE_SFX_TRIGGER_ANGLE = 20f; // play rotate sound when barrel must swing > this many degrees
+    private const float ROTATE_SFX_COOLDOWN = 0.4f;     // min seconds between rotate sound triggers
+
     // Visuals
     private SpriteRenderer haloRenderer;         // bright ground halo for visibility
     private SpriteRenderer shadowRenderer;       // dark outline ring
@@ -154,6 +159,10 @@ public class TurretUnit : MonoBehaviour
         if (currentTarget == null)
             currentTarget = FindClosestEnemy();
 
+        // Decrement rotate-sound cooldown every frame
+        if (rotateSfxCooldown > 0f)
+            rotateSfxCooldown -= Time.deltaTime;
+
         // Rotate barrel toward target
         if (barrelPivot != null)
         {
@@ -162,6 +171,20 @@ public class TurretUnit : MonoBehaviour
                 Vector2 dir = ((Vector2)currentTarget.position - (Vector2)transform.position).normalized;
                 float targetAngle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
                 float currentAngle = barrelPivot.eulerAngles.z;
+
+                // If barrel must swing more than the threshold, play rotate SFX
+                // (debounced so a sustained track doesn't spam the sound)
+                float angleDelta = Mathf.Abs(Mathf.DeltaAngle(currentAngle, targetAngle));
+                if (angleDelta > ROTATE_SFX_TRIGGER_ANGLE && rotateSfxCooldown <= 0f)
+                {
+                    rotateSfxCooldown = ROTATE_SFX_COOLDOWN;
+                    if (AudioManager.instance != null && FMODEvents.instance != null
+                        && !FMODEvents.instance.turretRotate.IsNull)
+                    {
+                        AudioManager.instance.PlayOneShot(FMODEvents.instance.turretRotate, transform.position);
+                    }
+                }
+
                 float newAngle = Mathf.MoveTowardsAngle(currentAngle, targetAngle, rotationSpeed * Time.deltaTime);
                 barrelPivot.rotation = Quaternion.Euler(0, 0, newAngle);
             }
@@ -222,6 +245,13 @@ public class TurretUnit : MonoBehaviour
             spawnPos = muzzleFlashTransform.position;
         else
             spawnPos = transform.position + (Vector3)(direction * 0.45f);
+
+        // Shot SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.turretShot.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.turretShot, spawnPos);
+        }
 
         GameObject projObj = new GameObject("TurretBullet");
         projObj.transform.position = spawnPos;
@@ -675,7 +705,7 @@ public class TurretBullet : MonoBehaviour
             if (stats != null)
             {
                 stats.TakeDamage(damage);
-                CombatFeel.OnHitEnemy(other.gameObject, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: false);
                 Destroy(gameObject);
                 return;
             }
@@ -684,7 +714,7 @@ public class TurretBullet : MonoBehaviour
             if (damageable != null)
             {
                 damageable.TakeDamage(damage, gameObject);
-                CombatFeel.OnHitEnemy(other.gameObject, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: false);
                 Destroy(gameObject);
                 return;
             }

@@ -38,7 +38,22 @@ public class HitStop : MonoBehaviour
         }
     }
 
-    public void Freeze(float duration = -1f)
+    public void Freeze(float duration = -1f, bool ignoreCooldown = false)
+    {
+        if (duration < 0f) duration = defaultDuration;
+
+        if (!ignoreCooldown && Time.unscaledTime - lastFreezeTime < cooldown)
+            return;
+
+        lastFreezeTime = Time.unscaledTime;
+
+        if (freezeCoroutine != null)
+            StopCoroutine(freezeCoroutine);
+
+        freezeCoroutine = StartCoroutine(FreezeRoutine(duration));
+    }
+
+    public void FreezeOLD(float duration = -1f)
     {
         if (duration < 0f) duration = defaultDuration;
 

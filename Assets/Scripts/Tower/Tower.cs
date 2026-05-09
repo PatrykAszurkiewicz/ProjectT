@@ -197,6 +197,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public bool requiresEnergyToFunction = true;
     public bool showEnergyBar = true;
 
+    [Tooltip("Vertical offset (world units) for the energy bar above the tower's pivot. " +
+             "Set to a value > 0 to override the per-TowerType default. " +
+             "Leave at 0 to use the default for this tower's TowerType.")]
+    public float energyBarOffsetOverride = 0f;
+
     [Header("Damage Settings")]
     public float armorReduction = 0f;
     public bool immuneToEnemyDamage = false;
@@ -1430,7 +1435,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         energyBar.showEnergyBar = true;
         energyBar.energyBarHeight = 0.1f;
         energyBar.energyBarWidth = 1f;
-        energyBar.energyBarOffset = 1.5f;
+        // Per-prefab override takes precedence; otherwise fall back to a per-TowerType default.
+        // Tune individual values in GetDefaultEnergyBarOffset() below, or just set
+        // energyBarOffsetOverride on a specific prefab in the inspector.
+        energyBar.energyBarOffset = energyBarOffsetOverride > 0f
+            ? energyBarOffsetOverride
+            : GetDefaultEnergyBarOffset(towerType);
         energyBar.showEnergyText = true;
 
         if (EnergyManager.Instance != null)
@@ -1441,7 +1451,29 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         energyBar.Initialize(this, spriteRenderer);
     }
+
+    /// <summary>
+    /// Per-TowerType default vertical offset for the energy bar.
+    /// Tune these to match each tower's sprite height. Used when
+    /// energyBarOffsetOverride is 0 (the default).
+    /// </summary>
+    static float GetDefaultEnergyBarOffset(TowerType type)
+    {
+        switch (type)
+        {
+            case TowerType.Laser: return 1.5f;
+            case TowerType.Basic: return 4.4f;// 2.4f;
+            case TowerType.Artillery: return 4.4f;
+            case TowerType.Ice: return 4.4f;
+            case TowerType.Poison: return 4.4f;
+            case TowerType.Generator: return 4.6f;
+            case TowerType.Hammer: return 4.6f;
+            default: return 4.4f;
+        }
+    }
     #endregion
+
+
 
     #region Targeting & Combat
     void UpdateTargeting()

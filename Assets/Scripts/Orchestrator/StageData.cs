@@ -7,6 +7,7 @@ public class StageData
 {
     public int stageIndex;            // 0, 1, 2, 3...
     public BiomeType biome;           // randomly picked
+    public MapLayoutDefinition layout; // null = use TowerDefenseMap default rings
     public bool nightMode;            // randomly rolled
     public bool fogEnabled;           // randomly rolled
     public bool rainEnabled;          // randomly rolled
@@ -20,6 +21,7 @@ public class StageData
     public override string ToString()
     {
         return $"Stage {stageIndex + 1}: {biome}" +
+               $"{(layout != null ? $" [{layout.layoutName}]" : "")}" +
                $"{(nightMode ? " [NIGHT]" : "")}" +
                $"{(balloonsEnabled ? " [BALLOONS]" : "")}" +
                $"{(fogEnabled ? " [FOG]" : "")}" +

@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using FMOD.Studio;
 
 
 
@@ -30,6 +31,10 @@ public class FlamethrowerSystem
     private Vector2 aimDirection = Vector2.right;
     private Camera mainCam;
 
+    //  Audio (looping FMOD instance) 
+    private EventInstance flamethrowerSfx;
+    private bool flamethrowerSfxValid;
+
     public bool IsFiring => isFiring;
     public float FuelNormalized => data != null ? currentFuel / data.flameFuelMax : 0f;
     public float CurrentFuel => currentFuel;
@@ -54,11 +59,29 @@ public class FlamethrowerSystem
         flameRoot = new GameObject("_FlamethrowerFX");
         flameRoot.transform.SetParent(playerTransform, false);
         flameRoot.transform.localPosition = Vector3.zero;
+
+        // Looping flamethrower SFX. Created here, started/stopped in StartFiring/StopFiring,
+        // and released in Cleanup. We don't start it now — it only plays while firing.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.flamethrower.IsNull)
+        {
+            flamethrowerSfx = AudioManager.instance.CreateInstance(FMODEvents.instance.flamethrower);
+            flamethrowerSfxValid = true;
+        }
     }
 
     public void Cleanup()
     {
         StopFiring();
+
+        // Release FMOD instance (StopFiring already stopped it with fade-out;
+        // we use IMMEDIATE here because the system is going away regardless).
+        if (flamethrowerSfxValid && flamethrowerSfx.isValid())
+        {
+            flamethrowerSfx.stop(STOP_MODE.IMMEDIATE);
+            flamethrowerSfx.release();
+        }
+        flamethrowerSfxValid = false;
 
         if (flameRoot != null)
             Object.Destroy(flameRoot);
@@ -105,12 +128,29 @@ public class FlamethrowerSystem
     {
         if (currentFuel <= 0f) return;
         isFiring = true;
+
+        // Start looping SFX if not already playing (idempotent — guard against rapid re-clicks
+        // and the case where StartFiring is called while StopFiring's fadeout is still running)
+        if (flamethrowerSfxValid && flamethrowerSfx.isValid())
+        {
+            flamethrowerSfx.getPlaybackState(out PLAYBACK_STATE state);
+            if (state == PLAYBACK_STATE.STOPPED || state == PLAYBACK_STATE.STOPPING)
+                flamethrowerSfx.start();
+        }
     }
 
     public void StopFiring()
     {
         isFiring = false;
         lastFireTime = Time.time;
+
+        // Stop looping SFX (allow fade-out for a smoother tail)
+        if (flamethrowerSfxValid && flamethrowerSfx.isValid())
+        {
+            flamethrowerSfx.getPlaybackState(out PLAYBACK_STATE state);
+            if (state == PLAYBACK_STATE.PLAYING || state == PLAYBACK_STATE.STARTING)
+                flamethrowerSfx.stop(STOP_MODE.ALLOWFADEOUT);
+        }
     }
 
     public bool CanFire() => currentFuel > 0.05f;
@@ -305,7 +345,7 @@ public class FlamethrowerSystem
             if (stats != null)
             {
                 stats.TakeDamage(dmg);
-                CombatFeel.OnHitEnemy(hit.gameObject, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(hit.gameObject, isMelee: false);
                 continue;
             }
 
@@ -313,7 +353,7 @@ public class FlamethrowerSystem
             if (damageable != null)
             {
                 damageable.TakeDamage(dmg, weapon.gameObject);
-                CombatFeel.OnHitEnemy(hit.gameObject, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(hit.gameObject, isMelee: false);
             }
         }
     }

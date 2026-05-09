@@ -153,6 +153,8 @@ public class GameOrchestrator : MonoBehaviour
     private List<StageData> currentRunPlan;
     private Coroutine runCoroutine;
     private int enemiesAlive;
+    private List<MapLayoutDefinition> usedLayouts = new List<MapLayoutDefinition>();
+    private MapLayoutDefinition runWideLayout; // used when changeLayoutPerStage == false
 
     //  UNITY LIFECYCLE
 
@@ -325,9 +327,12 @@ public class GameOrchestrator : MonoBehaviour
         }
 
         // ── Victory! ──
+        // Defensive: force gameplay timescale back to 1 so the visual sequence below can't hang.
+        Time.timeScale = 1f;
+
         if (enableTransitions && transitionOverlay != null)
         {
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSecondsRealtime(1f);
             yield return transitionOverlay.FadeOut(0.8f);
             yield return transitionOverlay.ShowMessage("VICTORY", "", 3f);
             // Leave screen faded — your menu/restart UI takes over from here
@@ -462,11 +467,15 @@ public class GameOrchestrator : MonoBehaviour
             if (debugLog)
                 Debug.Log($"[Orchestrator] Stage {stage.stageIndex + 1} BOSS defeated!");
 
+            // Clear the "BOSS" counter now that the fight is over
+            if (transitionOverlay != null)
+                transitionOverlay.SetWaveCounter("");
+
             // Let boss death VFX play out. Slightly longer than regular kills — it's a boss.
             yield return new WaitForSeconds(pauseAfterLastKill + 0.5f);
         }
 
-        // ── 4. POST-STAGE CHOICE: Heal+Energy  OR  Augment+Energy ──
+        // 4. POST-STAGE CHOICE: Heal+Energy  OR  Augment+Energy 
         if (enablePostStageChoice && postStageChoiceMenu != null)
         {
             yield return ShowPostStageChoice(stage);
@@ -477,7 +486,7 @@ public class GameOrchestrator : MonoBehaviour
             yield return ShowAugmentSelection($"stage {stage.stageIndex + 1} boss");
         }
 
-        // ── 5. STAGE COMPLETE ──
+        //  5. STAGE COMPLETE 
         SetState(RunState.StageComplete);
 
         if (debugLog)
@@ -487,9 +496,8 @@ public class GameOrchestrator : MonoBehaviour
     }
 
     //  WAVE SPAWNING (uses your existing WaveSpawner)
-
-    /// Spawns a wave and waits until all enemies are dead.
-    /// Uses WaveSpawner's existing SpawnEnemy logic but driven by the orchestrator.
+    // Spawns a wave and waits until all enemies are dead.
+    // Uses WaveSpawner's existing SpawnEnemy logic but driven by the orchestrator.
     private IEnumerator SpawnAndWaitForWave(WaveData wave, StageData stage)
     {
         // Extra delay before wave (from WaveData)
@@ -571,10 +579,7 @@ public class GameOrchestrator : MonoBehaviour
     }
 
     //  BOSS SPAWNING
-
-    /// <summary>
     /// Shows the post-stage choice menu: Heal All + bonus energy  OR  Augment + small energy.
-    /// </summary>
     private IEnumerator ShowPostStageChoice(StageData stage)
     {
         SetState(RunState.AugmentSelect); // reuse existing state — gameplay is paused either way
@@ -618,11 +623,7 @@ public class GameOrchestrator : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Fully heal the Core, all Towers, and the Player.
-    /// "Heal" on energy-based consumers (Core/Tower) means refilling their energy,
-    /// which is how TakeDamage drains them in this project.
-    /// </summary>
+    // Fully heal the Core, all Towers, and the Player.
     private void HealEverything()
     {
         // Core — refill to max energy (which is effectively its HP)
@@ -657,9 +658,7 @@ public class GameOrchestrator : MonoBehaviour
             Debug.Log($"[Orchestrator] Healed: core={(core != null)}, towers={(towers?.Length ?? 0)}, player={(player != null)}");
     }
 
-    /// <summary>
     /// Give the player bonus energy through the EnergyManager.
-    /// </summary>
     private void GiveEnergyBonus(int amount)
     {
         if (amount <= 0) return;
@@ -674,10 +673,8 @@ public class GameOrchestrator : MonoBehaviour
         }
     }
 
-    /// <summary>
     /// Shows the augment selection popup and waits for the player to pick.
     /// Used after waves (every Nth) and after stage bosses.
-    /// </summary>
     private IEnumerator ShowAugmentSelection(string reason)
     {
         SetState(RunState.AugmentSelect);
@@ -694,10 +691,8 @@ public class GameOrchestrator : MonoBehaviour
             Debug.Log($"[Orchestrator] Augment selected, continuing...");
     }
 
-    /// <summary>
-    /// Waits until the AugmentsMenu is closed (player made a selection).
-    /// Uses WaitForSecondsRealtime because Time.timeScale is 0 while the menu is open.
-    /// </summary>
+    // Waits until the AugmentsMenu is closed (player made a selection).
+    // Uses WaitForSecondsRealtime because Time.timeScale is 0 while the menu is open.
     private IEnumerator WaitForAugmentMenuClosed()
     {
         // The augment menu sets Time.timeScale = 0 when open.
@@ -735,6 +730,10 @@ public class GameOrchestrator : MonoBehaviour
     {
         SetState(RunState.FinalBoss);
 
+        // Defensive: a previous menu may have left Time.timeScale at 0. Force gameplay
+        // timescale back to 1 here so all the WaitForSeconds calls below actually advance.
+        Time.timeScale = 1f;
+
         if (debugLog)
             Debug.Log("[Orchestrator] ═══ FINAL BOSS ═══");
 
@@ -752,7 +751,7 @@ public class GameOrchestrator : MonoBehaviour
 
         OnBossSpawned?.Invoke(null);
 
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSecondsRealtime(1f);
 
         SpawnBoss(runConfig.finalBossPrefab);
         yield return WaitForBossDead();
@@ -765,10 +764,8 @@ public class GameOrchestrator : MonoBehaviour
             transitionOverlay.SetWaveCounter("");
 
         // Delay before victory so death VFX can play out
-        yield return new WaitForSeconds(2f);
+        yield return new WaitForSecondsRealtime(2f);
     }
-
-    //  BIOME APPLICATION
 
     private void ApplyBiome(StageData stage)
     {
@@ -788,8 +785,16 @@ public class GameOrchestrator : MonoBehaviour
         biomeManager.enableSnow = stage.snowEnabled;
         biomeManager.enableNightBalloons = stage.balloonsEnabled;
 
+        // Apply map layout (null = use TowerDefenseMap's own default rings)
+        var map = UnityEngine.Object.FindFirstObjectByType<TowerDefenseMap>();
+        if (map != null)
+        {
+            map.ApplyLayout(stage.layout);
+        }
+
         if (debugLog)
             Debug.Log($"[Orchestrator] Biome applied: {stage.biome}" +
+                      $"{(stage.layout != null ? $" +Layout:{stage.layout.layoutName}" : "")}" +
                       $"{(stage.nightMode ? " +Night" : "")}" +
                       $"{(stage.balloonsEnabled ? " +Balloons" : "")}" +
                       $"{(stage.fogEnabled ? " +Fog" : "")}" +
@@ -798,38 +803,55 @@ public class GameOrchestrator : MonoBehaviour
     }
 
     //  RUN PLAN GENERATION
-
     // Generates the full run plan: picks biomes, rolls modifiers, selects waves from your WaveConfig pool.
     private List<StageData> GenerateRunPlan()
     {
         var plan = new List<StageData>();
         var biomeSequence = PickBiomeSequence();
 
+        // Pick a single run-wide layout if changeLayoutPerStage is false
+        usedLayouts.Clear();
+        runWideLayout = null;
+        var library = runConfig.mapLayoutLibrary;
+        if (library != null && !library.changeLayoutPerStage)
+        {
+            runWideLayout = library.PickRandom(null);
+            if (runWideLayout != null)
+                Debug.Log($"[Orchestrator] Run-wide layout: {runWideLayout.layoutName}");
+        }
+
         for (int i = 0; i < runConfig.stageCount; i++)
         {
             BiomeType biome = biomeSequence[i];
+
+            // Pick a layout for this stage
+            MapLayoutDefinition layout = runWideLayout; // may be null
+            if (library != null && library.changeLayoutPerStage)
+            {
+                layout = library.PickRandom(usedLayouts);
+                if (layout != null) usedLayouts.Add(layout);
+            }
 
             var stage = new StageData
             {
                 stageIndex = i,
                 biome = biome,
+                layout = layout,
 
                 // Roll weather (with sensible biome-specific overrides)
                 nightMode = UnityEngine.Random.value < runConfig.nightModeChance,
                 fogEnabled = UnityEngine.Random.value < runConfig.fogChance,
                 rainEnabled = UnityEngine.Random.value < runConfig.rainChance
-                              && biome != BiomeType.Desert,    // no rain in desert
+                              && biome != BiomeType.Desert,
                 snowEnabled = UnityEngine.Random.value < runConfig.snowChance
-                              || biome == BiomeType.Snow,      // snow always snows
+                              || biome == BiomeType.Snow,
                 balloonsEnabled = UnityEngine.Random.value < runConfig.nightBalloonChance,
 
-                // Difficulty scaling (exponential per stage)
+                // Difficulty scaling
                 enemyCountMultiplier = Mathf.Pow(runConfig.enemyCountScalePerStage, i),
                 spawnDelayMultiplier = Mathf.Pow(runConfig.spawnDelayScalePerStage, i),
 
-                // Pick waves for this stage
                 waves = PickWavesForStage(i),
-
                 hasStageBoss = (runConfig.stageBossPrefab != null),
             };
 
@@ -839,7 +861,7 @@ public class GameOrchestrator : MonoBehaviour
         return plan;
     }
 
-    /// Picks a random non-repeating sequence of biomes from the pool.
+    // Picks a random non-repeating sequence of biomes from the pool.
     private List<BiomeType> PickBiomeSequence()
     {
         var pool = new List<BiomeType>(runConfig.availableBiomes);

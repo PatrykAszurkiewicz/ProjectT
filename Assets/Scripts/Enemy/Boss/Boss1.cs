@@ -440,7 +440,8 @@ public class Boss1 : BaseBossStats //, IDamageable
         isDying = true;  // FIRST — before any checks
         if (!gameObject.scene.isLoaded) return;
         transform.rotation = Quaternion.identity;
-
+        // Boss death freeze + shake — tune duration here
+        CombatJuice.OnBossKilled(gameObject);
         // Reset to idle frame 0 BEFORE disabling animController or calling VFX
         if (bossSprite != null && enemyData != null)
         {
@@ -797,11 +798,18 @@ public class Boss1 : BaseBossStats //, IDamageable
             if (damageDir != Vector3.zero)
             {
                 Vector3 spawnPos = GetLaserSpawnPosition();
-                RaycastHit2D[] hits = Physics2D.RaycastAll(
-                    spawnPos, damageDir, laserRange, laserTargetLayers);
 
-                foreach (var hit in hits)
+                ContactFilter2D filter = new ContactFilter2D();
+                filter.SetLayerMask(laserTargetLayers);
+                filter.useLayerMask = true;
+                filter.useTriggers = false;   // ignore trigger colliders (e.g. tower range sensors)
+
+                RaycastHit2D[] hits = new RaycastHit2D[16];
+                int count = Physics2D.Raycast(spawnPos, damageDir, filter, hits, laserRange);
+
+                for (int i = 0; i < count; i++)
                 {
+                    var hit = hits[i];
                     if (hit.collider == null) continue;
                     if (hit.collider.gameObject == gameObject) continue;
                     if (hit.collider.CompareTag("Enemy")) continue;
@@ -1169,7 +1177,10 @@ public class Boss1 : BaseBossStats //, IDamageable
         {
             if (hit.collider != null
                 && hit.collider.gameObject != gameObject
-                && !hit.collider.CompareTag("Enemy"))
+                && !hit.collider.CompareTag("Enemy")
+                //&& !(hit.collider.GetComponent<Tower>() != null)
+
+                )
             {
                 anyHits = true;
                 Gizmos.color = Color.red;

@@ -30,8 +30,8 @@ public static class ShieldFeedback
 
         //  Camera shake
 
-        if (CombatFeelManager.Instance != null)
-            CombatFeelManager.Instance.DoShake(BLOCK_SHAKE_INTENSITY, BLOCK_SHAKE_DURATION);
+        if (CameraShake.Instance != null)
+            CameraShake.Instance.Shake(BLOCK_SHAKE_INTENSITY, BLOCK_SHAKE_DURATION);
 
         //  Shield arc flash and radius pulse 
         if (arcLine != null)
@@ -47,10 +47,12 @@ public static class ShieldFeedback
         Vector3 contactPoint = playerTransform.position + contactDir * 0.9f;
         SpawnBlockSparks(contactPoint, contactDir);
 
-        //  Audio placeholder 
-        // TODO: Uncomment when FMOD shieldBlock event is ready
-        // if (AudioManager.instance != null && FMODEvents.instance != null)
-        //     AudioManager.instance.PlayOneShot(FMODEvents.instance.shieldBlock, playerTransform.position);
+        //  Audio 
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.shieldBlock.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.shieldBlock, playerTransform.position);
+        }
     }
 
 
@@ -60,8 +62,8 @@ public static class ShieldFeedback
         if (playerTransform == null) return;
 
         // ── Camera shake (punchy) ──
-        if (CombatFeelManager.Instance != null)
-            CombatFeelManager.Instance.DoShake(PARRY_SHAKE_INTENSITY, PARRY_SHAKE_DURATION);
+        if (CameraShake.Instance != null)
+            CameraShake.Instance.Shake(PARRY_SHAKE_INTENSITY, PARRY_SHAKE_DURATION);
 
         // ── Hitstop (brief freeze frame for impact) ──
         if (HitStop.Instance != null)
@@ -77,10 +79,12 @@ public static class ShieldFeedback
             host.FlashSprite(playerSR, PARRY_FLASH_DURATION);
         }
 
-        //  Audio placeholder 
-        // TODO: Uncomment when FMOD shieldParry event is ready
-        // if (AudioManager.instance != null && FMODEvents.instance != null)
-        //     AudioManager.instance.PlayOneShot(FMODEvents.instance.shieldParry, playerTransform.position);
+        //  Audio 
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.shieldParry.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.shieldParry, playerTransform.position);
+        }
     }
 
 

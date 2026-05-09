@@ -36,6 +36,11 @@ public class RunConfig : ScriptableObject
     [Tooltip("Can the same biome appear twice in one run?")]
     public bool allowRepeatBiomes = false;
 
+    [Header(" MAP LAYOUTS ")]
+    [Tooltip("Pool of map layouts to randomly pick from each stage.\n" +
+             "Leave empty to always use TowerDefenseMap's default rings (original behaviour).")]
+    public MapLayoutLibrary mapLayoutLibrary;
+
     [Header(" WAVE CONFIGS ")]
     [Tooltip("Your existing WaveConfig assets go here. The orchestrator picks waves from these.\n" +
              "If you only have ONE WaveConfig, that's fine — just drag it in.")]

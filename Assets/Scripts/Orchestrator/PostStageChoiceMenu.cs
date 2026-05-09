@@ -97,6 +97,15 @@ public class PostStageChoiceMenu : MonoBehaviour
 
     public IEnumerator ShowChoice(int healEnergyBonus, int augmentEnergyBonus, System.Action<Choice> onChosen)
     {
+        // Self-heal: if the canvas was destroyed (scene reload, manual delete, etc.) but `built`
+        // is still true, force a rebuild. Without this, root.SetActive(true) silently does nothing
+        // and the menu never appears.
+        if (built && (root == null || canvas == null))
+        {
+            Debug.LogWarning("[PostStageChoiceMenu] Canvas was destroyed; rebuilding.");
+            built = false;
+        }
+
         EnsureBuilt();
 
         headerLabel.text = headerText;
@@ -176,7 +185,11 @@ public class PostStageChoiceMenu : MonoBehaviour
 
         // Canvas
         GameObject canvasObj = new GameObject("PostStageChoiceCanvas");
-        canvasObj.transform.SetParent(transform, false);
+        // Parent to scene root (no parent) instead of `transform`. This prevents the popup from
+        // being affected by anything happening to the parent GameObject (e.g. it being parented
+        // under another Canvas, having its scale changed, being temporarily disabled, etc.).
+        // ScreenSpaceOverlay canvases work the same regardless of parent.
+        canvasObj.transform.SetParent(null, false);
         canvas = canvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 9997;
@@ -187,6 +200,14 @@ public class PostStageChoiceMenu : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
 
         canvasObj.AddComponent<GraphicRaycaster>();
+
+        // Make sure there's an EventSystem in the scene — without one, no UI buttons work.
+        if (UnityEngine.EventSystems.EventSystem.current == null)
+        {
+            var esGO = new GameObject("EventSystem");
+            esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+            esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        }
 
         rootGroup = canvasObj.AddComponent<CanvasGroup>();
         rootGroup.alpha = 1f;
@@ -817,4 +838,3 @@ public class PostStageChoiceMenu : MonoBehaviour
         }
     }
 }
-

@@ -20,6 +20,21 @@ public class TowerSlot : MonoBehaviour
     [Header("Click Detection")]
     public float clickRadius = 0.3f; // Click detection radius
 
+    [Header("Y-Sort Settings (must match GrassCartoonOverlay / YSortEntity)")]
+    [Tooltip("Must match GrassCartoonOverlay.sortPrecision")]
+    public float sortPrecision = 10f;
+
+    [Tooltip("Must match GrassCartoonOverlay.sortOrderBase")]
+    public int sortOrderBase = 1000;
+
+    [Tooltip("Y offset for the sort point. Larger value = slot sits further back " +
+             "in the y-sort against grass. ~3 means grass with base above slot.y+3 " +
+             "draws behind the slot; grass with base below draws in front.")]
+    public float sortYOffset = 3f;
+
+    private Transform playerTransform;
+    private SpriteRenderer playerSpriteRenderer;
+
     public bool IsOccupied => isOccupied;
     public bool IsAvailable => !isOccupied;
     public bool IsAffordable => EnergyManager.Instance?.CanAffordTower() ?? false;
@@ -27,11 +42,9 @@ public class TowerSlot : MonoBehaviour
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
-        // Set sorting layer and order
         if (spriteRenderer != null)
         {
             spriteRenderer.sortingLayerName = "Default";
-            spriteRenderer.sortingOrder = 3000; // Above grass Y-sort range (400-1600) but below fog (5000)
         }
         UpdateVisuals();
         // Register the slot with the placement manager
@@ -39,6 +52,40 @@ public class TowerSlot : MonoBehaviour
         {
             TowerPlacementManager.Instance.RegisterSlot(this);
         }
+    }
+
+    void LateUpdate()
+    {
+        if (spriteRenderer == null || !spriteRenderer.enabled) return;
+
+        // Step 1: y-sort against grass.
+        // Sort point pushed up by sortYOffset so this acts as a "ground decal"
+        // relative to the grass field — grass with base above the sort point
+        // draws behind, grass below draws in front.
+        float sortY = transform.position.y + sortYOffset;
+        int order = sortOrderBase + Mathf.RoundToInt(-sortY * sortPrecision);
+
+        // Step 2: clamp to (player.sortingOrder - 1) so the slot is ALWAYS
+        // behind the player no matter where the player stands. This dominates
+        // step 1 when the player walks above the slot — without this clamp,
+        // walking high above the slot would give the player a smaller
+        // sortingOrder than the slot, and the slot would pop in front.
+        if (playerSpriteRenderer == null || playerTransform == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null)
+            {
+                playerTransform = p.transform;
+                playerSpriteRenderer = p.GetComponent<SpriteRenderer>();
+            }
+        }
+        if (playerSpriteRenderer != null)
+        {
+            int maxAllowed = playerSpriteRenderer.sortingOrder - 1;
+            if (order > maxAllowed) order = maxAllowed;
+        }
+
+        spriteRenderer.sortingOrder = order;
     }
 
     void Start()

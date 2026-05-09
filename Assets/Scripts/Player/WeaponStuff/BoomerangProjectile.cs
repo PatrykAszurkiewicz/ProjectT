@@ -139,7 +139,7 @@ public class BoomerangProjectile : MonoBehaviour
         if (stats != null)
         {
             stats.TakeDamage(damage);
-            CombatFeel.OnHitEnemy(other.gameObject, isMelee: false);
+            CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: false);
 
             EnemyController ec = other.GetComponent<EnemyController>();
             if (ec != null)
@@ -154,7 +154,7 @@ public class BoomerangProjectile : MonoBehaviour
         if (dmg != null)
         {
             dmg.TakeDamage(damage, gameObject);
-            CombatFeel.OnHitEnemy(other.gameObject, isMelee: false);
+            CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: false);
         }
         // boomerang passes through — never destroyed on hit
     }

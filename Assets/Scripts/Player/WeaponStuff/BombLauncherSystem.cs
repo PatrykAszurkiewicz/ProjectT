@@ -87,5 +87,13 @@ public class BombLauncherSystem
         );
 
         activeMines.AddLast(mine);
+
+        // Plant SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.proximityMine.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.proximityMine, spawnPos);
+        }
     }
 }
+

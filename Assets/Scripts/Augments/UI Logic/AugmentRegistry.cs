@@ -1320,6 +1320,68 @@ public static class StatApplicator
             return true;
         }
 
+        // Handle additional tower SLOTS (works on ALL layout types)
+        if (modification.StatName == "additional_tower_slots")
+        {
+            var map = UnityEngine.Object.FindFirstObjectByType<TowerDefenseMap>();
+            if (map == null) return false;
+
+            int slotsToAdd = Mathf.RoundToInt(modification.Value);
+            int added = map.AddBonusSlots(slotsToAdd);
+
+            if (added == 0)
+            {
+                Debug.LogWarning("[Augment] additional_tower_slots: no bonus slots available " +
+                                 "in the current layout. Add positions to MapLayoutDefinition.bonusSlotPositions.");
+                return false;
+            }
+
+            Debug.Log($"[Augment] additional_tower_slots: revealed {added} bonus slot(s).");
+            return true;
+        }
+
+        // Handle Additional Tower Slot Per Waves (augment ID 320)
+        // Reveals 1 bonus slot every Nth wave. Multiple stat lines configure
+        // the same component (interval, count-per-trigger, optional cap).
+        if (modification.StatName == "slots_per_wave_interval" ||
+            modification.StatName == "slots_per_wave_count" ||
+            modification.StatName == "slots_per_wave_max")
+        {
+            // Host the effect on the WaveSpawner so it lives/dies with the spawner
+            // (matches the EscalationEffect pattern).
+            WaveSpawner spawner = UnityEngine.Object.FindFirstObjectByType<WaveSpawner>();
+            if (spawner == null)
+            {
+                Debug.LogError("[ADDITIONAL_SLOTS_PER_WAVE] WaveSpawner not found in scene!");
+                return false;
+            }
+
+            var spawnerObj = spawner.gameObject;
+
+            // Get-or-create so multiple stat rows from one CSV line configure
+            // ONE component (same way AdrenalineRushEffect is wired).
+            var effect = spawnerObj.GetComponent<AdditionalSlotsPerWaveEffect>();
+            if (effect == null)
+            {
+                effect = spawnerObj.AddComponent<AdditionalSlotsPerWaveEffect>();
+            }
+
+            switch (modification.StatName)
+            {
+                case "slots_per_wave_interval":
+                    effect.waveInterval = Mathf.Max(1, Mathf.RoundToInt(modification.Value));
+                    break;
+                case "slots_per_wave_count":
+                    effect.slotsPerTrigger = Mathf.Max(1, Mathf.RoundToInt(modification.Value));
+                    break;
+                case "slots_per_wave_max":
+                    effect.maxSlotsToReveal = Mathf.Max(0, Mathf.RoundToInt(modification.Value));
+                    break;
+            }
+
+            return true;
+        }
+
         // Handle global resource multiplier
         if (modification.StatName == "globalResourceMultiplier")
         {
@@ -2830,4 +2892,3 @@ public class AugmentTarget
         return new AugmentTarget(weapon.GetWeaponData());
     }
 }
-

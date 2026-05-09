@@ -61,7 +61,11 @@ public class StageTransitionOverlay : MonoBehaviour
 
         //  Canvas (Screen Space - Overlay, renders on top of everything) 
         GameObject canvasObj = new GameObject("TransitionCanvas");
-        canvasObj.transform.SetParent(transform, false);
+        // Parent to scene root (not to `transform`). ScreenSpaceOverlay canvases render the same
+        // regardless of parent, but parenting to the orchestrator's GameObject makes the canvas
+        // vulnerable to whatever happens to that GameObject (re-parented under another canvas,
+        // disabled temporarily, scaled by an animator, etc.). Scene-rooted = bulletproof.
+        canvasObj.transform.SetParent(null, false);
 
         canvas = canvasObj.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -172,7 +176,8 @@ public class StageTransitionOverlay : MonoBehaviour
         //  Separate canvas for persistent UI (counter + flash).
         //  These must stay visible during fades, so they live OUTSIDE the fading CanvasGroup.
         GameObject counterCanvasObj = new GameObject("PersistentUICanvas");
-        counterCanvasObj.transform.SetParent(transform, false);
+        // Scene-root parent (same reasoning as TransitionCanvas above).
+        counterCanvasObj.transform.SetParent(null, false);
         Canvas counterCanvas = counterCanvasObj.AddComponent<Canvas>();
         counterCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
         counterCanvas.sortingOrder = 9998; // below fade canvas
@@ -462,7 +467,8 @@ public class StageTransitionOverlay : MonoBehaviour
         bannerText.color = Color.white;
         subtitleText.color = new Color(0.75f, 0.75f, 0.75f, 1f);
 
-        yield return new WaitForSeconds(duration);
+        // Realtime so this can't hang if Time.timeScale is 0 (e.g. a menu didn't restore it).
+        yield return new WaitForSecondsRealtime(duration);
 
         bannerText.text = "";
         subtitleText.text = "";

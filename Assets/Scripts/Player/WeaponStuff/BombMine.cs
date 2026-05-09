@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 
 
-/// Proximity mine for the Bomb Launcher weapon.
+// Proximity mine for the Bomb Launcher weapon.
 
 public class BombMine : MonoBehaviour
 {
@@ -22,15 +22,21 @@ public class BombMine : MonoBehaviour
     // Visuals
     private SpriteRenderer bodyRenderer;
     private SpriteRenderer glowRenderer;
+    private SpriteRenderer coreRenderer; // bright white inner flash (sits on top of glow halo)
     private SpriteRenderer runeRenderer; // decorative ring around the bomb
     private float blinkTimer;
-    private float blinkInterval = 1.2f;
-    private Color glowColor = new Color(0.6f, 0.15f, 0.85f, 0.9f);
-    private Color glowOffColor = new Color(0.6f, 0.15f, 0.85f, 0.15f);
+    private float blinkInterval = 0.7f;
+    // Peak: near-white core with a hint of magenta — pops on both day (green grass) and night (dark) biomes.
+    // Off:  deep purple at low alpha — readable as "this thing is alive but quiet."
+    private Color glowColor = new Color(1f, 0.85f, 1f, 1f);
+    private Color glowOffColor = new Color(0.4f, 0.1f, 0.6f, 0.10f);
+    // Tinted outer halo that surrounds the white core (uses the existing glow renderer at full saturation).
+    private Color glowHaloColor = new Color(0.85f, 0.25f, 1f, 0.85f);
     private float spawnScale = 0f; // for pop-in animation
 
     private const float SORT_PRECISION = 10f;
     private const int SORT_ORDER_BASE = 1000;
+    private SpriteRenderer cachedPlayerRenderer;
 
     public void Initialize(float damage, float proximityRadius, float explosionRadius,
                            bool friendlyFire, float armDelay)
@@ -77,24 +83,64 @@ public class BombMine : MonoBehaviour
         // Glow pulse
         if (glowRenderer != null)
         {
-            float interval = isArmed ? blinkInterval : blinkInterval * 3f;
+            float interval = isArmed ? blinkInterval : blinkInterval * 2.5f;
             blinkTimer += Time.deltaTime;
-            float pulse = 0.5f + 0.5f * Mathf.Sin((blinkTimer / interval) * Mathf.PI * 2f);
-            glowRenderer.color = Color.Lerp(glowOffColor, glowColor, pulse);
-            glowRenderer.transform.localScale = Vector3.one * (0.22f + pulse * 0.1f);
+            if (blinkTimer >= interval) blinkTimer -= interval;
+
+            float phase = blinkTimer / interval; // 0..1 across the cycle
+
+            // Sharp blink: ramp up fast (0..0.1), hold near peak (0.1..0.25),
+            // decay (0.25..0.5), then dark hold (0.5..1).
+            float pulse;
+            if (phase < 0.10f)
+                pulse = phase / 0.10f;                     // attack
+            else if (phase < 0.25f)
+                pulse = 1f;                                // hold at peak
+            else if (phase < 0.50f)
+                pulse = 1f - (phase - 0.25f) / 0.25f;      // decay
+            else
+                pulse = 0f;                                // dark hold
+
+            // Outer halo: tinted purple at peak, dim purple when off.
+            glowRenderer.color = Color.Lerp(glowOffColor, glowHaloColor, pulse);
+            glowRenderer.transform.localScale = Vector3.one * (0.22f + pulse * 0.28f);
+
+            // Inner core flash: nearly white at peak, fully invisible when off.
+            // Brighter peak alpha and tighter scale make it pop against grass + dark biomes.
+            if (coreRenderer != null)
+            {
+                Color core = glowColor;
+                core.a = pulse * 0.95f;
+                coreRenderer.color = core;
+                coreRenderer.transform.localScale = Vector3.one * (0.08f + pulse * 0.18f);
+            }
         }
 
         // Rune ring slow rotation
         if (runeRenderer != null)
             runeRenderer.transform.Rotate(0, 0, 30f * Time.deltaTime);
 
-        // Y-sort
+        // Y-sort: hybrid approach.
+        const float SORT_Y_OFFSET = 3f;
         if (bodyRenderer != null)
         {
-            float sortY = transform.position.y - 0.15f;
+            float sortY = transform.position.y + SORT_Y_OFFSET;
             int order = SORT_ORDER_BASE + Mathf.RoundToInt(-sortY * SORT_PRECISION);
+
+            if (cachedPlayerRenderer == null)
+            {
+                GameObject p = GameObject.FindGameObjectWithTag("Player");
+                if (p != null) cachedPlayerRenderer = p.GetComponent<SpriteRenderer>();
+            }
+            if (cachedPlayerRenderer != null)
+            {
+                int maxAllowed = cachedPlayerRenderer.sortingOrder - 1;
+                if (order > maxAllowed) order = maxAllowed;
+            }
+
             bodyRenderer.sortingOrder = order;
             if (glowRenderer != null) glowRenderer.sortingOrder = order + 1;
+            if (coreRenderer != null) coreRenderer.sortingOrder = order + 2;
             if (runeRenderer != null) runeRenderer.sortingOrder = order - 1;
         }
 
@@ -103,15 +149,22 @@ public class BombMine : MonoBehaviour
     }
 
     //  PUBLIC: smooth removal when replaced by newer mine 
-
-
     // Called by BombLauncherSystem when this mine is the oldest and must be removed.
-
     public void Disintegrate()
     {
         if (isDisintegrating || hasExploded) return;
         isDisintegrating = true;
         isArmed = false; // disable proximity
+
+        // Hide core flash — DisintegrateMine only fades body/glow/rune.
+        // The core is a transient blink layer; just snap it off so it doesn't
+        // sit at full brightness while the rest of the mine fades.
+        if (coreRenderer != null)
+        {
+            Color c = coreRenderer.color;
+            c.a = 0f;
+            coreRenderer.color = c;
+        }
 
         var fx = gameObject.AddComponent<DisintegrateMine>();
         fx.Initialize(bodyRenderer, glowRenderer, runeRenderer);
@@ -164,7 +217,7 @@ public class BombMine : MonoBehaviour
             if (enemyStats != null)
             {
                 enemyStats.TakeDamage(dmg);
-                CombatFeel.OnHitEnemy(go, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(go, isMelee: false);
                 hits++;
                 continue;
             }
@@ -173,7 +226,7 @@ public class BombMine : MonoBehaviour
             if (boss != null)
             {
                 boss.TakeDamage(dmg);
-                CombatFeel.OnHitEnemy(go, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(go, isMelee: false);
                 hits++;
                 continue;
             }
@@ -182,7 +235,7 @@ public class BombMine : MonoBehaviour
             if (cs != null)
             {
                 cs.TakeDamage(dmg);
-                CombatFeel.OnHitEnemy(go, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(go, isMelee: false);
                 hits++;
                 continue;
             }
@@ -191,7 +244,7 @@ public class BombMine : MonoBehaviour
             if (dmgable != null)
             {
                 dmgable.TakeDamage(dmg, gameObject);
-                CombatFeel.OnHitEnemy(go, isMelee: false);
+                CombatJuice.OnPlayerHitEnemy(go, isMelee: false);
                 hits++;
             }
         }
@@ -208,8 +261,9 @@ public class BombMine : MonoBehaviour
                 {
                     float falloff = 1f - (dist / explosionRadius) * 0.5f;
                     es.TakeDamage(damage * Mathf.Max(falloff, 0.3f));
-                    CombatFeel.OnHitEnemy(es.gameObject, isMelee: false);
+                    CombatJuice.OnPlayerHitEnemy(es.gameObject, isMelee: false);
                     hits++;
+
                 }
             }
         }
@@ -232,8 +286,11 @@ public class BombMine : MonoBehaviour
         if (friendlyFire)
             ApplyFriendlyFire(pos);
 
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerDeath, transform.position);
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.proximityMineExplode.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.proximityMineExplode, transform.position);
+        }
 
         Destroy(gameObject, 0.05f);
     }
@@ -301,15 +358,26 @@ public class BombMine : MonoBehaviour
         bodyRenderer.sortingOrder = SORT_ORDER_BASE;
         bodyObj.transform.localScale = Vector3.one * 0.55f;
 
-        // Glow indicator
+        // Glow indicator (outer halo, tinted)
         GameObject glowObj = new GameObject("BombGlow");
         glowObj.transform.SetParent(transform, false);
-        glowObj.transform.localPosition = new Vector3(0f, 0.08f, 0f);
+        glowObj.transform.localPosition = Vector3.zero;
         glowRenderer = glowObj.AddComponent<SpriteRenderer>();
         glowRenderer.sprite = GenerateGlowSprite();
         glowRenderer.sortingOrder = SORT_ORDER_BASE + 1;
         glowRenderer.color = glowOffColor;
         glowObj.transform.localScale = Vector3.one * 0.22f;
+
+        // Core flash — small bright white center that punches through grass
+        // overlap and reads clearly on both day (green) and night (dark) biomes.
+        GameObject coreObj = new GameObject("BombCore");
+        coreObj.transform.SetParent(transform, false);
+        coreObj.transform.localPosition = Vector3.zero;
+        coreRenderer = coreObj.AddComponent<SpriteRenderer>();
+        coreRenderer.sprite = GenerateGlowSprite(); // same soft disc sprite, just tinted/scaled differently
+        coreRenderer.sortingOrder = SORT_ORDER_BASE + 2;
+        coreRenderer.color = new Color(1f, 1f, 1f, 0f); // starts invisible
+        coreObj.transform.localScale = Vector3.one * 0.10f;
     }
 
     //  PROCEDURAL SPRITES 

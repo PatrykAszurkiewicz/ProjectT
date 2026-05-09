@@ -4,20 +4,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using FMODUnity;
 
-/// <summary>
-/// WAVE SPAWNER
-/// 
-/// MODE 1 (STANDALONE): Works exactly like before — auto-advances waves.
-/// MODE 2 (ORCHESTRATOR-DRIVEN): Orchestrator calls SpawnEnemyPublic().
-///
-/// GREMLIN FIX:
-/// - SpawnEnemy() adds a WaveEnemy marker to every wave-spawned enemy
-/// - WaveEnemy.OnDestroy() notifies the orchestrator when that enemy is destroyed
-/// - OnEnemyDeath() here does NOT touch the orchestrator at all
-/// - Result: Gremlins dying can't mess up the wave count
-/// 
-/// YOU DO NOT NEED TO CHANGE EnemyStats.
-/// </summary>
+// WAVE SPAWNER
+// MODE 1 (STANDALONE): Works exactly like before — auto-advances waves.
+// MODE 2 (ORCHESTRATOR-DRIVEN): Orchestrator calls SpawnEnemyPublic().
+
 public class WaveSpawner : MonoBehaviour
 {
     [Header("Spawn areas (Top/Bottom/Left/Right)")]
@@ -29,6 +19,21 @@ public class WaveSpawner : MonoBehaviour
     [Header("Modifiers")]
     public float waveSpawnDelayModifier = 0f;
     public float enemySpawnCountMultiplier = 1f;
+
+    [Header("Obstacle Avoidance (must match TowerDefenseMap.obstacleLayerName)")]
+    [Tooltip("Physics layers considered solid when picking a spawn position.\n" +
+             "Set to the same 'Obstacle' layer used by TowerDefenseMap layout obstacles.\n" +
+             "Leave at 'Nothing' to disable the check (legacy behaviour — enemies may " +
+             "spawn inside walls).")]
+    public LayerMask obstacleAvoidanceLayers;
+
+    [Tooltip("Radius around the candidate spawn point that must be free of obstacles. " +
+             "Should be ~enemy collider radius (a small bit larger is safer).")]
+    public float obstacleClearanceRadius = 0.6f;
+
+    [Tooltip("How many random points to try inside the spawn area before falling back " +
+             "to a nudge-toward-area-edge strategy.")]
+    public int obstacleAvoidanceMaxAttempts = 12;
 
     private int currentWaveIndex = 0;
     private int enemiesAlive = 0;
@@ -201,9 +206,77 @@ public class WaveSpawner : MonoBehaviour
         }
 
         Bounds bounds = area.bounds;
-        float x = UnityEngine.Random.Range(bounds.min.x, bounds.max.x);
-        float y = UnityEngine.Random.Range(bounds.min.y, bounds.max.y);
-        return new Vector2(x, y);
+
+        // If the avoidance layer mask is empty, skip the check entirely (preserve
+        // original behaviour and avoid Physics2D calls).
+        bool avoidanceEnabled = obstacleAvoidanceLayers.value != 0;
+
+        // Try N random points inside the spawn rectangle.
+        int attempts = avoidanceEnabled ? Mathf.Max(1, obstacleAvoidanceMaxAttempts) : 1;
+        for (int i = 0; i < attempts; i++)
+        {
+            float x = UnityEngine.Random.Range(bounds.min.x, bounds.max.x);
+            float y = UnityEngine.Random.Range(bounds.min.y, bounds.max.y);
+            Vector2 candidate = new Vector2(x, y);
+
+            if (!avoidanceEnabled) return candidate;
+
+            if (!Physics2D.OverlapCircle(candidate, obstacleClearanceRadius, obstacleAvoidanceLayers))
+                return candidate;
+        }
+
+        // Fallback
+        Vector2[] corners = new Vector2[]
+        {
+            new Vector2(bounds.min.x, bounds.min.y),
+            new Vector2(bounds.max.x, bounds.min.y),
+            new Vector2(bounds.min.x, bounds.max.y),
+            new Vector2(bounds.max.x, bounds.max.y),
+        };
+
+        Vector2 best = corners[0];
+        float bestDistSq = best.sqrMagnitude;
+        for (int i = 1; i < corners.Length; i++)
+        {
+            float d = corners[i].sqrMagnitude;
+            if (d > bestDistSq) { best = corners[i]; bestDistSq = d; }
+        }
+
+        if (!Physics2D.OverlapCircle(best, obstacleClearanceRadius, obstacleAvoidanceLayers))
+            return best;
+
+        // Walk along the rectangle edge that's FARTHEST from the map centre
+        Vector2 edgeStart, edgeEnd;
+        float absCx = Mathf.Abs(bounds.center.x);
+        float absCy = Mathf.Abs(bounds.center.y);
+        if (absCy >= absCx)
+        {
+            // Top or Bottom area: outer edge is horizontal at the far y.
+            float outerY = bounds.center.y >= 0f ? bounds.max.y : bounds.min.y;
+            edgeStart = new Vector2(bounds.min.x, outerY);
+            edgeEnd = new Vector2(bounds.max.x, outerY);
+        }
+        else
+        {
+            // Left or Right area: outer edge is vertical at the far x.
+            float outerX = bounds.center.x >= 0f ? bounds.max.x : bounds.min.x;
+            edgeStart = new Vector2(outerX, bounds.min.y);
+            edgeEnd = new Vector2(outerX, bounds.max.y);
+        }
+
+        const int perimeterSamples = 32;
+        for (int i = 0; i < perimeterSamples; i++)
+        {
+            float t = i / (float)(perimeterSamples - 1);
+            Vector2 p = Vector2.Lerp(edgeStart, edgeEnd, t);
+            if (!Physics2D.OverlapCircle(p, obstacleClearanceRadius, obstacleAvoidanceLayers))
+                return p;
+        }
+
+        Debug.LogWarning($"WaveSpawner: could not find an obstacle-free spawn point in '{direction}' " +
+                         $"after {attempts} random + {perimeterSamples} perimeter attempts. " +
+                         $"Spawning at outer corner — enemy may still clip a wall.");
+        return best;
     }
 
     private void OnDrawGizmos()
@@ -245,9 +318,7 @@ public class WaveSpawner : MonoBehaviour
         enemiesAlive++;
     }
 
-    // ═══════════════════════════════════════════════
     //  PUBLIC API FOR ORCHESTRATOR
-    // ═══════════════════════════════════════════════
 
     public void SpawnEnemyPublic(GameObject prefab, SpawnDirection direction)
     {
@@ -259,7 +330,6 @@ public class WaveSpawner : MonoBehaviour
         ShowWaveIndicators(dirs);
     }
 
-    // ═══════════════════════════════════════════════
 
     void Shuffle<T>(List<T> list)
     {

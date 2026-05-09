@@ -61,9 +61,9 @@ public class EnergyManager : MonoBehaviour
     public bool onlyAllowRepairInPlacementMode = true;
 
     [Header("Continuous Supply Settings")]
-    public float continuousSupplyRate = 3f; // Energy per second when holding button
-    public float continuousSupplyCost = 3f; // Player energy cost per second
-    public float minSupplyInterval = 0.1f; // Minimum time between supply ticks (20fps)
+    public float continuousSupplyRate = 10f; // Energy per second when holding button
+    public float continuousSupplyCost = 10f; // Player energy cost per second
+    public float minSupplyInterval = 0.02f; // Minimum time between supply ticks (2fps)
 
     [Header("Tower Energy Settings")]
     public float towerMaxEnergy = 100f;
@@ -114,6 +114,17 @@ public class EnergyManager : MonoBehaviour
     public float beamFlowSpeed = 8f;
     public bool enableBeamGlow = true;
     public AnimationCurve beamPulseCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+
+    [Header("Beam Y-Sort (must match GrassCartoonOverlay / PlayerMovement)")]
+    [Tooltip("Must match GrassCartoonOverlay.sortPrecision")]
+    public float beamSortPrecision = 10f;
+    [Tooltip("Must match GrassCartoonOverlay.sortOrderBase")]
+    public int beamSortOrderBase = 1000;
+    [Tooltip("Y offset added to the beam's sort anchor. Negative = sort from lower (feet).")]
+    public float beamSortYOffset = -0.3f;
+    [Tooltip("Bonus added to beam sortingOrder so it draws ON TOP of foreground sprites and grass at the same Y. " +
+             "Set to 0 to draw behind, positive to draw in front.")]
+    public int beamSortBias = 5;
     #endregion
 
     #region Core Components
@@ -908,6 +919,11 @@ public class EnergyManager : MonoBehaviour
                 finalRate *= generatorBoost.GetEnergyEfficiencyMultiplier();
                 //Debug.Log($"[ENERGY_MANAGER] Tower {tower.towerName} decay reduced by generator proximity: {beforeProximity:F3} -> {finalRate:F3}");
             }
+            // Check for Tower Tether NEAR-zone decay boost  ← NEW
+            var tetherDecayBoost = tower.GetComponent<TowerTetherDecayBoost>();
+            if (tetherDecayBoost != null)
+                finalRate *= tetherDecayBoost.GetDecayMultiplier();
+
         }
 
         return finalRate;
@@ -1382,6 +1398,20 @@ public class SupplyBeamController
                 glowBeam.SetPosition(0, startPos);
                 glowBeam.SetPosition(1, endPos);
             }
+
+            // Y-sort the beam so it draws above cartoon grass / fog.
+            // Same formula as PlayerMovement / YSortEntity / GrassCartoonOverlay:
+            //     order = sortOrderBase + round(-(y + offset) * sortPrecision)
+            // Use the LOWER of the two endpoints (foreground anchor — the one in front),
+            // then add a small bias so the beam draws on top of the foreground sprite.
+            float startSortY = startPos.y + energyManager.beamSortYOffset;
+            float endSortY = endPos.y + energyManager.beamSortYOffset;
+            int startOrder = energyManager.beamSortOrderBase + Mathf.RoundToInt(-startSortY * energyManager.beamSortPrecision);
+            int endOrder = energyManager.beamSortOrderBase + Mathf.RoundToInt(-endSortY * energyManager.beamSortPrecision);
+            int foregroundOrder = Mathf.Max(startOrder, endOrder); // lower world-Y = larger order = foreground
+            supplyBeam.sortingOrder = foregroundOrder + energyManager.beamSortBias;
+            if (glowBeam != null)
+                glowBeam.sortingOrder = foregroundOrder + energyManager.beamSortBias - 1; // glow one step behind main beam
         }
         catch (System.Exception e)
         {

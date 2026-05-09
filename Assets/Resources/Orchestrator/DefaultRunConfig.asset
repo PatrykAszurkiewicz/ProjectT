@@ -15,8 +15,9 @@ MonoBehaviour:
   stageCount: 2
   wavesPerStage: 1
   hasFinalBoss: 1
-  availableBiomes: 02000000
+  availableBiomes: 05000000
   allowRepeatBiomes: 1
+  mapLayoutLibrary: {fileID: 11400000, guid: 938991bd3fb9cfd4bba2cfc169709e4d, type: 2}
   waveConfigPool:
   - {fileID: 11400000, guid: d3d3d7b01fe1cee4d9d93365b1f99214, type: 2}
   enemyCountScalePerStage: 1.2

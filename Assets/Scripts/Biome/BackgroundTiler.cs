@@ -107,6 +107,7 @@ public class BackgroundTiler : MonoBehaviour
                 tileSR.sortingLayerName = sourceSR.sortingLayerName;
                 tileSR.sortingOrder = sourceSR.sortingOrder;
                 tileSR.drawMode = sourceSR.drawMode;
+                tileSR.sharedMaterial = sourceSR.sharedMaterial;
 
                 totalTiles++;
             }

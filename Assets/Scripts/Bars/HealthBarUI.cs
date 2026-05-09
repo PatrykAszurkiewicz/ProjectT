@@ -12,13 +12,13 @@ public class HealthBarUI : MonoBehaviour
         if (stats != null && healthBarUI != null)
         {
             healthBarUI.SetValue(stats.currentHealth, stats.maxHealth);
-
             stats.OnHealthChanged += healthBarUI.SetValue;
         }
     }
+
     private void OnDestroy()
     {
-        if (stats != null)
+        if (stats != null && healthBarUI != null)
         {
             stats.OnHealthChanged -= healthBarUI.SetValue;
         }

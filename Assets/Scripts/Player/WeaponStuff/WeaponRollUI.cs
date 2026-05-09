@@ -423,17 +423,36 @@ public class WeaponRollUI : MonoBehaviour
     static Sprite CircleSprite()
     {
         if (_cachedCircle != null) return _cachedCircle;
-        const int S = 128;
-        var tex = new Texture2D(S, S, TextureFormat.ARGB32, false) { filterMode = FilterMode.Bilinear };
+        const int S = 512;
+        // Third arg `mipChain: true` enables mipmaps.
+        var tex = new Texture2D(S, S, TextureFormat.ARGB32, mipChain: true, linear: false)
+        {
+            filterMode = FilterMode.Trilinear,   // Trilinear blends between mip levels — smoothest
+            wrapMode = TextureWrapMode.Clamp,
+            anisoLevel = 4                        // Aniso filtering now active because mipmaps exist
+        };
         var px = new Color[S * S];
-        var c = new Vector2(S * .5f, S * .5f);
-        float r = S * .5f - 1f;
+        float cx = S * 0.5f;
+        float cy = S * 0.5f;
+        float r = S * 0.5f - 2f;
+        const float aa = 1.5f;
         for (int y = 0; y < S; y++)
+        {
             for (int x = 0; x < S; x++)
-                px[y * S + x] = new Color(1, 1, 1,
-                    1f - Mathf.Clamp01(Vector2.Distance(new Vector2(x, y), c) - (r - 1f)));
-        tex.SetPixels(px); tex.Apply();
-        _cachedCircle = Sprite.Create(tex, new Rect(0, 0, S, S), Vector2.one * .5f, S);
+            {
+                float dx = x - cx;
+                float dy = y - cy;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float t = Mathf.Clamp01((r - d) / aa);
+                float alpha = t * t * (3f - 2f * t);
+                px[y * S + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+        tex.SetPixels(px);
+        // First arg `updateMipmaps: true` regenerates the mip chain from the new pixel data.
+        tex.Apply(updateMipmaps: true, makeNoLongerReadable: false);
+        _cachedCircle = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f), 100f);
         return _cachedCircle;
     }
+
 }

@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 2df20bc9c60779740991498444a34fc2
+guid: cc2f310c3b0964e439ca5ed0f391ebf6
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6406843876081568196
-    second: F TOP green blur_0
+      213: -4028701862411245862
+    second: Grupa 36_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: F TOP green blur_0
+      name: Grupa 36_0
       rect:
         serializedVersion: 2
-        x: 3
-        y: 2
-        width: 1131
-        height: 217
+        x: 0
+        y: 0
+        width: 138
+        height: 137
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: c3675ca80715617a0800000000000000
-      internalID: -6406843876081568196
+      spriteID: ad6e509400d2718c0800000000000000
+      internalID: -4028701862411245862
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      F TOP green blur_0: -6406843876081568196
+      Grupa 36_0: -4028701862411245862
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

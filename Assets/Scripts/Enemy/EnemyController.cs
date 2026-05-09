@@ -22,6 +22,12 @@ public class EnemyController : MonoBehaviour
     [SerializeField] private float avoidDistance = 1f;
     [SerializeField] private LayerMask obstacleLayer;
 
+    [Tooltip("If true, the enemy will not start an attack cycle when a layout " +
+             "obstacle (wall/building) is between it and its target. Prevents " +
+             "enemies stuck on the wrong side of a wide wall from playing the " +
+             "attack animation forever against an unreachable target.")]
+    [SerializeField] private bool requireLineOfSightToAttack = true;
+
     [Header("Stuck Prevention")]
     [SerializeField] private float stuckCheckTime = 0.5f;
     [SerializeField] private float minMovementThreshold = 0.2f;
@@ -252,8 +258,14 @@ public class EnemyController : MonoBehaviour
         }
         else if (distance <= attackRange || isAttackingCycle)
         {
-            rb.linearVelocity = Vector2.zero;
-            return;
+            // Only freeze in place if we can actually reach the target.
+            // If a wall is blocking line-of-sight, fall through to the
+            // movement code below so stuck-detection can route us around it.
+            if (isAttackingCycle || HasLineOfSightToTarget(currentTarget))
+            {
+                rb.linearVelocity = Vector2.zero;
+                return;
+            }
         }
 
         HandleStuckDetection();
@@ -308,7 +320,15 @@ public class EnemyController : MonoBehaviour
 
         if (leftClear && !rightClear) stuckAvoidanceDirection = leftSide;
         else if (rightClear && !leftClear) stuckAvoidanceDirection = rightSide;
-        else stuckAvoidanceDirection = leftSide;
+        else
+        {
+            // Both sides clear OR both sides blocked: pick the side whose forward sample lies closer to the target.
+            Vector2 leftProbe = (Vector2)transform.position + leftSide * (avoidDistance * 1.5f);
+            Vector2 rightProbe = (Vector2)transform.position + rightSide * (avoidDistance * 1.5f);
+            float leftDistToTarget = Vector2.SqrMagnitude((Vector2)currentTarget.position - leftProbe);
+            float rightDistToTarget = Vector2.SqrMagnitude((Vector2)currentTarget.position - rightProbe);
+            stuckAvoidanceDirection = (leftDistToTarget <= rightDistToTarget) ? leftSide : rightSide;
+        }
     }
 
     private Vector2 GetOptimalMovementDirection(Vector2 desiredDirection)
@@ -324,8 +344,19 @@ public class EnemyController : MonoBehaviour
             if (tower != null && tower.IsDestroyed())
                 return desiredDirection;
 
-            Vector2 obstaclePos = obstacle.transform.position;
-            Vector2 toObstacle = (obstaclePos - (Vector2)transform.position).normalized;
+            // Use the CLOSEST POINT on the collider rather than its centre.
+
+            Vector2 selfPos = transform.position;
+            Vector2 closestOnObstacle = obstacle.ClosestPoint(selfPos);
+
+            // Defensive fallback: if the enemy's centre is INSIDE the collider ClosestPoint
+            // returns the input position and the normal collapses to zero.
+
+            Vector2 toObstacle = closestOnObstacle - selfPos;
+            if (toObstacle.sqrMagnitude < 0.0001f)
+                toObstacle = (Vector2)obstacle.transform.position - selfPos;
+
+            toObstacle = toObstacle.normalized;
             Vector2 perpLeft = new Vector2(-toObstacle.y, toObstacle.x);
             Vector2 perpRight = new Vector2(toObstacle.y, -toObstacle.x);
             float leftDot = Vector2.Dot(perpLeft, desiredDirection);
@@ -424,6 +455,12 @@ public class EnemyController : MonoBehaviour
                 if (isLuredByDecoy && currentTarget == decoyTarget)
                     return;
 
+                if (!HasLineOfSightToTarget(currentTarget))
+                {
+                    attackTimer = 0f;
+                    return;
+                }
+
                 attackTimer -= Time.deltaTime;
                 if (attackTimer <= 0f)
                 {
@@ -454,9 +491,7 @@ public class EnemyController : MonoBehaviour
 
         if (animController != null && resolvedHitFrame > 0)
         {
-            // Frame-driven hit: the animation coroutine calls PerformHit
-            // synchronously when it reaches the hit frame. One coroutine,
-            // one timeline, no drift between sprite and damage.
+            // Frame-driven hit
             animController.PlayMeleeAttackAnimation(resolvedHitFrame, () =>
             {
                 if (!hitDelivered && target != null)
@@ -610,7 +645,8 @@ public class EnemyController : MonoBehaviour
 
             if (playerStats != null)
             {
-                CombatFeel.OnPlayerHurt();
+                CombatJuice.OnEnemyHitPlayer();
+
 
                 var reflectionEffect = playerStats.GetComponent<DamageReflectionEffect>();
                 if (reflectionEffect != null)
@@ -675,6 +711,24 @@ public class EnemyController : MonoBehaviour
         if (tower != null && tower.IsDestroyed())
             return false;
         return true;
+    }
+
+    // Returns true when nothing on the obstacle layer sits between this enemy
+    // and the target. Prevents enemies from "attacking through" a wide wall
+
+    private bool HasLineOfSightToTarget(Transform target)
+    {
+        if (target == null) return false;
+        if (!requireLineOfSightToAttack) return true;
+        if (obstacleLayer.value == 0) return true; // no obstacle layer configured
+
+        Vector2 from = transform.position;
+        Vector2 to = target.position;
+
+        // Linecast against the obstacle layer only — we explicitly DON'T want
+        // towers or the core in this mask (the target might BE a tower).
+        RaycastHit2D hit = Physics2D.Linecast(from, to, obstacleLayer);
+        return hit.collider == null;
     }
 
     /// SAFE knockback — checks rigidbody type before setting velocity.

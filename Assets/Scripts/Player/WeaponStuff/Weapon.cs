@@ -713,7 +713,7 @@ public class Weapon : MonoBehaviour
                 vampireEffect.DrainEnergy();
 
             // ── Combat Feel ──
-            CombatFeel.OnHitEnemy(other.gameObject, isMelee: true);
+            CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: true);
         }
 
         if (weaponData.knockBack)

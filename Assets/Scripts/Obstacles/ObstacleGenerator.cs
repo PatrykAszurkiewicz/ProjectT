@@ -12,6 +12,13 @@ using System.Collections.Generic;
 
 public class ObstacleGenerator : MonoBehaviour
 {
+
+
+    [Tooltip("Extra padding added to the auto-detected inner radius. " +
+             "Increase this when layouts have obstacles that extend outward " +
+             "from the tower rings (walls, perimeter buildings).")]
+    public float extraInnerPadding = 6f;
+
     [Header("Prefabs (assigned by BiomeManager per biome — don't edit)")]
     public GameObject[] obstaclePrefabs;
 
@@ -449,7 +456,8 @@ public class ObstacleGenerator : MonoBehaviour
                 }
             }
             if (maxRingRadius > 0f)
-                return maxRingRadius + lastSlotSize * 0.5f + 1f;
+                //return maxRingRadius + lastSlotSize * 0.5f + 1f;
+                return maxRingRadius + lastSlotSize * 0.5f + 1f + extraInnerPadding;
         }
         return 5f;
     }

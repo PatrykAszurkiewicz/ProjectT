@@ -317,3 +317,5 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 316,1,Unlocked decoy,Player,"Rare",NULL,Unlocked decoy weapon — deploy a signal device that confuses and attracts nearby enemies for 7 seconds,Resources/Sprites/Augments/316,Kuba,Player
 317,1,Unlocked turret,Player,"Epic",NULL,Unlocked turret weapon — deploy a portable auto-turret that targets nearby enemies,Resources/Sprites/Augments/317,Kuba,Player
 318,1,Unlocked boomerang,Player,"Rare",NULL,Unlocked boomerang weapon,Resources/Sprites/Augments/318,Kuba,Player
+319,1,Additional Tower Slot,Map,Rare,additional_tower_slots=1,Reveals one extra tower placement slot on the current map,Resources/Sprites/Augments/319,Kuba,Global
+320,1,Additional Tower Slot Per Waves,Map,Epic,"slots_per_wave_interval=1,slots_per_wave_count=1,slots_per_wave_max=0",Reveals one extra tower placement slot every 3rd wave cleared,Resources/Sprites/Augments/320,Kuba,Global

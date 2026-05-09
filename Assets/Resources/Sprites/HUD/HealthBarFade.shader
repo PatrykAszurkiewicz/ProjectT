@@ -4,7 +4,9 @@ Shader "Custom/HealthBarFade"
     {
         _MainTex ("Texture", 2D) = "white" {}
         _Fill ("Fill Amount", Range(0,1)) = 1.0
-        _FadeWidth ("Fade Width", Range(0, 0.3)) = 0.05
+        _CornerRadius ("Corner Radius (UV)", Range(0, 0.5)) = 0.5
+        _AspectRatio ("Bar Width / Height", Float) = 8.55
+        _AAStrength ("AA Strength", Range(0.5, 5.0)) = 2.0
         _Color ("Tint", Color) = (1,1,1,1)
     }
 
@@ -38,7 +40,9 @@ Shader "Custom/HealthBarFade"
 
             sampler2D _MainTex;
             float _Fill;
-            float _FadeWidth;
+            float _CornerRadius;
+            float _AspectRatio;
+            float _AAStrength;
             float4 _Color;
 
             v2f vert(appdata v)
@@ -54,11 +58,33 @@ Shader "Custom/HealthBarFade"
             {
                 fixed4 col = tex2D(_MainTex, i.uv) * _Color * i.color;
 
-                // Miêkkie zanikanie na prawej krawêdzi fill
-                float edge = _Fill;
-                float fade = smoothstep(edge, edge - _FadeWidth, i.uv.x);
+                if (_Fill >= 0.999) return col;
 
-                col.a *= fade;
+                float x = i.uv.x * _AspectRatio;
+                float y = i.uv.y;
+                float fillX = _Fill * _AspectRatio;
+                float r = _CornerRadius;
+
+                // AA band â€” controlled by user-tunable strength.
+                // Use both fwidth axes and take the larger to handle stretched UVs.
+                float aa = max(fwidth(i.uv.x) * _AspectRatio, fwidth(i.uv.y)) * _AAStrength;
+                aa = max(aa, 0.005);
+
+                float distRight = fillX - x;
+
+                if (x > fillX - r && y > 1.0 - r)
+                {
+                    float2 cornerCenter = float2(fillX - r, 1.0 - r);
+                    distRight = r - distance(float2(x, y), cornerCenter);
+                }
+                else if (x > fillX - r && y < r)
+                {
+                    float2 cornerCenter = float2(fillX - r, r);
+                    distRight = r - distance(float2(x, y), cornerCenter);
+                }
+
+                float alpha = smoothstep(-aa, aa, distRight);
+                col.a *= alpha;
                 return col;
             }
             ENDCG

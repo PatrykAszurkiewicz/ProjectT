@@ -5,6 +5,15 @@ using System.Collections.Generic;
 
 // Enemy death VFX.
 // Animation driven by Update() (not coroutines) on an independent host GameObject.
+//
+// PERFORMANCE NOTE: This script reads sprite pixels at runtime to build the
+// boss "shatter" effect. To avoid forcing Read/Write on every sprite atlas:
+//   1) Pass `sourceTexturePath` (a Resources path) to Trigger() so we can
+//      load the source PNG directly instead of going through the atlas.
+//   2) The first read for each sprite is cached in _pixelCache; subsequent
+//      deaths of the same boss type do zero texture reads.
+// With this in place, you only need Read/Write enabled on the source boss
+// PNG(s), not on any sprite atlas.
 
 
 public class EnemyDeathVFX : MonoBehaviour
@@ -15,11 +24,9 @@ public class EnemyDeathVFX : MonoBehaviour
     public static void Trigger(
         GameObject enemy,
         float duration = 1.5f,
-        System.Action onComplete = null)
+        System.Action onComplete = null,
+        string sourceTexturePath = null)
     {
-
-        //Debug.Log($"[VFX-TRACE-1] Trigger() ENTERED. enemy='{enemy?.name ?? "NULL"}' duration={duration}");
-
         if (enemy == null)
         {
             Debug.LogError("[VFX] Trigger called with null enemy!");
@@ -34,10 +41,6 @@ public class EnemyDeathVFX : MonoBehaviour
 
         // Snapshot from live object before any mutation
         SpriteRenderer sr = enemy.GetComponentInChildren<SpriteRenderer>();
-        //Debug.Log($"[VFX-TRACE-2] SpriteRenderer={sr != null}  " +
-        //          $"sprite={(sr?.sprite != null ? sr.sprite.name : "NULL")}  " +
-        //          $"renderer.enabled={sr?.enabled}");
-
         Sprite sprite = sr?.sprite;
         bool flipX = sr != null && sr.flipX;
         int sortOrder = sr?.sortingOrder ?? 10;
@@ -50,72 +53,57 @@ public class EnemyDeathVFX : MonoBehaviour
             ? sr.bounds
             : new Bounds(worldPos, new Vector3(2f, 2f, 0f));
 
-        //Debug.Log($"[VFX-TRACE-2b] worldPos={worldPos}  bounds.size={worldBounds.size}  " +
-        //          $"scale={enemyScale}  layer='{sortLayerName}'({sortLayerID})  order={sortOrder}");
-
-
-        int rendererCount = 0, rbCount = 0, colCount = 0, mbCount = 0;
+        // Disable everything on the original enemy so it's invisible/inert
+        // while the VFX plays. The enemy GO is destroyed when the VFX finishes.
         foreach (var ren in enemy.GetComponentsInChildren<Renderer>())
-        { ren.enabled = false; rendererCount++; }
+            ren.enabled = false;
         foreach (var rb in enemy.GetComponentsInChildren<Rigidbody2D>())
         {
-            rb.linearVelocity = Vector2.zero; rb.angularVelocity = 0f;
-            rb.bodyType = RigidbodyType2D.Static; rb.simulated = false;
-            rbCount++;
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            rb.bodyType = RigidbodyType2D.Static;
+            rb.simulated = false;
         }
         foreach (var col in enemy.GetComponentsInChildren<Collider2D>())
-        { col.enabled = false; colCount++; }
+            col.enabled = false;
         foreach (var mb in enemy.GetComponentsInChildren<MonoBehaviour>())
-        { mb.enabled = false; mbCount++; }
-
-        //Debug.Log($"[VFX-TRACE-3] Disabled: {rendererCount} renderers, {rbCount} rigidbodies, " +
-        //          $"{colCount} colliders, {mbCount} monobehaviours");
-
+            mb.enabled = false;
 
         if (sprite == null)
         {
-            Debug.LogWarning("[VFX-TRACE-4] sprite is NULL — destroying immediately with no VFX.");
+            Debug.LogWarning("[VFX] sprite is NULL — destroying immediately with no VFX.");
             Object.Destroy(enemy);
             onComplete?.Invoke();
             return;
         }
-        //Debug.Log($"[VFX-TRACE-4] Sprite OK: '{sprite.name}'  PPU={sprite.pixelsPerUnit}  " +
-        //          $"texRect={sprite.textureRect}");
 
-        // ══ TRACE 5 — build VFX data synchronously ═══════════════════
         bool isBoss = duration >= DISINTEGRATION_THRESHOLD;
-        //Debug.Log($"[VFX-TRACE-5] isBoss={isBoss}  (threshold={DISINTEGRATION_THRESHOLD})");
 
         var chunks = new List<ChunkData>(80);
         var embers = new List<PtclData>(60);
 
         if (isBoss)
         {
-            //Debug.Log("[VFX-TRACE-5a] Attempting TryBuildSpriteChunks...");
             bool fromSprite = TryBuildSpriteChunks(
                 chunks, sprite, flipX,
                 sortOrder, sortLayerName, sortLayerID,
-                enemyScale, worldPos);
-            //Debug.Log($"[VFX-TRACE-5b] TryBuildSpriteChunks returned {fromSprite}, chunks.Count={chunks.Count}");
+                enemyScale, worldPos,
+                sourceTexturePath);
 
             if (!fromSprite || chunks.Count == 0)
             {
-                //Debug.Log("[VFX-TRACE-5c] Falling back to BuildFallbackChunks.");
                 BuildFallbackChunks(chunks, worldBounds,
                     sortOrder, sortLayerName, sortLayerID, worldPos);
-                //Debug.Log($"[VFX-TRACE-5d] Fallback produced {chunks.Count} chunks.");
             }
         }
         else
         {
             BuildClassicChunks(chunks, worldPos, worldBounds,
                 sortOrder, sortLayerName, sortLayerID);
-            //Debug.Log($"[VFX-TRACE-5e] Classic chunks: {chunks.Count}");
         }
 
         BuildEmbers(embers, worldPos, worldBounds,
             sortOrder, sortLayerName, sortLayerID);
-        //Debug.Log($"[VFX-TRACE-5f] Embers built: {embers.Count}");
 
 
         GameObject host = new GameObject("[EnemyDeathVFX_Host]");
@@ -128,9 +116,6 @@ public class EnemyDeathVFX : MonoBehaviour
         vfx._isBoss = isBoss;
         vfx._enemy = enemy;
         vfx._onComplete = onComplete;
-
-        //Debug.Log($"[VFX-TRACE-6] Host '{host.name}' created at {worldPos}.  " +
-        //          $"AddComponent<EnemyDeathVFX> done.  Reparenting chunks to host...");
 
         // Parent all chunks/embers to host so they live/die with it
         vfx.ReparentChildren();
@@ -147,26 +132,11 @@ public class EnemyDeathVFX : MonoBehaviour
         // Night mode: brief burst of light at the death position
         if (NightOverlay.Instance != null)
             vfx.StartCoroutine(vfx.DoNightDeathFlash(worldPos, isBoss));
-
-        //Debug.Log("[VFX-TRACE-6b] Trigger() complete — host Update() will animate from next frame.");
     }
 
 
-
-    private void Awake()
-    {
-        // This fires as soon as AddComponent<EnemyDeathVFX>() is called.
-        //Debug.Log($"[VFX-HOST-AWAKE] EnemyDeathVFX Awake() on '{gameObject.name}' " +
-        //          $"instanceID={gameObject.GetInstanceID()}");
-    }
-
-    private void OnDestroy()
-    {
-        //Debug.Log($"[VFX-HOST-DESTROY] EnemyDeathVFX host '{gameObject.name}' destroyed. " +
-        //          $"elapsed={_elapsed:F3}/{_duration:F3}  done={_done}");
-    }
-
-
+    // ─────────────────────────────────────────────────────────────────
+    // Instance state
 
     private List<ChunkData> _chunks;
     private List<PtclData> _embers;
@@ -176,20 +146,11 @@ public class EnemyDeathVFX : MonoBehaviour
     private System.Action _onComplete;
 
     private float _elapsed = 0f;
-    private bool _firstUpdate = true;
     private bool _done = false;
 
     private void Update()
     {
         if (_done) return;
-
-        if (_firstUpdate)
-        {
-            _firstUpdate = false;
-            //Debug.Log($"[VFX-UPDATE-1] FIRST Update() tick on host '{gameObject.name}'.  " +
-            //          $"chunks={_chunks?.Count ?? -1}  embers={_embers?.Count ?? -1}  " +
-            //          $"duration={_duration}  isBoss={_isBoss}");
-        }
 
         _elapsed += Time.deltaTime;
 
@@ -199,14 +160,12 @@ public class EnemyDeathVFX : MonoBehaviour
         if (_elapsed >= _duration)
         {
             _done = true;
-            //Debug.Log($"[VFX-UPDATE-DONE] Animation finished at elapsed={_elapsed:F3}. Destroying enemy and host.");
             if (_enemy != null) Destroy(_enemy);
             _onComplete?.Invoke();
             Destroy(gameObject);  // also destroys all parented chunks/embers
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────
 
     private void TickChunks(float elapsed)
     {
@@ -259,13 +218,16 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
+    // ─────────────────────────────────────────────────────────────────
+    // Chunk builders
+
     private static bool TryBuildSpriteChunks(
         List<ChunkData> chunks,
         Sprite srcSprite, bool flipX,
         int sortOrder, string sortLayerName, int sortLayerID,
-        Vector3 enemyScale, Vector3 origin)
+        Vector3 enemyScale, Vector3 origin,
+        string sourceTexturePath)
     {
-        Texture2D srcTex = srcSprite.texture;
         Rect texRect = srcSprite.textureRect;
         Vector2 pivot = srcSprite.pivot;
         float ppu = srcSprite.pixelsPerUnit;
@@ -275,34 +237,42 @@ public class EnemyDeathVFX : MonoBehaviour
         float cellW = texRect.width / gridX;
         float cellH = texRect.height / gridY;
 
-        //Debug.Log($"[VFX-CHUNKS] grid={gridX}x{gridY}  cellSize={cellW:F1}x{cellH:F1}  " +
-        //          $"texRect={texRect}  ppu={ppu}");
-
-        Texture2D readable = MakeReadable(srcTex, texRect);
-        if (readable == null)
+        // Get pixels (cached after first read per sprite).
+        CachedSpritePixels cache = GetOrCachePixels(srcSprite, sourceTexturePath);
+        if (cache == null)
         {
-            Debug.LogWarning("[VFX-CHUNKS] MakeReadable returned null!");
+            Debug.LogWarning("[VFX-CHUNKS] GetOrCachePixels returned null!");
             return false;
         }
-        //Debug.Log($"[VFX-CHUNKS] readable texture: {readable.width}x{readable.height}");
 
         float localPivotX = pivot.x - texRect.x;
         float localPivotY = pivot.y - texRect.y;
-
-
 
         for (int cy = 0; cy < gridY; cy++)
             for (int cx = 0; cx < gridX; cx++)
             {
                 int px = Mathf.FloorToInt(cx * cellW);
                 int py = Mathf.FloorToInt(cy * cellH);
-                int pw = Mathf.Min(Mathf.CeilToInt(cellW), readable.width - px);
-                int ph = Mathf.Min(Mathf.CeilToInt(cellH), readable.height - py);
+                int pw = Mathf.Min(Mathf.CeilToInt(cellW), cache.width - px);
+                int ph = Mathf.Min(Mathf.CeilToInt(cellH), cache.height - py);
                 if (pw <= 0 || ph <= 0) continue;
 
-                Color[] cellPx = readable.GetPixels(px, py, pw, ph);
+                // Slice the sub-region from the cached pixel array (no GetPixels call).
+                Color[] cellPx = new Color[pw * ph];
                 bool hasContent = false;
-                foreach (var c in cellPx) if (c.a > 0.05f) { hasContent = true; break; }
+                for (int row = 0; row < ph; row++)
+                {
+                    int srcStart = (py + row) * cache.width + px;
+                    int dstStart = row * pw;
+                    System.Array.Copy(cache.pixels, srcStart, cellPx, dstStart, pw);
+                    if (!hasContent)
+                    {
+                        for (int col = 0; col < pw; col++)
+                        {
+                            if (cellPx[dstStart + col].a > 0.05f) { hasContent = true; break; }
+                        }
+                    }
+                }
                 if (!hasContent) continue;
 
                 Texture2D ct = new Texture2D(pw, ph, TextureFormat.RGBA32, false);
@@ -346,7 +316,6 @@ public class EnemyDeathVFX : MonoBehaviour
                 });
             }
 
-        Destroy(readable);
         return chunks.Count > 0;
     }
 
@@ -493,19 +462,16 @@ public class EnemyDeathVFX : MonoBehaviour
             foreach (var p in _embers)
                 if (p.go != null)
                     p.go.transform.SetParent(transform, true);
-
-        //Debug.Log($"[VFX-REPARENT] Parented {_chunks?.Count ?? 0} chunks + " +
-        //          $"{_embers?.Count ?? 0} embers to host '{gameObject.name}'.");
     }
 
 
-
+    // ─────────────────────────────────────────────────────────────────
+    // Coroutines (Flash, Shockwave, Night flash)
 
     private IEnumerator DoFlash(
         Vector3 origin, Sprite sprite, bool flipX,
         int sortOrder, string sortLayerName, int sortLayerID, Vector3 scale)
     {
-        //Debug.Log("[VFX-FLASH] DoFlash coroutine started.");
         GameObject fObj = new GameObject("Flash");
         fObj.transform.SetParent(transform, false);  // parent to host
         fObj.transform.position = origin;
@@ -518,7 +484,6 @@ public class EnemyDeathVFX : MonoBehaviour
         fsr.sortingOrder = sortOrder + 50;
         fsr.flipX = flipX;
         fsr.color = Color.white;
-        //Debug.Log($"[VFX-FLASH] Flash SR: layer='{sortLayerName}' order={sortOrder + 50} sprite='{sprite.name}'");
 
         float t = 0f;
         while (t < 0.12f)
@@ -529,13 +494,11 @@ public class EnemyDeathVFX : MonoBehaviour
             yield return null;
         }
         if (fObj != null) Destroy(fObj);
-        //Debug.Log("[VFX-FLASH] DoFlash coroutine complete.");
     }
 
     private IEnumerator DoShockwave(
         Vector3 origin, int sortOrder, string sortLayerName, float maxRadius)
     {
-        //Debug.Log("[VFX-SHOCKWAVE] DoShockwave started.");
         GameObject go = new GameObject("Ring");
         go.transform.SetParent(transform, false);
         go.transform.position = origin;
@@ -566,7 +529,6 @@ public class EnemyDeathVFX : MonoBehaviour
             yield return null;
         }
         if (go != null) Destroy(go);
-        //Debug.Log("[VFX-SHOCKWAVE] DoShockwave complete.");
     }
 
     /// Brief burst of illumination through the night overlay when an enemy disintegrates.
@@ -599,6 +561,7 @@ public class EnemyDeathVFX : MonoBehaviour
 
             handle.intensity = peakIntensity * envelope;
             handle.radius = flashRadius * (1f + t * 0.3f);  // slight expansion
+
             yield return null;
         }
 
@@ -606,60 +569,99 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
-    // TEXTURE UTILITY
+    // ─────────────────────────────────────────────────────────────────
+    // PIXEL CACHE  (the main change vs. the old version)
+    //
+    // Reads the source PNG once per sprite, then reuses its pixels on every
+    // subsequent boss death. Lets us keep Read/Write OFF on every sprite
+    // atlas — only the source boss PNG(s) need Read/Write enabled.
 
-    private static Texture2D MakeReadable(Texture2D src, Rect rect)
+    private class CachedSpritePixels
     {
-        int x = Mathf.FloorToInt(rect.x);
-        int y = Mathf.FloorToInt(rect.y);
-        int w = Mathf.Min(Mathf.CeilToInt(rect.width), src.width - x);
-        int h = Mathf.Min(Mathf.CeilToInt(rect.height), src.height - y);
+        public Color[] pixels;
+        public int width;
+        public int height;
+    }
+
+    private static readonly Dictionary<string, CachedSpritePixels> _pixelCache
+        = new Dictionary<string, CachedSpritePixels>();
+
+    private static CachedSpritePixels GetOrCachePixels(Sprite srcSprite, string sourceTexturePath)
+    {
+        // Cache key: source path if given (matches between bosses sharing a sheet),
+        // otherwise the sprite name.
+        string key = !string.IsNullOrEmpty(sourceTexturePath)
+            ? sourceTexturePath + "::" + srcSprite.name
+            : srcSprite.name;
+
+        if (_pixelCache.TryGetValue(key, out var cached) && cached != null)
+            return cached;
+
+        Texture2D srcTex = null;
+        Rect texRect;
+
+        // Prefer the source PNG if a Resources path was provided. This bypasses
+        // the atlas entirely, so the atlas itself doesn't need Read/Write enabled.
+        if (!string.IsNullOrEmpty(sourceTexturePath))
+        {
+            Texture2D direct = Resources.Load<Texture2D>(sourceTexturePath);
+            if (direct != null && direct.isReadable)
+            {
+                srcTex = direct;
+                texRect = new Rect(0, 0, direct.width, direct.height);
+            }
+            else
+            {
+                // Source PNG not found or not readable — fall back to the atlas path.
+                if (direct == null)
+                    Debug.LogWarning($"[VFX] Source texture not found at '{sourceTexturePath}', falling back to atlas read.");
+                else
+                    Debug.LogWarning($"[VFX] Source texture '{sourceTexturePath}' is not readable. Enable 'Read/Write' on it, or fix the path.");
+                srcTex = srcSprite.texture;
+                texRect = srcSprite.textureRect;
+            }
+        }
+        else
+        {
+            srcTex = srcSprite.texture;
+            texRect = srcSprite.textureRect;
+        }
+
+        int x = Mathf.FloorToInt(texRect.x);
+        int y = Mathf.FloorToInt(texRect.y);
+        int w = Mathf.Min(Mathf.CeilToInt(texRect.width), srcTex.width - x);
+        int h = Mathf.Min(Mathf.CeilToInt(texRect.height), srcTex.height - y);
+
         if (w <= 0 || h <= 0)
         {
-            Debug.LogWarning($"[VFX] MakeReadable: invalid region w={w} h={h}");
+            Debug.LogWarning($"[VFX] GetOrCachePixels: invalid region {w}x{h}");
             return null;
         }
 
-        // Direct CPU read
+        Color[] px;
         try
         {
-            Color[] px = src.GetPixels(x, y, w, h);
-            Texture2D r = new Texture2D(w, h, TextureFormat.RGBA32, false);
-            r.filterMode = FilterMode.Point;
-            r.SetPixels(px); r.Apply();
-            //Debug.Log("[VFX] Texture read via GetPixels (isReadable=true).");
-            return r;
+            px = srcTex.GetPixels(x, y, w, h);
         }
-        catch (System.Exception ex1)
+        catch (System.Exception ex)
         {
-            Debug.Log($"[VFX] GetPixels failed ({ex1.Message}), trying GPU blit");
-        }
-
-        // GPU blit fallback (works even when Read/Write is off)
-        try
-        {
-            RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
-            RenderTexture prev = RenderTexture.active;
-            Graphics.Blit(src, rt);
-            RenderTexture.active = rt;
-            Texture2D r = new Texture2D(w, h, TextureFormat.RGBA32, false);
-            r.filterMode = FilterMode.Point;
-            r.ReadPixels(new Rect(x, y, w, h), 0, 0); r.Apply();
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-            //Debug.Log("[VFX] Texture read via GPU blit (isReadable=false).");
-            return r;
-        }
-        catch (System.Exception ex2)
-        {
-            Debug.LogWarning($"[VFX] Both texture reads failed: {ex2.Message}");
+            // Final safety net: if even GetPixels failed, return null so the caller
+            // can fall back to the procedural fallback chunks. We do NOT use the
+            // GPU blit / ReadPixels path anymore — it was the cause of the
+            // D3D12 device-removed crashes.
+            Debug.LogWarning($"[VFX] GetOrCachePixels: GetPixels failed ({ex.Message}). " +
+                             $"Either enable Read/Write on the source PNG, or pass a valid sourceTexturePath.");
             return null;
         }
+
+        var entry = new CachedSpritePixels { pixels = px, width = w, height = h };
+        _pixelCache[key] = entry;
+        return entry;
     }
 
 
-    // PROCEDURAL SPRITES
-
+    // ─────────────────────────────────────────────────────────────────
+    // PROCEDURAL SPRITES (unchanged)
 
     private static Sprite _chunkSprite, _emberSprite;
 
@@ -712,11 +714,14 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
+    // ─────────────────────────────────────────────────────────────────
+    // Data classes
+
     private class ChunkData
     {
         public GameObject go;
         public SpriteRenderer sr;
-        public Vector3 worldPos;   // initial world position 
+        public Vector3 worldPos;
         public Vector2 vel;
         public float rotSpeed, delay, life, grav;
         public Vector3 startScale;
