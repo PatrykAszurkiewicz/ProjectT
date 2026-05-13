@@ -8,8 +8,6 @@ using System.Collections.Generic;
 //   - Weapon.cs creates / destroys this system when shield tool is equipped.
 //   - PlayerAttack.cs calls RaiseShield() / LowerShield().
 //   - EnemyController.ApplyDamageToTarget() calls TryBlockOrParry().
-
-
 public class ShieldSystem
 {
     //  Tuning 
@@ -40,7 +38,20 @@ public class ShieldSystem
 
     private const float QUICK_PRESS_GRACE = 0.6f;
 
+    // Block-feedback throttle: continuous damage sources (laser, flames) call TryBlockOrParry many times per second. 
+    private const float BLOCK_FEEDBACK_COOLDOWN = 0.12f;
+    private float lastBlockFeedbackTime = -999f;
 
+    // Stamina exhaustion gating:
+
+    private const float STAMINA_REENGAGE_THRESHOLD = 0.5f;
+    private bool shieldBroken = false;
+
+    // Sustained-source drain rate (stamina per second).
+    private const float BLOCK_DRAIN_PER_SECOND = 2.4f;
+    private const float SUSTAINED_SOURCE_WINDOW = 0.1f; // same attacker within this = continuous
+    private GameObject lastBlockedAttacker = null;
+    private float lastBlockTime = -999f;
 
     // Visual objects
     private GameObject arcObject;
@@ -52,6 +63,7 @@ public class ShieldSystem
 
     // Reference to player transform (cached)
     private Transform playerTransform;
+    private PlayerStats playerStats;
 
     //  Construction / Cleanup 
 
@@ -60,10 +72,13 @@ public class ShieldSystem
         this.weapon = weapon;
         this.shieldData = data;
 
-        // Cache player transform
+        // Cache player transform + stats
         var player = GameObject.FindGameObjectWithTag("Player");
         if (player != null)
+        {
             playerTransform = player.transform;
+            playerStats = player.GetComponent<PlayerStats>();
+        }
 
         CreateArcVisual();
         SetArcVisible(false);
@@ -100,8 +115,8 @@ public class ShieldSystem
     }
 
 
-    /// Called every frame from Weapon.Update().
-    /// Updates arc visual position and rotation.
+    // Called every frame from Weapon.Update().
+    // Updates arc visual position and rotation.
 
     public void Update()
     {
@@ -165,6 +180,26 @@ public class ShieldSystem
             return false;
         }
 
+        // ── Stamina gate ──
+        // Parries bypass this — they're one-frame skill, not sustained defense.
+        // Blocks require either non-broken state OR enough stamina to re-engage.
+        if (!isParry && playerStats != null)
+        {
+            // Already broken? Stay broken until stamina recovers above the threshold.
+            if (shieldBroken && playerStats.currentStamina < STAMINA_REENGAGE_THRESHOLD)
+                return false;
+
+            // Fully drained? Block fails as well (no stamina to absorb the hit).
+            if (playerStats.currentStamina <= 0f)
+            {
+                shieldBroken = true;
+                return false;
+            }
+
+            // Stamina has recovered enough — shield is operational again.
+            shieldBroken = false;
+        }
+
         //Debug.Log($"[SHIELD] {(isParry ? "PARRY!" : "BLOCK")} from {attackerGO.name} " +
         //          $"angle={angle:F1}° raised={currentlyRaised} recentRelease={recentlyReleased} " +
         //          $"raiseAge={Time.time - raiseTime:F3}s");
@@ -179,8 +214,54 @@ public class ShieldSystem
         }
         else
         {
-            // ── Visual + audio feedback (block) ──
-            ShieldFeedback.OnBlock(playerTransform, attackerGO.transform.position, arcLine);
+            // ── Audio every tick (constant clang reads as sustained pressure) ──
+            ShieldFeedback.OnBlockAudio(playerTransform);
+
+            // ── Visual feedback throttled (sparks/arc flash/shake would otherwise stack
+            //    every laser/flame tick and saturate the screen to white) ──
+            if (Time.time - lastBlockFeedbackTime >= BLOCK_FEEDBACK_COOLDOWN)
+            {
+                lastBlockFeedbackTime = Time.time;
+                ShieldFeedback.OnBlockVisuals(playerTransform, attackerGO.transform.position, arcLine);
+            }
+        }
+
+        // ── Stamina drain (only on successful block / parry) ──
+        // Detect continuous source: same attacker calling within the sustained window.
+        // - Discrete hit / new attacker:  pay the full per-call cost.
+        // - Continuous source:            pay per-second rate × elapsed time.
+        // Parries always drain the full discrete cost.
+        if (playerStats != null)
+        {
+            float drainAmount;
+            if (isParry)
+            {
+                drainAmount = playerStats.shieldBlockStaminaCost;
+            }
+            else
+            {
+                bool sameSource = attackerGO == lastBlockedAttacker
+                                  && (Time.time - lastBlockTime) <= SUSTAINED_SOURCE_WINDOW;
+                if (sameSource)
+                {
+                    // Per-second rate: drain proportional to elapsed time since last block
+                    float dt = Time.time - lastBlockTime;
+                    drainAmount = BLOCK_DRAIN_PER_SECOND * dt;
+                }
+                else
+                {
+                    // Discrete hit (or first hit from this attacker) — full per-call cost
+                    drainAmount = playerStats.shieldBlockStaminaCost;
+                }
+            }
+
+            playerStats.DrainStamina(drainAmount);
+
+            if (!isParry && playerStats.currentStamina <= 0f)
+                shieldBroken = true;
+
+            lastBlockedAttacker = attackerGO;
+            lastBlockTime = Time.time;
         }
 
         return true;
@@ -357,14 +438,6 @@ public class ShieldSystem
 }
 
 // PARRY VFX HOST
-// Hero parry effect: a crisp shield silhouette slams in, holds briefly,
-// then fades with a gentle outward bloom. Supporting layers below it:
-// a soft warm halo, and 8 subtle radial shards.
-//
-// All shape sprites are generated with 4x supersampled edges for smooth
-// anti-aliasing at any scale. Every pixel outside the shape is fully
-// transparent (alpha = 0), so nothing ever shows as a square.
-
 public class ParryVFXHost : MonoBehaviour
 {
     private float elapsed = 0f;
@@ -518,7 +591,7 @@ public class ParryVFXHost : MonoBehaviour
 
     //  PROCEDURAL SPRITES — every "outside" pixel is hard alpha=0 
 
-    // Helper: is the point (nx, ny) inside the shield silhouette?
+    // Helper: is the point (nx, ny) inside the shield silhouette
     // Coordinates are in normalized texture space, [-1, 1].
     // Shield occupies roughly nx ∈ [-0.78, 0.78], ny ∈ [-0.92, 0.85].
     private static bool IsInsideShield(float nx, float ny)
@@ -602,7 +675,7 @@ public class ParryVFXHost : MonoBehaviour
         Texture2D tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
         tex.wrapMode = TextureWrapMode.Clamp;
-        tex.alphaIsTransparency = true;
+        // alphaIsTransparency is editor-only; removed so Player builds compile (no behavior change — RGBA32 already preserves alpha).
         Color[] px = new Color[S * S];
 
         // Pixel size in normalized [-1,1] space
@@ -680,7 +753,7 @@ public class ParryVFXHost : MonoBehaviour
         Texture2D tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
         tex.wrapMode = TextureWrapMode.Clamp;
-        tex.alphaIsTransparency = true;
+        // alphaIsTransparency is editor-only; removed so Player builds compile (no behavior change — RGBA32 already preserves alpha).
         Color[] px = new Color[S * S];
         Vector2 c = new Vector2(S * 0.5f, S * 0.5f);
         float maxR = S * 0.5f;
@@ -719,7 +792,7 @@ public class ParryVFXHost : MonoBehaviour
         Texture2D tex = new Texture2D(W, H, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
         tex.wrapMode = TextureWrapMode.Clamp;
-        tex.alphaIsTransparency = true;
+        // alphaIsTransparency is editor-only; removed so Player builds compile (no behavior change — RGBA32 already preserves alpha).
         Color[] px = new Color[W * H];
 
         for (int y = 0; y < H; y++)

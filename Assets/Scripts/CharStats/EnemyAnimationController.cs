@@ -376,10 +376,22 @@ public class EnemyAnimationController : MonoBehaviour
             return;
         }
 
-        if (velocity.x < -0.1f)
-            smoothFlip.SetFacingLeft(true);
-        else if (velocity.x > 0.1f)
-            smoothFlip.SetFacingLeft(false);
+        // The flip decision needs to reject collision-jitter without
+        // breaking when an enemy is genuinely slowed (e.g. ice debuff).
+        // We require BOTH:
+        //   1. |velocity.x| above a low absolute floor (rejects micro-jitter)
+        //   2. |velocity.x| is at least 30% of total motion (rejects the
+        //      "wedged enemy bouncing sideways while really trying to push
+        //      into the wall" case where intended motion is mostly Y).
+        // This is independent of MoveSpeed, so slowed enemies still flip.
+        const float FLIP_X_FLOOR = 0.15f;
+        const float FLIP_X_FRACTION = 0.3f;
+        if (Mathf.Abs(velocity.x) > FLIP_X_FLOOR
+            && Mathf.Abs(velocity.x) > velocity.magnitude * FLIP_X_FRACTION)
+        {
+            if (velocity.x < 0f) smoothFlip.SetFacingLeft(true);
+            else smoothFlip.SetFacingLeft(false);
+        }
 
         float angle = 0f;
         if (Mathf.Abs(velocity.x) > 0.1f || Mathf.Abs(velocity.y) > 0.1f)
@@ -395,10 +407,24 @@ public class EnemyAnimationController : MonoBehaviour
             Time.deltaTime * orientationSmoothSpeed);
     }
 
+    // Decides whether the velocity-based auto-attack animation should play for non-boss enemies. 
     private bool IsEnemyAttacking()
     {
+        // Authoritative path: ask the controller if a real attack cycle is running.
+        var enemyController = GetComponent<EnemyController>();
+        if (enemyController != null)
+            return enemyController.IsAttacking;
+
+        // Fallback (rare): no controller — keep velocity heuristic but require
+        // proximity to a real target. Prevents collision-stops from reading as attacks.
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
-        return rb != null && rb.linearVelocity.magnitude < 0.1f;
+        if (rb == null || rb.linearVelocity.magnitude >= 0.1f)
+            return false;
+
+        var nearest = Utilities.GetClosestAttackableTarget(transform.position);
+        if (nearest == null) return false;
+        const float MELEE_PROXIMITY = 2.0f; // generous enough for any vanilla enemy
+        return Vector2.Distance(transform.position, nearest.transform.position) <= MELEE_PROXIMITY;
     }
 
     private void PlayIdleAnimation()
@@ -460,3 +486,4 @@ public class EnemyAnimationController : MonoBehaviour
         CurrentAttackFrame = -1;
     }
 }
+

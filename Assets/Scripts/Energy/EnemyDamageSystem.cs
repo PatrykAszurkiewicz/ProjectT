@@ -78,6 +78,7 @@ public class EnemyDamageSystem : MonoBehaviour
         var characterStats = target.GetComponent<CharacterStats>();
         if (characterStats != null)
         {
+            if (ShieldBlockHelper.TryBlock(attacker, target)) return; // ← add
             characterStats.TakeDamage(damage);
             return;
         }

@@ -10,6 +10,7 @@ public class Weapon : MonoBehaviour
     [SerializeField] private GameObject visual;
 
     private List<EnemyStats> hitEnemies = new List<EnemyStats>();
+    private bool meleeHitSoundPlayedThisSwing = false;
     private PlayerStats playerStats;
     private bool isOnCooldown = false;
     public WeaponData defaultWeapon;
@@ -57,12 +58,10 @@ public class Weapon : MonoBehaviour
     public bool HasTool => toolData != null;
     public ShieldSystem GetShieldSystem() => shieldSystem;
 
-    /// <summary>
-    /// Returns true if the given WeaponData represents a shield tool
-    /// (has armorBonus but isn't another tool type like grappling hook).
-    /// Shield tools do NOT grant passive armor — their protection is
-    /// directional and only active while the shield is raised.
-    /// </summary>
+    // Returns true if the given WeaponData represents a shield tool
+    // (has armorBonus but isn't another tool type like grappling hook).
+    // Shield tools do NOT grant passive armor — their protection is
+    // directional and only active while the shield is raised.
     private static bool IsShieldTool(WeaponData data)
     {
         if (data == null) return false;
@@ -180,7 +179,7 @@ public class Weapon : MonoBehaviour
         originalToolData = newData;
         toolData = newData.CreateRuntimeCopy();
 
-        // NOTE: Shield armor bonus is NOT applied passively.
+        // Shield armor bonus is NOT applied passively.
         // Protection is only active while the shield is raised (right-click held)
         // and only blocks attacks from the cursor direction.
         // The ShieldSystem handles blocking via TryBlockOrParry().
@@ -388,7 +387,20 @@ public class Weapon : MonoBehaviour
     {
         if (weaponData?.isFlamethrower != true || flamethrowerSystem == null) return;
         bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
-        if (!inPlacementMode) flamethrowerSystem.Update();
+        if (!inPlacementMode)
+        {
+            // Continuous stamina drain while actively firing. Auto-stop firing
+            // when stamina runs out so the flame can't be held with empty bar.
+            if (flamethrowerSystem.IsFiring && playerStats != null)
+            {
+                bool depleted = playerStats.DrainStamina(
+                    playerStats.flamethrowerStaminaDrainPerSec * Time.deltaTime);
+                if (depleted)
+                    flamethrowerSystem.StopFiring();
+            }
+
+            flamethrowerSystem.Update();
+        }
     }
 
     private void UpdateBombLauncherSystem()
@@ -421,7 +433,7 @@ public class Weapon : MonoBehaviour
         shieldSystem.Update();
     }
 
-    // ── Shield raise/lower (called by PlayerAttack) ──
+    //  Shield raise/lower (called by PlayerAttack) 
     public void RaiseShield()
     {
         if (shieldSystem != null)
@@ -461,22 +473,40 @@ public class Weapon : MonoBehaviour
 
         if (weaponData.isFlamethrower)
         {
-            if (flamethrowerSystem != null && flamethrowerSystem.CanFire())
+            // Flamethrower: stamina is drained continuously while firing
+            // (see UpdateFlamethrowerSystem). Just gate the initial start
+            // on having any stamina at all so it doesn't sputter instantly.
+            if (flamethrowerSystem != null && flamethrowerSystem.CanFire()
+                && playerStats != null && playerStats.HasStamina(0.05f))
                 flamethrowerSystem.StartFiring();
         }
         else if (weaponData.isBoomerang)
         {
+            // Boomerang is classified as ranged (see WeaponData.OnValidate)
+            if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.rangedAttackStaminaCost))
+                return;
+
             ShootBoomerang();
             StartCoroutine(WeaponCooldownRoutine());
         }
         else if (weaponData.isRanged)
         {
+            if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.rangedAttackStaminaCost))
+                return;
+
             ShootProjectile();
             StartCoroutine(WeaponCooldownRoutine());
         }
         else
         {
             // Melee
+            if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.meleeAttackStaminaCost))
+                return;
+
+            // Always play the swing sound — hit sound layers on top if it connects
+            if (AudioManager.instance != null && FMODEvents.instance != null)
+                AudioManager.instance.PlaySFX(FMODEvents.instance.meleeSwing, transform.position);
+
             StartCoroutine(AttackRoutine());
             StartCoroutine(WeaponCooldownRoutine());
         }
@@ -515,13 +545,32 @@ public class Weapon : MonoBehaviour
         if (toolData.isObstacleDrawer)
         {
             if (obstacleDrawerSystem != null && !obstacleDrawerSystem.IsDrawing())
+            {
+                // Pay stamina up front when committing to a draw. Path length
+                // isn't predictable so a one-shot cost feels fairer than per-segment.
+                if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.obstacleDrawerStaminaCost))
+                    return;
+
                 obstacleDrawerSystem.StartDrawing();
+            }
         }
         else if (toolData.isGrapplingHook)
         {
             if (grapplingSystem?.CanFire() == true)
             {
-                grapplingSystem.FireHook();
+                // Gate (but don't deduct) on stamina first — exhausted player
+                // shouldn't be able to fire, same rule as melee/ranged attacks.
+                if (playerStats != null && !playerStats.HasStamina(playerStats.grapplingHookStaminaCost))
+                    return;
+
+                // Then fire. FireHook returns false if there's no valid target,
+                // in which case we don't charge stamina (no "whiff tax").
+                bool fired = grapplingSystem.FireHook();
+                if (!fired) return;
+
+                if (playerStats != null)
+                    playerStats.TryConsumeStamina(playerStats.grapplingHookStaminaCost);
+
                 StartCoroutine(ToolCooldownRoutine());
             }
         }
@@ -679,6 +728,7 @@ public class Weapon : MonoBehaviour
     private IEnumerator AttackRoutine()
     {
         hitEnemies.Clear();
+        meleeHitSoundPlayedThisSwing = false;
         attackCollider.enabled = true;
         yield return new WaitForSeconds(weaponData.attackCooldown);
         attackCollider.enabled = false;
@@ -711,6 +761,14 @@ public class Weapon : MonoBehaviour
             var vampireEffect = playerStats?.GetComponent<EnergyVampireTouchEffect>();
             if (vampireEffect != null)
                 vampireEffect.DrainEnergy();
+
+            // Play hit sound once per swing, even if multiple enemies are hit.
+            // Layers on top of the swing sound for a satisfying impact.
+            if (!meleeHitSoundPlayedThisSwing && AudioManager.instance != null && FMODEvents.instance != null)
+            {
+                AudioManager.instance.PlaySFX(FMODEvents.instance.meleeHit, other.transform.position);
+                meleeHitSoundPlayedThisSwing = true;
+            }
 
             // ── Combat Feel ──
             CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: true);

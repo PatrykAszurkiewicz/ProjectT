@@ -153,6 +153,7 @@ public class GameOrchestrator : MonoBehaviour
     private List<StageData> currentRunPlan;
     private Coroutine runCoroutine;
     private int enemiesAlive;
+    private GameObject currentBossInstance; // specific boss GO we're waiting on (null when no boss alive)
     private List<MapLayoutDefinition> usedLayouts = new List<MapLayoutDefinition>();
     private MapLayoutDefinition runWideLayout; // used when changeLayoutPerStage == false
 
@@ -571,9 +572,28 @@ public class GameOrchestrator : MonoBehaviour
 
     private IEnumerator WaitForAllEnemiesDead()
     {
-        while (enemiesAlive > 0)
+        while (true)
         {
             if (CurrentState == RunState.GameOver) yield break;
+
+            // Cross-check the counter against the actual scene state. WaveEnemy.OnDisable
+            // is what decrements the counter, so a WaveEnemy is "alive" iff its
+            // MonoBehaviour is still enabled and its GameObject is active. This catches
+            // any drift where the counter says 0 but enemies are still visibly present.
+            int aliveInScene = 0;
+            var allWaveEnemies = UnityEngine.Object.FindObjectsByType<WaveEnemy>(
+                FindObjectsSortMode.None);
+            foreach (var we in allWaveEnemies)
+            {
+                if (we == null) continue;
+                if (!we.enabled) continue;
+                if (!we.gameObject.activeInHierarchy) continue;
+                aliveInScene++;
+            }
+
+            if (enemiesAlive <= 0 && aliveInScene <= 0)
+                yield break;
+
             yield return null;
         }
     }
@@ -707,21 +727,73 @@ public class GameOrchestrator : MonoBehaviour
 
     private void SpawnBoss(GameObject bossPrefab)
     {
-        // Must increment orchestrator's enemiesAlive here.
+        // Increment orchestrator's enemiesAlive.
         // WaveSpawner.SpawnEnemy increments the SPAWNER's own enemiesAlive (separate variable).
         // WaveEnemy.OnDisable() decrements the ORCHESTRATOR's enemiesAlive when the boss dies.
         enemiesAlive++;
 
         SpawnDirection dir = (SpawnDirection)UnityEngine.Random.Range(0, 4);
+
+        // Record how many WaveEnemy markers exist BEFORE the boss spawns, so we can
+        // identify the new GameObject the spawner creates and track IT specifically.
+        var beforeSpawn = new HashSet<WaveEnemy>(
+            UnityEngine.Object.FindObjectsByType<WaveEnemy>(FindObjectsSortMode.None));
+
         waveSpawner.SpawnEnemyPublic(bossPrefab, dir);
+
+        // Find the WaveEnemy that wasn't in the scene before the spawn — that's our boss.
+        currentBossInstance = null;
+        foreach (var we in UnityEngine.Object.FindObjectsByType<WaveEnemy>(FindObjectsSortMode.None))
+        {
+            if (!beforeSpawn.Contains(we))
+            {
+                currentBossInstance = we.gameObject;
+                break;
+            }
+        }
+
+        if (currentBossInstance == null && debugLog)
+            Debug.LogWarning("[Orchestrator] SpawnBoss: could not locate the spawned boss GameObject. " +
+                             "Falling back to counter-only wait — may exit early if other enemies linger.");
     }
 
+    // Waits until the specific boss instance is dead AND no other wave enemies are alive.
     private IEnumerator WaitForBossDead()
     {
-
-        while (enemiesAlive > 0)
+        while (true)
         {
             if (CurrentState == RunState.GameOver) yield break;
+
+            // Boss reference is set: wait for the boss's WaveEnemy marker to be disabled/destroyed 
+            bool bossStillAlive = currentBossInstance != null
+                && currentBossInstance.activeInHierarchy;
+            if (bossStillAlive)
+            {
+                var we = currentBossInstance.GetComponent<WaveEnemy>();
+                // OnDisable disables the MonoBehaviour — when that happens, we treat the boss as dead.
+                bossStillAlive = (we != null && we.enabled);
+            }
+
+            // Cross-check the scene: ANY enabled WaveEnemy other than the boss
+            // means a wave enemy is still alive and the reward menu must wait.
+            int otherWaveEnemiesAlive = 0;
+            var allWaveEnemies = UnityEngine.Object.FindObjectsByType<WaveEnemy>(
+                FindObjectsSortMode.None);
+            foreach (var we in allWaveEnemies)
+            {
+                if (we == null) continue;
+                if (!we.enabled) continue;
+                if (!we.gameObject.activeInHierarchy) continue;
+                if (currentBossInstance != null && we.gameObject == currentBossInstance) continue;
+                otherWaveEnemiesAlive++;
+            }
+
+            if (!bossStillAlive && otherWaveEnemiesAlive == 0 && enemiesAlive <= 0)
+            {
+                currentBossInstance = null;
+                yield break;
+            }
+
             yield return null;
         }
     }

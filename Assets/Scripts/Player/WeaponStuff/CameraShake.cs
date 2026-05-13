@@ -1,13 +1,8 @@
 using UnityEngine;
 
 // Camera shake that plays nicely with Cinemachine.
-//
 // Cinemachine Brain writes the camera transform in LateUpdate at default
-// execution order. By running at order 1000 we guarantee our LateUpdate
-// runs AFTER it, and we add our offset on top of whatever Cinemachine set.
-//
-// If you ever remove Cinemachine, this still works — adding a per-frame
-// offset to a static camera is harmless.
+// execution order.
 
 [DefaultExecutionOrder(1000)]
 public class CameraShake : MonoBehaviour
@@ -49,12 +44,16 @@ public class CameraShake : MonoBehaviour
         if (duration < 0f) duration = defaultDuration;
         intensity = Mathf.Min(intensity, maxIntensity);
 
-        // If already shaking, stack: boost intensity slightly and reset timer.
+        // If already shaking, stack — but only let the dominant shake control timing.
         if (isShaking)
         {
-            currentIntensity = Mathf.Min(currentIntensity + intensity * 0.5f, maxIntensity);
-            shakeDuration = Mathf.Max(shakeDuration, duration);
-            shakeElapsed = 0f;
+            if (intensity >= currentIntensity)
+            {
+                currentIntensity = Mathf.Min(currentIntensity + intensity * 0.5f, maxIntensity);
+                shakeDuration = Mathf.Max(shakeDuration, duration);
+                shakeElapsed = 0f;
+            }
+            // Otherwise: ignore. The bigger shake is already covering this hit.
             return;
         }
 
@@ -64,8 +63,7 @@ public class CameraShake : MonoBehaviour
         isShaking = true;
     }
 
-    // Immediately cancels any active shake. Cinemachine (or whatever drives
-    // the camera) will reposition cleanly on the next frame.
+    // Immediately cancels any active shake. 
     public void StopShake()
     {
         isShaking = false;
@@ -92,7 +90,7 @@ public class CameraShake : MonoBehaviour
 
         Vector3 offset = new Vector3(noiseX, noiseY, 0f) * decayedIntensity;
 
-        // Add on TOP of whatever Cinemachine just set. Because we run at
+        // Add on TOP of whatever Cinemachine just set because it's run at
         // execution order 1000, this happens after the Brain's LateUpdate.
         transform.position += offset;
     }

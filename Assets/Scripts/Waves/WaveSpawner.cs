@@ -47,6 +47,26 @@ public class WaveSpawner : MonoBehaviour
 
     void Start()
     {
+        // If the obstacle avoidance mask wasn't set in the inspector, derive it from TowerDefenseMap.obstacleLayerName at runtime. 
+        if (obstacleAvoidanceLayers.value == 0)
+        {
+            string layerName = "Obstacle";
+            var mapInstance = FindFirstObjectByType<TowerDefenseMap>();
+            if (mapInstance != null && !string.IsNullOrEmpty(mapInstance.obstacleLayerName))
+                layerName = mapInstance.obstacleLayerName;
+
+            int layerIndex = LayerMask.NameToLayer(layerName);
+            if (layerIndex >= 0)
+            {
+                obstacleAvoidanceLayers = (LayerMask)(1 << layerIndex);
+                Debug.Log($"[WaveSpawner] Auto-configured obstacleAvoidanceLayers to '{layerName}' (bit {layerIndex}).");
+            }
+            else
+            {
+                Debug.LogWarning($"[WaveSpawner] Layer '{layerName}' not found. Spawn-obstacle avoidance is disabled — enemies may spawn inside walls.");
+            }
+        }
+
         if (waveConfig == null)
         {
             if (!IsOrchestratorMode)
@@ -180,11 +200,9 @@ public class WaveSpawner : MonoBehaviour
         currentWaveIndex++;
     }
 
-    /// <summary>
     /// Called by EnemyStats.PerformDeath() for ALL enemies (wave + gremlins + anything).
     /// This ONLY manages the spawner's internal count and music.
     /// It does NOT notify the orchestrator — WaveEnemy.OnDestroy() handles that.
-    /// </summary>
     public void OnEnemyDeath()
     {
         enemiesAlive--;
@@ -196,16 +214,35 @@ public class WaveSpawner : MonoBehaviour
         }
     }
 
-    Vector2 GetRandomPositionInArea(SpawnDirection direction)
+    Vector2 GetRandomPositionInArea(SpawnDirection direction, float clearanceRadius = -1f)
     {
-        Collider2D area = spawnAreas.Find(c => c.name.Equals(direction.ToString(), StringComparison.OrdinalIgnoreCase));
+        Collider2D area = spawnAreas.Find(c => c != null && c.name.Equals(direction.ToString(), StringComparison.OrdinalIgnoreCase));
         if (area == null)
         {
-            Debug.LogWarning($"Brak obszaru spawnu dla kierunku: {direction}");
-            return Vector2.zero;
+            // Fall back to ANY configured spawn area so the enemy at least
+            // appears on the map perimeter rather than at its centre.
+            Collider2D fallback = spawnAreas.Find(c => c != null);
+            if (fallback != null)
+            {
+                Debug.LogWarning($"[WaveSpawner] No spawn area found for direction '{direction}'. " +
+                                 $"Falling back to '{fallback.name}'. Configure all four directions " +
+                                 $"in the WaveSpawner Inspector to silence this warning.");
+                area = fallback;
+            }
+            else
+            {
+                Debug.LogError($"[WaveSpawner] No spawn areas configured at all. Cannot spawn for '{direction}'. " +
+                               $"Returning a perimeter point as best-effort.");
+                // Last resort: a fixed-radius point on the map perimeter in
+                // some direction. Better than (0, 0) which is the core.
+                return new Vector2(0f, 12f);
+            }
         }
 
         Bounds bounds = area.bounds;
+
+        // Clearance radius
+        float clearance = (clearanceRadius > 0f) ? clearanceRadius : obstacleClearanceRadius;
 
         // If the avoidance layer mask is empty, skip the check entirely (preserve
         // original behaviour and avoid Physics2D calls).
@@ -221,7 +258,7 @@ public class WaveSpawner : MonoBehaviour
 
             if (!avoidanceEnabled) return candidate;
 
-            if (!Physics2D.OverlapCircle(candidate, obstacleClearanceRadius, obstacleAvoidanceLayers))
+            if (!Physics2D.OverlapCircle(candidate, clearance, obstacleAvoidanceLayers))
                 return candidate;
         }
 
@@ -242,7 +279,7 @@ public class WaveSpawner : MonoBehaviour
             if (d > bestDistSq) { best = corners[i]; bestDistSq = d; }
         }
 
-        if (!Physics2D.OverlapCircle(best, obstacleClearanceRadius, obstacleAvoidanceLayers))
+        if (!Physics2D.OverlapCircle(best, clearance, obstacleAvoidanceLayers))
             return best;
 
         // Walk along the rectangle edge that's FARTHEST from the map centre
@@ -269,7 +306,7 @@ public class WaveSpawner : MonoBehaviour
         {
             float t = i / (float)(perimeterSamples - 1);
             Vector2 p = Vector2.Lerp(edgeStart, edgeEnd, t);
-            if (!Physics2D.OverlapCircle(p, obstacleClearanceRadius, obstacleAvoidanceLayers))
+            if (!Physics2D.OverlapCircle(p, clearance, obstacleAvoidanceLayers))
                 return p;
         }
 
@@ -277,6 +314,58 @@ public class WaveSpawner : MonoBehaviour
                          $"after {attempts} random + {perimeterSamples} perimeter attempts. " +
                          $"Spawning at outer corner — enemy may still clip a wall.");
         return best;
+    }
+
+    // Estimate the clearance radius needed for a given prefab by inspecting
+    // its non-trigger Collider2D. Matches the OverlapCircle test we'll do
+    // against obstacles, so a prefab whose body would clip a wall is rejected.
+    private float GetPrefabClearanceRadius(GameObject prefab)
+    {
+        if (prefab == null) return obstacleClearanceRadius;
+
+        Vector3 scale = prefab.transform.localScale;
+        float scaleFactor = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
+        if (scaleFactor < 0.0001f) scaleFactor = 1f;
+
+        // Special case: Boss1 sets its CircleCollider2D radius at runtime in
+        // ConfigureBossCollider() based on its serialized bossColliderRadius field. 
+        var boss1 = prefab.GetComponent<Boss1>();
+        if (boss1 != null)
+        {
+            // Use reflection — bossColliderRadius is private. Accessing it
+            // this way avoids touching Boss1's public surface.
+            var field = typeof(Boss1).GetField("bossColliderRadius",
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic);
+            if (field != null)
+            {
+                float bossRadius = (float)field.GetValue(boss1);
+                if (bossRadius > 0f)
+                    return bossRadius * scaleFactor * 1.1f;
+            }
+        }
+
+        // Look for the largest non-trigger collider on the prefab root.
+        // For most enemies this is a CircleCollider2D; bosses and odd shapes
+        // get the bounds-based fallback.
+        Collider2D[] colliders = prefab.GetComponents<Collider2D>();
+        float maxRadius = 0f;
+        foreach (var c in colliders)
+        {
+            if (c == null || c.isTrigger) continue;
+            float r;
+            if (c is CircleCollider2D circle)
+                r = circle.radius * scaleFactor;
+            else
+                r = Mathf.Max(c.bounds.extents.x, c.bounds.extents.y);
+            if (r > maxRadius) maxRadius = r;
+        }
+
+        if (maxRadius <= 0f) return obstacleClearanceRadius;
+
+        // Slight bump above body radius so the spawn point isn't just barely
+        // clear — leaves some breathing room as enemies start moving.
+        return maxRadius * 1.1f;
     }
 
     private void OnDrawGizmos()
@@ -303,7 +392,16 @@ public class WaveSpawner : MonoBehaviour
             return;
         }
 
-        Vector2 spawnPosition = GetRandomPositionInArea(direction);
+        float clearance = GetPrefabClearanceRadius(prefab);
+        Vector2 spawnPosition = GetRandomPositionInArea(direction, clearance);
+
+        // Fallback
+        if (obstacleAvoidanceLayers.value != 0
+            && Physics2D.OverlapCircle(spawnPosition, clearance, obstacleAvoidanceLayers))
+        {
+            spawnPosition = NudgeOutOfObstacle(spawnPosition, clearance);
+        }
+
         GameObject enemyObj = Instantiate(prefab, spawnPosition, Quaternion.identity);
 
         // ★ Mark as wave enemy — WaveEnemy.OnDestroy() will notify orchestrator
@@ -316,6 +414,32 @@ public class WaveSpawner : MonoBehaviour
         }
 
         enemiesAlive++;
+    }
+
+    // Iteratively pushes the spawn point outward (away from world origin)
+    // by the clearance radius until it no longer overlaps any obstacle.
+    // Bounded by a step count so it can't loop forever.
+    private Vector2 NudgeOutOfObstacle(Vector2 start, float clearance)
+    {
+        // Direction outward from map centre (origin). If the start is exactly
+        // at the origin (unlikely) pick an arbitrary direction.
+        Vector2 outward = start.sqrMagnitude > 0.0001f ? start.normalized : Vector2.up;
+
+        const int MAX_STEPS = 20;
+        Vector2 current = start;
+        for (int i = 0; i < MAX_STEPS; i++)
+        {
+            current += outward * clearance;
+            if (!Physics2D.OverlapCircle(current, clearance, obstacleAvoidanceLayers))
+                return current;
+        }
+
+        // Couldn't escape — log and return the last attempted position. The
+        // post-spawn stuck-detection in EnemyController will eventually try
+        // to recover, but this is a layout configuration issue worth fixing.
+        Debug.LogWarning($"[WaveSpawner] Could not nudge spawn point out of obstacle after {MAX_STEPS} steps " +
+                         $"from {start}. The spawn area may be entirely inside a layout obstacle.");
+        return current;
     }
 
     //  PUBLIC API FOR ORCHESTRATOR

@@ -373,9 +373,11 @@ public class RunProgressBar : MonoBehaviour
             if (cfg.stageBossPrefab != null)
                 nodes.Add(new Node { phase = SlotPhase.Boss, stageIndex = s, waveIndex = -1 });
 
-            bool isLastStage = (s == stages - 1);
-            if (!isLastStage)
-                nodes.Add(new Node { phase = SlotPhase.HeartChoice, stageIndex = s, waveIndex = -1 });
+            // The orchestrator's RunStage() fires the post-stage choice menu after
+            // EVERY stage, including the last one — independent of whether a final
+            // boss follows. Mirror that here so the progress bar shows a reward icon
+            // after every stage boss.
+            nodes.Add(new Node { phase = SlotPhase.HeartChoice, stageIndex = s, waveIndex = -1 });
         }
 
         if (cfg.hasFinalBoss && cfg.finalBossPrefab != null)

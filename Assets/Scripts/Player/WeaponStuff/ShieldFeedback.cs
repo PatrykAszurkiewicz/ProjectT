@@ -24,7 +24,17 @@ public static class ShieldFeedback
     private const float PARRY_FLASH_DURATION = 0.08f;
 
     // Call when the shield successfully BLOCKS an attack (not a parry).
+    // Convenience wrapper that fires both visuals and audio. Prefer calling
+    // OnBlockVisuals / OnBlockAudio separately when you need to throttle them
+    // independently (e.g. continuous damage from a laser or flamethrower).
     public static void OnBlock(Transform playerTransform, Vector3 attackerPosition, LineRenderer arcLine)
+    {
+        OnBlockVisuals(playerTransform, attackerPosition, arcLine);
+        OnBlockAudio(playerTransform);
+    }
+
+    // Visuals only: camera shake, arc flash, impact sparks. Throttle this for continuous damage sources.
+    public static void OnBlockVisuals(Transform playerTransform, Vector3 attackerPosition, LineRenderer arcLine)
     {
         if (playerTransform == null) return;
 
@@ -46,8 +56,13 @@ public static class ShieldFeedback
         Vector3 contactDir = (attackerPosition - playerTransform.position).normalized;
         Vector3 contactPoint = playerTransform.position + contactDir * 0.9f;
         SpawnBlockSparks(contactPoint, contactDir);
+    }
 
-        //  Audio 
+    // Audio only: shield-clang one-shot. Safe to call every tick.
+    public static void OnBlockAudio(Transform playerTransform)
+    {
+        if (playerTransform == null) return;
+
         if (AudioManager.instance != null && FMODEvents.instance != null
             && !FMODEvents.instance.shieldBlock.IsNull)
         {
@@ -61,15 +76,15 @@ public static class ShieldFeedback
     {
         if (playerTransform == null) return;
 
-        // ── Camera shake (punchy) ──
+        //  Camera shake (punchy) 
         if (CameraShake.Instance != null)
             CameraShake.Instance.Shake(PARRY_SHAKE_INTENSITY, PARRY_SHAKE_DURATION);
 
-        // ── Hitstop (brief freeze frame for impact) ──
+        //  Hitstop (brief freeze frame for impact) 
         if (HitStop.Instance != null)
             HitStop.Instance.Freeze(PARRY_HITSTOP_DURATION);
 
-        // ── Player sprite white flash ──
+        //  Player sprite white flash 
         SpriteRenderer playerSR = playerTransform.GetComponent<SpriteRenderer>();
         if (playerSR != null)
         {
@@ -104,17 +119,18 @@ public static class ShieldFeedback
 
 // SHIELD FEEDBACK HOST
 // Lightweight MonoBehaviour for coroutine-based effects on existing GameObjects
-
-
 public class ShieldFeedbackHost : MonoBehaviour
 {
     private Coroutine arcFlashRoutine;
     private Coroutine spriteFlashRoutine;
 
     // Briefly brightens and pulses the shield arc LineRenderer outward.
+    // If a flash is already in progress we ignore the new call — restarting
+    // would interrupt the restore step and leave the arc stuck wide/pushed-out
+    // (very visible under continuous damage sources like the laser).
     public void FlashArc(LineRenderer arcLine, Transform playerTransform)
     {
-        if (arcFlashRoutine != null) StopCoroutine(arcFlashRoutine);
+        if (arcFlashRoutine != null) return;
         arcFlashRoutine = StartCoroutine(ArcFlashRoutine(arcLine, playerTransform));
     }
 
@@ -214,8 +230,6 @@ public class ShieldFeedbackHost : MonoBehaviour
 
 // BLOCK SPARKS VFX
 // Small bright particles that burst outward from the contact point on block.
-
-
 public class BlockSparksVFX : MonoBehaviour
 {
     private struct Spark

@@ -628,21 +628,27 @@ public class GrapplingHookSystem
 
     public bool CanFire() => !isOnCooldown && currentState == HookState.Idle;
 
-    public void FireHook()
+    /// <summary>
+    /// Returns true if the hook actually fired at a valid target.
+    /// Returns false if there is no current target or the target is invalid —
+    /// callers can use this to skip costs like stamina drain on a "whiffed" press.
+    /// </summary>
+    public bool FireHook()
     {
-        if (!CanFire() || currentTarget == null) return;
+        if (!CanFire() || currentTarget == null) return false;
 
         // Validate target before firing
         if (!IsTargetValid(currentTarget))
         {
             currentTarget = null;
-            return;
+            return false;
         }
 
         // Stop any ongoing disintegration effect
         StopLineDisintegration();
 
         weapon.StartCoroutine(GrappleSequence());
+        return true;
     }
 
     private IEnumerator GrappleSequence()

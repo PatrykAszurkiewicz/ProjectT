@@ -21,6 +21,10 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Shot SFX")]
     [field: SerializeField] public EventReference shotSound { get; private set; }
 
+    [field: Header("Melee SFX")]
+    [field: SerializeField] public EventReference meleeSwing { get; private set; }
+    [field: SerializeField] public EventReference meleeHit { get; private set; }
+
     [field: Header("Footsteps SFX")]
     [field: SerializeField] public EventReference footstepsSound { get; private set; }
 

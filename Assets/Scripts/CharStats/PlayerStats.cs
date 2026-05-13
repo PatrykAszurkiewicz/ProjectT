@@ -27,6 +27,20 @@ public class PlayerStats : CharacterStats
     public float staminaDrainRate = 1.5f;
     public float currentStamina = 5f;
 
+    [Header("Stamina Costs — Actions")]
+    [Tooltip("Stamina cost per melee swing.")]
+    public float meleeAttackStaminaCost = 0.8f;
+    [Tooltip("Stamina cost per ranged shot (bow / gun / boomerang).")]
+    public float rangedAttackStaminaCost = 0.4f;
+    [Tooltip("Stamina drained per second while flamethrower is firing.")]
+    public float flamethrowerStaminaDrainPerSec = 1.4f;
+    [Tooltip("Stamina cost when starting an obstacle draw.")]
+    public float obstacleDrawerStaminaCost = 1.5f;
+    [Tooltip("Stamina cost per grappling hook fire (smaller — mobility tool).")]
+    public float grapplingHookStaminaCost = 1.2f;
+    [Tooltip("Stamina cost per successful shield block or parry.")]
+    public float shieldBlockStaminaCost = 1.3f;
+
     [Header("Health Regen")]
     public float healthRegenRate = 2f;
     public float healthRegenDelay = 3f;
@@ -54,11 +68,8 @@ public class PlayerStats : CharacterStats
         }
     }
 
-    /// <summary>
-    /// Called by PlayerMovement after it moves the SpriteRenderer to a child object
-    /// for Y-sorting. This ensures damage flash and all visual effects target the
-    /// correct (visible) renderer.
-    /// </summary>
+    // Called by PlayerMovement after it moves the SpriteRenderer to a child object
+    // for Y-sorting. This ensures damage flash and all visual effects target the correct (visible) renderer.
     public void UpdateSpriteRenderer(SpriteRenderer newSR)
     {
         spriteRenderer = newSR;
@@ -217,6 +228,39 @@ public class PlayerStats : CharacterStats
     {
         currentMana -= amount;
         if (currentMana < 0) currentMana = 0;
+    }
+
+    // Returns true if the player has at least <paramref name="amount"/> stamina available
+    // (used to gate offensive actions — they shouldn't even fire if exhausted).
+    public bool HasStamina(float amount)
+    {
+        return currentStamina >= amount;
+    }
+
+    // Atomically check + consume stamina. Returns true if the cost was paid in full.
+    // Use this for one-shot actions (melee swing, ranged shot, obstacle draw start,
+    // grappling hook fire) where the action should be blocked if there isn't enough.
+    public bool TryConsumeStamina(float amount)
+    {
+        if (amount <= 0f) return true;
+        if (currentStamina < amount) return false;
+        currentStamina -= amount;
+        currentStamina = Mathf.Max(currentStamina, 0f);
+        return true;
+    }
+
+    // Drain stamina without gating (drains whatever is available, clamped to 0).
+
+    public bool DrainStamina(float amount)
+    {
+        if (amount <= 0f) return false;
+        currentStamina -= amount;
+        if (currentStamina <= 0f)
+        {
+            currentStamina = 0f;
+            return true;
+        }
+        return false;
     }
 
     public void RegenerateMana(float amount)

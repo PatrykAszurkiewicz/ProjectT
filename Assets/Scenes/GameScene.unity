@@ -2653,7 +2653,7 @@ MonoBehaviour:
   - {fileID: 2110909284}
   maxRerolls: 99
   debugMode: 1
-  forcedAugmentIDsList: 510000003f01000040010000
+  forcedAugmentIDsList: 510000000400000041000000
   chosenAugmentsUI: {fileID: 1984759432}
 --- !u!1 &453391371 stripped
 GameObject:
@@ -7645,6 +7645,20 @@ MonoBehaviour:
       Data3: -1327968887
       Data4: -44403318
     Path: event:/TowerShot
+  <meleeSwing>k__BackingField:
+    Guid:
+      Data1: -2108065072
+      Data2: 1162002805
+      Data3: 1834976641
+      Data4: 1112014357
+    Path: event:/MeleeSwing
+  <meleeHit>k__BackingField:
+    Guid:
+      Data1: 974621012
+      Data2: 1155956433
+      Data3: -213103474
+      Data4: 979060408
+    Path: event:/MeleeHit
   <footstepsSound>k__BackingField:
     Guid:
       Data1: -1543252814
@@ -30022,6 +30036,26 @@ PrefabInstance:
     - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: currentHealth
       value: 500
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: meleeAttackStaminaCost
+      value: 0.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: shieldBlockStaminaCost
+      value: 0.9
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: grapplingHookStaminaCost
+      value: 1.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: obstacleDrawerStaminaCost
+      value: 1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 2816154035199129691, guid: da0818b169e996442afdafb8e400ed33, type: 3}
+      propertyPath: flamethrowerStaminaDrainPerSec
+      value: 1.4
       objectReference: {fileID: 0}
     - target: {fileID: 2845798086413134017, guid: da0818b169e996442afdafb8e400ed33, type: 3}
       propertyPath: m_Radius

@@ -322,7 +322,12 @@ public class EnemyController : MonoBehaviour
         else if (rightClear && !leftClear) stuckAvoidanceDirection = rightSide;
         else
         {
-            // Both sides clear OR both sides blocked: pick the side whose forward sample lies closer to the target.
+            // Both sides clear OR both sides blocked: pick the side whose
+            // forward sample lies closer to the target. Sampling 1.5 units
+            // ahead along each side means we choose the route that ends up
+            // nearer the goal, instead of always defaulting to leftSide.
+            // This prevents enemies on long walls from systematically
+            // escaping in the wrong direction along the wall.
             Vector2 leftProbe = (Vector2)transform.position + leftSide * (avoidDistance * 1.5f);
             Vector2 rightProbe = (Vector2)transform.position + rightSide * (avoidDistance * 1.5f);
             float leftDistToTarget = Vector2.SqrMagnitude((Vector2)currentTarget.position - leftProbe);
@@ -343,15 +348,11 @@ public class EnemyController : MonoBehaviour
             var tower = obstacle.GetComponent<Tower>();
             if (tower != null && tower.IsDestroyed())
                 return desiredDirection;
-
             // Use the CLOSEST POINT on the collider rather than its centre.
-
             Vector2 selfPos = transform.position;
             Vector2 closestOnObstacle = obstacle.ClosestPoint(selfPos);
 
-            // Defensive fallback: if the enemy's centre is INSIDE the collider ClosestPoint
-            // returns the input position and the normal collapses to zero.
-
+            // Defensive fallback
             Vector2 toObstacle = closestOnObstacle - selfPos;
             if (toObstacle.sqrMagnitude < 0.0001f)
                 toObstacle = (Vector2)obstacle.transform.position - selfPos;
@@ -455,6 +456,9 @@ public class EnemyController : MonoBehaviour
                 if (isLuredByDecoy && currentTarget == decoyTarget)
                     return;
 
+                // If a wall/building is between us and the target, we're not
+                // really "in range" — moving around the obstacle is the right
+                // response, not standing here flailing the attack animation.
                 if (!HasLineOfSightToTarget(currentTarget))
                 {
                     attackTimer = 0f;
@@ -491,7 +495,9 @@ public class EnemyController : MonoBehaviour
 
         if (animController != null && resolvedHitFrame > 0)
         {
-            // Frame-driven hit
+            // Frame-driven hit: the animation coroutine calls PerformHit
+            // synchronously when it reaches the hit frame. One coroutine,
+            // one timeline, no drift between sprite and damage.
             animController.PlayMeleeAttackAnimation(resolvedHitFrame, () =>
             {
                 if (!hitDelivered && target != null)
@@ -722,13 +728,44 @@ public class EnemyController : MonoBehaviour
         if (!requireLineOfSightToAttack) return true;
         if (obstacleLayer.value == 0) return true; // no obstacle layer configured
 
-        Vector2 from = transform.position;
-        Vector2 to = target.position;
+        // Cast from the BODY centre, not transform.position. Some prefabs
+        // (e.g. Slime) have CircleCollider2D offsets that move the actual
+        // physical body off the transform pivot. Using transform.position
+        // here would offset the LoS check by the collider offset, producing
+        // false positives where the line slips around the wall corner that
+        // the body is actually touching. Same on the target side.
+        Vector2 from = GetBodyCentre(transform);
+        Vector2 to = GetBodyCentre(target);
 
-        // Linecast against the obstacle layer only — we explicitly DON'T want
-        // towers or the core in this mask (the target might BE a tower).
-        RaycastHit2D hit = Physics2D.Linecast(from, to, obstacleLayer);
+        Vector2 delta = to - from;
+        float dist = delta.magnitude;
+        if (dist <= 0.0001f) return true;
+        Vector2 dir = delta / dist;
+
+        // Use a CIRCLECAST with a small radius
+        const float LOS_PROBE_RADIUS = 0.08f;
+        if (dist <= LOS_PROBE_RADIUS) return true;
+        Vector2 origin = from + dir * LOS_PROBE_RADIUS;
+        float castDist = dist - LOS_PROBE_RADIUS;
+
+        RaycastHit2D hit = Physics2D.CircleCast(origin, LOS_PROBE_RADIUS, dir, castDist, obstacleLayer);
         return hit.collider == null;
+    }
+
+    // Returns the world-space centre of the first non-trigger 2D collider on
+    // the given Transform, accounting for collider offset and scale. Falls
+    // back to transform.position if no collider is found.
+    private static Vector2 GetBodyCentre(Transform t)
+    {
+        if (t == null) return Vector2.zero;
+        var colliders = t.GetComponents<Collider2D>();
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            var c = colliders[i];
+            if (c != null && !c.isTrigger)
+                return c.bounds.center;
+        }
+        return t.position;
     }
 
     /// SAFE knockback — checks rigidbody type before setting velocity.

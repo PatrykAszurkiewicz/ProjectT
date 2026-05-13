@@ -963,11 +963,17 @@ public class Boss1 : BaseBossStats //, IDamageable
 
 
 
+
     private void ApplyDamageToTarget(GameObject target, float damage)
     {
         var stats = target.GetComponent<CharacterStats>();
-        if (stats != null) { stats.TakeDamage(damage); return; }
-
+        //if (stats != null) { stats.TakeDamage(damage); return; }
+        if (stats != null)
+        {
+            if (ShieldBlockHelper.TryBlock(gameObject, target)) return;
+            stats.TakeDamage(damage);
+            return;
+        }
         var consumer = target.GetComponent<IEnergyConsumer>();
         if (consumer != null && EnergyManager.Instance != null)
             EnergyManager.Instance.DamageEnergyConsumer(consumer, damage, gameObject);
