@@ -73,6 +73,12 @@ public class AugmentEffectHandler : MonoBehaviour
                 ApplyToolSwap("TurretTest", "Turret");
                 break;
 
+            case 323:
+                if (WeaponUnlockRegistry.Instance != null)
+                    WeaponUnlockRegistry.Instance.TryUnlock(323);
+                ApplyToolSwap("CloakTest", "Cloak");
+                break;
+
             case 11:
                 ApplyImmunityPhases();
                 break;

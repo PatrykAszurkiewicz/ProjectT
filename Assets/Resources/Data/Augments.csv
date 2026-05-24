@@ -71,15 +71,15 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 70,0,Scrap Collector,Player,Common,"globalResourceMultiplier*1.20,towerSellRefundPercentage*1.20",Collect 20% more scrap materials from destroyed enemies and structures,Resources/Sprites/Augments/70,Kuba,Global
 71,0,Energy Vampire Touch,Player,Epic,player_energy_drain+2,Drain 2 energy from enemies on successful melee attacks,Resources/Sprites/Augments/71,Kuba,Player
 72,0,Energy Scavenging,Energy,Rare,energy_scavenging_amount+5,Gain 5 energy units for each enemy destroyed near Generators,Resources/Sprites/Augments/72,Kuba,Global
-73,1,Core Shield Matrix,Central Core,Epic,core_shield+200,Provide energy-based shield with 200 hit points protecting the Central Core,Resources/Sprites/Augments/73,Kuba,Global
+73,0,Core Shield Matrix,Central Core,Epic,core_shield+200,Provide energy-based shield with 200 hit points protecting the Central Core,Resources/Sprites/Augments/73,Kuba,Global
 74,0,Core Repair Systems,Central Core,Rare,core_regen_rate+0.5,Core stops decaying and regenerates 0.5 energy per second after 30 seconds without getting damaged,Resources/Sprites/Augments/74,Kuba,Global
 75,0,Core Energy Siphon,Central Core,Rare,core_energy_from_attacks*0.20,Core gains energy from enemy attacks converting 20% damage to Central Core health energy,Resources/Sprites/Augments/75,Kuba,Global
 76,0,Pheromone Control,Player,Epic,player_enemy_confusion_aura=0.15,Nearby enemies have 15% chance to ignore you or attack each other,Resources/Sprites/Augments/76,Kuba,Player
 77,0,Grappling Hook Damage,Player,"Rare, Epic, Legendary",grappling_hook_damage=15,Grappling Hook deals damage when shot at the enemy,Resources/Sprites/Augments/77,Kuba,Player
 78,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",{player_damage: -0.15},Reduce incoming damage to the Player by 15%,Resources/Sprites/Augments/78,Patryk,
-79,1,Lightning on dodge,Player,Legendary,lightning_dodge_damage=0.8,Row of lightning after dodge on the ground dealing 80% of base damage,Resources/Sprites/Augments/79,Kuba,Player
-80,1,Fire on dodge,Player,Legendary,"fire_dodge_damage=0.2,fire_dodge_dot=0.05,fire_dodge_duration=10",Row of fire after dodge on the ground with 20% initial damage plus 5% damage over time per second for 10 seconds,Resources/Sprites/Augments/80,Kuba,Player
-81,1,Unlock Shield,Player,Epic,NULL,Unlocks the Shield as an equippable weapon,Resources/Sprites/Augments/81,Kuba,Player
+79,0,Lightning on dodge,Player,Legendary,lightning_dodge_damage=0.8,Row of lightning after dodge on the ground dealing 80% of base damage,Resources/Sprites/Augments/79,Kuba,Player
+80,0,Fire on dodge,Player,Legendary,"fire_dodge_damage=0.2,fire_dodge_dot=0.05,fire_dodge_duration=10",Row of fire after dodge on the ground with 20% initial damage plus 5% damage over time per second for 10 seconds,Resources/Sprites/Augments/80,Kuba,Player
+81,0,Unlock Shield,Player,Epic,NULL,Unlocks the Shield as an equippable weapon,Resources/Sprites/Augments/81,Kuba,Player
 82,1,Multi-Shot,Tower,Rare,{tower_projectile_count: 2},Towers fire 2 additional projectiles at reduced damage,Resources/Sprites/Augments/82,Kuba,
 83,1,Poison Coating,Tower,Common,"{tower_poison_damage_per_second: 0.05, tower_poison_duration: 8}",Tower attacks apply poison DoT (5% damage/sec for 8 seconds),Resources/Sprites/Augments/83,Kuba,
 84,1,Critical Towers,Tower,Epic,{tower_crit_chance: 0.15},15% chance for towers to deal 300% damage,Resources/Sprites/Augments/84,Kuba,
@@ -91,7 +91,7 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 90,1,Resource Magnet,Synergy,Rare,NULL,Player movement generates energy for nearby generators,Resources/Sprites/Augments/90,Patryk,
 91,1,Splash damage towers,Tower,Epic,{tower_splash_radius: 1.0},Towers deal splash damage in small radius,Resources/Sprites/Augments/91,Kuba,
 92,1,Trade routes,Map,Rare,{passive_resource_income: 0.25},Generates 25% additional passive resource income,Resources/Sprites/Augments/92,Patryk,
-93,1,Unlocked flamethrower,Player,"Rare, Epic, Legendary",NULL,Unlocked flamethrower weapon,Resources/Sprites/Augments/93,Kuba,Player
+93,0,Unlocked flamethrower,Player,"Rare, Epic, Legendary",NULL,Unlocked flamethrower weapon,Resources/Sprites/Augments/93,Kuba,Player
 94,1,Unlocked portable obstacles,Player,"Rare, Epic, Legendary",NULL,Unlocked portable obstacles,Resources/Sprites/Augments/94,Patryk,
 95,1,Modular Construction,Tower,Common,{tower_build_flexibility: 1.0},Towers can be quickly disassembled and rebuilt in new locations,Resources/Sprites/Augments/95,Kuba,
 96,1,Self-Destruct Protocol,Tower,Legendary,{tower_destruction_damage: 5.0},Critically damaged towers can detonate dealing massive area damage,Resources/Sprites/Augments/96,Kuba,
@@ -312,10 +312,13 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 311,2,Interdimensional Communication,Central Core,Epic,NULL,Core can communicate with parallel universe versions for strategic advice,Resources/Sprites/Augments/311,Kuba,
 312,2,Genesis Protocol,Central Core,Legendary,NULL,If everything else fails core can restart civilization from stored genetic and cultural templates,Resources/Sprites/Augments/312,Kuba,
 313,1,Increase fire defense,Player,"Common, Epic",{player_fire_defense: +0.15},Increased fire defense of the player by 15%,Resources/Sprites/Augments/313,Patryk,
-314,1,Unlocked bomb launcher,Player,"Epic",NULL,Unlocked bomb launcher weapon,Resources/Sprites/Augments/314,Kuba,Player
-315,1,Unlocked trap,Player,"Rare",NULL,Unlocked trap weapon — places bear traps that root enemies in place,Resources/Sprites/Augments/315,Kuba,Player
-316,1,Unlocked decoy,Player,"Rare",NULL,Unlocked decoy weapon — deploy a signal device that confuses and attracts nearby enemies for 7 seconds,Resources/Sprites/Augments/316,Kuba,Player
-317,1,Unlocked turret,Player,"Epic",NULL,Unlocked turret weapon — deploy a portable auto-turret that targets nearby enemies,Resources/Sprites/Augments/317,Kuba,Player
-318,1,Unlocked boomerang,Player,"Rare",NULL,Unlocked boomerang weapon,Resources/Sprites/Augments/318,Kuba,Player
-319,1,Additional Tower Slot,Map,Rare,additional_tower_slots=1,Reveals one extra tower placement slot on the current map,Resources/Sprites/Augments/319,Kuba,Global
-320,1,Additional Tower Slot Per Waves,Map,Epic,"slots_per_wave_interval=1,slots_per_wave_count=1,slots_per_wave_max=0",Reveals one extra tower placement slot every 3rd wave cleared,Resources/Sprites/Augments/320,Kuba,Global
+314,0,Unlocked bomb launcher,Player,"Epic",NULL,Unlocked bomb launcher weapon,Resources/Sprites/Augments/314,Kuba,Player
+315,0,Unlocked trap,Player,"Rare",NULL,Unlocked trap weapon — places bear traps that root enemies in place,Resources/Sprites/Augments/315,Kuba,Player
+316,0,Unlocked decoy,Player,"Rare",NULL,Unlocked decoy weapon — deploy a signal device that confuses and attracts nearby enemies for 7 seconds,Resources/Sprites/Augments/316,Kuba,Player
+317,0,Unlocked turret,Player,"Epic",NULL,Unlocked turret weapon — deploy a portable auto-turret that targets nearby enemies,Resources/Sprites/Augments/317,Kuba,Player
+318,0,Unlocked boomerang,Player,"Rare",NULL,Unlocked boomerang weapon,Resources/Sprites/Augments/318,Kuba,Player
+319,0,Additional Tower Slot,Map,Rare,additional_tower_slots=1,Reveals one extra tower placement slot on the current map,Resources/Sprites/Augments/319,Kuba,Global
+320,0,Additional Tower Slot Per Waves,Map,Epic,"slots_per_wave_interval=1,slots_per_wave_count=1,slots_per_wave_max=0",Reveals one extra tower placement slot every 3rd wave cleared,Resources/Sprites/Augments/320,Kuba,Global
+321,0,Unlocked revenant necronomicon,Player,"Legendary",NULL,Unlocked revenant necronomicon — activate to raise a purple aura that resurrects enemies slain inside it as friendly shadows for 8 seconds,Resources/Sprites/Augments/321,Kuba,Player
+322,0,Unlocked battle hammer,Player,Epic,NULL,Unlocked battle hammer,Resources/Sprites/Augments/322,Kuba,Player
+323,0,Unlock stealth cloak,Player,Epic,NULL,Unlocked stealth cloak tool grants 30s invisibility on right-click enemies ignore you until you attack 10s cooldown,Resources/Sprites/Augments/323,Kuba,Player

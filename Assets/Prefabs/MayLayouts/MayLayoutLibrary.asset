@@ -16,3 +16,4 @@ MonoBehaviour:
   useBuiltinLayouts: 1
   avoidRepeatLayouts: 1
   changeLayoutPerStage: 0
+  forcedLayoutName: 

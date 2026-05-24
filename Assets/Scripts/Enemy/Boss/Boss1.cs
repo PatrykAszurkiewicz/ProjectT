@@ -497,6 +497,9 @@ public class Boss1 : BaseBossStats //, IDamageable
             EnergyDrop.CreateEnergyDrop(spawnPos, energyValue);
         }
 
+        // Roll for a permanent weapon/tool blueprint drop
+        RollBlueprintDrop(deathPos);
+
         if (EnergyManager.Instance != null)
             EnergyManager.Instance.OnEnemyKilled(gameObject);
 
@@ -583,11 +586,16 @@ public class Boss1 : BaseBossStats //, IDamageable
 
     private void FindTarget()
     {
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
+        // Stealth Cloak: while the player is invisible, the boss must not
+        // acquire the player as a target. Fall through to the core.
+        if (!PlayerCloakEffect.IsActive)
         {
-            currentTarget = player.transform;
-            return;
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                currentTarget = player.transform;
+                return;
+            }
         }
 
         GameObject core = GameObject.FindGameObjectWithTag("Core");

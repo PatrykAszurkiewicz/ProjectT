@@ -576,26 +576,48 @@ public class GameOrchestrator : MonoBehaviour
         {
             if (CurrentState == RunState.GameOver) yield break;
 
-            // Cross-check the counter against the actual scene state. WaveEnemy.OnDisable
-            // is what decrements the counter, so a WaveEnemy is "alive" iff its
-            // MonoBehaviour is still enabled and its GameObject is active. This catches
-            // any drift where the counter says 0 but enemies are still visibly present.
-            int aliveInScene = 0;
-            var allWaveEnemies = UnityEngine.Object.FindObjectsByType<WaveEnemy>(
-                FindObjectsSortMode.None);
-            foreach (var we in allWaveEnemies)
-            {
-                if (we == null) continue;
-                if (!we.enabled) continue;
-                if (!we.gameObject.activeInHierarchy) continue;
-                aliveInScene++;
-            }
+            // Cross-check the counter against the actual scene state. We scan for
+            // EnemyStats (not WaveEnemy) because that's the component on EVERY
+            // enemy — including ones spawned by other enemies (e.g. boss minions,
+            // splitter add-ons) which never go through WaveSpawner.SpawnEnemy and
+            // therefore never get a WaveEnemy marker. Without this, a "wave clear"
+            // could be declared while add-on enemies are still alive.
+            int aliveInScene = CountLivingEnemiesInScene(excludeBoss: false);
 
             if (enemiesAlive <= 0 && aliveInScene <= 0)
                 yield break;
 
             yield return null;
         }
+    }
+
+    // Counts EnemyStats components in the scene that are still alive
+    // (component enabled + GameObject active). Used as a scene-state fallback that
+    // is independent of the orchestrator's internal counters and works for ANY
+    // enemy regardless of spawn path. Optionally excludes the boss instance.
+    //
+    // GREMLIN EXCLUSION: Gremlins spawn ambiently throughout the run, completely
+    // independent of wave/boss combat. They MUST NOT count toward "is the wave
+    // cleared" or "is the boss room clear" — if they did, the orchestrator would
+    // softlock the moment a gremlin was on screen (which is most of the time).
+    // They're identified by the GremlinController component, which is unique to them.
+    private int CountLivingEnemiesInScene(bool excludeBoss)
+    {
+        int alive = 0;
+        var allEnemies = UnityEngine.Object.FindObjectsByType<EnemyStats>(
+            FindObjectsSortMode.None);
+        foreach (var es in allEnemies)
+        {
+            if (es == null) continue;
+            if (!es.enabled) continue;
+            if (!es.gameObject.activeInHierarchy) continue;
+            if (excludeBoss && currentBossInstance != null
+                && es.gameObject == currentBossInstance) continue;
+            // Skip ambient non-combat enemies (gremlins) — see comment above.
+            if (es.GetComponent<GremlinController>() != null) continue;
+            alive++;
+        }
+        return alive;
     }
 
     //  BOSS SPAWNING
@@ -757,14 +779,14 @@ public class GameOrchestrator : MonoBehaviour
                              "Falling back to counter-only wait — may exit early if other enemies linger.");
     }
 
-    // Waits until the specific boss instance is dead AND no other wave enemies are alive.
+    // Waits until the specific boss instance is dead AND no other enemies are alive.
     private IEnumerator WaitForBossDead()
     {
         while (true)
         {
             if (CurrentState == RunState.GameOver) yield break;
 
-            // Boss reference is set: wait for the boss's WaveEnemy marker to be disabled/destroyed 
+            // Is the boss itself still alive?
             bool bossStillAlive = currentBossInstance != null
                 && currentBossInstance.activeInHierarchy;
             if (bossStillAlive)
@@ -774,21 +796,20 @@ public class GameOrchestrator : MonoBehaviour
                 bossStillAlive = (we != null && we.enabled);
             }
 
-            // Cross-check the scene: ANY enabled WaveEnemy other than the boss
-            // means a wave enemy is still alive and the reward menu must wait.
-            int otherWaveEnemiesAlive = 0;
-            var allWaveEnemies = UnityEngine.Object.FindObjectsByType<WaveEnemy>(
-                FindObjectsSortMode.None);
-            foreach (var we in allWaveEnemies)
-            {
-                if (we == null) continue;
-                if (!we.enabled) continue;
-                if (!we.gameObject.activeInHierarchy) continue;
-                if (currentBossInstance != null && we.gameObject == currentBossInstance) continue;
-                otherWaveEnemiesAlive++;
-            }
+            // Cross-check the scene for ANY other living enemy. We scan EnemyStats
+            // (not WaveEnemy) because boss minions / add-ons spawned outside the
+            // WaveSpawner.SpawnEnemy path never receive a WaveEnemy marker, but they
+            // DO have EnemyStats. Scanning only WaveEnemy would miss them and the
+            // reward menu would pop the moment the boss died — even while minions
+            // were still on screen. This is the root cause of the post-stage menu
+            // appearing prematurely after a boss kill.
+            int otherEnemiesAlive = CountLivingEnemiesInScene(excludeBoss: true);
 
-            if (!bossStillAlive && otherWaveEnemiesAlive == 0 && enemiesAlive <= 0)
+            // Note: we deliberately no longer require `enemiesAlive <= 0`. That counter
+            // tracks orchestrator-spawned enemies only; boss-spawned minions are missing
+            // from it (births not counted, deaths still decrement it — it clamps to 0).
+            // The scene scan above is the source of truth.
+            if (!bossStillAlive && otherEnemiesAlive == 0)
             {
                 currentBossInstance = null;
                 yield break;

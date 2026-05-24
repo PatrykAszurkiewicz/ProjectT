@@ -28,6 +28,25 @@ public class TowerDefenseMap : MonoBehaviour
              "positions override the rings list above. Leave null to use the rings.")]
     public MapLayoutDefinition activeLayout;
 
+    [Header("Test Layout (Editor Only)")]
+    [Tooltip("Quick way to test a built-in layout WITHOUT creating any assets.\n" +
+             "Type a name like 'Stonehenge', 'Twin Moons', 'Mushroom Grove', etc.\n" +
+             "Then right-click this component header → 'Generate Map'.\n" +
+             "Leave empty to use 'Active Layout' (set by the orchestrator) instead.\n" +
+             "\n" +
+             "Available built-ins:\n" +
+             "  Concentric Classic, Chokepoint Corridor, Spiral Siege,\n" +
+             "  Breached Fortress, Crossroads, The Gauntlet, The Arena,\n" +
+             "  Ghost Town, Maze Hallways, Diamond Formation, Pincer Grip,\n" +
+             "  Stonehenge, Crossroads Pillars,\n" +
+             "  Asteroid Belt, Pinwheel.")]
+    public string testLayoutName = "";
+
+    [Tooltip("If true and Test Layout Name is set, the named built-in layout\n" +
+             "is applied automatically on Start, overriding Active Layout.\n" +
+             "Turn this OFF in production builds.")]
+    public bool useTestLayoutOnStart = true;
+
     [Tooltip("Runtime multiplier applied to all layout positions, ring radii, " +
              "obstacle positions/sizes, and connection-line points when a layout " +
              "is applied.\n" +
@@ -98,7 +117,71 @@ public class TowerDefenseMap : MonoBehaviour
             rings.Add(new RingConfiguration { radius = 2.3f, slotCount = 6, slotSize = 1.9f });
             rings.Add(new RingConfiguration { radius = 3.8f, slotCount = 6, slotSize = 1.9f });
         }
+
+        // Editor-only quick override: if testLayoutName is set, build that
+        // layout from MapLayoutExamples directly. No assets needed.
+        if (useTestLayoutOnStart && !string.IsNullOrWhiteSpace(testLayoutName))
+        {
+            var testLayout = MapLayoutExamplesLookup.FindByName(testLayoutName);
+            if (testLayout != null)
+            {
+                Debug.Log($"[TowerDefenseMap] Using TEST layout '{testLayout.layoutName}'.");
+                ApplyLayout(testLayout);
+                return; // ApplyLayout already calls GenerateMap
+            }
+            else
+            {
+                Debug.LogWarning($"[TowerDefenseMap] testLayoutName='{testLayoutName}' " +
+                                 "didn't match any built-in layout. Falling back to default.");
+            }
+        }
+
         GenerateMap();
+    }
+
+    // Editor helper — right-click the component header in the Inspector,
+    // pick "Generate Test Layout", and the map rebuilds using whatever name
+    // is currently typed into 'Test Layout Name'.
+    [ContextMenu("Generate Test Layout")]
+    public void GenerateTestLayout()
+    {
+        if (string.IsNullOrWhiteSpace(testLayoutName))
+        {
+            Debug.LogWarning("[TowerDefenseMap] Test Layout Name is empty. " +
+                             "Type a layout name (e.g. 'Stonehenge') first.");
+            return;
+        }
+        var layout = MapLayoutExamplesLookup.FindByName(testLayoutName);
+        if (layout == null)
+        {
+            Debug.LogWarning($"[TowerDefenseMap] No built-in layout named '{testLayoutName}'. " +
+                             "Check the spelling against the list in the tooltip.");
+            return;
+        }
+        Debug.Log($"[TowerDefenseMap] Applying test layout '{layout.layoutName}'.");
+        ApplyLayout(layout);
+    }
+
+    // One-click shortcuts for the new curvy layouts. Right-click the component
+    // header in the inspector and pick one — the map rebuilds immediately.
+    // These bypass testLayoutName entirely (avoids inspector-serialization
+    // assertions that fire when mutating serialized fields mid-draw).
+    [ContextMenu("Test: Stonehenge")] void _TestStonehenge() { ApplyTestLayoutByName("Stonehenge"); }
+    [ContextMenu("Test: Crossroads Pillars")] void _TestCrossroadsPillars() { ApplyTestLayoutByName("Crossroads Pillars"); }
+    [ContextMenu("Test: Asteroid Belt")] void _TestAsteroidBelt() { ApplyTestLayoutByName("Asteroid Belt"); }
+    [ContextMenu("Test: Pinwheel")] void _TestPinwheel() { ApplyTestLayoutByName("Pinwheel"); }
+
+    // Helper used by the [ContextMenu("Test: …")] shortcuts.
+    void ApplyTestLayoutByName(string name)
+    {
+        var layout = MapLayoutExamplesLookup.FindByName(name);
+        if (layout == null)
+        {
+            Debug.LogWarning($"[TowerDefenseMap] No built-in layout named '{name}'.");
+            return;
+        }
+        Debug.Log($"[TowerDefenseMap] Applying test layout '{layout.layoutName}'.");
+        ApplyLayout(layout);
     }
 
     [ContextMenu("Generate Map")]
@@ -359,27 +442,84 @@ public class TowerDefenseMap : MonoBehaviour
         }
     }
 
-    // Returns true if the obstacle's axis-aligned bounding rectangle overlaps
-    // a circle of `safeRadius` around the world origin (where the core lives).
-    // Conservative: ignores rotation, treats rotated rects as their AABB.
+    // Returns true if the obstacle overlaps a circle of `safeRadius` around
+    // the world origin (where the core lives). Shape-aware:
+    //   Rectangle → tested as AABB (rotation ignored, conservative).
+    //   Circle    → centre-distance < (safe + radius).
+    //   Ellipse   → conservative bounding circle of max axis.
     bool IntersectsCore(MapLayoutDefinition.LayoutObstacle obs, float safeRadius)
     {
-        // Closest point on the obstacle rect to origin
-        float halfW = obs.size.x * 0.5f;
-        float halfH = obs.size.y * 0.5f;
-        float closestX = Mathf.Clamp(0f, obs.position.x - halfW, obs.position.x + halfW);
-        float closestY = Mathf.Clamp(0f, obs.position.y - halfH, obs.position.y + halfH);
-        float dx = closestX;
-        float dy = closestY;
-        return (dx * dx + dy * dy) < (safeRadius * safeRadius);
+        switch (obs.shape)
+        {
+            case MapLayoutDefinition.ObstacleShape.Circle:
+                {
+                    float r = obs.size.x * 0.5f;
+                    float dx = obs.position.x;
+                    float dy = obs.position.y;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    return dist < (safeRadius + r);
+                }
+            case MapLayoutDefinition.ObstacleShape.Ellipse:
+                {
+                    float r = Mathf.Max(obs.size.x, obs.size.y) * 0.5f;
+                    float dx = obs.position.x;
+                    float dy = obs.position.y;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    return dist < (safeRadius + r);
+                }
+            case MapLayoutDefinition.ObstacleShape.Crescent:
+                {
+                    // Conservative: treat the crescent as its bounding circle.
+                    // The convex outer arc fits inside this radius.
+                    float r = Mathf.Max(obs.size.x, obs.size.y) * 0.5f;
+                    float dx = obs.position.x;
+                    float dy = obs.position.y;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    return dist < (safeRadius + r);
+                }
+            case MapLayoutDefinition.ObstacleShape.Rectangle:
+            default:
+                {
+                    float halfW = obs.size.x * 0.5f;
+                    float halfH = obs.size.y * 0.5f;
+                    float closestX = Mathf.Clamp(0f, obs.position.x - halfW, obs.position.x + halfW);
+                    float closestY = Mathf.Clamp(0f, obs.position.y - halfH, obs.position.y + halfH);
+                    float dx = closestX;
+                    float dy = closestY;
+                    return (dx * dx + dy * dy) < (safeRadius * safeRadius);
+                }
+        }
     }
 
-    // Creates one obstacle: a single sprite + segmented colliders.
-    // Uses YSortEntity so the obstacle sorts correctly against grass/players/enemies.
-    //
-    // - blockMovement obstacles: solid grey "wall/building" look
-    // - decorative obstacles (moat, bridges): keep their layout-specified color
+    // Creates one obstacle. Dispatches by shape:
+    //   Rectangle → segmented box colliders (good for walls/buildings).
+    //   Circle    → single CircleCollider2D    (smooth, no segment edges).
+    //   Ellipse   → single CapsuleCollider2D   (still smooth, just stretched).
+    // Circle and Ellipse are STRONGLY preferred for blockMovement obstacles
+    // because enemy local-avoidance glides around them with no snag points.
     void CreateOneObstacle(MapLayoutDefinition.LayoutObstacle obs, int i, Sprite squareSprite, int obstacleLayer)
+    {
+        switch (obs.shape)
+        {
+            case MapLayoutDefinition.ObstacleShape.Circle:
+                CreateCircleObstacle(obs, i, obstacleLayer);
+                break;
+            case MapLayoutDefinition.ObstacleShape.Ellipse:
+                CreateEllipseObstacle(obs, i, obstacleLayer);
+                break;
+            case MapLayoutDefinition.ObstacleShape.Crescent:
+                CreateCrescentObstacle(obs, i, obstacleLayer);
+                break;
+            case MapLayoutDefinition.ObstacleShape.Rectangle:
+            default:
+                CreateRectObstacle(obs, i, squareSprite, obstacleLayer);
+                break;
+        }
+    }
+
+    // Rectangle obstacle — the original behaviour, kept as-is for compatibility
+    // with all existing layouts (Chokepoint Corridor, Breached Fortress, etc.).
+    void CreateRectObstacle(MapLayoutDefinition.LayoutObstacle obs, int i, Sprite squareSprite, int obstacleLayer)
     {
         string name = string.IsNullOrEmpty(obs.label) ? $"Obstacle_{i}" : obs.label;
         GameObject root = new GameObject(name);
@@ -398,17 +538,10 @@ public class TowerDefenseMap : MonoBehaviour
 
         if (obs.blocksMovement)
         {
-            // Wall/building — stone-textured sprite, scaled to obstacle size.
-            // The procedural stone uses isotropic Perlin noise so stretching
-            // doesn't produce obviously horizontal/vertical artifacts.
             sr.sprite = CreateRoundedSquareSprite();
             sr.color = Color.white;
             visualGO.transform.localScale = new Vector3(obs.size.x, obs.size.y, 1f);
 
-            // Set sortingOrder directly using the same formula as GrassCartoonOverlay
-            // and YSortEntity. Obstacles never move, so we don't need a per-frame
-            // updater — set it once and forget. Sort point = bottom edge so the
-            // obstacle behaves like a sprite "standing" at its base.
             const int sortOrderBase = 1000;
             const float sortPrecision = 10f;
             float sortY = obs.position.y - obs.size.y * 0.5f;
@@ -418,10 +551,451 @@ public class TowerDefenseMap : MonoBehaviour
         }
         else
         {
-            // Decorative — flat sprite below all gameplay (moat, bridges, etc.)
             sr.sprite = squareSprite;
             sr.color = obs.color.a > 0f ? obs.color : new Color(0.35f, 0.40f, 0.50f, 0.85f);
-            sr.sortingOrder = 600; // above terrain (-1), below grass+sprites
+            sr.sortingOrder = 600;
+        }
+    }
+
+    // Circle obstacle — single round sprite + single CircleCollider2D.
+    // Enemies' local-avoidance treats this as a smooth round obstacle with
+    // no edges to snag on.
+    void CreateCircleObstacle(MapLayoutDefinition.LayoutObstacle obs, int i, int obstacleLayer)
+    {
+        string name = string.IsNullOrEmpty(obs.label) ? $"Circle_{i}" : obs.label;
+        GameObject root = new GameObject(name);
+        root.transform.parent = obstaclesContainer.transform;
+        root.transform.position = new Vector3(obs.position.x, obs.position.y, 0f);
+        root.transform.rotation = Quaternion.identity; // rotation irrelevant for a circle
+
+        float diameter = obs.size.x; // size.y is ignored for a true circle
+
+        GameObject visualGO = new GameObject("Visual");
+        visualGO.transform.parent = root.transform;
+        visualGO.transform.localPosition = Vector3.zero;
+        visualGO.transform.localRotation = Quaternion.identity;
+        visualGO.transform.localScale = new Vector3(diameter, diameter, 1f);
+
+        var sr = visualGO.AddComponent<SpriteRenderer>();
+        sr.sortingLayerName = "Default";
+
+        if (obs.blocksMovement)
+        {
+            // Use the rich stone-textured sprite (same palette as Rectangle
+            // obstacles) so blocking circles read as solid stone walls.
+            sr.sprite = CreateStoneCircleSprite();
+            sr.color = Color.white; // texture provides the color
+        }
+        else
+        {
+            // Decorative circle: flat-tinted simple disc.
+            sr.sprite = CreateRoundObstacleSprite();
+            sr.color = obs.color.a > 0f ? obs.color : new Color(0.45f, 0.46f, 0.50f, 1f);
+        }
+
+        if (obs.blocksMovement)
+        {
+            // Y-sort from bottom edge so the obstacle behaves like a "standing" sprite.
+            const int sortOrderBase = 1000;
+            const float sortPrecision = 10f;
+            float sortY = obs.position.y - diameter * 0.5f;
+            sr.sortingOrder = sortOrderBase + Mathf.RoundToInt(-sortY * sortPrecision);
+
+            root.layer = obstacleLayer;
+            var col = root.AddComponent<CircleCollider2D>();
+            col.radius = diameter * 0.5f;
+            col.isTrigger = false;
+        }
+        else
+        {
+            sr.sortingOrder = 600;
+        }
+    }
+
+    // Ellipse obstacle — same round sprite stretched non-uniformly, plus a
+    // CapsuleCollider2D for smooth oblong collision.
+    void CreateEllipseObstacle(MapLayoutDefinition.LayoutObstacle obs, int i, int obstacleLayer)
+    {
+        string name = string.IsNullOrEmpty(obs.label) ? $"Ellipse_{i}" : obs.label;
+        GameObject root = new GameObject(name);
+        root.transform.parent = obstaclesContainer.transform;
+        root.transform.position = new Vector3(obs.position.x, obs.position.y, 0f);
+        root.transform.rotation = Quaternion.Euler(0f, 0f, obs.rotationDegrees);
+
+        GameObject visualGO = new GameObject("Visual");
+        visualGO.transform.parent = root.transform;
+        visualGO.transform.localPosition = Vector3.zero;
+        visualGO.transform.localRotation = Quaternion.identity;
+        visualGO.transform.localScale = new Vector3(obs.size.x, obs.size.y, 1f);
+
+        var sr = visualGO.AddComponent<SpriteRenderer>();
+        sr.sortingLayerName = "Default";
+
+        if (obs.blocksMovement)
+        {
+            // Stone-textured sprite — same palette as Rectangle obstacles.
+            // When stretched non-uniformly (size.x != size.y) the texture
+            // stretches with it, which reads naturally for oblong rocks.
+            sr.sprite = CreateStoneCircleSprite();
+            sr.color = Color.white;
+        }
+        else
+        {
+            sr.sprite = CreateRoundObstacleSprite();
+            sr.color = obs.color.a > 0f ? obs.color : new Color(0.45f, 0.46f, 0.50f, 1f);
+        }
+
+        if (obs.blocksMovement)
+        {
+            const int sortOrderBase = 1000;
+            const float sortPrecision = 10f;
+            float sortY = obs.position.y - obs.size.y * 0.5f;
+            sr.sortingOrder = sortOrderBase + Mathf.RoundToInt(-sortY * sortPrecision);
+
+            root.layer = obstacleLayer;
+            var col = root.AddComponent<CapsuleCollider2D>();
+            col.size = new Vector2(obs.size.x, obs.size.y);
+            col.direction = (obs.size.x > obs.size.y)
+                ? CapsuleDirection2D.Horizontal
+                : CapsuleDirection2D.Vertical;
+            col.isTrigger = false;
+        }
+        else
+        {
+            sr.sortingOrder = 600;
+        }
+    }
+
+    // Cached round sprite for Circle and Ellipse obstacles.
+    // 128×128 antialiased disc with a subtle radial darkening for depth.
+    private static Sprite cachedRoundObstacleSprite;
+    Sprite CreateRoundObstacleSprite()
+    {
+        if (cachedRoundObstacleSprite != null) return cachedRoundObstacleSprite;
+
+        const int size = 128;
+        Texture2D tex = new Texture2D(size, size);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[size * size];
+        Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
+        float r = size * 0.48f;
+        float rInner = r - 1f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - center.x;
+                float dy = y + 0.5f - center.y;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+
+                float alpha;
+                if (d <= rInner) alpha = 1f;
+                else if (d <= r) alpha = 1f - (d - rInner);
+                else alpha = 0f;
+
+                // Subtle radial darken so it doesn't look like a flat disc.
+                float shade = Mathf.Lerp(1f, 0.78f, d / r);
+
+                pixels[y * size + x] = new Color(shade, shade, shade, alpha);
+            }
+        }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+        cachedRoundObstacleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, size);
+        return cachedRoundObstacleSprite;
+    }
+
+    // Stone-textured CIRCLE sprite. Uses the same multi-octave Perlin palette
+    // as CreateRoundedSquareSprite (stoneLight/Mid/Dark + cracks + edge
+    // darkening) but masked into a circle with a slightly noisy outline so
+    // it doesn't look like a perfect geometric disc.
+    private static Sprite cachedStoneCircleSprite;
+    Sprite CreateStoneCircleSprite()
+    {
+        if (cachedStoneCircleSprite != null) return cachedStoneCircleSprite;
+
+        const int size = 128;
+        Texture2D tex = new Texture2D(size, size);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[size * size];
+        float halfSize = size * 0.5f;
+        float baseR = halfSize - size * 0.05f; // 5% inset baseline
+        float edgeNoiseAmp = size * 0.04f;     // up to ~4% rim jitter
+        // (No edgeNoiseScale needed here — the rim noise is sampled in polar
+        // coordinates below using Cos(ang)/Sin(ang), not x/y screen coords.)
+
+        const float surfaceScale1 = 0.06f;
+        const float surfaceScale2 = 0.18f;
+        const float surfaceScale3 = 0.45f;
+
+        Color stoneLight = new Color(0.62f, 0.63f, 0.65f, 1f);
+        Color stoneMid = new Color(0.48f, 0.49f, 0.52f, 1f);
+        Color stoneDark = new Color(0.30f, 0.31f, 0.34f, 1f);
+
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                float dx = x - halfSize;
+                float dy = y - halfSize;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                // Direction-dependent edge noise — perturbs the circle's rim
+                // by a few percent so it reads as a worn stone, not a perfect disc.
+                float ang = Mathf.Atan2(dy, dx);
+                float rimNoise = (Mathf.PerlinNoise(Mathf.Cos(ang) * 4f + 31.7f,
+                                                    Mathf.Sin(ang) * 4f + 13.2f) - 0.5f) * 2f * edgeNoiseAmp;
+                float r = baseR + rimNoise;
+
+                float inside;
+                if (dist <= r - 1f) inside = 1f;
+                else if (dist <= r) inside = 1f - (dist - (r - 1f));
+                else inside = 0f;
+
+                if (inside <= 0f)
+                {
+                    pixels[y * size + x] = Color.clear;
+                    continue;
+                }
+
+                //  Stone surface with multi-octave noise 
+                float n1 = Mathf.PerlinNoise(x * surfaceScale1, y * surfaceScale1);
+                float n2 = Mathf.PerlinNoise(x * surfaceScale2 + 7.3f, y * surfaceScale2 + 4.1f) * 0.5f;
+                float n3 = Mathf.PerlinNoise(x * surfaceScale3 + 13.7f, y * surfaceScale3 + 9.2f) * 0.25f;
+                float surface = (n1 + n2 + n3) / 1.75f;
+
+                float crack = surface < 0.32f ? Mathf.InverseLerp(0.32f, 0.18f, surface) : 0f;
+
+                Color stone;
+                if (surface < 0.5f)
+                    stone = Color.Lerp(stoneMid, stoneDark, (0.5f - surface) * 1.4f);
+                else
+                    stone = Color.Lerp(stoneMid, stoneLight, (surface - 0.5f) * 1.4f);
+
+                stone = Color.Lerp(stone, stoneDark * 0.7f, crack);
+
+                // Edge darkening — radial falloff toward the outer rim.
+                float edgeDist = r - dist;
+                float edgeDarkening = Mathf.InverseLerp(0f, size * 0.05f, edgeDist);
+                stone = Color.Lerp(stoneDark, stone, edgeDarkening);
+
+                stone.a = inside;
+                pixels[y * size + x] = stone;
+            }
+        }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+        cachedStoneCircleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, size);
+        return cachedStoneCircleSprite;
+    }
+
+    // Stone-textured CRESCENT sprite. The crescent is built by subtracting
+    // a smaller offset circle from a larger one — the result is a single
+    // moon-shaped sprite with rich stone texture and noisy rims on both
+    // the outer convex edge and the inner concave edge.
+    //
+    // Geometry: outer circle radius = size*0.46, centered.
+    //           inner circle radius = size*0.36, offset upward by size*0.18
+    //           so the bite is taken out of the TOP of the sprite.
+    // (Rotate the GameObject to point the bite anywhere you want.)
+    private static Sprite cachedCrescentSprite;
+    Sprite CreateCrescentSprite()
+    {
+        if (cachedCrescentSprite != null) return cachedCrescentSprite;
+
+        const int size = 256;  // bigger texture — crescents are wider on screen
+        Texture2D tex = new Texture2D(size, size);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Clamp;
+
+        Color[] pixels = new Color[size * size];
+        float halfSize = size * 0.5f;
+
+        // Outer disc parameters
+        float outerR = size * 0.46f;
+        // Inner "bite" disc — pushed UP so the concave side faces +Y (up).
+        // Game code rotates the GameObject so the bite points wherever we want.
+        Vector2 innerCenter = new Vector2(halfSize, halfSize + size * 0.18f);
+        float innerR = size * 0.36f;
+
+        const float rimNoiseScale = 4f;
+        float rimNoiseAmp = size * 0.025f;
+
+        const float surfaceScale1 = 0.04f;
+        const float surfaceScale2 = 0.12f;
+        const float surfaceScale3 = 0.32f;
+
+        Color stoneLight = new Color(0.62f, 0.63f, 0.65f, 1f);
+        Color stoneMid = new Color(0.48f, 0.49f, 0.52f, 1f);
+        Color stoneDark = new Color(0.30f, 0.31f, 0.34f, 1f);
+
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                float dx = x - halfSize;
+                float dy = y - halfSize;
+                float distOuter = Mathf.Sqrt(dx * dx + dy * dy);
+
+                float idx = x - innerCenter.x;
+                float idy = y - innerCenter.y;
+                float distInner = Mathf.Sqrt(idx * idx + idy * idy);
+
+                // Noisy outer rim
+                float angOuter = Mathf.Atan2(dy, dx);
+                float outerNoise = (Mathf.PerlinNoise(Mathf.Cos(angOuter) * rimNoiseScale + 31.7f,
+                                                      Mathf.Sin(angOuter) * rimNoiseScale + 13.2f) - 0.5f) * 2f * rimNoiseAmp;
+                float effOuterR = outerR + outerNoise;
+
+                // Noisy inner (concave) rim
+                float angInner = Mathf.Atan2(idy, idx);
+                float innerNoise = (Mathf.PerlinNoise(Mathf.Cos(angInner) * rimNoiseScale + 47.1f,
+                                                      Mathf.Sin(angInner) * rimNoiseScale + 22.5f) - 0.5f) * 2f * rimNoiseAmp;
+                float effInnerR = innerR + innerNoise;
+
+                // Inside crescent = inside outer disc AND outside inner disc
+                float insideOuter;
+                if (distOuter <= effOuterR - 1f) insideOuter = 1f;
+                else if (distOuter <= effOuterR) insideOuter = 1f - (distOuter - (effOuterR - 1f));
+                else insideOuter = 0f;
+
+                float outsideInner;
+                if (distInner >= effInnerR + 1f) outsideInner = 1f;
+                else if (distInner >= effInnerR) outsideInner = (distInner - effInnerR);
+                else outsideInner = 0f;
+
+                float inside = Mathf.Min(insideOuter, outsideInner);
+
+                if (inside <= 0f)
+                {
+                    pixels[y * size + x] = Color.clear;
+                    continue;
+                }
+
+                //  Stone surface with multi-octave noise 
+                float n1 = Mathf.PerlinNoise(x * surfaceScale1, y * surfaceScale1);
+                float n2 = Mathf.PerlinNoise(x * surfaceScale2 + 7.3f, y * surfaceScale2 + 4.1f) * 0.5f;
+                float n3 = Mathf.PerlinNoise(x * surfaceScale3 + 13.7f, y * surfaceScale3 + 9.2f) * 0.25f;
+                float surface = (n1 + n2 + n3) / 1.75f;
+
+                float crack = surface < 0.32f ? Mathf.InverseLerp(0.32f, 0.18f, surface) : 0f;
+
+                Color stone;
+                if (surface < 0.5f)
+                    stone = Color.Lerp(stoneMid, stoneDark, (0.5f - surface) * 1.4f);
+                else
+                    stone = Color.Lerp(stoneMid, stoneLight, (surface - 0.5f) * 1.4f);
+                stone = Color.Lerp(stone, stoneDark * 0.7f, crack);
+
+                // Edge darkening near both rims
+                float edgeDistOuter = effOuterR - distOuter;
+                float edgeDistInner = distInner - effInnerR;
+                float edgeDist = Mathf.Min(edgeDistOuter, edgeDistInner);
+                float edgeDarkening = Mathf.InverseLerp(0f, size * 0.04f, edgeDist);
+                stone = Color.Lerp(stoneDark, stone, edgeDarkening);
+
+                stone.a = inside;
+                pixels[y * size + x] = stone;
+            }
+        }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+        cachedCrescentSprite = Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, size);
+        return cachedCrescentSprite;
+    }
+
+    // Crescent obstacle. Renders as a single textured crescent sprite. For
+    // collisions, the convex outer rim is approximated with a chain of small
+    // circle colliders following the outer arc — enemies path smoothly
+    // around the convex side. The concave "bite" stays open (no colliders
+    // inside the cup) so enemies can never get trapped there.
+    //
+    // Convention:
+    //   obs.position        = centre of the bounding box
+    //   obs.size.x          = overall width of the crescent
+    //   obs.size.y          = overall height of the crescent
+    //   obs.rotationDegrees = rotation of the whole sprite. 0° = bite facing UP.
+    //                         90° = bite facing LEFT. 180° = bite DOWN. 270° = RIGHT.
+    void CreateCrescentObstacle(MapLayoutDefinition.LayoutObstacle obs, int i, int obstacleLayer)
+    {
+        string name = string.IsNullOrEmpty(obs.label) ? $"Crescent_{i}" : obs.label;
+        GameObject root = new GameObject(name);
+        root.transform.parent = obstaclesContainer.transform;
+        root.transform.position = new Vector3(obs.position.x, obs.position.y, 0f);
+        root.transform.rotation = Quaternion.Euler(0f, 0f, obs.rotationDegrees);
+
+        // Visual
+        GameObject visualGO = new GameObject("Visual");
+        visualGO.transform.parent = root.transform;
+        visualGO.transform.localPosition = Vector3.zero;
+        visualGO.transform.localRotation = Quaternion.identity;
+        visualGO.transform.localScale = new Vector3(obs.size.x, obs.size.y, 1f);
+
+        var sr = visualGO.AddComponent<SpriteRenderer>();
+        sr.sortingLayerName = "Default";
+        sr.sprite = CreateCrescentSprite();
+        sr.color = Color.white; // texture provides color
+
+        if (obs.blocksMovement)
+        {
+            const int sortOrderBase = 1000;
+            const float sortPrecision = 10f;
+            float sortY = obs.position.y - obs.size.y * 0.5f;
+            sr.sortingOrder = sortOrderBase + Mathf.RoundToInt(-sortY * sortPrecision);
+
+            root.layer = obstacleLayer;
+
+            // Approximate the convex outer arc with N small circle colliders
+            // attached to the ROOT (so they rotate with the sprite).
+            // Arc spans 280° around the bottom of the sprite (the bite at the
+            // top stays open). Collider radius scales with the crescent size.
+            //
+            // Local-space: in the sprite's local frame, the outer arc is at
+            // radius ~0.46 of the bounding box. We use unit scale (the root
+            // doesn't have a scale — only the Visual child does). The colliders
+            // need to be placed at the world-space arc, scaled by obs.size.
+            //
+            // Use the smaller of size.x/size.y so the arc fits cleanly when the
+            // crescent is non-square.
+            float worldR = Mathf.Min(obs.size.x, obs.size.y) * 0.46f;
+            float colliderRadius = worldR * 0.16f; // small enough to be smooth
+            int colliderCount = Mathf.Max(7, Mathf.RoundToInt(worldR * 2.5f));
+
+            // Arc goes from -130° to +130° (relative to the sprite's local
+            // -Y axis — i.e. it follows the bottom 260° of the outer rim,
+            // leaving 100° of the top open where the bite is).
+            const float arcStart = -130f;
+            const float arcEnd = 130f;
+            for (int c = 0; c < colliderCount; c++)
+            {
+                float t = colliderCount == 1 ? 0.5f : c / (float)(colliderCount - 1);
+                float ang = Mathf.Lerp(arcStart, arcEnd, t) * Mathf.Deg2Rad;
+                // Sprite's local "down" is -Y. Crescent bite faces +Y, so the
+                // outer rim's bottom is at -Y.
+                float localX = Mathf.Sin(ang) * worldR;
+                float localY = -Mathf.Cos(ang) * worldR;
+
+                var colGO = new GameObject($"Col_{c}");
+                colGO.transform.parent = root.transform;
+                colGO.transform.localPosition = new Vector3(localX, localY, 0f);
+                colGO.layer = obstacleLayer;
+
+                var col = colGO.AddComponent<CircleCollider2D>();
+                col.radius = colliderRadius;
+                col.isTrigger = false;
+            }
+        }
+        else
+        {
+            sr.sortingOrder = 600;
         }
     }
 
@@ -907,6 +1481,7 @@ public class TowerDefenseMap : MonoBehaviour
             {
                 copy.obstacles.Add(new MapLayoutDefinition.LayoutObstacle
                 {
+                    shape = o.shape,
                     position = o.position * scale,
                     size = o.size * scale,
                     rotationDegrees = o.rotationDegrees,

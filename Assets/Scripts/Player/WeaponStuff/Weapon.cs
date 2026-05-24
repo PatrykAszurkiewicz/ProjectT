@@ -29,8 +29,18 @@ public class Weapon : MonoBehaviour
     private float toolBufferTimer = 0f;
     private bool isToolRightHeld = false;
 
+    // Obstacle drawer: "start as soon as cooldown clears" flag. Hold-to-use
+    // tools don't fit the existing 0.15s buffer model — a player who places
+    // an obstacle, then immediately repress-and-holds during the cooldown,
+    // would have their press dropped because the buffer window expires
+    // before the cooldown does. This flag persists until cooldown ends and
+    // is validated against the real mouse state in Update so an early
+    // release still aborts cleanly.
+    private bool obstacleDrawerStartPending = false;
+
     // Subsystems — weapon side
     private FlamethrowerSystem flamethrowerSystem;
+    private HammerSlamSystem hammerSlamSystem;
 
     // Subsystems — tool side
     private GrapplingHookSystem grapplingSystem;
@@ -40,6 +50,8 @@ public class Weapon : MonoBehaviour
     private TurretLauncherSystem turretLauncherSystem;
     private DecoyLauncherSystem decoyLauncherSystem;
     private ShieldSystem shieldSystem;
+    private RevenantNecronomiconSystem bookSystem;
+    private StealthCloakSystem stealthCloakSystem;
 
     // Persist flamethrower fuel across weapon swaps
     private float savedFlamethrowerFuel = -1f;
@@ -58,6 +70,100 @@ public class Weapon : MonoBehaviour
     public bool HasTool => toolData != null;
     public ShieldSystem GetShieldSystem() => shieldSystem;
 
+    // ── WeaponRollUI gauge queries ──
+    // The WeaponRollUI draws a per-slot overlay for the CURRENTLY-EQUIPPED
+    // weapon and tool. These expose the live state of the active subsystems.
+    // They are only meaningful for the equipped items — an unequipped tool has
+    // no running subsystem, so the UI shows no overlay on those slots.
+
+    /// How a tool's gauge should be drawn this frame.
+    public enum ToolGaugePhase
+    {
+        Ready,        // no overlay
+        ActiveClock,  // effect is running — draw a depleting radial clock
+        CooldownFill, // recharging — draw a rising fill gauge
+    }
+
+    /// Result of a tool gauge query.
+    public struct ToolGaugeInfo
+    {
+        public bool has;              // false → this tool has no gauge
+        public ToolGaugePhase phase;
+        public float value;           // 0..1; meaning depends on phase:
+                                      //  ActiveClock  → 1 = just started, 0 = about to end
+                                      //  CooldownFill → 0 = just spent,   1 = ready
+    }
+
+    /// Gauge state for the currently-equipped TOOL (book or cloak).
+    public ToolGaugeInfo GetToolGauge()
+    {
+        var info = new ToolGaugeInfo { has = false, phase = ToolGaugePhase.Ready, value = 1f };
+        if (toolData == null) return info;
+
+        if (toolData.isBook && bookSystem != null)
+        {
+            info.has = true;
+            switch (bookSystem.CurrentPhase)
+            {
+                case RevenantNecronomiconSystem.BookPhase.AuraActive:
+                    info.phase = ToolGaugePhase.ActiveClock;
+                    info.value = bookSystem.AuraNormalized;     // 1→0 over the aura
+                    break;
+                case RevenantNecronomiconSystem.BookPhase.CoolingDown:
+                    info.phase = ToolGaugePhase.CooldownFill;
+                    info.value = bookSystem.CooldownNormalized; // 0→1 recharge
+                    break;
+                default:
+                    info.phase = ToolGaugePhase.Ready;
+                    info.value = 1f;
+                    break;
+            }
+            return info;
+        }
+
+        if (toolData.isCloak && stealthCloakSystem != null)
+        {
+            info.has = true;
+            if (stealthCloakSystem.IsInvisible)
+            {
+                // Cloak is up — depleting clock counting down the 30s.
+                info.phase = ToolGaugePhase.ActiveClock;
+                info.value = stealthCloakSystem.ActiveNormalized;
+            }
+            else if (stealthCloakSystem.IsOnCooldown)
+            {
+                // Recharging — rising fill gauge.
+                info.phase = ToolGaugePhase.CooldownFill;
+                info.value = stealthCloakSystem.CooldownNormalized;
+            }
+            else
+            {
+                info.phase = ToolGaugePhase.Ready;
+                info.value = 1f;
+            }
+            return info;
+        }
+
+        return info;
+    }
+
+    /// True if the currently-equipped WEAPON is a flamethrower with a fuel
+    /// gauge to display. (Out param gives 0..1 fuel: 1 = full.)
+    public bool TryGetWeaponFuel(out float normalizedFuel)
+    {
+        normalizedFuel = 1f;
+        if (weaponData != null && weaponData.isFlamethrower && flamethrowerSystem != null)
+        {
+            normalizedFuel = flamethrowerSystem.FuelNormalized;
+            return true;
+        }
+        return false;
+    }
+
+    // The weapon-sprite GameObject's transform. Exposed so weapon subsystems
+    // (e.g. HammerSlamSystem) can animate the held weapon during an attack.
+    public Transform VisualTransform => visual != null ? visual.transform : null;
+
     // Returns true if the given WeaponData represents a shield tool
     // (has armorBonus but isn't another tool type like grappling hook).
     // Shield tools do NOT grant passive armor — their protection is
@@ -69,7 +175,8 @@ public class Weapon : MonoBehaviour
             && !data.isGrapplingHook && !data.isObstacleDrawer
             && !data.isBombLauncher && !data.isTrap
             && !data.isTurret && !data.isDecoy
-            && !data.isFlamethrower && !data.isRanged;
+            && !data.isFlamethrower && !data.isRanged
+            && !data.isBook && !data.isCloak;
     }
 
     public float GetFlamethrowerFuelNormalized()
@@ -104,6 +211,12 @@ public class Weapon : MonoBehaviour
             flamethrowerSystem = null;
         }
 
+        if (hammerSlamSystem != null)
+        {
+            hammerSlamSystem.Cleanup();
+            hammerSlamSystem = null;
+        }
+
         // Remove old armor bonus
         if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
             playerStats.currentArmor -= weaponData.armorBonus;
@@ -132,6 +245,9 @@ public class Weapon : MonoBehaviour
             flamethrowerUnequipTime = -1f;
             savedFlamethrowerData = null;
         }
+
+        if (weaponData.isHammer)
+            hammerSlamSystem = new HammerSlamSystem(this, weaponData);
 
         // Apply swap cooldown (cancel any existing attack cooldown too)
         ApplySwapCooldown();
@@ -191,6 +307,8 @@ public class Weapon : MonoBehaviour
         if (toolData.isTrap) trapLauncherSystem = new TrapLauncherSystem(this, toolData);
         if (toolData.isTurret) turretLauncherSystem = new TurretLauncherSystem(this, toolData);
         if (toolData.isDecoy) decoyLauncherSystem = new DecoyLauncherSystem(this, toolData);
+        if (toolData.isBook) bookSystem = new RevenantNecronomiconSystem(this, toolData);
+        if (toolData.isCloak) stealthCloakSystem = new StealthCloakSystem(this, toolData);
         if (toolData.armorBonus > 0f) shieldSystem = new ShieldSystem(this, toolData);
     }
 
@@ -203,6 +321,11 @@ public class Weapon : MonoBehaviour
         if (turretLauncherSystem != null) { turretLauncherSystem.Cleanup(); turretLauncherSystem = null; }
         if (decoyLauncherSystem != null) { decoyLauncherSystem.Cleanup(); decoyLauncherSystem = null; }
         if (shieldSystem != null) { shieldSystem.Cleanup(); shieldSystem = null; }
+        if (bookSystem != null) { bookSystem.Cleanup(); bookSystem = null; }
+        if (stealthCloakSystem != null) { stealthCloakSystem.Cleanup(); stealthCloakSystem = null; }
+
+        // Any deferred drawer start belongs to the *old* tool — drop it.
+        obstacleDrawerStartPending = false;
     }
 
     //  SWAP COOLDOWN
@@ -285,6 +408,9 @@ public class Weapon : MonoBehaviour
         if (weaponData.isFlamethrower)
             flamethrowerSystem = new FlamethrowerSystem(this, weaponData);
 
+        if (weaponData.isHammer)
+            hammerSlamSystem = new HammerSlamSystem(this, weaponData);
+
         // Tool-side subsystems
         if (toolData != null)
         {
@@ -298,6 +424,8 @@ public class Weapon : MonoBehaviour
             if (toolData.isTrap) trapLauncherSystem = new TrapLauncherSystem(this, toolData);
             if (toolData.isTurret) turretLauncherSystem = new TurretLauncherSystem(this, toolData);
             if (toolData.isDecoy) decoyLauncherSystem = new DecoyLauncherSystem(this, toolData);
+            if (toolData.isBook) bookSystem = new RevenantNecronomiconSystem(this, toolData);
+            if (toolData.isCloak) stealthCloakSystem = new StealthCloakSystem(this, toolData);
             if (toolData.armorBonus > 0f) shieldSystem = new ShieldSystem(this, toolData);
         }
 
@@ -336,6 +464,8 @@ public class Weapon : MonoBehaviour
         UpdateTurretSystem();
         UpdateDecoySystem();
         UpdateShieldSystem();
+        UpdateBookSystem();
+        UpdateCloakSystem();
 
         // Weapon input buffer
         if (attackBuffered)
@@ -366,6 +496,36 @@ public class Weapon : MonoBehaviour
                 ExecuteToolAttack();
             }
         }
+
+        // Obstacle drawer: deferred start across a cooldown window.
+        // If the player kept right-click held through the cooldown, start
+        // drawing the moment it clears. If they released early, drop the
+        // pending flag silently — same effect as if they'd never pressed.
+        if (obstacleDrawerStartPending)
+        {
+            bool rightStillDown = UnityEngine.InputSystem.Mouse.current != null
+                && UnityEngine.InputSystem.Mouse.current.rightButton.isPressed;
+
+            // Clear the pending flag if the tool changed, the player let go,
+            // or the drawer no longer exists — these are all "user no longer
+            // wants this draw" or "we can't service it" outcomes.
+            if (!rightStillDown
+                || toolData == null
+                || !toolData.isObstacleDrawer
+                || obstacleDrawerSystem == null)
+            {
+                obstacleDrawerStartPending = false;
+            }
+            else if (!isToolOnCooldown)
+            {
+                // Cooldown is done and the button is still held — fulfil the
+                // queued start. ExecuteToolAttack performs the placement-mode
+                // and stamina gates internally, so we don't need to duplicate
+                // them here.
+                obstacleDrawerStartPending = false;
+                ExecuteToolAttack();
+            }
+        }
     }
 
     private void UpdateGrapplingSystem()
@@ -381,6 +541,18 @@ public class Weapon : MonoBehaviour
         if (toolData?.isObstacleDrawer != true || obstacleDrawerSystem == null) return;
         bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
         if (!inPlacementMode) obstacleDrawerSystem.Update();
+
+        // If the drawer auto-finished a valid obstacle (player held right-click
+        // past the gameplay cap, weaponData.drawDuration — e.g. 1s), charge
+        // stamina + start a cooldown now. Same costs as a normal release-to-
+        // finish path. Without this, hitting the cap would be a free obstacle.
+        if (obstacleDrawerSystem.ConsumeAutoFinishSignal())
+        {
+            if (playerStats != null)
+                playerStats.TryConsumeStamina(playerStats.obstacleDrawerStaminaCost);
+
+            StartCoroutine(ToolCooldownRoutine());
+        }
     }
 
     private void UpdateFlamethrowerSystem()
@@ -427,6 +599,18 @@ public class Weapon : MonoBehaviour
         decoyLauncherSystem.Update();
     }
 
+    private void UpdateBookSystem()
+    {
+        if (toolData?.isBook != true || bookSystem == null) return;
+        bookSystem.Update();
+    }
+
+    private void UpdateCloakSystem()
+    {
+        if (toolData?.isCloak != true || stealthCloakSystem == null) return;
+        stealthCloakSystem.Update();
+    }
+
     private void UpdateShieldSystem()
     {
         if (shieldSystem == null) return;
@@ -453,10 +637,28 @@ public class Weapon : MonoBehaviour
     }
 
     //  WEAPON ATTACK (Left-click)
+
+    // Breaks Stealth Cloak invisibility when the player commits an offensive
+    // action. Called from the weapon attack paths (melee swing, ranged shot,
+    // boomerang, flamethrower start, hammer slam) and from melee hit-connect.
+    // Safe to call when no cloak is equipped — it simply does nothing.
+    private void NotifyCloakOffensiveAttack()
+    {
+        if (stealthCloakSystem != null)
+            stealthCloakSystem.NotifyPlayerAttackedEnemy();
+    }
+
     public void PerformAttack()
     {
         if (isOnCooldown)
         {
+            // The hammer is a hold-to-charge weapon — a press can't be buffered
+            // (the player would have to keep holding through the whole cooldown
+            // for it to make sense, and a buffered charge with the button
+            // already released would hang). Just ignore presses on cooldown.
+            if (weaponData != null && weaponData.isHammer)
+                return;
+
             if (!attackBuffered)
             {
                 attackBuffered = true;
@@ -465,6 +667,39 @@ public class Weapon : MonoBehaviour
             return;
         }
         ExecuteWeaponAttack();
+    }
+
+    // Battle Hammer — called when the left mouse button is RELEASED.
+    // Releases a charged slam (damage scales with how long the button was held).
+    // No-op for non-hammer weapons or when no charge is in progress.
+    public void ReleaseHammerCharge()
+    {
+        // A release also cancels a buffered press so a charge can't auto-start
+        // after the button is already up.
+        attackBuffered = false;
+
+        if (weaponData == null || !weaponData.isHammer) return;
+        if (hammerSlamSystem == null) return;
+        if (!hammerSlamSystem.IsCharging) return; // nothing charging → nothing to release
+
+        // Out of stamina → cancel the charge instead of slamming (mirrors how
+        // a normal melee swing is gated on stamina).
+        if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.meleeAttackStaminaCost))
+        {
+            hammerSlamSystem.CancelCharge();
+            return;
+        }
+
+        // Fire the charged slam. ReleaseCharge transitions the charging runner
+        // straight into its slam using the accumulated charge factor.
+        hammerSlamSystem.ReleaseCharge();
+        NotifyCloakOffensiveAttack(); // the slam is an offensive action — breaks stealth
+
+        if (AudioManager.instance != null && FMODEvents.instance != null)
+            AudioManager.instance.PlaySFX(FMODEvents.instance.meleeSwing, transform.position);
+
+        // Cooldown starts on RELEASE so holding a charge doesn't burn it.
+        StartCoroutine(WeaponCooldownRoutine());
     }
 
     private void ExecuteWeaponAttack()
@@ -478,7 +713,10 @@ public class Weapon : MonoBehaviour
             // on having any stamina at all so it doesn't sputter instantly.
             if (flamethrowerSystem != null && flamethrowerSystem.CanFire()
                 && playerStats != null && playerStats.HasStamina(0.05f))
+            {
                 flamethrowerSystem.StartFiring();
+                NotifyCloakOffensiveAttack(); // committing to an attack breaks stealth
+            }
         }
         else if (weaponData.isBoomerang)
         {
@@ -487,6 +725,7 @@ public class Weapon : MonoBehaviour
                 return;
 
             ShootBoomerang();
+            NotifyCloakOffensiveAttack();
             StartCoroutine(WeaponCooldownRoutine());
         }
         else if (weaponData.isRanged)
@@ -495,7 +734,19 @@ public class Weapon : MonoBehaviour
                 return;
 
             ShootProjectile();
+            NotifyCloakOffensiveAttack();
             StartCoroutine(WeaponCooldownRoutine());
+        }
+        else if (weaponData.isHammer)
+        {
+            // Battle Hammer — slow, heavy melee with a hold-to-charge attack.
+            // PerformAttack() here corresponds to the button being PRESSED:
+            // begin charging. The actual slam (damage, VFX, cooldown) fires on
+            // release via ReleaseHammerCharge(). Stamina is consumed at release.
+            if (hammerSlamSystem == null)
+                hammerSlamSystem = new HammerSlamSystem(this, weaponData);
+
+            hammerSlamSystem.BeginCharge();
         }
         else
         {
@@ -507,6 +758,7 @@ public class Weapon : MonoBehaviour
             if (AudioManager.instance != null && FMODEvents.instance != null)
                 AudioManager.instance.PlaySFX(FMODEvents.instance.meleeSwing, transform.position);
 
+            NotifyCloakOffensiveAttack(); // swinging at enemies breaks stealth
             StartCoroutine(AttackRoutine());
             StartCoroutine(WeaponCooldownRoutine());
         }
@@ -528,6 +780,18 @@ public class Weapon : MonoBehaviour
 
         if (isToolOnCooldown)
         {
+            // Obstacle drawer is a hold-to-use tool — the standard 0.15s
+            // buffer is too short and discrete-shaped for this. Instead,
+            // remember that the player wants to start drawing once the
+            // cooldown clears. Update will check this flag against the
+            // current mouse state to start the draw if (and only if) the
+            // player is still holding right-click when cooldown ends.
+            if (toolData.isObstacleDrawer)
+            {
+                obstacleDrawerStartPending = true;
+                return;
+            }
+
             if (!toolAttackBuffered)
             {
                 toolAttackBuffered = true;
@@ -546,9 +810,22 @@ public class Weapon : MonoBehaviour
         {
             if (obstacleDrawerSystem != null && !obstacleDrawerSystem.IsDrawing())
             {
-                // Pay stamina up front when committing to a draw. Path length
-                // isn't predictable so a one-shot cost feels fairer than per-segment.
-                if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.obstacleDrawerStaminaCost))
+                // Don't start a draw we know can't progress — UpdateObstacleDrawerSystem
+                // short-circuits in placement mode, so a draw started there would
+                // silently record nothing, then cancel on release. Previously this
+                // still charged stamina and started a cooldown; gating up front
+                // avoids both costs.
+                if (TowerPlacementManager.Instance?.IsInPlacementMode() == true)
+                    return;
+
+                // Gate (but don't consume) stamina. Drawer now follows the same
+                // "no whiff tax" rule as the grappling hook: stamina is only
+                // deducted on a successful draw (path long enough to produce
+                // an obstacle), and that deduction happens in StopToolAttack
+                // when StopDrawing reports success. This stops the old failure
+                // mode where a brief / stationary press cost stamina AND a
+                // cooldown despite producing nothing visible.
+                if (playerStats != null && !playerStats.HasStamina(playerStats.obstacleDrawerStaminaCost))
                     return;
 
                 obstacleDrawerSystem.StartDrawing();
@@ -606,6 +883,26 @@ public class Weapon : MonoBehaviour
                 StartCoroutine(ToolCooldownRoutine());
             }
         }
+        else if (toolData.isBook)
+        {
+            // Right-click TOGGLES the book (first cast → aura, second →
+            // ends it early and enters cooldown). The book owns its complete
+            // two-phase cooldown internally (RevenantNecronomiconSystem), so
+            // we do NOT start the generic ToolCooldownRoutine — doing so would
+            // gate (and drop) the second click that performs the toggle-off.
+            if (bookSystem != null)
+                bookSystem.Activate();
+        }
+        else if (toolData.isCloak)
+        {
+            // Right-click TOGGLES the cloak (first → invisible, second →
+            // uncloak early + cooldown). Like the book, the cloak owns its
+            // own duration + cooldown (PlayerCloakEffect), so we must NOT
+            // start the generic ToolCooldownRoutine — it would block the
+            // toggle-off click whenever the asset's attackCooldown is > 0.
+            if (stealthCloakSystem != null)
+                stealthCloakSystem.Activate();
+        }
         else if (toolData.armorBonus > 0f)
         {
             // Shield — raise handled via OnToolButtonPressed/Released in PlayerAttack
@@ -619,8 +916,18 @@ public class Weapon : MonoBehaviour
         {
             if (obstacleDrawerSystem.IsDrawing())
             {
-                obstacleDrawerSystem.StopDrawing();
-                StartCoroutine(ToolCooldownRoutine());
+                // StopDrawing returns true only when an obstacle was actually
+                // placed. Pair the cooldown + stamina deduction with that
+                // outcome so a brief or stationary press is genuinely free —
+                // matches the "no whiff tax" rule used by the grappling hook.
+                bool created = obstacleDrawerSystem.StopDrawing();
+                if (created)
+                {
+                    if (playerStats != null)
+                        playerStats.TryConsumeStamina(playerStats.obstacleDrawerStaminaCost);
+
+                    StartCoroutine(ToolCooldownRoutine());
+                }
             }
         }
     }
@@ -646,6 +953,8 @@ public class Weapon : MonoBehaviour
             CursorManager.Instance.SetCursor(CursorManager.CursorType.Flamethrower);
         else if (weaponData.isBoomerang)
             CursorManager.Instance.SetCursor(CursorManager.CursorType.Boomerang);
+        else if (weaponData.isHammer)
+            CursorManager.Instance.SetCursor(CursorManager.CursorType.Hammer);
         else if (weaponData.isRanged)
             CursorManager.Instance.SetCursor(CursorManager.CursorType.Ranged);
         else
@@ -662,6 +971,8 @@ public class Weapon : MonoBehaviour
         else if (toolData.isTrap) CursorManager.Instance.SetCursor(CursorManager.CursorType.Trap);
         else if (toolData.isTurret) CursorManager.Instance.SetCursor(CursorManager.CursorType.Turret);
         else if (toolData.isDecoy) CursorManager.Instance.SetCursor(CursorManager.CursorType.Decoy);
+        else if (toolData.isBook) CursorManager.Instance.SetCursor(CursorManager.CursorType.Book);
+        else if (toolData.isCloak) CursorManager.Instance.SetCursor(CursorManager.CursorType.Cloak);
         else if (toolData.armorBonus > 0f) CursorManager.Instance.SetCursor(CursorManager.CursorType.Shield);
     }
 
@@ -745,6 +1056,10 @@ public class Weapon : MonoBehaviour
 
         if (weaponData.damage > 0)
         {
+            // Landing a melee hit on an enemy definitively breaks stealth, even
+            // if (somehow) the swing-start notification was missed.
+            NotifyCloakOffensiveAttack();
+
             var stats = other.GetComponent<CharacterStats>();
             if (stats != null)
             {
@@ -801,6 +1116,7 @@ public class Weapon : MonoBehaviour
     void OnDestroy()
     {
         if (flamethrowerSystem != null) flamethrowerSystem.Cleanup();
+        if (hammerSlamSystem != null) hammerSlamSystem.Cleanup();
         CleanupToolSubsystems();
     }
 }

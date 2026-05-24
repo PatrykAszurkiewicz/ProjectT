@@ -10,7 +10,10 @@ using UnityEngine;
 //  "additional_tower_rings"  → only works when layoutType == Concentric.
 //  "additional_tower_slots"  → works on ALL layout types.
 // OBSTACLES
-// Layout-specific terrain (walls, buildings, moats). 
+// Layout-specific terrain (walls, buildings, moats, rocks, mushrooms, ice floes…).
+// Each obstacle can be rendered as a Rectangle, Circle, or Ellipse.
+// Curved obstacles produce smooth navigation for enemies (single circle
+// collider, no segment edges to snag on).
 [CreateAssetMenu(fileName = "NewMapLayout", menuName = "Game/Map Layout Definition")]
 public class MapLayoutDefinition : ScriptableObject
 {
@@ -56,8 +59,10 @@ public class MapLayoutDefinition : ScriptableObject
 
     //  obstacles 
 
-    [Tooltip("Layout-specific terrain obstacles (walls, buildings, moats).\n" +
-             "These are visual rectangles with optional colliders.\n" +
+    [Tooltip("Layout-specific terrain obstacles (walls, buildings, moats, rocks, mushrooms).\n" +
+             "Can be rectangles, circles, or ellipses. Curved obstacles are STRONGLY\n" +
+             "preferred for blockMovement=true because enemies navigate around them\n" +
+             "without snagging on segment edges.\n" +
              "They do NOT interfere with biome decorations (trees, rocks).")]
     public List<LayoutObstacle> obstacles = new List<LayoutObstacle>();
 
@@ -85,28 +90,54 @@ public class MapLayoutDefinition : ScriptableObject
         public float width = 0.08f;
     }
 
-    // A rectangular obstacle defined by centre, size, and visual style.
+    // Visual shape used to draw and collide the obstacle.
+    // Rectangle = classic boxy wall/building (segmented colliders).
+    // Circle    = single round obstacle (single CircleCollider2D — smooth for nav).
+    // Ellipse   = stretched circle, still one smooth collider.
+    // Crescent  = curved moon-shaped wall. Inner arc faces 'rotationDegrees'
+    //             direction. Approximated with chained CircleColliders so
+    //             enemies path around its convex outer side smoothly.
+    public enum ObstacleShape
+    {
+        Rectangle = 0,
+        Circle = 1,
+        Ellipse = 2,
+        Crescent = 3,
+    }
+
+    // An obstacle defined by centre, size, shape, and visual style.
     // Spawned by TowerDefenseMap when this layout becomes active.
     [System.Serializable]
     public struct LayoutObstacle
     {
-        [Tooltip("Centre position of the rectangle in world space.")]
+        [Tooltip("Visual & physics shape. Circle/Ellipse use a single smooth\n" +
+                 "collider so enemies glide around them. Rectangle uses\n" +
+                 "segmented box colliders.")]
+        public ObstacleShape shape;
+
+        [Tooltip("Centre position in world space.")]
         public Vector2 position;
 
-        [Tooltip("Width and height of the rectangle in world units.")]
+        [Tooltip("Width and height in world units.\n" +
+                 "For Circle, only size.x is used (as diameter).\n" +
+                 "For Ellipse, size.x = width, size.y = height.")]
         public Vector2 size;
 
-        [Tooltip("Rotation around Z in degrees (0 = axis-aligned).")]
+        [Tooltip("Rotation around Z in degrees (0 = axis-aligned).\n" +
+                 "Affects Rectangle and Ellipse. Ignored for Circle.")]
         public float rotationDegrees;
 
-        [Tooltip("Visual fill colour. Alpha controls transparency.")]
+        [Tooltip("Visual fill colour. Alpha controls transparency.\n" +
+                 "Used as a tint for the stone texture on Rectangles,\n" +
+                 "and as the fill colour for Circles/Ellipses.")]
         public Color color;
 
-        [Tooltip("Spawn a BoxCollider2D so enemies/projectiles physically stop at this obstacle.\n" +
+        [Tooltip("Spawn a collider so enemies/projectiles physically stop at this obstacle.\n" +
                  "Pure visual decorations should leave this off.")]
         public bool blocksMovement;
 
-        [Tooltip("Optional label shown in hierarchy (e.g. 'NorthWall', 'Building_03').")]
+        [Tooltip("Optional label shown in hierarchy (e.g. 'NorthWall', 'Stone_03').")]
         public string label;
     }
 }
+

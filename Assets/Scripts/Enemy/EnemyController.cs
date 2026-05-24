@@ -30,7 +30,9 @@ public class EnemyController : MonoBehaviour
 
     [Header("Stuck Prevention")]
     [SerializeField] private float stuckCheckTime = 0.5f;
-    [SerializeField] private float minMovementThreshold = 0.2f;
+    [Tooltip("Progress toward target (in world units) required during stuckCheckTime to avoid being marked stuck. " +
+             "Measures progress along the direction to the target, so sliding along a wall counts as no progress.")]
+    [SerializeField] private float minMovementThreshold = 0.05f;
 
     [Header("Grappling")]
     private bool isBeingGrappled = false;
@@ -281,9 +283,18 @@ public class EnemyController : MonoBehaviour
 
     private void HandleStuckDetection()
     {
-        float distanceMoved = Vector2.Distance(transform.position, lastKnownPosition);
+        // Measure progress TOWARD the target, not raw movement.
+        // An enemy sliding along a wall has high raw distance but ~0 progress
+        // toward the target, so we still detect it as stuck.
+        Vector2 displacement = (Vector2)transform.position - lastKnownPosition;
+        Vector2 toTargetRaw = (Vector2)currentTarget.position - lastKnownPosition;
+        float progress;
+        if (toTargetRaw.sqrMagnitude > 0.0001f)
+            progress = Vector2.Dot(displacement, toTargetRaw.normalized);
+        else
+            progress = displacement.magnitude;
 
-        if (distanceMoved > minMovementThreshold)
+        if (progress > minMovementThreshold)
         {
             timeSinceLastMovement = 0f;
             lastKnownPosition = transform.position;
@@ -300,7 +311,27 @@ public class EnemyController : MonoBehaviour
         {
             stuckModeTimer -= Time.fixedDeltaTime;
             if (stuckModeTimer <= 0f)
-                isInStuckMode = false;
+            {
+                // Only release stuck mode when we've actually cleared the
+                // obstacle. If we're still pressed against one (e.g. a long
+                // wall whose end we haven't rounded yet), refresh the slide
+                // direction — we might have reached a corner where the
+                // previously blocked side is now clear.
+                bool stillBlocked = Physics2D.OverlapCircle(
+                    transform.position, avoidDistance, obstacleLayer) != null;
+                if (stillBlocked)
+                {
+                    EnterStuckMode();
+                    // Reset the movement-progress baseline so we don't
+                    // immediately re-trigger the "no progress" path.
+                    timeSinceLastMovement = 0f;
+                    lastKnownPosition = transform.position;
+                }
+                else
+                {
+                    isInStuckMode = false;
+                }
+            }
         }
     }
 
@@ -308,31 +339,70 @@ public class EnemyController : MonoBehaviour
     {
         isInStuckMode = true;
         stuckModeTimer = 2f;
-        Vector2 toTarget = (currentTarget.position - transform.position).normalized;
-        Vector2 perpendicular = new Vector2(-toTarget.y, toTarget.x);
-        Vector2 leftSide = perpendicular;
-        Vector2 rightSide = -perpendicular;
 
-        bool leftClear = !Physics2D.OverlapCircle(
-            transform.position + (Vector3)(leftSide * avoidDistance), 0.3f, obstacleLayer);
-        bool rightClear = !Physics2D.OverlapCircle(
-            transform.position + (Vector3)(rightSide * avoidDistance), 0.3f, obstacleLayer);
+        // Find what we're actually pressed against, so we slide ALONG the
+        // wall (perpendicular to its surface normal) rather than perpendicular
+        // to "direction to target", which is only correct when the wall and
+        // target happen to be axis-aligned with each other.
+        Collider2D wall = Physics2D.OverlapCircle(
+            transform.position, avoidDistance, obstacleLayer);
 
-        if (leftClear && !rightClear) stuckAvoidanceDirection = leftSide;
-        else if (rightClear && !leftClear) stuckAvoidanceDirection = rightSide;
+        Vector2 wallNormal;
+        if (wall != null)
+        {
+            Vector2 selfPos = transform.position;
+            Vector2 closest = wall.ClosestPoint(selfPos);
+            wallNormal = selfPos - closest;
+
+            // If we're inside the collider, ClosestPoint may return our own
+            // position. Fall back to the collider centre direction.
+            if (wallNormal.sqrMagnitude < 0.0001f)
+                wallNormal = selfPos - (Vector2)wall.transform.position;
+
+            if (wallNormal.sqrMagnitude < 0.0001f)
+            {
+                // Total fallback — treat target as the reference.
+                Vector2 toT = ((Vector2)currentTarget.position - selfPos).normalized;
+                wallNormal = new Vector2(-toT.y, toT.x);
+            }
+            else
+            {
+                wallNormal = wallNormal.normalized;
+            }
+        }
         else
         {
-            // Both sides clear OR both sides blocked: pick the side whose
-            // forward sample lies closer to the target. Sampling 1.5 units
-            // ahead along each side means we choose the route that ends up
-            // nearer the goal, instead of always defaulting to leftSide.
-            // This prevents enemies on long walls from systematically
-            // escaping in the wrong direction along the wall.
-            Vector2 leftProbe = (Vector2)transform.position + leftSide * (avoidDistance * 1.5f);
-            Vector2 rightProbe = (Vector2)transform.position + rightSide * (avoidDistance * 1.5f);
-            float leftDistToTarget = Vector2.SqrMagnitude((Vector2)currentTarget.position - leftProbe);
-            float rightDistToTarget = Vector2.SqrMagnitude((Vector2)currentTarget.position - rightProbe);
-            stuckAvoidanceDirection = (leftDistToTarget <= rightDistToTarget) ? leftSide : rightSide;
+            // No obstacle in range (rare — stuck without a nearby wall, e.g.
+            // jammed between enemies). Fall back to perpendicular-to-target.
+            Vector2 toT = (currentTarget.position - transform.position).normalized;
+            wallNormal = new Vector2(-toT.y, toT.x);
+        }
+
+        // Two ways to slide along the wall (perpendicular to its normal).
+        Vector2 slideA = new Vector2(-wallNormal.y, wallNormal.x);
+        Vector2 slideB = -slideA;
+
+        // Probe further than avoidDistance: on a long segmented wall, a short
+        // probe lands inside another segment of the same wall and reports
+        // "blocked" on both sides. 3x avoidDistance reaches past segment
+        // boundaries so we can pick the genuinely-clear direction.
+        float probeDist = avoidDistance * 3f;
+        Vector2 selfPos2 = transform.position;
+        bool aClear = !Physics2D.OverlapCircle(selfPos2 + slideA * probeDist, 0.3f, obstacleLayer);
+        bool bClear = !Physics2D.OverlapCircle(selfPos2 + slideB * probeDist, 0.3f, obstacleLayer);
+
+        if (aClear && !bClear) stuckAvoidanceDirection = slideA;
+        else if (bClear && !aClear) stuckAvoidanceDirection = slideB;
+        else
+        {
+            // Both clear or both blocked: pick the side whose probe lands
+            // closer to the target. Prevents systematically drifting the
+            // wrong way along a long wall.
+            Vector2 aEnd = selfPos2 + slideA * probeDist;
+            Vector2 bEnd = selfPos2 + slideB * probeDist;
+            float aDistSq = Vector2.SqrMagnitude((Vector2)currentTarget.position - aEnd);
+            float bDistSq = Vector2.SqrMagnitude((Vector2)currentTarget.position - bEnd);
+            stuckAvoidanceDirection = (aDistSq <= bDistSq) ? slideA : slideB;
         }
     }
 
@@ -363,7 +433,11 @@ public class EnemyController : MonoBehaviour
             float leftDot = Vector2.Dot(perpLeft, desiredDirection);
             float rightDot = Vector2.Dot(perpRight, desiredDirection);
             Vector2 chosenDirection = (leftDot > rightDot) ? perpLeft : perpRight;
-            return Vector2.Lerp(chosenDirection, desiredDirection, 0.3f);
+            // Small bias toward desired direction so the enemy curves around
+            // the obstacle rather than orbiting it. 0.1 is gentle enough that
+            // on long walls we don't keep getting pulled back into the wall
+            // each frame (which used to delay stuck-mode triggering).
+            return Vector2.Lerp(chosenDirection, desiredDirection, 0.1f);
         }
 
         return desiredDirection;
@@ -388,11 +462,16 @@ public class EnemyController : MonoBehaviour
 
         if (coreTarget == null) return;
 
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player && Vector2.Distance(transform.position, player.transform.position) < detectRange)
+        // Stealth Cloak: while the player is invisible, enemies must not
+        // acquire the player as a target. Fall through to towers / core.
+        if (!PlayerCloakEffect.IsActive)
         {
-            currentTarget = player.transform;
-            return;
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player && Vector2.Distance(transform.position, player.transform.position) < detectRange)
+            {
+                currentTarget = player.transform;
+                return;
+            }
         }
 
         GameObject[] towers = GameObject.FindGameObjectsWithTag("Tower");
@@ -442,6 +521,17 @@ public class EnemyController : MonoBehaviour
         {
             currentTarget = coreTarget;
             return;
+        }
+
+        // Stealth Cloak: if the player turns invisible while this enemy is
+        // already targeting them, re-acquire a target immediately instead of
+        // waiting up to 0.5s for the next UpdateTarget() tick. UpdateTarget()
+        // already skips the player while the cloak is active, so this hands
+        // the enemy off to a tower / core right away.
+        if (PlayerCloakEffect.IsActive && currentTarget != null
+            && currentTarget.CompareTag("Player"))
+        {
+            UpdateTarget();
         }
 
         if (currentTarget != null && !isFrozen && !isAttackingCycle
@@ -803,3 +893,4 @@ public class EnemyController : MonoBehaviour
     }
 
 }
+

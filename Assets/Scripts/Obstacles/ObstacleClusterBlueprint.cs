@@ -1,18 +1,14 @@
 using UnityEngine;
 
-/// <summary>
-/// Defines a reusable cluster composition blueprint.
-/// Each member has a prefab slot index (which prefab from the biome's 3 slots),
-/// a relative position offset, and a scale multiplier.
-///
-/// Create via: Assets → Create → Obstacles → Cluster Blueprint
-///
-/// Slot indices:
-///   0 = primary/hero prefab (e.g. large tree)
-///   1 = secondary prefab (e.g. small rock)
-///   2 = tertiary prefab (e.g. different rock variant)
-///   -1 = pick randomly from all available
-/// </summary>
+// Defines a reusable cluster composition blueprint.
+// Each member has a prefab slot index (which prefab from the biome's 3 slots),
+// a relative position offset, and a scale multiplier.
+// Assets → Create → Obstacles → Cluster Blueprint
+// Slot indices:
+//   0 = primary/hero prefab (e.g. large tree)
+//   1 = secondary prefab (e.g. small rock)
+//   2 = tertiary prefab (e.g. different rock variant)
+//   -1 = pick randomly from all available
 [CreateAssetMenu(fileName = "NewClusterBlueprint", menuName = "Obstacles/Cluster Blueprint")]
 public class ObstacleClusterBlueprint : ScriptableObject
 {

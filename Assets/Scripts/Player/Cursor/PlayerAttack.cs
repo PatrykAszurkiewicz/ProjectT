@@ -24,14 +24,19 @@ public class PlayerAttack : MonoBehaviour
     {
         if (weapon == null) return;
 
-        // Safety net for held-down weapon attacks (flamethrower on left click)
+        // Safety net for held-down weapon attacks (flamethrower / hammer-charge
+        // on left click) — if the button comes up without a 'canceled' event.
         if (isWeaponButtonHeld)
         {
             bool leftStillDown = Mouse.current != null && Mouse.current.leftButton.isPressed;
             if (!leftStillDown)
             {
                 isWeaponButtonHeld = false;
-                weapon.StopAttack();
+                WeaponData heldWeaponData = weapon.GetWeaponData();
+                if (heldWeaponData != null && heldWeaponData.isHammer)
+                    weapon.ReleaseHammerCharge(); // release a charged slam
+                else
+                    weapon.StopAttack();          // stop the flamethrower
             }
         }
 
@@ -88,6 +93,23 @@ public class PlayerAttack : MonoBehaviour
             {
                 isWeaponButtonHeld = false;
                 weapon.StopAttack();
+            }
+        }
+        // Battle Hammer — hold to charge, release to slam.
+        else if (weaponData != null && weaponData.isHammer)
+        {
+            if (context.started)
+            {
+                isWeaponButtonHeld = true;
+                // Begins the charge (or, if charging is disabled on the data,
+                // fires an immediate slam — see Weapon.PerformAttack).
+                weapon.PerformAttack();
+            }
+            else if (context.canceled)
+            {
+                isWeaponButtonHeld = false;
+                // Releases the charged slam. No-op if no charge is in progress.
+                weapon.ReleaseHammerCharge();
             }
         }
         else

@@ -24,6 +24,18 @@ public class EnemyAnimationController : MonoBehaviour
     // When true, velocity-based attack auto-detection is permanently disabled. 
     private bool disableAutoAttackDetection = false;
 
+    /// <summary>
+    /// Public hook for support-style enemies (e.g. Scarecrow) to opt out of
+    /// the velocity-based auto-attack heuristic. These enemies never play an
+    /// "attack" animation — their damage comes from auras or other systems —
+    /// so the heuristic would just cause idle/attack flicker when they stand
+    /// near the player. Call once at Start() before any animation begins.
+    /// </summary>
+    public void SetAutoAttackDetectionEnabled(bool enabled)
+    {
+        disableAutoAttackDetection = !enabled;
+    }
+
     // Sprite orientation settings
     [Header("Sprite Orientation")]
     [SerializeField] private float maxRotationAngle = 20f;
@@ -486,4 +498,3 @@ public class EnemyAnimationController : MonoBehaviour
         CurrentAttackFrame = -1;
     }
 }
-

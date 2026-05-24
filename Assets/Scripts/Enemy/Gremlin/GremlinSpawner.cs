@@ -9,6 +9,16 @@ public class GremlinSpawner : MonoBehaviour
     public int maxGremlinsOnMap = 1;
     public float spawnDistance = 8f;
 
+    [Header("Obstacle Avoidance")]
+    [Tooltip("Radius around the candidate spawn point that must be clear of obstacles.")]
+    public float spawnClearanceRadius = 0.5f;
+    [Tooltip("How many random positions to try before giving up on a spawn attempt.")]
+    public int maxSpawnPlacementAttempts = 12;
+    [Tooltip("Layers checked when validating that the spawn point is free.\n" +
+             "By default this is 'everything' — the spawner ignores triggers and the\n" +
+             "Player/Enemy layers internally, so leaving this as Everything is fine.")]
+    public LayerMask obstacleBlockingMask = ~0;
+
     [Header("Path Indicator")]
     public bool showPathToGremlin = true;
     public float pathFootprintSpacing = 1.5f;
@@ -100,13 +110,78 @@ public class GremlinSpawner : MonoBehaviour
     {
         activeGremlins.RemoveAll(g => g == null);
         if (activeGremlins.Count >= maxGremlinsOnMap) return;
+        if (playerTransform == null) return;
 
-        if (playerTransform != null)
+        if (TryFindClearSpawnPosition(out Vector3 spawnPos))
         {
-            Vector2 randomDirection = Random.insideUnitCircle.normalized;
-            Vector3 spawnPos = playerTransform.position + (Vector3)(randomDirection * spawnDistance);
             SpawnGremlinAt(spawnPos);
         }
+        else
+        {
+            // Couldn't find a clear spot this tick. Stay silent — next interval will try again.
+        }
+    }
+
+    // Picks a random direction at `spawnDistance` from the player and verifies the spot
+    // is clear of layout obstacles, biome obstacles, towers, etc. If blocked, tries
+    // a slightly shorter/longer radius along the same ray before picking a fresh angle.
+    bool TryFindClearSpawnPosition(out Vector3 result)
+    {
+        result = default;
+        Vector2 playerPos = playerTransform.position;
+
+        // Layers we should NEVER treat as blocking. The Player and Enemy layers may
+        // not be defined in every project — NameToLayer returns -1 in that case,
+        // which we just ignore via the bitmask helper below.
+        int ignoreMask = LayerToBit(LayerMask.NameToLayer("Player")) |
+                         LayerToBit(LayerMask.NameToLayer("Enemy"));
+        int testMask = obstacleBlockingMask.value & ~ignoreMask;
+
+        // Small set of distance fallbacks per attempt — keeps the gremlin near the
+        // intended ring even if the first radius lands inside a wall.
+        float[] radiusOffsets = { 0f, 1.2f, -1.2f, 2.4f };
+
+        for (int attempt = 0; attempt < maxSpawnPlacementAttempts; attempt++)
+        {
+            Vector2 dir = Random.insideUnitCircle.normalized;
+            if (dir.sqrMagnitude < 0.0001f) dir = Vector2.right;
+
+            foreach (float offset in radiusOffsets)
+            {
+                float radius = Mathf.Max(0.5f, spawnDistance + offset);
+                Vector2 candidate = playerPos + dir * radius;
+
+                if (IsPositionClear(candidate, testMask))
+                {
+                    result = new Vector3(candidate.x, candidate.y, 0f);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool IsPositionClear(Vector2 pos, int testMask)
+    {
+        // OverlapCircleAll so we can inspect each hit and skip triggers (energy drops,
+        // pickup zones, etc.) which shouldn't count as obstacles.
+        Collider2D[] hits = Physics2D.OverlapCircleAll(pos, spawnClearanceRadius, testMask);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            var c = hits[i];
+            if (c == null) continue;
+            if (c.isTrigger) continue;
+            // Skip anything tagged Player or Enemy in case those tags exist
+            // on the default layer (so layer-based filtering doesn't catch them).
+            if (c.CompareTag("Player") || c.CompareTag("Enemy")) continue;
+            return false;
+        }
+        return true;
+    }
+
+    static int LayerToBit(int layer)
+    {
+        return (layer < 0 || layer > 31) ? 0 : (1 << layer);
     }
 
     void SpawnGremlinAt(Vector3 position)

@@ -1,9 +1,24 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-
+/// <summary>
+/// Legacy standalone flamethrower fuel bar.
+///
+/// SUPERSEDED: the flamethrower's fuel level is now shown directly on its
+/// WeaponRollUI hotbar icon (the icon depletes from the top down). This
+/// separate on-screen bar is therefore redundant.
+///
+/// `useLegacyBar` is false by default, so this component does nothing — you
+/// can safely delete the GameObject it sits on. Set it true only if you want
+/// the old separate bar back instead of the icon gauge.
+/// </summary>
 public class FlamethrowerFuelUI : MonoBehaviour
 {
+    [Header("Legacy")]
+    [Tooltip("OFF: the fuel level is shown on the WeaponRollUI icon instead " +
+             "(recommended). ON: restores this old standalone bar.")]
+    public bool useLegacyBar = false;
+
     [Header("Layout")]
     public Vector2 position = new Vector2(66f, 40f);
     public float barWidth = 110f;
@@ -29,6 +44,14 @@ public class FlamethrowerFuelUI : MonoBehaviour
 
     void LateUpdate()
     {
+        // Superseded by the WeaponRollUI icon gauge — do nothing (and make sure
+        // any previously-built bar is hidden) unless explicitly re-enabled.
+        if (!useLegacyBar)
+        {
+            if (canvas != null) canvas.gameObject.SetActive(false);
+            return;
+        }
+
         if (weapon == null)
         {
             weapon = FindFirstObjectByType<Weapon>();

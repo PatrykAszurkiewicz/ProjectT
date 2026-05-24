@@ -28,6 +28,13 @@ public class EnemyStats : CharacterStats
     protected SpriteRenderer SpriteRenderer => spriteRenderer;
     protected EnemyHealthBar HealthBar => healthBar;
 
+    /// <summary>
+    /// Public accessor for the runtime-instantiated health bar. Used by support
+    /// enemies (e.g. Scarecrow) that need to hide the bar during invisible
+    /// phases. May be null before Start() runs or if no healthBarPrefab is set.
+    /// </summary>
+    public EnemyHealthBar GetHealthBar() => healthBar;
+
     protected void CallStartDamageFlash()
     {
         StartDamageFlash();
@@ -281,4 +288,3 @@ public class EnemyStats : CharacterStats
     }
 #endif
 }
-

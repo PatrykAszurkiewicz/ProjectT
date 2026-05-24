@@ -86,6 +86,14 @@ public class ParryIndicator : MonoBehaviour
             return;
         }
 
+        // If ReadParryConfig disabled the indicator (e.g. single-frame attack),
+        // never show. parryStart < 0 is the disable sentinel.
+        if (parryStart < 0)
+        {
+            if (isShowingIndicator) SetVisible(false);
+            return;
+        }
+
         // Use CurrentAttackFrame from the animation controller for pixel-perfect sync
         bool inParryWindow = false;
 
@@ -151,6 +159,16 @@ public class ParryIndicator : MonoBehaviour
             parryStart = Mathf.Max(data.parryFrameStart, 0);
             parryEnd = Mathf.Max(data.parryFrameEnd, 0);
             if (parryEnd < parryStart) parryEnd = parryStart;
+
+            // Degenerate case: a single-frame attack collapses the parry window
+            // onto the hit frame. There's no meaningful "wind-up" the player can
+            // react to, and the indicator would show continuously every cycle.
+            // Disable the indicator until the enemy has at least 2 attack frames.
+            if (data.attack.frameCount <= 1)
+            {
+                parryStart = -1;
+                parryEnd = -1;
+            }
         }
     }
 

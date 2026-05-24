@@ -22,6 +22,9 @@ public class CursorManager : MonoBehaviour
     public string turretCursorPath = "Sprites/Cursors/cursor_spritesheet_turret";
     public string decoyCursorPath = "Sprites/Cursors/cursor_spritesheet_decoy";
     public string boomerangCursorPath = "Sprites/Cursors/cursor_spritesheet_boomerang";
+    public string bookCursorPath = "Sprites/Cursors/cursor_spritesheet_book";
+    public string hammerCursorPath = "Sprites/Cursors/cursor_spritesheet_hammer";
+    public string cloakCursorPath = "Sprites/Cursors/cursor_spritesheet_cloak";
 
     [Header("Cursor Size")]
     [Tooltip("Desired cursor size in world units. All cursor sprites will be normalized to this size.")]
@@ -41,6 +44,9 @@ public class CursorManager : MonoBehaviour
     private Sprite turretCursorSprite;
     private Sprite decoyCursorSprite;
     private Sprite boomerangCursorSprite;
+    private Sprite bookCursorSprite;
+    private Sprite hammerCursorSprite;
+    private Sprite cloakCursorSprite;
 
     private Sprite previousCursorSprite;
     private CursorType currentCursorType = CursorType.Default;
@@ -64,7 +70,10 @@ public class CursorManager : MonoBehaviour
         Trap,
         Turret,
         Decoy,
-        Boomerang
+        Boomerang,
+        Book,
+        Hammer,
+        Cloak
     }
 
     void Awake()
@@ -126,6 +135,9 @@ public class CursorManager : MonoBehaviour
         turretCursorSprite = Resources.Load<Sprite>(turretCursorPath);
         decoyCursorSprite = Resources.Load<Sprite>(decoyCursorPath);
         boomerangCursorSprite = Resources.Load<Sprite>(boomerangCursorPath);
+        bookCursorSprite = Resources.Load<Sprite>(bookCursorPath);
+        hammerCursorSprite = Resources.Load<Sprite>(hammerCursorPath);
+        cloakCursorSprite = Resources.Load<Sprite>(cloakCursorPath);
     }
 
     public void SetCursor(CursorType cursorType)
@@ -169,6 +181,9 @@ public class CursorManager : MonoBehaviour
             CursorType.Turret => turretCursorSprite ?? defaultCursorSprite,
             CursorType.Decoy => decoyCursorSprite ?? defaultCursorSprite,
             CursorType.Boomerang => boomerangCursorSprite ?? rangedCursorSprite ?? defaultCursorSprite,
+            CursorType.Book => bookCursorSprite ?? defaultCursorSprite,
+            CursorType.Hammer => hammerCursorSprite ?? meleeCursorSprite ?? defaultCursorSprite,
+            CursorType.Cloak => cloakCursorSprite ?? defaultCursorSprite,
             _ => defaultCursorSprite
         };
 

@@ -18,6 +18,9 @@ public class WeaponUnlockRegistry : MonoBehaviour
         { 317, 8 },  // Turret
         { 316, 9 },  // Decoy
         { 318, 10 }, // Boomerang
+        { 321, 11 }, // Revenant Necronomicon (Book)
+        { 322, 12 }, // Battle Hammer
+        { 323, 13 }, // Stealth Cloak
     };
 
     private readonly HashSet<int> _unlocked = new HashSet<int>();

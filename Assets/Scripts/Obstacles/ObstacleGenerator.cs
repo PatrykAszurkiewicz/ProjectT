@@ -43,6 +43,14 @@ public class ObstacleGenerator : MonoBehaviour
     [Tooltip("Minimum distance between placement anchors.")]
     public float minDistanceBetweenObstacles = 2.5f;
 
+    [Tooltip("Obstacles will not spawn within this radius of the player at the moment of generation. " +
+             "Prevents the player from being trapped inside a freshly spawned obstacle or cluster member. " +
+             "Set to 0 to disable.")]
+    public float minDistanceFromPlayer = 2.5f;
+
+    [Tooltip("Tag used to find the player GameObject for the spawn exclusion check.")]
+    public string playerTag = "Player";
+
     [Header("Scale")]
     [Tooltip("Base scale for obstacle prefab instances.")]
     public float baseScale = 0.5f;
@@ -75,6 +83,11 @@ public class ObstacleGenerator : MonoBehaviour
     public float sortYOffset = -0.5f;
 
     private GameObject containerGO;
+
+    // Cached at the start of GenerateObstacles() so every spawn check uses the
+    // same player position even if the player moves during generation.
+    // null = no player found / exclusion disabled.
+    private Vector2? cachedPlayerPos;
 
     //  Built-in cluster templates 
 
@@ -134,6 +147,16 @@ public class ObstacleGenerator : MonoBehaviour
     public void GenerateObstacles()
     {
         Cleanup();
+
+        // Cache the player position once. Every solo / cluster member spawn
+        // will avoid this point by `minDistanceFromPlayer`.
+        cachedPlayerPos = null;
+        if (minDistanceFromPlayer > 0f && !string.IsNullOrEmpty(playerTag))
+        {
+            GameObject playerGO = GameObject.FindGameObjectWithTag(playerTag);
+            if (playerGO != null)
+                cachedPlayerPos = (Vector2)playerGO.transform.position;
+        }
 
         // Auto-pull prefabs from BiomeManager if not set
         bool hasPrefabs = false;
@@ -219,6 +242,17 @@ public class ObstacleGenerator : MonoBehaviour
                 }
                 if (tooClose) continue;
 
+                // Player exclusion — the anchor is the cluster centre, so we
+                // also widen the check by clusterSpread when this attempt
+                // would become a cluster (members radiate outward from anchor).
+                if (cachedPlayerPos.HasValue)
+                {
+                    float playerExcl = minDistanceFromPlayer;
+                    if (enableClusters) playerExcl += clusterSpread;
+                    if (Vector2.Distance(anchor, cachedPlayerPos.Value) < playerExcl)
+                        continue;
+                }
+
                 bool makeCluster = enableClusters && Random.value < clusterChance;
 
                 if (makeCluster)
@@ -287,6 +321,11 @@ public class ObstacleGenerator : MonoBehaviour
                 }
                 if (tooClose) continue;
 
+                // Player exclusion
+                if (cachedPlayerPos.HasValue &&
+                    Vector2.Distance(pos, cachedPlayerPos.Value) < minDistanceFromPlayer)
+                    continue;
+
                 GameObject prefab = validSolo[Random.Range(0, validSolo.Count)];
                 float s = baseScale * Random.Range(1f - scaleVariation, 1f + scaleVariation);
                 SpawnSinglePrefab(prefab, pos, s);
@@ -347,6 +386,12 @@ public class ObstacleGenerator : MonoBehaviour
             float posDist = pos.magnitude;
             if (posDist < zoneInner || posDist > zoneOuter) continue;
 
+            // Per-member player exclusion (anchor was already checked, but
+            // members radiate outward and could still land on the player).
+            if (cachedPlayerPos.HasValue &&
+                Vector2.Distance(pos, cachedPlayerPos.Value) < minDistanceFromPlayer)
+                continue;
+
             GameObject prefab = ResolvePrefab(member.slotIndex, allValid, heroPrefabs, accentPrefabs);
             float scaleMult = member.scaleMult;
             if (member.slotIndex != 0)
@@ -383,6 +428,11 @@ public class ObstacleGenerator : MonoBehaviour
             Vector2 pos = anchor + rotated;
             float posDist = pos.magnitude;
             if (posDist < zoneInner || posDist > zoneOuter) continue;
+
+            // Per-member player exclusion.
+            if (cachedPlayerPos.HasValue &&
+                Vector2.Distance(pos, cachedPlayerPos.Value) < minDistanceFromPlayer)
+                continue;
 
             GameObject prefab = ResolvePrefab(member.prefabSlotIndex, allValid, heroPrefabs, accentPrefabs);
             float s = baseScale * member.scaleMult * Random.Range(1f - scaleVariation * 0.5f, 1f + scaleVariation * 0.5f);
@@ -567,3 +617,4 @@ public class ObstacleGenerator : MonoBehaviour
         { name = n; members = m; }
     }
 }
+

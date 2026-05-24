@@ -258,7 +258,18 @@ public class GremlinPathIndicator : MonoBehaviour
         SpriteRenderer renderer = footprint.AddComponent<SpriteRenderer>();
         renderer.sprite = footprintSprite;
         renderer.sortingLayerName = "Default";
-        renderer.sortingOrder = 2000; // Above grass Y-sort range (400-1600)
+
+        // Match the grass's Y-sort formula (see GrassCartoonOverlay):
+        //   sortOrder = sortOrderBase + round(-y * sortPrecision)
+        // Grass uses base=1000, precision=10. The gremlin's YSortEntity uses the
+        // same base/precision with sortYOffset=-0.2 (which adds ~+2 to its order).
+        // We subtract 5 here so a footprint at the gremlin's feet sorts BELOW
+        // the gremlin sprite, while still landing in the grass band range
+        // (~400–1600) so it covers the grass at its own Y position.
+        const int kSortBase = 1000;
+        const float kSortPrecision = 10f;
+        const int kBelowEntityBias = 5;
+        renderer.sortingOrder = kSortBase + Mathf.RoundToInt(-position.y * kSortPrecision) - kBelowEntityBias;
 
         // Set initial alpha
         Color color = Color.white;
@@ -459,3 +470,4 @@ public class GremlinPathIndicator : MonoBehaviour
         }
     }
 }
+

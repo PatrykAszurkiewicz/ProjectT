@@ -37,6 +37,13 @@ public class StageTransitionOverlay : MonoBehaviour
     [Tooltip("Font size for the TMP stage counter. Only used if counterFont is set.")]
     public float counterFontSize = 42f;
 
+    [Header("External Wave Counter (optional)")]
+    [Tooltip("Drag your Canvas/WaveCounter TMP text here to drive it with 'Wave X/Y'.\n" +
+             "If assigned, the script will NOT create its own auto-generated wave counter.\n" +
+             "If left empty, the script tries to auto-find a scene object named 'WaveCounter' " +
+             "with a TextMeshProUGUI; if none is found, falls back to the legacy auto-generated counter.")]
+    public TMPro.TextMeshProUGUI externalWaveCounterTMP;
+
     // UI references (auto-created)
     private Canvas canvas;
     private CanvasGroup canvasGroup;
@@ -194,29 +201,35 @@ public class StageTransitionOverlay : MonoBehaviour
         // center-screen WaveFlashText) cover clicks intended for the AugmentsMenu beneath it.
 
         //  Persistent wave counter (top right, below HUD elements) 
-        GameObject counterObj = new GameObject("WaveCounterText");
-        counterObj.transform.SetParent(counterCanvasObj.transform, false);
+        //  If the user has placed their own TMP text in the scene (typically Canvas/WaveCounter),
+        //  drive that instead and skip building our own.
+        TryResolveExternalWaveCounter();
+        if (externalWaveCounterTMP == null)
+        {
+            GameObject counterObj = new GameObject("WaveCounterText");
+            counterObj.transform.SetParent(counterCanvasObj.transform, false);
 
-        waveCounterText = counterObj.AddComponent<Text>();
-        waveCounterText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        waveCounterText.fontSize = 36;
-        waveCounterText.fontStyle = FontStyle.Bold;
-        waveCounterText.alignment = TextAnchor.UpperRight;
-        waveCounterText.color = new Color(1f, 1f, 1f, 0.95f);
-        waveCounterText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        waveCounterText.text = "";
-        waveCounterText.raycastTarget = false; // display-only, must not block clicks
+            waveCounterText = counterObj.AddComponent<Text>();
+            waveCounterText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            waveCounterText.fontSize = 36;
+            waveCounterText.fontStyle = FontStyle.Bold;
+            waveCounterText.alignment = TextAnchor.UpperRight;
+            waveCounterText.color = new Color(1f, 1f, 1f, 0.95f);
+            waveCounterText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            waveCounterText.text = "";
+            waveCounterText.raycastTarget = false; // display-only, must not block clicks
 
-        Outline counterOutline = counterObj.AddComponent<Outline>();
-        counterOutline.effectColor = new Color(0, 0, 0, 1f);
-        counterOutline.effectDistance = new Vector2(2, -2);
+            Outline counterOutline = counterObj.AddComponent<Outline>();
+            counterOutline.effectColor = new Color(0, 0, 0, 1f);
+            counterOutline.effectDistance = new Vector2(2, -2);
 
-        RectTransform counterRect = counterObj.GetComponent<RectTransform>();
-        counterRect.anchorMin = new Vector2(1, 1);
-        counterRect.anchorMax = new Vector2(1, 1);
-        counterRect.pivot = new Vector2(1f, 1f);
-        counterRect.anchoredPosition = new Vector2(-68, -90); // pushed down to avoid overlap with Energy HUD
-        counterRect.sizeDelta = new Vector2(400, 60);
+            RectTransform counterRect = counterObj.GetComponent<RectTransform>();
+            counterRect.anchorMin = new Vector2(1, 1);
+            counterRect.anchorMax = new Vector2(1, 1);
+            counterRect.pivot = new Vector2(1f, 1f);
+            counterRect.anchoredPosition = new Vector2(-68, -90); // pushed down to avoid overlap with Energy HUD
+            counterRect.sizeDelta = new Vector2(400, 60);
+        } // end if (externalWaveCounterTMP == null)
 
         //  Wave flash (center of screen, brief) 
         GameObject flashObj = new GameObject("WaveFlashText");
@@ -250,7 +263,45 @@ public class StageTransitionOverlay : MonoBehaviour
     public void SetWaveCounter(string text)
     {
         EnsureInitialized();
+
+        // Prefer the user-styled external TMP text if one is present in the scene.
+        if (externalWaveCounterTMP != null)
+        {
+            externalWaveCounterTMP.text = text;
+            return;
+        }
+
         if (waveCounterText != null) waveCounterText.text = text;
+    }
+
+    // Try to find a TMP text named "WaveCounter" anywhere in the scene (including inactive),
+    // unless one has already been assigned via the Inspector.
+    private void TryResolveExternalWaveCounter()
+    {
+        if (externalWaveCounterTMP != null) return;
+
+        // FindObjectsInactive.Include so a hidden HUD that gets enabled later still wires up.
+        var allTMP = Resources.FindObjectsOfTypeAll<TMPro.TextMeshProUGUI>();
+        for (int i = 0; i < allTMP.Length; i++)
+        {
+            var t = allTMP[i];
+            if (t == null) continue;
+            // Skip prefab assets — only accept things actually in a scene.
+            if (!t.gameObject.scene.IsValid()) continue;
+            if (t.gameObject.name != "WaveCounter") continue;
+
+            externalWaveCounterTMP = t;
+            Debug.Log($"[StageTransitionOverlay] Bound external WaveCounter TMP: {GetPath(t.transform)}");
+            return;
+        }
+    }
+
+    private static string GetPath(Transform t)
+    {
+        if (t == null) return "(null)";
+        string p = t.name;
+        while (t.parent != null) { t = t.parent; p = t.name + "/" + p; }
+        return p;
     }
 
     // Briefly flash "Wave X" in the center of the screen. Non-blocking — returns immediately, animates asynchronously.

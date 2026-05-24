@@ -82,4 +82,16 @@ public abstract class BaseBossStats : EnemyStats
 
 
     }
+
+    // Called by boss subclasses from their death routines.
+    // Rolls for a permanent weapon/tool blueprint drop using the current stage index.
+    // Every boss inherits this — Boss1, Boss2, FinalBoss, etc. — so adding new
+    // bosses doesn't require any per-boss wiring.
+    protected void RollBlueprintDrop(Vector3 deathPos)
+    {
+        int stageIdx = GameOrchestrator.Instance != null
+            ? GameOrchestrator.Instance.CurrentStageIndex
+            : 0;
+        BossBlueprintDropper.RollAndSpawn(deathPos, stageIdx);
+    }
 }

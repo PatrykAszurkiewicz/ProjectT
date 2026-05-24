@@ -653,10 +653,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 639142959707558863
+  lastModified: 639152390974982027
   FileSizes:
   - Name: Desktop
-    Value: 2744
+    Value: 2802
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -714,13 +714,14 @@ MonoBehaviour:
   - {fileID: -3323416297157214354}
   - {fileID: 466687119483286031}
   - {fileID: -7431918612028469694}
+  - {fileID: 2543031125653396588}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 639142959707558863
+  cacheTime: 639152390974982027
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -798,6 +799,8 @@ MonoBehaviour:
     index: 36
   - key: event:/MeleeHit
     index: 37
+  - key: event:/ScarecrowScream
+    index: 38
 --- !u!114 &466687119483286031
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -974,6 +977,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &2543031125653396588
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/ScarecrowScream
+  m_EditorClassIdentifier: 
+  Path: event:/ScarecrowScream
+  Guid:
+    Data1: -922597727
+    Data2: 1228093541
+    Data3: 821004176
+    Data4: -524538866
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &2632449698367640323
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1071,10 +1101,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 639142959707548092
+  lastModified: 639152390974962035
   FileSizes:
   - Name: Desktop
-    Value: 1490368
+    Value: 1554464
   Exists: 1
 --- !u!114 &4699882167230820914
 MonoBehaviour:

@@ -73,6 +73,9 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Enemy SFX")]
     [field: SerializeField] public EventReference enemyAttack { get; private set; }
 
+    [field: Header("Scarecrow SFX")]
+    [field: SerializeField] public EventReference scarecrowScream { get; private set; }
+
     [field: Header("Shield SFX")]
     [field: SerializeField] public EventReference shieldBlock { get; private set; }
     [field: SerializeField] public EventReference shieldParry { get; private set; }

@@ -10,6 +10,11 @@ public class EnemyHealthBar : MonoBehaviour
     private float maxHealth;
     private bool initialized = false;
 
+    // Public read of the transform this bar is tracking. Used by
+    // external systems (Scarecrow) to find their bar when EnemyStats.healthBar
+    // is null — e.g. on prefabs that spawn the bar via a different path.
+    public Transform Target => target;
+
     private void Awake()
     {
         // Hide until Initialize() is called with a valid target.
@@ -51,6 +56,25 @@ public class EnemyHealthBar : MonoBehaviour
     {
         if (barUI != null)
             barUI.SetValue(currentHealth, maxHealth);
+    }
+
+
+    // Cleanly hide/show the bar. Used by support enemies (e.g. Scarecrow)
+    // that have an invisible phase.
+    public void SetVisible(bool visible)
+    {
+        if (gameObject.activeSelf != visible)
+            gameObject.SetActive(visible);
+    }
+
+
+    // Fade-friendly alpha. 
+
+    public CanvasGroup EnsureCanvasGroup()
+    {
+        var cg = GetComponent<CanvasGroup>();
+        if (cg == null) cg = gameObject.AddComponent<CanvasGroup>();
+        return cg;
     }
 
     private void LateUpdate()

@@ -268,4 +268,169 @@ public class PlayerStats : CharacterStats
         currentMana += amount;
         if (currentMana > maxMana) currentMana = maxMana;
     }
+
+    // ============================================================
+    //  Animated maxStamina change
+    // ============================================================
+    // Mirror of CharacterStats.SetMaxHealthAnimated for the stamina pool.
+    //
+    // StaminaBarUI polls currentStamina/maxStamina every Update, and the
+    // underlying ResourceBarUI distinguishes ratio-down (damage shadow) from
+    // ratio-up (fill). We preserve the ratio first, then animate up — and
+    // when the player is at/near full stamina (the natural fill-up would be
+    // invisible) we briefly dip currentStamina by `maxStaminaMinPulseFraction`
+    // and tween it back up. Reads as a confident pulse, not damage.
+    [Header("Capacity Change Animation (Stamina / Mana)")]
+    [Tooltip("Duration of the smooth fill-up tween when maxStamina increases.")]
+    public float maxStaminaIncreaseAnimDuration = 0.5f;
+    [Tooltip("Minimum visible motion (as a fraction of maxStamina) when an augment is picked. Same role as maxHealthMinPulseFraction.")]
+    [Range(0f, 0.5f)]
+    public float maxStaminaMinPulseFraction = 0.18f;
+    [Tooltip("Duration of the smooth fill-up tween when maxMana increases.")]
+    public float maxManaIncreaseAnimDuration = 0.5f;
+    [Tooltip("Minimum visible motion (as a fraction of maxMana) when an augment is picked.")]
+    [Range(0f, 0.5f)]
+    public float maxManaMinPulseFraction = 0.18f;
+
+    private Coroutine _maxStaminaTween;
+    private Coroutine _maxManaTween;
+
+    public void SetMaxStaminaAnimated(float newMax)
+    {
+        if (newMax <= 0f || float.IsNaN(newMax) || float.IsInfinity(newMax))
+        {
+            Debug.LogWarning($"[PlayerStats] SetMaxStaminaAnimated ignored invalid value: {newMax}");
+            return;
+        }
+
+        float oldMax = maxStamina;
+
+        if (newMax <= oldMax)
+        {
+            maxStamina = newMax;
+            if (currentStamina > maxStamina) currentStamina = maxStamina;
+            return;
+        }
+
+        // Preserve fill ratio across the cap change.
+        float ratio = (oldMax > 0f) ? Mathf.Clamp01(currentStamina / oldMax) : 1f;
+        maxStamina = newMax;
+        currentStamina = maxStamina * ratio;
+
+        if (_maxStaminaTween != null)
+        {
+            StopCoroutine(_maxStaminaTween);
+            _maxStaminaTween = null;
+        }
+
+        if (!isActiveAndEnabled) return;
+
+        // Guarantee visible motion: if the natural fill gap is too small, dip
+        // currentStamina to widen it. Pulse reads as a positive flash.
+        float naturalGapFraction = (maxStamina - currentStamina) / maxStamina;
+        float minGapFraction = Mathf.Clamp01(maxStaminaMinPulseFraction);
+        if (naturalGapFraction < minGapFraction)
+        {
+            currentStamina = maxStamina * (1f - minGapFraction);
+        }
+
+        if (currentStamina < maxStamina)
+        {
+            _maxStaminaTween = StartCoroutine(AnimateStaminaFillUp());
+        }
+    }
+
+    private IEnumerator AnimateStaminaFillUp()
+    {
+        float startValue = currentStamina;
+        float targetValue = maxStamina;
+        float duration = Mathf.Max(0.05f, maxStaminaIncreaseAnimDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            // Player started consuming stamina mid-tween — let gameplay win,
+            // existing regen will refill from wherever we land.
+            if (currentStamina < startValue - 0.01f) { _maxStaminaTween = null; yield break; }
+            // maxStamina changed again (another augment) — fresh tween took over.
+            if (!Mathf.Approximately(maxStamina, targetValue)) { _maxStaminaTween = null; yield break; }
+
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float eased = 1f - (1f - t) * (1f - t);
+            currentStamina = Mathf.Lerp(startValue, targetValue, eased);
+            yield return null;
+        }
+
+        currentStamina = targetValue;
+        _maxStaminaTween = null;
+    }
+
+    // Animated maxMana change
+    // No augment touches maxMana today, but adding this preemptively means
+    // when one is introduced it Just Works without re-fixing the bug.
+    public void SetMaxManaAnimated(float newMax)
+    {
+        if (newMax <= 0f || float.IsNaN(newMax) || float.IsInfinity(newMax))
+        {
+            Debug.LogWarning($"[PlayerStats] SetMaxManaAnimated ignored invalid value: {newMax}");
+            return;
+        }
+
+        float oldMax = maxMana;
+
+        if (newMax <= oldMax)
+        {
+            maxMana = newMax;
+            if (currentMana > maxMana) currentMana = maxMana;
+            return;
+        }
+
+        float ratio = (oldMax > 0f) ? Mathf.Clamp01(currentMana / oldMax) : 1f;
+        maxMana = newMax;
+        currentMana = maxMana * ratio;
+
+        if (_maxManaTween != null)
+        {
+            StopCoroutine(_maxManaTween);
+            _maxManaTween = null;
+        }
+
+        if (!isActiveAndEnabled) return;
+
+        float naturalGapFraction = (maxMana - currentMana) / maxMana;
+        float minGapFraction = Mathf.Clamp01(maxManaMinPulseFraction);
+        if (naturalGapFraction < minGapFraction)
+        {
+            currentMana = maxMana * (1f - minGapFraction);
+        }
+
+        if (currentMana < maxMana)
+        {
+            _maxManaTween = StartCoroutine(AnimateManaFillUp());
+        }
+    }
+
+    private IEnumerator AnimateManaFillUp()
+    {
+        float startValue = currentMana;
+        float targetValue = maxMana;
+        float duration = Mathf.Max(0.05f, maxManaIncreaseAnimDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            if (currentMana < startValue - 0.01f) { _maxManaTween = null; yield break; }
+            if (!Mathf.Approximately(maxMana, targetValue)) { _maxManaTween = null; yield break; }
+
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float eased = 1f - (1f - t) * (1f - t);
+            currentMana = Mathf.Lerp(startValue, targetValue, eased);
+            yield return null;
+        }
+
+        currentMana = targetValue;
+        _maxManaTween = null;
+    }
 }

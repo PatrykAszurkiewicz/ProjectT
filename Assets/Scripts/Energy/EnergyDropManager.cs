@@ -169,9 +169,14 @@ public class EnergyDropManager : MonoBehaviour
         // Add random spread
         Vector3 spawnPos = position + (Vector3)Random.insideUnitCircle * spawnRadius;
         spawnPos.z = 0;
-        int adjustedValue = Mathf.RoundToInt(energyValue * EnergyManager.Instance.globalResourceMultiplier);
+
+        // Null-guard: EnergyManager may not exist (e.g. during scene transitions
+        // or in test scenes). Fall back to a 1.0 multiplier if missing.
+        var em = EnergyManager.Instance;
+        float multiplier = em != null ? em.globalResourceMultiplier : 1f;
+        int adjustedValue = Mathf.RoundToInt(energyValue * multiplier);
+
         GameObject drop = EnergyDrop.CreateEnergyDrop(spawnPos, adjustedValue);
-        //GameObject drop = EnergyDrop.CreateEnergyDrop(spawnPos, energyValue);
         return drop;
     }
 
@@ -181,13 +186,23 @@ public class EnergyDropManager : MonoBehaviour
         Vector3 spawnPos = position + (Vector3)Random.insideUnitCircle * spawnRadius;
         spawnPos.z = 0;
 
-        int adjustedValue = Mathf.RoundToInt(energyValue * EnergyManager.Instance.globalResourceMultiplier);
-
-        // Roll for bonus resources
-        if (EnergyManager.Instance.bonusResourceDropChance > 0f &&
-            Random.Range(0f, 1f) <= EnergyManager.Instance.bonusResourceDropChance)
+        // Null-guard: EnergyManager may not exist yet (e.g. during scene
+        // transitions, or if the enemy died on the same frame the manager
+        // was destroyed). Fall back to no scaling rather than throwing.
+        var em = EnergyManager.Instance;
+        if (em == null)
         {
-            adjustedValue = Mathf.RoundToInt(adjustedValue * EnergyManager.Instance.bonusResourceMultiplier);
+            // Plain drop with the unscaled value — better than crashing.
+            return EnergyDrop.CreateEnergyDrop(spawnPos, energyValue);
+        }
+
+        int adjustedValue = Mathf.RoundToInt(energyValue * em.globalResourceMultiplier);
+
+        // Roll for bonus resources (also guarded by the null check above)
+        if (em.bonusResourceDropChance > 0f &&
+            Random.Range(0f, 1f) <= em.bonusResourceDropChance)
+        {
+            adjustedValue = Mathf.RoundToInt(adjustedValue * em.bonusResourceMultiplier);
             //Debug.Log($"Bonus resources! {adjustedValue} energy");
         }
 

@@ -1678,6 +1678,47 @@ public static class StatApplicator
                 Debug.Log($"Clamped armorReduction to valid range: {newValue}");
             }
 
+            // -----------------------------------------------------------------
+            // Capacity fields (maxHealth / maxStamina / maxMana) MUST NOT be
+            // written via raw reflection: doing so leaves currentHealth /
+            // currentStamina / currentMana out of sync with the new cap and,
+            // critically, never fires OnHealthChanged — so the HealthBarUI
+            // keeps showing the old ratio and then "snaps" to a much smaller
+            // fill the next time any damage or regen tick fires the event
+            // (about healthRegenDelay seconds later). That's the "depleting
+            // healthbar" bug for augment 32 — and the structurally identical
+            // case for augment 38 (maxStamina) and any future maxMana augment.
+            //
+            // Route these through their animated setters instead. The setters:
+            //   1. update the cap
+            //   2. clamp / hold current value appropriately
+            //   3. fire the change event so the UI redraws
+            //   4. tween current value up to the new cap for a visible,
+            //      satisfying fill animation on increases
+            // -----------------------------------------------------------------
+            if (field.Name == "maxHealth" && target is CharacterStats charStats)
+            {
+                charStats.SetMaxHealthAnimated(newValue);
+                Debug.Log($"Applied {modification.OperationType} {modification.Value} to maxHealth (animated): {currentValue} -> {charStats.maxHealth}");
+                return true;
+            }
+
+            if (target is PlayerStats playerStats)
+            {
+                if (field.Name == "maxStamina")
+                {
+                    playerStats.SetMaxStaminaAnimated(newValue);
+                    Debug.Log($"Applied {modification.OperationType} {modification.Value} to maxStamina (animated): {currentValue} -> {playerStats.maxStamina}");
+                    return true;
+                }
+                if (field.Name == "maxMana")
+                {
+                    playerStats.SetMaxManaAnimated(newValue);
+                    Debug.Log($"Applied {modification.OperationType} {modification.Value} to maxMana (animated): {currentValue} -> {playerStats.maxMana}");
+                    return true;
+                }
+            }
+
             field.SetValue(target, Convert.ChangeType(newValue, field.FieldType));
             Debug.Log($"Applied {modification.OperationType} {modification.Value} to {field.Name}: {currentValue} -> {newValue}");
             return true;

@@ -2,20 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 
-
 // Enemy death VFX.
 // Animation driven by Update() (not coroutines) on an independent host GameObject.
-//
-// PERFORMANCE NOTE: This script reads sprite pixels at runtime to build the
-// boss "shatter" effect. To avoid forcing Read/Write on every sprite atlas:
-//   1) Pass `sourceTexturePath` (a Resources path) to Trigger() so we can
-//      load the source PNG directly instead of going through the atlas.
-//   2) The first read for each sprite is cached in _pixelCache; subsequent
-//      deaths of the same boss type do zero texture reads.
-// With this in place, you only need Read/Write enabled on the source boss
-// PNG(s), not on any sprite atlas.
-
-
 public class EnemyDeathVFX : MonoBehaviour
 {
     private const float DISINTEGRATION_THRESHOLD = 1.0f;
@@ -134,10 +122,7 @@ public class EnemyDeathVFX : MonoBehaviour
             vfx.StartCoroutine(vfx.DoNightDeathFlash(worldPos, isBoss));
     }
 
-
-    // ─────────────────────────────────────────────────────────────────
     // Instance state
-
     private List<ChunkData> _chunks;
     private List<PtclData> _embers;
     private float _duration;
@@ -216,11 +201,7 @@ public class EnemyDeathVFX : MonoBehaviour
             p.go.transform.localScale = Vector3.one * Mathf.Max(0.001f, ps);
         }
     }
-
-
-    // ─────────────────────────────────────────────────────────────────
     // Chunk builders
-
     private static bool TryBuildSpriteChunks(
         List<ChunkData> chunks,
         Sprite srcSprite, bool flipX,
@@ -465,9 +446,7 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
-    // ─────────────────────────────────────────────────────────────────
     // Coroutines (Flash, Shockwave, Night flash)
-
     private IEnumerator DoFlash(
         Vector3 origin, Sprite sprite, bool flipX,
         int sortOrder, string sortLayerName, int sortLayerID, Vector3 scale)
@@ -496,36 +475,102 @@ public class EnemyDeathVFX : MonoBehaviour
         if (fObj != null) Destroy(fObj);
     }
 
+    // Boss explosion shockwave 
     private IEnumerator DoShockwave(
         Vector3 origin, int sortOrder, string sortLayerName, float maxRadius)
     {
-        GameObject go = new GameObject("Ring");
-        go.transform.SetParent(transform, false);
-        go.transform.position = origin;
+        // Root holds every dust GameObject so they all clean up together.
+        GameObject root = new GameObject("DustShockwave");
+        root.transform.SetParent(transform, false);
+        root.transform.position = origin;
 
-        LineRenderer lr = go.AddComponent<LineRenderer>();
-        Material mat = new Material(Shader.Find("Sprites/Default"));
-        lr.material = mat;
-        lr.startWidth = 0.22f;
-        lr.endWidth = 0.22f;
-        lr.sortingOrder = sortOrder + 25;
-        lr.sortingLayerName = sortLayerName;
-        lr.useWorldSpace = true;
-        lr.loop = true;
-        lr.positionCount = 49;
+        // Warm explosion dust: the hammer uses a neutral grey-tan; here we
+        // bias it toward the boss's orange so it matches the rest of the blast.
+        Color dust = new Color(0.95f, 0.62f, 0.30f);
 
-        float dur = 0.42f, e = 0f;
-        while (e < dur)
+        // Soft ground-hugging disc that expands once and fades.
+        StartCoroutine(DustDisc(root.transform, sortLayerName, sortOrder + 24,
+                                dust, maxRadius));
+
+        // Ring of dust puffs rolling outward.
+        int puffs = 14;
+        for (int i = 0; i < puffs; i++)
+        {
+            float ang = (i / (float)puffs) * Mathf.PI * 2f
+                        + Random.Range(-0.12f, 0.12f);
+            StartCoroutine(DustPuff(root.transform, sortLayerName, sortOrder + 25,
+                                    i, dust, ang, maxRadius));
+        }
+
+        // Keep the root alive until the longest-lived puff has finished.
+        yield return new WaitForSeconds(0.7f);
+        if (root != null) Destroy(root);
+    }
+
+    // One soft puff travelling outward along `angle`, decelerating like dust.
+    private IEnumerator DustPuff(
+        Transform parent, string sortLayerName, int sortOrder,
+        int index, Color dust, float angle, float maxRadius)
+    {
+        var go = new GameObject("DustPuff");
+        go.transform.SetParent(parent, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = HammerSlamSystem.GetSoftDiscSprite();
+        sr.sortingLayerName = sortLayerName;
+        sr.sortingOrder = sortOrder + (index % 5);
+
+        Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        float startR = maxRadius * 0.10f;
+        float endR = maxRadius * Random.Range(0.85f, 1.10f);
+        float life = Random.Range(0.42f, 0.62f);
+        float startSize = maxRadius * Random.Range(0.16f, 0.26f);
+        float endSize = maxRadius * Random.Range(0.45f, 0.72f);
+        float spin = Random.Range(-120f, 120f);
+
+        float e = 0f;
+        while (e < life)
         {
             e += Time.deltaTime;
-            float t = e / dur;
-            float r = Mathf.Lerp(0.05f, maxRadius, Mathf.Sqrt(t));
-            mat.color = new Color(1f, 0.55f, 0.08f, 1f - t * t);
-            for (int i = 0; i < 49; i++)
-            {
-                float a = i / 48f * Mathf.PI * 2f;
-                lr.SetPosition(i, origin + new Vector3(Mathf.Cos(a), Mathf.Sin(a)) * r);
-            }
+            float t = Mathf.Clamp01(e / life);
+            // Ease-out travel: fast launch, decelerating like real dust.
+            float travel = 1f - (1f - t) * (1f - t);
+            float r = Mathf.Lerp(startR, endR, travel);
+            go.transform.localPosition = (Vector3)(dir * r);
+            go.transform.localScale = Vector3.one * Mathf.Lerp(startSize, endSize, t);
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, spin * t);
+
+            Color c = dust;
+            c.a = Mathf.Lerp(0.85f, 0f, t * t);
+            sr.color = c;
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    // A soft low cloud that expands once and fades, hugging the ground.
+    private IEnumerator DustDisc(
+        Transform parent, string sortLayerName, int sortOrder,
+        Color dust, float maxRadius)
+    {
+        var go = new GameObject("DustDisc");
+        go.transform.SetParent(parent, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = HammerSlamSystem.GetSoftDiscSprite();
+        sr.sortingLayerName = sortLayerName;
+        sr.sortingOrder = sortOrder;
+
+        float life = 0.55f;
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float eased = 1f - (1f - p) * (1f - p);
+            go.transform.localScale =
+                Vector3.one * Mathf.Lerp(maxRadius * 0.35f, maxRadius * 1.8f, eased);
+            Color c = dust;
+            c.a = Mathf.Lerp(0.5f, 0f, p);
+            sr.color = c;
             yield return null;
         }
         if (go != null) Destroy(go);
@@ -569,13 +614,7 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
-    // ─────────────────────────────────────────────────────────────────
-    // PIXEL CACHE  (the main change vs. the old version)
-    //
-    // Reads the source PNG once per sprite, then reuses its pixels on every
-    // subsequent boss death. Lets us keep Read/Write OFF on every sprite
-    // atlas — only the source boss PNG(s) need Read/Write enabled.
-
+    // PIXEL CACHE 
     private class CachedSpritePixels
     {
         public Color[] pixels;
@@ -660,9 +699,7 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
-    // ─────────────────────────────────────────────────────────────────
     // PROCEDURAL SPRITES (unchanged)
-
     private static Sprite _chunkSprite, _emberSprite;
 
     private static Sprite GetChunkSprite()
@@ -714,9 +751,7 @@ public class EnemyDeathVFX : MonoBehaviour
     }
 
 
-    // ─────────────────────────────────────────────────────────────────
     // Data classes
-
     private class ChunkData
     {
         public GameObject go;

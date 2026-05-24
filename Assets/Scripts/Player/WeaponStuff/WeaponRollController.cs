@@ -6,8 +6,8 @@ public enum ScrollTarget { None, Weapon, Tool }
 
 public class WeaponRollController : MonoBehaviour
 {
-    [Header("Slots 0-10: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret, Decoy, Boomerang")]
-    public WeaponData[] allWeaponSlots = new WeaponData[11];
+    [Header("Slots 0-13: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret, Decoy, Boomerang, Book, BattleHammer, StealthCloak")]
+    public WeaponData[] allWeaponSlots = new WeaponData[14];
 
     Weapon _weapon;
     WeaponRollUI _ui;
@@ -75,6 +75,13 @@ public class WeaponRollController : MonoBehaviour
 
     void Update()
     {
+        // Suspend ALL input handling when the game is paused (e.g. pause menu
+        // is open). Otherwise the mouse wheel cycles weapons while the player
+        // is scrolling the augment list, and number keys swap weapons while
+        // they're typing in a menu. Time.timeScale == 0 is the canonical
+        // "paused" signal set by PauseMenuController.
+        if (Time.timeScale == 0f) return;
+
         bool shiftHeld = Keyboard.current != null &&
             (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
 

@@ -55,7 +55,7 @@ public class AugmentsMenu : MonoBehaviour
     }
 
 
-    [SerializeField] private ChosenAugmentsUI chosenAugmentsUI; // menu pauzy itp
+    //[SerializeField] private ChosenAugmentsUI chosenAugmentsUI; // menu pauzy itp
 
     // State variables
     private bool isHidden = false;
@@ -129,7 +129,7 @@ public class AugmentsMenu : MonoBehaviour
 
     void Start()
     {
-        chosenAugmentsUI = FindAnyObjectByType<ChosenAugmentsUI>(FindObjectsInactive.Include);
+        //chosenAugmentsUI = FindAnyObjectByType<ChosenAugmentsUI>(FindObjectsInactive.Include);
 
         if (debugMode) Debug.Log("AugmentsMenu: Start called");
 
@@ -365,6 +365,7 @@ public class AugmentsMenu : MonoBehaviour
             94,  // Unlocked portable obstacles
             231, // Unlocked heavy melee weapon
             232, // Unlocked dagger melee weapon
+            323, // Unlocked stealth cloak
             // One-time special effects
             30,  // God Mode (permanent penalty)
             37,  // Quick revive (once per wave)
@@ -376,6 +377,30 @@ public class AugmentsMenu : MonoBehaviour
             var appliedAugments = AugmentRegistry.Instance.GetAppliedAugments();
             // Only exclude non-repeatable augments
             excluded.AddRange(appliedAugments.Where(id => nonRepeatableAugments.Contains(id)));
+        }
+
+        //  BLUEPRINT/STARTER EXCLUSIONS 
+        // 1) Melee (ID 2) — starter weapon, never offer an "Unlock Melee" card.
+        excluded.Add(2);
+
+        // 2) Any weapon/tool unlock-augment whose slot is already unlocked in
+        //    WeaponUnlockRegistry (i.e. already in the hotbar). Stops the popup
+        //    offering "Unlock Flamethrower" when the player just picked up the
+        //    flamethrower blueprint and has it equipped.
+        if (WeaponUnlockRegistry.Instance != null)
+        {
+            // augmentID → slot mapping (mirrors WeaponUnlockRegistry.AugmentToSlot)
+            (int augId, int slot)[] unlockMap =
+            {
+                (2, 0), (66, 1), (65, 2), (81, 3), (4, 4),
+                (93, 5), (314, 6), (315, 7), (317, 8), (316, 9), (318, 10),
+                (323, 13),
+            };
+            foreach (var (augId, slot) in unlockMap)
+            {
+                if (WeaponUnlockRegistry.Instance.IsUnlocked(slot))
+                    excluded.Add(augId);
+            }
         }
 
         return excluded.Distinct().ToList();
@@ -544,9 +569,11 @@ public class AugmentsMenu : MonoBehaviour
         {
             Debug.LogError($"Failed to apply {selectedRarity} augment {chosenId}");
         }
-        FindAnyObjectByType<StatsUI>().RefreshUI();
+        //FindAnyObjectByType<StatsUI>().RefreshUI();
+        FindAnyObjectByType<StatsPanelUI>()?.RefreshAll();
 
-        chosenAugmentsUI.RefreshUI();
+        //chosenAugmentsUI?.RefreshUI();
+
 
     }
 
@@ -664,6 +691,12 @@ public class AugmentsMenu : MonoBehaviour
         var availableAugments = allAugments
             .Where(a => a.Priority == 0 && !excludeIDs.Contains(a.ID) && a.Icon != null)
             .ToList();
+
+        // BLUEPRINT GATE — weapon/tool unlock augments are only eligible if the
+        // player has discovered the corresponding blueprint (boss drop pickup).
+        // Filters IDs 2, 4, 65, 66, 81, 93, 314, 315, 316, 317, 318 against
+        // WeaponBlueprintRegistry. Non-unlock augments pass through unchanged.
+        availableAugments = AugmentBlueprintGate.FilterByBlueprints(availableAugments);
 
         if (availableAugments.Count == 0)
         {

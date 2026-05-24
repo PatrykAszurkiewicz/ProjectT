@@ -16,6 +16,16 @@ public class EnergyBar : MonoBehaviour
     public Color lowEnergyColor = Color.yellow;
     public Color criticalEnergyColor = Color.red;
     public Color depletedEnergyColor = Color.gray;
+
+    [Header("Text Outline")]
+    [Tooltip("Adds a contrasting outline behind the energy text so it stays readable on light biomes (Snow, Stones) and dark ones alike.")]
+    public bool useTextOutline = true;
+
+    [Tooltip("Color of the outline drawn behind the main energy text.")]
+    public Color textOutlineColor = Color.black;
+
+    [Tooltip("Outline thickness in local units. Around 0.015–0.03 looks right for the default characterSize (0.18).")]
+    public float textOutlineThickness = 0.022f;
     #endregion
 
     #region Core Components
@@ -23,6 +33,7 @@ public class EnergyBar : MonoBehaviour
     private SpriteRenderer energyBarBackground;
     private SpriteRenderer energyBarFill;
     private TextMesh energyText;
+    private TextMesh[] energyTextOutlines; // 4-direction outline stamps drawn behind energyText
     private IEnergyConsumer energyConsumer;
     private SpriteRenderer parentSpriteRenderer;
     #endregion
@@ -87,14 +98,54 @@ public class EnergyBar : MonoBehaviour
 
     void CreateEnergyText()
     {
+        // Outline stamps must be created first so they render BEHIND the main text
+        // (lower sortingOrder). The four offsets give a balanced N/S/E/W outline that
+        // reads as a clean stroke at this character size while staying cheap.
+        if (useTextOutline)
+        {
+            Vector2[] offsets = new Vector2[]
+            {
+                new Vector2(-textOutlineThickness, 0f),
+                new Vector2( textOutlineThickness, 0f),
+                new Vector2( 0f, -textOutlineThickness),
+                new Vector2( 0f,  textOutlineThickness),
+            };
+
+            energyTextOutlines = new TextMesh[offsets.Length];
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                GameObject outlineObj = new GameObject($"EnergyTextOutline_{i}");
+                outlineObj.transform.SetParent(energyBarContainer.transform);
+                outlineObj.transform.localPosition = Vector3.up * 0.3f + (Vector3)offsets[i];
+
+                TextMesh outlineMesh = outlineObj.AddComponent<TextMesh>();
+                outlineMesh.text = $"{energyConsumer.GetEnergy():F0}/{energyConsumer.GetMaxEnergy():F0}";
+                outlineMesh.fontSize = 22;
+                outlineMesh.characterSize = 0.18f;
+                outlineMesh.anchor = TextAnchor.MiddleCenter;
+                outlineMesh.color = textOutlineColor;
+
+                MeshRenderer outlineRenderer = outlineObj.GetComponent<MeshRenderer>();
+                if (outlineRenderer != null)
+                {
+                    if (parentSpriteRenderer != null)
+                        outlineRenderer.sortingLayerName = parentSpriteRenderer.sortingLayerName;
+                    // One below the main text (4002), still above fill (4001)
+                    outlineRenderer.sortingOrder = 4002;
+                }
+
+                energyTextOutlines[i] = outlineMesh;
+            }
+        }
+
         GameObject textObj = new GameObject("EnergyText");
         textObj.transform.SetParent(energyBarContainer.transform);
         textObj.transform.localPosition = Vector3.up * 0.3f;
 
         energyText = textObj.AddComponent<TextMesh>();
         energyText.text = $"{energyConsumer.GetEnergy():F0}/{energyConsumer.GetMaxEnergy():F0}";
-        energyText.fontSize = 17;
-        energyText.characterSize = 0.14f;
+        energyText.fontSize = 22;
+        energyText.characterSize = 0.18f;
         energyText.anchor = TextAnchor.MiddleCenter;
         energyText.color = normalEnergyColor;
 
@@ -103,8 +154,8 @@ public class EnergyBar : MonoBehaviour
         {
             if (parentSpriteRenderer != null)
                 textRenderer.sortingLayerName = parentSpriteRenderer.sortingLayerName;
-            // Above fill (4001)
-            textRenderer.sortingOrder = 4002;
+            // Above fill (4001) and above outline stamps (4002)
+            textRenderer.sortingOrder = 4003;
         }
     }
     #endregion
@@ -140,8 +191,22 @@ public class EnergyBar : MonoBehaviour
         // Update energy text
         if (energyText != null && showEnergyText)
         {
-            energyText.text = $"{energyConsumer.GetEnergy():F0}/{energyConsumer.GetMaxEnergy():F0}";
+            string label = $"{energyConsumer.GetEnergy():F0}/{energyConsumer.GetMaxEnergy():F0}";
+            energyText.text = label;
             energyText.color = energyColor;
+
+            // Keep outline stamps in lockstep with the main text. Outline color stays
+            // constant — it's the contrast layer, not part of the energy state cue.
+            if (energyTextOutlines != null)
+            {
+                for (int i = 0; i < energyTextOutlines.Length; i++)
+                {
+                    if (energyTextOutlines[i] != null)
+                    {
+                        energyTextOutlines[i].text = label;
+                    }
+                }
+            }
         }
     }
 
