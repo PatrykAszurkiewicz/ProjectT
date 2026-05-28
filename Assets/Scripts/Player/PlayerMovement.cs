@@ -15,6 +15,11 @@ public class PlayerMovement : MonoBehaviour
 
     bool isSprinting = false;
 
+    /// While true, PlayerMovement yields control of the Rigidbody2D to whoever
+    /// set this flag (e.g. the grappling hook). FixedUpdate will not call
+    /// MovePosition, so external systems can move the player freely.
+    public bool IsBeingGrappled { get; set; } = false;
+
     private bool isDashing = false;
     private Vector2 dashDirection;
     private float dashTimer;
@@ -283,6 +288,11 @@ public class PlayerMovement : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // Grappling hook owns position while active — bail out completely so
+        // we don't fight it with MovePosition or input-based movement.
+        if (IsBeingGrappled)
+            return;
+
         if (isDashing)
         {
             rb.MovePosition(rb.position + dashDirection * pstats.dashSpeed * Time.fixedDeltaTime);
@@ -390,3 +400,4 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 }
+

@@ -286,8 +286,69 @@ public struct BiomeVolumeDefaults
                     globalLightColor = new Color(0.65f, 0.68f, 0.88f, 1f),
                 };
 
+            //  Corruption — sickly green-purple haze, very dark, low saturation.
+            case BiomeType.Corruption:
+                return new BiomeVolumeDefaults
+                {
+                    volumeEnabled = true,
+                    volumeWeight = 1f,
+
+                    bloomEnabled = false,
+                    bloomIntensity = 0.5f,
+                    bloomThreshold = 1.0f,
+                    bloomScatter = 0.4f,
+                    bloomTint = new Color(0.55f, 0.85f, 0.50f, 1f),
+
+                    vignetteEnabled = true,
+                    vignetteIntensity = 0.55f,
+                    vignetteSmoothness = 0.45f,
+                    vignetteRounded = true,
+                    vignetteColor = new Color(0.05f, 0.08f, 0.03f, 1f),
+
+                    colorAdjustmentsEnabled = true,
+                    postExposure = -0.35f,
+                    contrast = 22f,
+                    saturation = -28f,
+                    colorFilter = new Color(0.85f, 0.92f, 0.82f, 1f),
+
+                    globalLightOverride = true,
+                    globalLightIntensity = 0.55f,
+                    globalLightColor = new Color(0.75f, 0.82f, 0.72f, 1f),
+                };
+
+            //  PitchBlack — only the torch cone is visible, everything else is pure black. 
+            case BiomeType.PitchBlack:
+                return new BiomeVolumeDefaults
+                {
+                    volumeEnabled = true,
+                    volumeWeight = 1f,
+
+                    bloomEnabled = false,
+                    bloomIntensity = 0.3f,
+                    bloomThreshold = 1.2f,
+                    bloomScatter = 0.3f,
+                    bloomTint = new Color(0.85f, 0.90f, 1.0f, 1f),
+
+                    vignetteEnabled = true,
+                    vignetteIntensity = 0.40f,
+                    vignetteSmoothness = 0.50f,
+                    vignetteRounded = true,
+                    vignetteColor = new Color(0.00f, 0.00f, 0.00f, 1f),
+
+                    colorAdjustmentsEnabled = false,
+                    postExposure = 0f,
+                    contrast = 0f,
+                    saturation = 0f,
+                    colorFilter = Color.white,
+
+                    globalLightOverride = false,
+                    globalLightIntensity = 1f,
+                    globalLightColor = Color.white,
+                };
+
             default:
                 return ForBiome(BiomeType.Grass);
         }
     }
 }
+

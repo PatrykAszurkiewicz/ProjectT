@@ -88,6 +88,14 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
         if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy)
             return false;
 
+        // Hide if the target's sprite has been faded out (e.g. Scarecrow
+        // in its hidden-cycle phase). Without this, the indicator floats
+        // above an invisible-but-still-alive GameObject until the target
+        // either dies or comes back. Cheap component lookup; the indicator
+        // already runs Update once per frame.
+        var sr = target.GetComponent<SpriteRenderer>();
+        if (sr != null && sr.color.a < 0.05f) return false;
+
         if (Camera.main == null) return false;
 
         Vector3 screenPos = Camera.main.WorldToScreenPoint(target.position);
@@ -192,3 +200,4 @@ public class GrapplingHookTargetIndicator : MonoBehaviour
         isDestroyed = true;
     }
 }
+

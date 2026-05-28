@@ -865,6 +865,8 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.GrassCartoon: return "Backgrounds/Background13";
             case BiomeType.Marsh: return "Backgrounds/Background8"; // Same grass background
             case BiomeType.Night: return "Backgrounds/Background13"; // Same as GrassCartoon base
+            case BiomeType.Corruption: return "Backgrounds/Background13"; // Same as Night base
+            case BiomeType.PitchBlack: return "Backgrounds/Background13"; // Same as Night base
             default: return "Backgrounds/Background8";
         }
     }
@@ -914,6 +916,12 @@ public class BiomeManager : MonoBehaviour
                     borderNightPrefab1, borderNightPrefab2,
                     borderNightPrefab3, borderNightPrefab4
                 };
+            case BiomeType.Corruption:
+                // Re-use Night's border prefabs for Corruption (visual continuity).
+                return GetBorderPrefabsForBiome(BiomeType.Night);
+            case BiomeType.PitchBlack:
+                // Re-use Night's border prefabs — barely visible anyway.
+                return GetBorderPrefabsForBiome(BiomeType.Night);
             default:
                 return GetBorderPrefabsForBiome(BiomeType.Grass);
         }
@@ -932,6 +940,8 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.GrassCartoon: return borderGrassCartoonPreventOverlap;
             case BiomeType.Marsh: return borderMarshPreventOverlap;
             case BiomeType.Night: return borderNightPreventOverlap;
+            case BiomeType.Corruption: return borderNightPreventOverlap;
+            case BiomeType.PitchBlack: return borderNightPreventOverlap;
             default: return false;
         }
     }
@@ -949,6 +959,8 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.GrassCartoon: return borderGrassCartoonSpacing;
             case BiomeType.Marsh: return borderMarshSpacing;
             case BiomeType.Night: return borderNightSpacing;
+            case BiomeType.Corruption: return borderNightSpacing;
+            case BiomeType.PitchBlack: return borderNightSpacing;
             default: return 0.8f;
         }
     }
@@ -974,6 +986,10 @@ public class BiomeManager : MonoBehaviour
                 return new GameObject[] { obstacleMarshPrefab1, obstacleMarshPrefab2, obstacleMarshPrefab3 };
             case BiomeType.Night:
                 return new GameObject[] { obstacleNightPrefab1, obstacleNightPrefab2, obstacleNightPrefab3 };
+            case BiomeType.Corruption:
+                return new GameObject[] { obstacleNightPrefab1, obstacleNightPrefab2, obstacleNightPrefab3 };
+            case BiomeType.PitchBlack:
+                return new GameObject[] { obstacleNightPrefab1, obstacleNightPrefab2, obstacleNightPrefab3 };
             default:
                 return GetObstaclePrefabsForBiome(BiomeType.Grass);
         }
@@ -992,6 +1008,8 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.GrassCartoon: return new GameObject[] { obstacleGrassCartoonSoloPrefab };
             case BiomeType.Marsh: return new GameObject[] { obstacleMarshSoloPrefab };
             case BiomeType.Night: return new GameObject[] { obstacleNightSoloPrefab };
+            case BiomeType.Corruption: return new GameObject[] { obstacleNightSoloPrefab };
+            case BiomeType.PitchBlack: return new GameObject[] { obstacleNightSoloPrefab };
             default: return GetObstacleSoloPrefabsForBiome(BiomeType.Grass);
         }
     }
@@ -1312,6 +1330,12 @@ public class BiomeManager : MonoBehaviour
             case BiomeType.Night:
                 SetupNightBiome();
                 break;
+            case BiomeType.Corruption:
+                SetupCorruptionBiome();
+                break;
+            case BiomeType.PitchBlack:
+                SetupPitchBlackBiome();
+                break;
         }
 
         // 5. Apply fog (or remove it if defaults turned it off)
@@ -1382,6 +1406,15 @@ public class BiomeManager : MonoBehaviour
 
     void ApplyNightOverlay()
     {
+        // When the Corruption biome is active, SetupCorruptionBiome has already
+        // installed a NightOverlay in directional mode. Do not touch it here —
+        // otherwise we'd replace it with a non-directional overlay if
+        // enableNightMode happens to be true.
+        if (activeBiome == BiomeType.Corruption) return;
+
+        // PitchBlack: same protection — SetupPitchBlackBiome owns the overlay.
+        if (activeBiome == BiomeType.PitchBlack) return;
+
         RemoveOverlay<NightOverlay>();
 
         if (!enableNightMode) return;
@@ -1425,7 +1458,10 @@ public class BiomeManager : MonoBehaviour
         RemoveOverlay<NightBalloonController>();
 
         // Balloons only make sense alongside an active NightOverlay.
-        bool nightActive = enableNightMode || activeBiome == BiomeType.Night;
+        bool nightActive = enableNightMode
+                        || activeBiome == BiomeType.Night
+                        || activeBiome == BiomeType.Corruption
+                        || activeBiome == BiomeType.PitchBlack;
 
         Debug.Log($"[BiomeManager] ApplyNightBalloons — enabled={enableNightBalloons}, " +
                   $"nightMode={enableNightMode}, biome={activeBiome}, nightActive={nightActive}");
@@ -2484,6 +2520,161 @@ public class BiomeManager : MonoBehaviour
         //Debug.LogWarning($"[BiomeManager] Night biome active — preset={nightPreset}, " +
         //                 $"torch={(nightTorchEnabled ? "ON" : "OFF")}, " +
         //                 $"grass instances={nightGrassInstanceCount:N0}");
+    }
+
+    // Corruption biome — same GrassCartoon base + NightOverlay as Night,
+    // but the NightOverlay runs in directional-darkness mode so the player
+    // is shrouded in pitch-black behind them and only sees forward.
+    void SetupCorruptionBiome()
+    {
+        // 1. Spawn the same GrassCartoon prefab grass underneath (same as Night)
+        GameObject[] allSlots = new GameObject[]
+        {
+            grassCartoonPrefab1, grassCartoonPrefab2,
+            grassCartoonPrefab3, grassCartoonPrefab4,
+            grassCartoonPrefab5, grassCartoonPrefab6,
+            grassCartoonPrefab7, grassCartoonPrefab8
+        };
+
+        int validCount = 0;
+        foreach (var p in allSlots)
+            if (p != null) validCount++;
+
+        if (validCount == 0)
+        {
+            Debug.LogWarning("[BiomeManager] Corruption biome: no GrassCartoon prefabs assigned — " +
+                             "skipping grass layer. Drag prefabs into 'GrassCartoon — Prefab Slots'.");
+        }
+        else
+        {
+            GrassCartoonOverlay gc = gameObject.AddComponent<GrassCartoonOverlay>();
+
+            gc.instanceCount = nightGrassInstanceCount;
+            gc.spawnRadius = nightGrassSpawnRadius;
+            gc.coreExclusionRadius = nightGrassCoreExclusion;
+
+            gc.prefabs = allSlots;
+
+            gc.baseScale = nightGrassBaseScale;
+            gc.scaleVariation = nightGrassScaleVariation;
+
+            gc.sortPrecision = 10f;
+            gc.sortOrderBase = 1000;
+
+            gc.GenerateCartoonGrass();
+        }
+
+        // 2Spawn the night overlay in DIRECTIONAL mode.
+        //    Unlike SetupNightBiome we always take ownership of the overlay here
+        //    (regardless of enableNightMode). ApplyNightOverlay() is guarded
+        //    against the Corruption biome so it won't replace this one.
+        RemoveOverlay<NightOverlay>();
+
+        NightOverlay night = gameObject.AddComponent<NightOverlay>();
+
+        night.preset = nightPreset;
+        night.darkness = nightDarkness;
+        night.nightColor = nightColor;
+        night.ambientLight = nightAmbientLight;
+        night.playerGlowRadius = nightPlayerGlowRadius;
+        night.playerGlowStrength = nightPlayerGlowStrength;
+
+        night.torchEnabled = nightTorchEnabled;
+        night.torchRange = nightTorchRange;
+        night.torchHalfAngle = nightTorchHalfAngle;
+        night.torchEdgeSoftness = nightTorchEdgeSoftness;
+        night.torchBrightness = nightTorchBrightness;
+        night.torchWarmTint = nightTorchWarmTint;
+        night.flickerSpeed = nightFlickerSpeed;
+        night.flickerIntensity = nightFlickerIntensity;
+
+        // --- Corruption-specific overrides ---
+        night.directionalMode = true;
+        night.frontConeHalfAngle = 80f;   // wide peripheral arc (~human FOV)
+        night.frontConeRange = 5f;        // shorter than torchRange so torch stays brighter
+        night.frontConeDimming = 0.25f;   // enemies are vague shapes, not gameplay-clear
+        night.feetGlowRadius = 0.7f;      // tiny always-on bubble at player's feet
+        night.feetGlowStrength = 0.35f;
+
+        night.sortingOrder = 6000;
+        night.GenerateNight();
+    }
+
+    // PitchBlack biome — only the torch cone is visible. 
+    void SetupPitchBlackBiome()
+    {
+        // 1. Spawn the same GrassCartoon prefab grass underneath (same as Night)
+        GameObject[] allSlots = new GameObject[]
+        {
+            grassCartoonPrefab1, grassCartoonPrefab2,
+            grassCartoonPrefab3, grassCartoonPrefab4,
+            grassCartoonPrefab5, grassCartoonPrefab6,
+            grassCartoonPrefab7, grassCartoonPrefab8
+        };
+
+        int validCount = 0;
+        foreach (var p in allSlots)
+            if (p != null) validCount++;
+
+        if (validCount == 0)
+        {
+            Debug.LogWarning("[BiomeManager] PitchBlack biome: no GrassCartoon prefabs assigned — " +
+                             "skipping grass layer. Drag prefabs into 'GrassCartoon — Prefab Slots'.");
+        }
+        else
+        {
+            GrassCartoonOverlay gc = gameObject.AddComponent<GrassCartoonOverlay>();
+
+            gc.instanceCount = nightGrassInstanceCount;
+            gc.spawnRadius = nightGrassSpawnRadius;
+            gc.coreExclusionRadius = nightGrassCoreExclusion;
+
+            gc.prefabs = allSlots;
+
+            gc.baseScale = nightGrassBaseScale;
+            gc.scaleVariation = nightGrassScaleVariation;
+
+            gc.sortPrecision = 10f;
+            gc.sortOrderBase = 1000;
+
+            gc.GenerateCartoonGrass();
+        }
+
+        // Spawn the night overlay configured for "only the cone is visible".
+
+        RemoveOverlay<NightOverlay>();
+
+        NightOverlay night = gameObject.AddComponent<NightOverlay>();
+
+        // Start from the Custom preset so ApplyPreset doesn't overwrite the
+        // hard-coded values on the first frame. (The other presets would
+        // restore playerGlowStrength = 0.08+ etc., breaking the effect.)
+        night.preset = NightOverlay.NightPreset.Custom;
+
+        //  Only the cone is visible
+
+        night.darkness = 1.0f;            // maximum darkness alpha outside the cone
+        night.ambientLight = 0.0f;        // no minimum visibility — pure black elsewhere
+        night.playerGlowRadius = 1.0f;    // ~1 world unit ≈ player sprite radius
+        night.playerGlowStrength = 0.45f; // soft, just enough to wrap the sprite
+        night.nightColor = new Color(0.0f, 0.0f, 0.0f, 1f);
+
+        // Directional mode OFF — we want a pure cone, not a feet bubble +
+        // wide peripheral cone (that's Corruption's job).
+        night.directionalMode = false;
+
+        // Torch: wider, longer, brighter than Night 
+        night.torchEnabled = nightTorchEnabled;
+        night.torchHalfAngle = 44f;       // 2x wider than Night's default 22°
+        night.torchRange = 30f;           // long reach — quadratic falloff means visible length ≈ half this
+        night.torchEdgeSoftness = 0.35f;  // soft edges so the cone fades smoothly
+        night.torchBrightness = 1.0f;     // peak brightness — the cone IS the gameplay
+        night.torchWarmTint = nightTorchWarmTint;
+        night.flickerSpeed = nightFlickerSpeed;
+        night.flickerIntensity = nightFlickerIntensity;
+
+        night.sortingOrder = 6000;
+        night.GenerateNight();
     }
 }
 

@@ -39,6 +39,14 @@ public struct BiomeBackgroundDefaults
             case BiomeType.Night:
                 return new BiomeBackgroundDefaults { backgroundScale = 1.0f };
 
+            // Corruption uses the same GrassCartoon-derived background as Night 
+            case BiomeType.Corruption:
+                return new BiomeBackgroundDefaults { backgroundScale = 1.0f };
+
+            // PitchBlack: same GrassCartoon-derived base
+            case BiomeType.PitchBlack:
+                return new BiomeBackgroundDefaults { backgroundScale = 1.0f };
+
             default:
                 return ForBiome(BiomeType.Grass);
         }

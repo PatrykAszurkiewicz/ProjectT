@@ -9,6 +9,7 @@ public class GrapplingHookSystem
     private WeaponData weaponData;
     private Transform playerTransform;
     private Rigidbody2D playerRigidbody;
+    private PlayerMovement playerMovement;
 
     // Targeting
     private List<IGrapplingTarget> potentialTargets = new List<IGrapplingTarget>();
@@ -46,6 +47,7 @@ public class GrapplingHookSystem
 
         playerTransform = weapon.GetComponentInParent<PlayerMovement>()?.transform ?? weapon.transform.parent;
         playerRigidbody = weapon.GetComponentInParent<Rigidbody2D>();
+        playerMovement = weapon.GetComponentInParent<PlayerMovement>();
 
         SetupLineRenderer();
         LoadHookSprite();
@@ -288,6 +290,12 @@ public class GrapplingHookSystem
         isActive = active;
         if (!active)
         {
+            // Safety net: if the weapon is deactivated mid-pull (e.g. weapon
+            // swap), release control of the player so they don't get stuck
+            // with PlayerMovement disabled.
+            if (playerMovement != null)
+                playerMovement.IsBeingGrappled = false;
+
             ClearCurrentTarget();
             HideIndicator();
             HideHookHead();
@@ -719,37 +727,46 @@ public class GrapplingHookSystem
         // Deal damage to enemy targets when hook connects
         DealGrapplingDamage(grappleTarget);
 
-        float pullDuration = 1.5f;
+        // Long enough that a max-range hook completes even at moderate pull
+        // speeds. Loop exits early once the player arrives anyway.
+        float pullDuration = 3.0f;
         float elapsed = 0f;
-        Vector3 lastPlayerPosition = playerTransform.position;
 
         // Determine pull behavior based on target type and mass
         bool shouldPullPlayer = ShouldPullPlayer(grappleTarget);
 
-        while (elapsed < pullDuration && IsTargetValid(grappleTarget))
+        // Take ownership of the player's movement so PlayerMovement.FixedUpdate
+        // stops calling MovePosition and clobbering our pull each physics step.
+        if (shouldPullPlayer && playerMovement != null)
+            playerMovement.IsBeingGrappled = true;
+
+        try
         {
-            elapsed += Time.deltaTime;
-
-            if (shouldPullPlayer)
-                PullPlayerTowardsTarget(grappleTarget.GetGrapplePoint(), grappleTarget);
-            else
-                PullTargetTowardsPlayer(grappleTarget, playerTransform.position);
-
-            float dist = Vector3.Distance(playerTransform.position, grappleTarget.GetGrapplePoint());
-            if (dist < 2.0f) break;
-
-            // Check if player moved significantly after being close to target - early release
-            if (dist < 3.0f)
+            while (elapsed < pullDuration && IsTargetValid(grappleTarget))
             {
-                float playerMovement = Vector3.Distance(playerTransform.position, lastPlayerPosition);
-                if (playerMovement > 1.5f)
-                {
-                    break; // Player is actively moving away - release early
-                }
-            }
+                elapsed += Time.deltaTime;
 
-            lastPlayerPosition = playerTransform.position;
-            yield return null;
+                if (shouldPullPlayer)
+                    PullPlayerTowardsTarget(grappleTarget.GetGrapplePoint(), grappleTarget);
+                else
+                    PullTargetTowardsPlayer(grappleTarget, playerTransform.position);
+
+                float dist = Vector3.Distance(playerTransform.position, grappleTarget.GetGrapplePoint());
+                if (dist < 2.5f) break;
+
+                yield return null;
+            }
+        }
+        finally
+        {
+            // Always return control to PlayerMovement, even on early exit.
+            if (shouldPullPlayer && playerMovement != null)
+                playerMovement.IsBeingGrappled = false;
+
+            // Clear any residual velocity so the player doesn't drift after
+            // the hook releases.
+            if (shouldPullPlayer && playerRigidbody != null)
+                playerRigidbody.linearVelocity = Vector2.zero;
         }
     }
     private void DealGrapplingDamage(IGrapplingTarget target)
@@ -834,28 +851,45 @@ public class GrapplingHookSystem
         return 0f; // Non-enemies have no mass consideration
     }
 
-    // Mass-aware player pulling
+    // Mass-aware player pulling.
+    //
+    // IMPORTANT: PlayerMovement drives the player via rb.MovePosition() in
+    // FixedUpdate, NOT via linearVelocity. Setting linearVelocity here would
+    // do nothing — MovePosition overwrites position every physics step. So
+    // we use MovePosition too, and PlayerMovement.IsBeingGrappled gates its
+    // own MovePosition call while we own the rigidbody.
     private void PullPlayerTowardsTarget(Vector3 targetPoint, IGrapplingTarget target)
     {
         if (playerRigidbody == null) return;
 
-        Vector3 direction = (targetPoint - playerTransform.position).normalized;
-        float distance = Vector3.Distance(playerTransform.position, targetPoint);
-        float forceMagnitude = weaponData.pullForce * Mathf.Clamp01(distance / 5f);
+        Vector3 toTarget = targetPoint - playerTransform.position;
+        float distance = toTarget.magnitude;
+        if (distance < 0.001f) return;
+        Vector3 direction = toTarget / distance;
 
-        // Apply mass-based force adjustment for heavy enemies
-        var enemyMass = GetTargetMass(target);
-        if (enemyMass >= HEAVY_ENEMY_THRESHOLD)
+        // Pull speed in units/sec. With default pullForce = 15, this gives
+        // ~22 u/s — significantly faster than the player's walk speed.
+        float pullSpeed = weaponData.pullForce * 1.5f;
+
+        // Heavy enemies act as a solid anchor — slightly faster pull toward them.
+        if (target != null)
         {
-            // Heavy enemies provide stronger pull
-            float massMultiplier = Mathf.Clamp(enemyMass / HEAVY_ENEMY_THRESHOLD, 1f, 2f);
-            forceMagnitude *= massMultiplier;
+            var enemyMass = GetTargetMass(target);
+            if (enemyMass >= HEAVY_ENEMY_THRESHOLD)
+            {
+                float massMultiplier = Mathf.Clamp(enemyMass / HEAVY_ENEMY_THRESHOLD, 1f, 1.5f);
+                pullSpeed *= massMultiplier;
+            }
         }
 
-        playerRigidbody.AddForce(direction * forceMagnitude * 16f);
+        // Distance to move this frame. Clamp to remaining distance so we
+        // don't overshoot on the final step.
+        float step = pullSpeed * Time.deltaTime;
+        if (step > distance) step = distance;
 
-        Vector3 pullVelocity = direction * (weaponData.pullForce * 0.08f);
-        playerRigidbody.linearVelocity = Vector3.Lerp(playerRigidbody.linearVelocity, pullVelocity, Time.deltaTime * 1.05f);
+        // Drive the rigidbody the same way PlayerMovement does — MovePosition.
+        Vector2 newPos = (Vector2)playerTransform.position + (Vector2)direction * step;
+        playerRigidbody.MovePosition(newPos);
     }
 
     // Mass-aware target pulling  
@@ -1088,11 +1122,25 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         }
         else if (GetComponent<EnemyStats>())
         {
-            isSolidTarget = false;
-            if (rb == null)
+            // Scarecrow is a stationary support enemy — treat it as solid
+            // (tower-like) so the grappling hook pulls the PLAYER to IT
+            // instead of yanking the scarecrow toward the player. Without
+            // this branch, the enemy default isSolidTarget=false runs and
+            // ApplyGrapplePull dumps force into the scarecrow's rigidbody.
+            // With zero linear damping on its prefab, that velocity never
+            // decays and the scarecrow ends up shoving the player around.
+            if (GetComponent<Scarecrow>() != null)
             {
-                rb = gameObject.AddComponent<Rigidbody2D>();
-                rb.gravityScale = 0;
+                isSolidTarget = true;
+            }
+            else
+            {
+                isSolidTarget = false;
+                if (rb == null)
+                {
+                    rb = gameObject.AddComponent<Rigidbody2D>();
+                    rb.gravityScale = 0;
+                }
             }
         }
     }
@@ -1108,7 +1156,24 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         if (isDestroyed || this == null || gameObject == null) return false;
         if (!canBeGrappled) return false;
 
-        return !IsComponentDestroyed();
+        if (IsComponentDestroyed()) return false;
+
+        // Reject targets that are currently faded out / "ghosted" — e.g. the
+        // Scarecrow in its hidden-cycle phase. Without this check, the player
+        // could lock on to an invisible target, fire the hook, and watch it
+        // pull them to thin air. Two checks:
+        //
+        //   1) The Scarecrow component owns its own visibility flag. Asking
+        //      it directly is cheaper than reading a SpriteRenderer.
+        //   2) Fallback: sprite alpha. Anything < 0.05 counts as invisible.
+        //      Catches generic fade-out animations on other potential targets.
+        var scarecrow = GetComponent<Scarecrow>();
+        if (scarecrow != null && !scarecrow.IsCurrentlyVisible()) return false;
+
+        var sr = GetComponent<SpriteRenderer>();
+        if (sr != null && sr.color.a < 0.05f) return false;
+
+        return true;
     }
 
     private bool IsComponentDestroyed()
@@ -1168,3 +1233,5 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, pullVelocity, 1.0f);
     }
 }
+
+

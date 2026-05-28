@@ -118,6 +118,30 @@ public struct BiomeFogDefaults
                     smokeDarkCore = new Color(0.30f, 0.42f, 0.35f, 1.0f),
                 };
 
+            // Corruption: no fog
+            case BiomeType.Corruption:
+                return new BiomeFogDefaults
+                {
+                    fogEnabled = false,
+                    fogDensity = 0f,
+                    fogColor = new Color(0.10f, 0.14f, 0.08f, 1f),
+                    fogColorDeep = new Color(0.05f, 0.08f, 0.04f, 1f),
+                    smokeColor = new Color(0.08f, 0.12f, 0.06f, 1f),
+                    smokeDarkCore = new Color(0.02f, 0.04f, 0.01f, 1f),
+                };
+
+            // PitchBlack: no fog
+            case BiomeType.PitchBlack:
+                return new BiomeFogDefaults
+                {
+                    fogEnabled = false,
+                    fogDensity = 0f,
+                    fogColor = new Color(0.02f, 0.02f, 0.04f, 1f),
+                    fogColorDeep = new Color(0.01f, 0.01f, 0.02f, 1f),
+                    smokeColor = new Color(0.02f, 0.02f, 0.03f, 1f),
+                    smokeDarkCore = new Color(0.00f, 0.00f, 0.01f, 1f),
+                };
+
             default:
                 return ForBiome(BiomeType.Grass);
         }

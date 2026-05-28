@@ -78,6 +78,30 @@ public class EnemyController : MonoBehaviour
 
     public float GetAttackCooldown() => attackCooldown;
 
+    // Detection radius is configured per-prefab; expose it so companion
+    // behaviours (e.g. BerserkController) can scan the same range the
+    // controller uses for target acquisition without duplicating the value.
+    public float DetectRange => detectRange;
+
+    // The transform this enemy is currently moving toward / attacking.
+    // Read-only; lets companion behaviours observe what the controller picked
+    // (e.g. to notice when a hunted enemy dies). Null when no valid target.
+    public Transform CurrentTarget => currentTarget;
+
+    // Optional priority target hook. Returns null by default — vanilla enemies
+    // keep their normal player/tower/core selection. Override (or have a
+    // companion component drive this via a delegate) to redirect targeting,
+    // e.g. so the Berserk hunts other enemies before anything else.
+    protected virtual Transform GetPriorityTarget()
+    {
+        return PriorityTargetProvider != null ? PriorityTargetProvider() : null;
+    }
+
+    // Composition-friendly alternative to subclassing: a companion component
+    // on the same GameObject can assign this to inject a priority target.
+    // Kept null for every existing prefab, so behaviour is unchanged.
+    public System.Func<Transform> PriorityTargetProvider;
+
     private void Start()
     {
         stats = GetComponent<EnemyStats>();
@@ -459,6 +483,17 @@ public class EnemyController : MonoBehaviour
         if (currentTarget != null &&
             (currentTarget.gameObject == null || !currentTarget.gameObject.activeInHierarchy))
             currentTarget = null;
+
+        // Optional priority target supplied by a derived/companion behaviour
+        // (e.g. BerserkController, which hunts other enemies). Default
+        // implementation returns null, so vanilla enemies are unaffected and
+        // fall through to the normal player/tower/core selection below.
+        Transform priority = GetPriorityTarget();
+        if (priority != null)
+        {
+            currentTarget = priority;
+            return;
+        }
 
         if (coreTarget == null) return;
 

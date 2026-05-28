@@ -1,28 +1,21 @@
 using UnityEngine;
 
-// Eye-specific EnemyStats. Differs from vanilla EnemyStats in two ways:
-//   1. FIXED energy drop — exactly one drop worth 10 energy on death,
-//   2. DISINTEGRATION death VFX — fires EnemyDeathVFX.Trigger() on death,
-//      same pipeline the bosses and the Scarecrow use. Health bar is
-//      pulled before the VFX so it doesn't float above the disintegration.
+// Eye-specific EnemyStats.
+//
+// The VFX/health-bar behavior previously here moved into EnemyStats — set
+// the base class's `deathVfxDuration` field on the Eye prefab to enable it.
+// What remains here is genuinely Eye-specific:
+//   1. FIXED energy drop — exactly one drop worth `fixedEnergyDrop` on death,
+//      instead of the usual stage-driven probabilistic roll.
+//   2. SKIP DEATH ANIMATION — the Eye disintegrates straight away rather
+//      than playing its idle-collapse animation, because the animation and
+//      the VFX otherwise fight each other visually.
 
 public class EyeStats : EnemyStats
 {
     [Header("Eye Drop")]
     [Tooltip("Exact energy value dropped on death — a single drop worth this much.")]
     [SerializeField] private int fixedEnergyDrop = 10;
-
-    [Header("Eye Death VFX")]
-    [Tooltip("Duration passed to EnemyDeathVFX.Trigger() on death. " +
-             "Values < 1.0 use the lighter 'classic chunks' disintegration; " +
-             "values ≥ 1.0 trigger the full boss-style sprite shatter. " +
-             "0.9 gives the Eye a beefier disintegration than a regular mob " +
-             "without going full boss; bump to 1.2 if you want sprite shatter.")]
-    [SerializeField] private float deathVfxDuration = 0.9f;
-
-    [Tooltip("If true, the health bar is destroyed BEFORE the death VFX plays " +
-             "so it doesn't float above the disintegration. Almost always desired.")]
-    [SerializeField] private bool destroyHealthBarBeforeVfx = true;
 
     [Tooltip("If true, the Eye skips its death animation (idle frame collapse) " +
              "and disintegrates straight away. Looks cleaner because the death " +
@@ -31,17 +24,14 @@ public class EyeStats : EnemyStats
              "want to play before the dust.")]
     [SerializeField] private bool skipDeathAnimation = true;
 
-    // Guard so the VFX is only triggered once even if Die() somehow fires twice.
-    private bool deathVfxFired = false;
-
     public override void Die()
     {
-        // Fire the disintegration VFX FIRST 
-        FireDeathVfx();
+        // VFX + health-bar removal now lives in the base class. Calling this
+        // first ensures the bar is gone before any frames of the disintegration
+        // play. No-op if the Eye prefab has deathVfxDuration left at 0.
+        TryFireDeathVfx();
 
-        // Reuse the standard death pipeline (stops physics, plays death
-        // animation, then calls PerformDeath via DelayedDeath) 
-
+        // Reuse the standard physics-stop / death-animation pipeline.
         var rb = GetComponent<Rigidbody2D>();
         if (rb != null)
         {
@@ -69,23 +59,6 @@ public class EyeStats : EnemyStats
         PerformEyeDeath();
     }
 
-    private void FireDeathVfx()
-    {
-        if (deathVfxFired) return;
-        deathVfxFired = true;
-        if (destroyHealthBarBeforeVfx)
-        {
-            var bar = GetHealthBar();
-            if (bar != null) Destroy(bar.gameObject);
-        }
-
-        EnemyDeathVFX.Trigger(
-            enemy: gameObject,
-            duration: deathVfxDuration,
-            onComplete: null
-        );
-    }
-
     private System.Collections.IEnumerator DelayedEyeDeath()
     {
         // Disable components so the eye can't move/attack while dying.
@@ -110,13 +83,16 @@ public class EyeStats : EnemyStats
 
     private void PerformEyeDeath()
     {
-
+        // Fixed drop — this is the Eye's real reason for overriding death.
+        // Bypasses EnergyDropManager's probabilistic table in favour of a
+        // single guaranteed drop worth fixedEnergyDrop.
         if (canDropEnergy)
         {
             EnergyDrop.CreateEnergyDrop(transform.position, fixedEnergyDrop);
         }
 
-        // Clean up health bar
+        // Health bar may have already been pulled by TryFireDeathVfx() — this
+        // is defensive in case deathVfxDuration was left at 0 on the prefab.
         var bar = GetHealthBar();
         if (bar != null) Destroy(bar.gameObject);
 

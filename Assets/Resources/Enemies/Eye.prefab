@@ -239,7 +239,7 @@ MonoBehaviour:
   maxHealthMinPulseFraction: 0.12
   healthBarPrefab: {fileID: 4013683592240770047, guid: cde1533554ef19f439dc1bac60c6978b, type: 3}
   enemyData: {fileID: 11400000, guid: e741711fa7ce36946afe1545194ade29, type: 2}
-  energyDropChance: 0.357
+  energyDropChance: 0.3
   energyDropValue: 10
   canDropEnergy: 1
   damageFlashDuration: 0.1

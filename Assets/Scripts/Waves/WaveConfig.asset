@@ -29,6 +29,14 @@ MonoBehaviour:
       count: 1
     - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
       count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
+      count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e82a99147de618847a75df2260891ee0, type: 3}
+      count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+      count: 1
   - waveNumber: 0
     extraDelayBeforeStart: 2
     spawnDirections: 000000000200000001000000

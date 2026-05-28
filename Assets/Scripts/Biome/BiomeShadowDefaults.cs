@@ -41,6 +41,15 @@ public struct BiomeShadowDefaults
             case BiomeType.Night:
                 return new BiomeShadowDefaults { shadowEnabled = true, shadowPrefabIndex = 0 };
 
+            // Corruption: shadows are pointless in pitch black — disable.
+            // (They'd just sit invisibly under the darkness overlay anyway.)
+            case BiomeType.Corruption:
+                return new BiomeShadowDefaults { shadowEnabled = false, shadowPrefabIndex = 0 };
+
+            // PitchBlack: same reasoning — shadows invisible under the darkness.
+            case BiomeType.PitchBlack:
+                return new BiomeShadowDefaults { shadowEnabled = false, shadowPrefabIndex = 0 };
+
             default:
                 return ForBiome(BiomeType.Grass);
         }

@@ -37,8 +37,17 @@ public struct BiomeWeatherDefaults
             case BiomeType.Night:
                 return new BiomeWeatherDefaults { rainEnabled = false, snowEnabled = false };
 
+            // Corruption: no particle weather — the darkness is the weather.
+            case BiomeType.Corruption:
+                return new BiomeWeatherDefaults { rainEnabled = false, snowEnabled = false };
+
+            // PitchBlack: same — no weather particles, nothing would be visible anyway.
+            case BiomeType.PitchBlack:
+                return new BiomeWeatherDefaults { rainEnabled = false, snowEnabled = false };
+
             default:
                 return ForBiome(BiomeType.Grass);
         }
     }
 }
+

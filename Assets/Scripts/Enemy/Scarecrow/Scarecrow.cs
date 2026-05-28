@@ -12,7 +12,6 @@ using FMODUnity;
 // contact with the aura. Then disappears for <see cref="hiddenDuration"/>
 // seconds and repeats. Can be killed while visible.
 // EnemyController — disabled if present; scarecrow doesn't chase/melee.
-
 [RequireComponent(typeof(EnemyStats))]
 public class Scarecrow : MonoBehaviour
 {
@@ -150,6 +149,13 @@ public class Scarecrow : MonoBehaviour
     private EventInstance screamInstance;
     private bool screamInstanceCreated = false;
 
+    // Public read for outside systems (grappling hook) so they can skip the
+    // scarecrow during its hidden-cycle phase. Counts the brief fade
+    // transitions as "not visible" — isVisible is flipped to true only at the
+    // start of an Appear cycle and to false at the start of a Disappear cycle,
+    // which is the behavior we want here.
+    public bool IsCurrentlyVisible() => isVisible && !isDead;
+
     private void Awake()
     {
         stats = GetComponent<EnemyStats>();
@@ -236,6 +242,11 @@ public class Scarecrow : MonoBehaviour
 
     private void Start()
     {
+        // Configure how the grappling hook treats the scarecrow.
+        var grappleTarget = GetComponent<GrapplingTarget>() ?? gameObject.AddComponent<GrapplingTarget>();
+        grappleTarget.canBeGrappled = true;     // YES, can be hooked
+        grappleTarget.isSolidTarget = true;     // Treat like a tower: pull player to it, don't yank it
+
         // Build the aura as a child object so we control its lifetime independently
         // of the scarecrow's sprite/collider state.
         CreateAura();
@@ -457,8 +468,14 @@ public class Scarecrow : MonoBehaviour
         const float barFraction = 0.25f;
 
         Vector3 startPosition = transform.position;
-        Color startColor = spriteRenderer.color;
-        Color baseColor = new Color(startColor.r, startColor.g, startColor.b, 1f);
+        // IMPORTANT: do NOT inherit whatever color is currently on the sprite —
+        // external systems can tint it (e.g. the grappling hook adds a green
+        // highlight when the player is locked on). If we capture that tinted
+        // color as `baseColor`, the fade will look "off" and any later
+        // RemoveHighlight call will restore the sprite to a wrong state at
+        // the OLD position, leaving a visible ghost on the map after the
+        // scarecrow has teleported away.
+        Color baseColor = Color.white;
         spriteRenderer.color = baseColor;
 
         //  Build the slash GameObject (LineRenderer with tapered ends) 
@@ -579,7 +596,7 @@ public class Scarecrow : MonoBehaviour
                 });
             lr.colorGradient = g;
 
-            // ---- Health bar fade on its shorter timeline ----
+            //  Health bar fade on its shorter timeline 
             if (healthBarCanvasGroup != null)
             {
                 float barAlpha;
@@ -599,7 +616,7 @@ public class Scarecrow : MonoBehaviour
             yield return null;
         }
 
-        // ---- Snap to final state ----
+        //  Snap to final state 
         Color finalColor = baseColor;
         finalColor.a = appearing ? 1f : 0f;
         spriteRenderer.color = finalColor;
@@ -1070,3 +1087,5 @@ public class Scarecrow : MonoBehaviour
         }
     }
 }
+
+

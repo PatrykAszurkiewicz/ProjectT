@@ -16,7 +16,7 @@ MonoBehaviour:
   maxHealth: 50
   maxArmor: 0
   moveSpeed: 2.5
-  damage: 10
+  damage: 8
   mass: 25
   spriteFolderPath: Sprites/EnemySprites/Slime
   animationSpeed: 0.1

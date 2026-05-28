@@ -5,7 +5,7 @@ public static class NightOverlayShaderSource
 {
     // VERSION TAG
     // EnsureShaderAsset compares this against a marker file to know when to re-write.
-    public const string ShaderVersion = "2.2_smoothFalloff";
+    public const string ShaderVersion = "2.3_directional";
 
     // The full shader source code — kept in sync with NightOverlayShader.shader
     public static readonly string ShaderCode = @"
@@ -28,6 +28,20 @@ Shader ""Hidden/NightOverlay""
         _TorchWarmTint (""Warm Tint"", Color) = (1, 0.85, 0.55, 0.12)
         _FlickerOffset (""Flicker"", Float) = 0
         _ExtraLightCount (""Extra Light Count"", Float) = 0
+
+        // --- Directional darkness mode (Corruption biome) ---
+        // When _DirectionalMode > 0.5, the radial player glow is replaced by:
+        //   * a tiny feet bubble (always-on minimal visibility)
+        //   * a wide, dim front cone (peripheral awareness in the direction the
+        //     player is facing)
+        // Behind the player there is no glow at all — pure darkness.
+        _DirectionalMode (""Directional Mode"", Float) = 0
+        _PlayerFacing (""Player Facing"", Vector) = (1,0,0,0)
+        _FrontConeHalfAngle (""Front Cone Half Angle Rad"", Float) = 1.4
+        _FrontConeRange (""Front Cone Range"", Float) = 5.0
+        _FrontConeDimming (""Front Cone Dimming"", Range(0,1)) = 0.25
+        _FeetGlowRadius (""Feet Glow Radius"", Float) = 0.7
+        _FeetGlowStrength (""Feet Glow Strength"", Range(0,1)) = 0.35
     }
 
     SubShader
@@ -59,6 +73,15 @@ Shader ""Hidden/NightOverlay""
             float _TorchBrightness;
             float4 _TorchWarmTint;
             float _FlickerOffset;
+
+            // Directional darkness uniforms
+            float _DirectionalMode;
+            float4 _PlayerFacing;
+            float _FrontConeHalfAngle;
+            float _FrontConeRange;
+            float _FrontConeDimming;
+            float _FeetGlowRadius;
+            float _FeetGlowStrength;
 
             // Extra point lights — up to 64 dynamic light sources
             // Each entry: (x, y, radius, intensity)
@@ -94,9 +117,55 @@ Shader ""Hidden/NightOverlay""
                 float2 dirNorm = (dist > 0.001) ? (toFrag / dist) : float2(0, 1);
 
                 // === Player glow ===
-                float glowFalloff = saturate(dist / max(0.01, _PlayerGlowRadius));
-                glowFalloff = glowFalloff * glowFalloff;
-                float glowLight = (1.0 - glowFalloff) * _PlayerGlowStrength;
+                // Two modes — selected by _DirectionalMode uniform.
+                // Default (0) = original radial glow, used by Night biome
+                //               and universal night mode. Unchanged from v2.2.
+                // Directional (1) = tiny feet bubble + wide front cone.
+                //                   Used by the Corruption biome.
+                float glowLight = 0.0;
+
+                if (_DirectionalMode < 0.5)
+                {
+                    // --- Radial player glow (unchanged) ---
+                    float glowFalloff = saturate(dist / max(0.01, _PlayerGlowRadius));
+                    glowFalloff = glowFalloff * glowFalloff;
+                    glowLight = (1.0 - glowFalloff) * _PlayerGlowStrength;
+                }
+                else
+                {
+                    // --- Directional player glow ---
+                    // 1) Tiny feet bubble — keeps the immediate area around the
+                    //    player faintly visible so they're never standing in pure
+                    //    black. Uses the same quadratic falloff as radial mode.
+                    float feetFalloff = saturate(dist / max(0.01, _FeetGlowRadius));
+                    feetFalloff = feetFalloff * feetFalloff;
+                    float feetLight = (1.0 - feetFalloff) * _FeetGlowStrength;
+
+                    // 2) Wide, dim front cone — peripheral awareness in front of
+                    //    the player. Same cone math as the torch, but wider, dimmer,
+                    //    and tied to _PlayerFacing rather than _TorchDir.
+                    float frontCos = dot(dirNorm, _PlayerFacing.xy);
+                    frontCos = clamp(frontCos, -1.0, 1.0);
+                    float frontFragAngle = acos(frontCos);
+
+                    // Soft falloff at the edge of the front cone so it doesn't
+                    // look like a flashlight ring.
+                    float frontInner = _FrontConeHalfAngle * 0.55;
+                    float frontOuter = _FrontConeHalfAngle;
+                    float frontAngleFactor = 1.0 - saturate(
+                        (frontFragAngle - frontInner) /
+                        max(0.001, frontOuter - frontInner));
+
+                    float frontDistNorm = dist / max(0.001, _FrontConeRange);
+                    float frontDistFactor = saturate(1.0 - frontDistNorm);
+                    frontDistFactor = frontDistFactor * frontDistFactor;
+
+                    float frontLight = frontAngleFactor * frontDistFactor * _FrontConeDimming;
+
+                    // Combine — take the max so the feet bubble doesn't get
+                    // clobbered by the dim front cone right at the player.
+                    glowLight = max(feetLight, frontLight);
+                }
 
                 // === Torch cone ===
                 float coneLight = 0.0;
@@ -263,4 +332,3 @@ Shader ""Hidden/NightOverlay""
 #endif
     }
 }
-

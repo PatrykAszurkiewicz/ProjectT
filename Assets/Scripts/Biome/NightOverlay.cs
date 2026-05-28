@@ -76,6 +76,36 @@ public class NightOverlay : MonoBehaviour
     [Range(0f, 0.15f)]
     public float flickerIntensity = 0.06f;
 
+    //  Directional Darkness (Corruption biome) 
+    [Header("Directional Darkness (Corruption biome)")]
+    [Tooltip("When enabled, the radial player glow is replaced by a tiny feet bubble + " +
+             "a wide dim front cone. Behind the player is pure darkness. " +
+             "Used by the Corruption biome; leave off for Night biome and universal night mode.")]
+    public bool directionalMode = false;
+
+    [Tooltip("Half-angle of the wide front-awareness cone, in degrees. " +
+             "80° gives roughly the human peripheral-vision arc.")]
+    [Range(20f, 120f)]
+    public float frontConeHalfAngle = 80f;
+
+    [Tooltip("How far the front-awareness cone reaches (world units). " +
+             "Should be smaller than torchRange so the torch still feels brighter.")]
+    public float frontConeRange = 5f;
+
+    [Tooltip("Brightness of the front cone. 0 = invisible (pure darkness), " +
+             "1 = as bright as torch. 0.20-0.30 = enemies are vague shapes.")]
+    [Range(0f, 1f)]
+    public float frontConeDimming = 0.25f;
+
+    [Tooltip("Radius of the tiny always-on glow at the player's feet. " +
+             "Keeps the immediate area faintly visible so the player isn't standing in pure black.")]
+    public float feetGlowRadius = 0.7f;
+
+    [Tooltip("Strength of the feet glow. Keep low (0.2-0.4) — this is just a hint, " +
+             "not real lighting.")]
+    [Range(0f, 1f)]
+    public float feetGlowStrength = 0.35f;
+
 
     [Header("Sorting")]
     public string sortingLayerName = "Default";
@@ -86,6 +116,10 @@ public class NightOverlay : MonoBehaviour
     private Material overlayMat;
     private Transform playerTransform;
     private NightPreset lastAppliedPreset = (NightPreset)(-1);
+
+    // Last-known facing direction — used in directional mode when the torch is
+    // off or the cursor hasn't moved yet. Defaults to "right".
+    private Vector2 lastFacing = Vector2.right;
 
     // Cached shader property IDs
     private static readonly int _PlayerPos = Shader.PropertyToID("_PlayerPos");
@@ -105,6 +139,15 @@ public class NightOverlay : MonoBehaviour
     private static readonly int _ExtraLightCountID = Shader.PropertyToID("_ExtraLightCount");
     private static readonly int _ExtraLightDataID = Shader.PropertyToID("_ExtraLightData");
     private static readonly int _ExtraLightColorsID = Shader.PropertyToID("_ExtraLightColors");
+
+    // Directional darkness property IDs
+    private static readonly int _DirectionalMode = Shader.PropertyToID("_DirectionalMode");
+    private static readonly int _PlayerFacing = Shader.PropertyToID("_PlayerFacing");
+    private static readonly int _FrontConeHalfAngle = Shader.PropertyToID("_FrontConeHalfAngle");
+    private static readonly int _FrontConeRange = Shader.PropertyToID("_FrontConeRange");
+    private static readonly int _FrontConeDimming = Shader.PropertyToID("_FrontConeDimming");
+    private static readonly int _FeetGlowRadius = Shader.PropertyToID("_FeetGlowRadius");
+    private static readonly int _FeetGlowStrength = Shader.PropertyToID("_FeetGlowStrength");
 
     // ========================================================================
     // EXTRA POINT LIGHT SYSTEM
@@ -357,6 +400,18 @@ public class NightOverlay : MonoBehaviour
         overlayMat.SetFloat(_TorchBrightness, torchBrightness);
         overlayMat.SetColor(_TorchWarmTint, torchWarmTint);
         overlayMat.SetFloat(_TorchEnabled, torchEnabled ? 1f : 0f);
+
+        // Directional darkness uniforms. Always pushed — when directionalMode
+        // is false the shader's _DirectionalMode branch falls through to the
+        // original radial-glow code path, so the rest of these values are
+        // simply ignored. This keeps Night biome and universal night mode
+        // bit-identical to the v2.2 behavior.
+        overlayMat.SetFloat(_DirectionalMode, directionalMode ? 1f : 0f);
+        overlayMat.SetFloat(_FrontConeHalfAngle, frontConeHalfAngle * Mathf.Deg2Rad);
+        overlayMat.SetFloat(_FrontConeRange, frontConeRange);
+        overlayMat.SetFloat(_FrontConeDimming, frontConeDimming);
+        overlayMat.SetFloat(_FeetGlowRadius, feetGlowRadius);
+        overlayMat.SetFloat(_FeetGlowStrength, feetGlowStrength);
     }
 
 
@@ -383,16 +438,32 @@ public class NightOverlay : MonoBehaviour
         Vector3 playerPos = playerTransform.position;
         overlayMat.SetVector(_PlayerPos, new Vector4(playerPos.x, playerPos.y, 0, 0));
 
-        // Torch direction — follows cursor
-        if (torchEnabled && Mouse.current != null)
+        // Torch direction — follows cursor. In directional mode, this is also
+        // the player's facing for the front cone (the player aims their gaze
+        // with the cursor whether the torch is on or off).
+        Vector2 facingThisFrame = lastFacing;
+        if (Mouse.current != null && Camera.main != null)
         {
             Vector2 mouseScreen = Mouse.current.position.ReadValue();
             Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mouseScreen);
             mouseWorld.z = 0;
-
-            Vector2 dir = ((Vector2)(mouseWorld - playerPos)).normalized;
-            overlayMat.SetVector(_TorchDir, new Vector4(dir.x, dir.y, 0, 0));
+            Vector2 toCursor = (Vector2)(mouseWorld - playerPos);
+            if (toCursor.sqrMagnitude > 0.0001f)
+            {
+                facingThisFrame = toCursor.normalized;
+                lastFacing = facingThisFrame;
+            }
         }
+
+        if (torchEnabled)
+        {
+            overlayMat.SetVector(_TorchDir, new Vector4(facingThisFrame.x, facingThisFrame.y, 0, 0));
+        }
+
+        // Front-cone facing is independent of torch state — even with the
+        // torch off, the player can still "see" peripherally in front of
+        // themselves.
+        overlayMat.SetVector(_PlayerFacing, new Vector4(facingThisFrame.x, facingThisFrame.y, 0, 0));
 
         // Flicker
         float flicker = 0f;
@@ -469,6 +540,16 @@ public class NightOverlay : MonoBehaviour
         return torchEnabled;
     }
 
+    /// <summary>
+    /// Enable/disable the directional-darkness mode used by the Corruption biome.
+    /// When off, the player glow is radial (Night biome behavior).
+    /// When on, the radial glow is replaced by a tiny feet bubble + wide dim front cone.
+    /// </summary>
+    public void SetDirectionalMode(bool enabled)
+    {
+        directionalMode = enabled;
+    }
+
     //  CLEANUP
 
     private void Cleanup()
@@ -505,4 +586,3 @@ public class NightOverlay : MonoBehaviour
         Cleanup();
     }
 }
-

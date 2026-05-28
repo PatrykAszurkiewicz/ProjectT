@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: BookTest
   m_EditorClassIdentifier: 
   weaponName: RevenantBook
-  sprite: {fileID: 0}
+  sprite: {fileID: -1460991882080049600, guid: b4e09492a10a0bf49b091dccc02378e6, type: 3}
   damage: 0
   attackCooldown: 0
   armorBonus: 0
@@ -78,6 +78,28 @@ MonoBehaviour:
   isBoomerang: 0
   boomerangRange: 6
   boomerangCurve: 2.5
+  isHammer: 0
+  hammerSlamRadius: 2.8
+  hammerWindup: 0.42
+  hammerAoEDamageMultiplier: 1
+  hammerSlamKnockback: 12
+  hammerHitStop: 0.13
+  hammerShakeJolt: 0.42
+  hammerShakeRumble: 0.16
+  hammerShakeRumbleDuration: 0.55
+  hammerShockwaveColor: {r: 0.93, g: 0.74, b: 0.45, a: 1}
+  hammerCrackColor: {r: 0.16, g: 0.12, b: 0.09, a: 1}
+  hammerDebrisCount: 14
+  hammerDustCount: 26
+  hammerGhostSpritePath: Icons/BattleHammerSmall
+  hammerGhostSize: 2.4
+  hammerGhostAlpha: 0.5
+  hammerChargeEnabled: 1
+  hammerChargeTime: 0.9
+  hammerChargeBonus: 0.3
+  hammerChargeRadiusBonus: 1.25
+  hammerReachDistance: 2.6
+  hammerChargeReachBonus: 1.3
   isBook: 1
   bookAuraRadius: 5
   bookAuraDuration: 8
@@ -88,3 +110,8 @@ MonoBehaviour:
   bookShadowAttackRange: 1.2
   bookShadowAttackInterval: 0.8
   bookShadowMoveSpeed: 3.5
+  bookCooldown: 6
+  isCloak: 0
+  cloakDuration: 30
+  cloakCooldown: 10
+  cloakPlayerAlpha: 0.28

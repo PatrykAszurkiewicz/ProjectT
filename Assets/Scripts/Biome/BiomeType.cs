@@ -7,5 +7,7 @@ public enum BiomeType
     Stones,
     GrassCartoon,
     Marsh,
-    Night
+    Night,
+    Corruption,
+    PitchBlack
 }

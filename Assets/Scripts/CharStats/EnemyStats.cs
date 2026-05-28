@@ -25,14 +25,39 @@ public class EnemyStats : CharacterStats
     private Material originalMaterial;
     private Material flashMaterial;
 
+    [Header("Death VFX (optional)")]
+    [Tooltip("If > 0, EnemyDeathVFX.Trigger() is fired on death. " +
+             "Values below 1.0 use the lighter 'classic chunks' disintegration; " +
+             "values 1.0+ trigger the full boss-style sprite-shatter. " +
+             "Leave at 0 to disable (default — preserves legacy behavior).")]
+    [SerializeField] protected float baseDeathVfxDuration = 0f;
+
+    [Tooltip("If true (and baseDeathVfxDuration > 0), the health bar is destroyed " +
+             "BEFORE the death VFX plays so it doesn't float above the " +
+             "disintegration. Ignored when baseDeathVfxDuration is 0.")]
+    [SerializeField] protected bool baseDestroyHealthBarBeforeVfx = true;
+
+    // Guard so the VFX is only triggered once even if Die() somehow fires twice.
+    private bool deathVfxFired = false;
+
+    /// <summary>
+    /// Public runtime setter for the death VFX. Controllers that build their
+    /// enemy from code (like BufferController) call this in Awake so they
+    /// don't depend on prefab inspector values being set correctly. Pass
+    /// duration &gt; 0 to enable, 0 to disable.
+    /// </summary>
+    public void ConfigureDeathVfx(float duration, bool destroyHealthBarBeforeVfx = true)
+    {
+        baseDeathVfxDuration = duration;
+        baseDestroyHealthBarBeforeVfx = destroyHealthBarBeforeVfx;
+    }
+
     protected SpriteRenderer SpriteRenderer => spriteRenderer;
     protected EnemyHealthBar HealthBar => healthBar;
 
-    /// <summary>
     /// Public accessor for the runtime-instantiated health bar. Used by support
     /// enemies (e.g. Scarecrow) that need to hide the bar during invisible
     /// phases. May be null before Start() runs or if no healthBarPrefab is set.
-    /// </summary>
     public EnemyHealthBar GetHealthBar() => healthBar;
 
     protected void CallStartDamageFlash()
@@ -153,6 +178,12 @@ public class EnemyStats : CharacterStats
     {
         //Debug.Log($"[ENEMY_STATS] Die() called on {gameObject.name}");
 
+        // Opt-in disintegration VFX. Fires once, before anything else, so the
+        // health bar is gone before the first frame of the effect plays.
+        // Default (baseDeathVfxDuration == 0) means this whole block is skipped
+        // and the original death behavior is bit-for-bit preserved.
+        TryFireDeathVfx();
+
         // Stop all movement and reset rotation before death animation
         var rb = GetComponent<Rigidbody2D>();
         if (rb != null)
@@ -173,6 +204,27 @@ public class EnemyStats : CharacterStats
 
         // No animation - die immediately (old behavior)
         PerformDeath();
+    }
+
+    // Fires the opt-in disintegration VFX exactly once per enemy lifetime.
+    // No-op when baseDeathVfxDuration <= 0, which is the default 
+    protected void TryFireDeathVfx()
+    {
+        if (baseDeathVfxDuration <= 0f) return;
+        if (deathVfxFired) return;
+        deathVfxFired = true;
+
+        if (baseDestroyHealthBarBeforeVfx && healthBar != null)
+        {
+            Destroy(healthBar.gameObject);
+            healthBar = null;
+        }
+
+        EnemyDeathVFX.Trigger(
+            enemy: gameObject,
+            duration: baseDeathVfxDuration,
+            onComplete: null
+        );
     }
 
     private IEnumerator DelayedDeath()
@@ -211,8 +263,21 @@ public class EnemyStats : CharacterStats
 
         if (canDropEnergy)
         {
-            //EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);
-            EnergyDropManager.TrySpawnEnemyDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+            // Per-enemy override: if the prefab specifies a positive
+            // energyDropValue AND a non-negative drop chance, use those
+            // directly. Otherwise fall back to the stage-driven default
+            // table on EnergyDropManager. This keeps existing enemies
+            // unchanged (defaults are -1 / -1) while letting specific
+            // enemies like the Wolf guarantee a fixed drop (10 energy,
+            // one unit, 100% chance).
+            if (energyDropValue > 0 && energyDropChance >= 0f)
+            {
+                EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);
+            }
+            else
+            {
+                EnergyDropManager.TrySpawnEnemyDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+            }
             // If this is a boss, also spawn the boss burst on top
             if (GetComponent<BaseBossStats>() != null)
                 EnergyDropManager.SpawnBossDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
@@ -288,3 +353,4 @@ public class EnemyStats : CharacterStats
     }
 #endif
 }
+

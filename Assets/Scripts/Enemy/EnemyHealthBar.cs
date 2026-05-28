@@ -58,6 +58,15 @@ public class EnemyHealthBar : MonoBehaviour
             barUI.SetValue(currentHealth, maxHealth);
     }
 
+    // Update the bar's maximum WITHOUT the full-bar flash that Initialize()
+    // causes (Initialize calls SetValue(max, max)
+    public void SetMaxHealth(float newMax, float currentHealth)
+    {
+        this.maxHealth = newMax;
+        if (barUI != null)
+            barUI.SetValue(currentHealth, newMax);
+    }
+
 
     // Cleanly hide/show the bar. Used by support enemies (e.g. Scarecrow)
     // that have an invisible phase.
@@ -67,9 +76,7 @@ public class EnemyHealthBar : MonoBehaviour
             gameObject.SetActive(visible);
     }
 
-
     // Fade-friendly alpha. 
-
     public CanvasGroup EnsureCanvasGroup()
     {
         var cg = GetComponent<CanvasGroup>();
