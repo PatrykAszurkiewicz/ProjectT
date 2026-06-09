@@ -442,7 +442,14 @@ public class NightOverlay : MonoBehaviour
         // the player's facing for the front cone (the player aims their gaze
         // with the cursor whether the torch is on or off).
         Vector2 facingThisFrame = lastFacing;
-        if (Mouse.current != null && Camera.main != null)
+        if (PlayerAim.Instance != null)
+        {
+            // Unified aim source (mouse OR right stick) — same direction the
+            // directional cursor uses, so the torch tracks the gamepad too.
+            facingThisFrame = PlayerAim.Instance.Direction;
+            lastFacing = facingThisFrame;
+        }
+        else if (Mouse.current != null && Camera.main != null)
         {
             Vector2 mouseScreen = Mouse.current.position.ReadValue();
             Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mouseScreen);

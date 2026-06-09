@@ -118,8 +118,8 @@ public struct BiomeFogDefaults
                     smokeDarkCore = new Color(0.30f, 0.42f, 0.35f, 1.0f),
                 };
 
-            // Corruption: no fog
-            case BiomeType.Corruption:
+            // PitchBlack: no fog (SWAPPED — was Corruption's body)
+            case BiomeType.PitchBlack:
                 return new BiomeFogDefaults
                 {
                     fogEnabled = false,
@@ -130,8 +130,8 @@ public struct BiomeFogDefaults
                     smokeDarkCore = new Color(0.02f, 0.04f, 0.01f, 1f),
                 };
 
-            // PitchBlack: no fog
-            case BiomeType.PitchBlack:
+            // Corruption: no fog (SWAPPED — was PitchBlack's body)
+            case BiomeType.Corruption:
                 return new BiomeFogDefaults
                 {
                     fogEnabled = false,
@@ -147,3 +147,4 @@ public struct BiomeFogDefaults
         }
     }
 }
+

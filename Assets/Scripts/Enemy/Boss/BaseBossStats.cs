@@ -11,6 +11,18 @@ public abstract class BaseBossStats : EnemyStats
     public bool IsArmorDestroyed => armorDestroyed;
     public float CurrentArmor => bossArmor;
 
+    // Per-stage scaling for a boss special-attack damage (laser, explosion, etc.)
+    protected float BossStageDamageMultiplier
+    {
+        get
+        {
+            var mgr = EnemyStatModifierManager.Instance;
+            if (mgr != null && mgr.StageScalingAffectsBosses)
+                return mgr.GetStageDamageMultiplier();
+            return 1f;
+        }
+    }
+
     protected BossHead spawnedHead;
 
     protected override void Awake()
@@ -95,3 +107,4 @@ public abstract class BaseBossStats : EnemyStats
         BossBlueprintDropper.RollAndSpawn(deathPos, stageIdx);
     }
 }
+

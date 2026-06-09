@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 
 public class PauseMenuController : MonoBehaviour
 {
@@ -11,6 +12,14 @@ public class PauseMenuController : MonoBehaviour
     {
         pauseMenu.SetActive(false);
         activated = false;
+    }
+
+    private void Update()
+    {
+        // Start (Menu) button opens AND closes the pause menu. Input polling
+        // runs regardless of Time.timeScale, so this still un-pauses at 0.
+        if (Gamepad.current != null && Gamepad.current.startButton.wasPressedThisFrame)
+            ActivatePauseMenu();
     }
 
     public void ActivatePauseMenu()
@@ -43,3 +52,4 @@ public class PauseMenuController : MonoBehaviour
         }
     }
 }
+

@@ -42,6 +42,11 @@ public class Weapon : MonoBehaviour
     private FlamethrowerSystem flamethrowerSystem;
     private HammerSlamSystem hammerSlamSystem;
 
+    // Mortar (left-click weapon): the on-ground red aiming reticle that follows
+    // the cursor while a mortar is equipped. The shell itself is a
+    // PlayerMortarProjectile spawned on fire — see ShootMortar().
+    private MortarAimReticle mortarReticle;
+
     // Subsystems — tool side
     private GrapplingHookSystem grapplingSystem;
     private ObstacleDrawerSystem obstacleDrawerSystem;
@@ -52,6 +57,22 @@ public class Weapon : MonoBehaviour
     private ShieldSystem shieldSystem;
     private RevenantNecronomiconSystem bookSystem;
     private StealthCloakSystem stealthCloakSystem;
+    private TorchPlacerSystem torchPlacerSystem;
+
+    private ClockSystem clockSystem;
+
+    // Smoke Screen (right-click tool): aimed like the mortar via an on-ground
+    // reticle, it lobs an arcing canister that bursts into a vision-blocking
+    // grey cloud on impact. The cooldown lives on PlayerToolCooldownStore so it
+    // survives un-equipping (see SmokeScreenSystem).
+    private SmokeScreenSystem smokeSystem;
+    private MortarAimReticle smokeReticle;
+    // The smoke aim reticle is drawn 40% smaller than its true cloud footprint
+    // (the grey cloud shows the real extent). Display-only; does not affect the
+    // cloud radius, its blocking, or where the canister lands.
+    private const float SmokeReticleDisplayScale = 0.6f;
+
+
 
     // Persist flamethrower fuel across weapon swaps
     private float savedFlamethrowerFuel = -1f;
@@ -70,7 +91,7 @@ public class Weapon : MonoBehaviour
     public bool HasTool => toolData != null;
     public ShieldSystem GetShieldSystem() => shieldSystem;
 
-    // ── WeaponRollUI gauge queries ──
+    //  WeaponRollUI gauge queries 
     // The WeaponRollUI draws a per-slot overlay for the CURRENTLY-EQUIPPED
     // weapon and tool. These expose the live state of the active subsystems.
     // They are only meaningful for the equipped items — an unequipped tool has
@@ -144,6 +165,27 @@ public class Weapon : MonoBehaviour
             return info;
         }
 
+
+        if (toolData.isClock && clockSystem != null)
+        {
+            info.has = true;
+            if (clockSystem.IsOnCooldown)
+            { info.phase = ToolGaugePhase.CooldownFill; info.value = clockSystem.CooldownNormalized; }
+            else
+            { info.phase = ToolGaugePhase.Ready; info.value = 1f; }
+            return info;
+        }
+
+        if (toolData.isSmoke && smokeSystem != null)
+        {
+            info.has = true;
+            if (smokeSystem.IsOnCooldown)
+            { info.phase = ToolGaugePhase.CooldownFill; info.value = smokeSystem.CooldownNormalized; }
+            else
+            { info.phase = ToolGaugePhase.Ready; info.value = 1f; }
+            return info;
+        }
+
         return info;
     }
 
@@ -176,7 +218,7 @@ public class Weapon : MonoBehaviour
             && !data.isBombLauncher && !data.isTrap
             && !data.isTurret && !data.isDecoy
             && !data.isFlamethrower && !data.isRanged
-            && !data.isBook && !data.isCloak;
+            && !data.isBook && !data.isCloak && !data.isTorch;
     }
 
     public float GetFlamethrowerFuelNormalized()
@@ -217,11 +259,20 @@ public class Weapon : MonoBehaviour
             hammerSlamSystem = null;
         }
 
+        // Leaving a mortar → drop its aiming reticle. EnsureMortarReticle()
+        // below re-creates it if the incoming weapon is also a mortar.
+        CleanupMortarReticle();
+
         // Remove old armor bonus
         if (weaponData != null && weaponData.armorBonus > 0 && playerStats != null)
             playerStats.currentArmor -= weaponData.armorBonus;
 
         weaponData = newData.CreateRuntimeCopy();
+
+        // Re-apply persistent weapon-stat augments (damage / attackCooldown). The fresh
+        // runtime copy starts from clean asset values, so without this the buffs vanish.
+        if (AugmentRegistry.Instance != null)
+            AugmentRegistry.Instance.ReapplyWeaponStatAugments(weaponData);
 
         if (weaponData.armorBonus > 0 && playerStats != null)
             playerStats.currentArmor += weaponData.armorBonus;
@@ -248,6 +299,9 @@ public class Weapon : MonoBehaviour
 
         if (weaponData.isHammer)
             hammerSlamSystem = new HammerSlamSystem(this, weaponData);
+
+        if (weaponData.isMortar)
+            EnsureMortarReticle();
 
         // Apply swap cooldown (cancel any existing attack cooldown too)
         ApplySwapCooldown();
@@ -309,6 +363,9 @@ public class Weapon : MonoBehaviour
         if (toolData.isDecoy) decoyLauncherSystem = new DecoyLauncherSystem(this, toolData);
         if (toolData.isBook) bookSystem = new RevenantNecronomiconSystem(this, toolData);
         if (toolData.isCloak) stealthCloakSystem = new StealthCloakSystem(this, toolData);
+        if (toolData.isTorch) torchPlacerSystem = new TorchPlacerSystem(this, toolData);
+        if (toolData.isClock) clockSystem = new ClockSystem(this, toolData);
+        if (toolData.isSmoke) smokeSystem = new SmokeScreenSystem(this, toolData);
         if (toolData.armorBonus > 0f) shieldSystem = new ShieldSystem(this, toolData);
     }
 
@@ -323,7 +380,13 @@ public class Weapon : MonoBehaviour
         if (shieldSystem != null) { shieldSystem.Cleanup(); shieldSystem = null; }
         if (bookSystem != null) { bookSystem.Cleanup(); bookSystem = null; }
         if (stealthCloakSystem != null) { stealthCloakSystem.Cleanup(); stealthCloakSystem = null; }
-
+        if (torchPlacerSystem != null) { torchPlacerSystem.Cleanup(); torchPlacerSystem = null; }
+        if (clockSystem != null) { clockSystem.Cleanup(); clockSystem = null; }
+        // The smoke COOLDOWN intentionally persists (it lives on
+        // PlayerToolCooldownStore), but the in-world aiming reticle must go when
+        // we leave the tool.
+        if (smokeSystem != null) { smokeSystem.Cleanup(); smokeSystem = null; }
+        CleanupSmokeReticle();
         // Any deferred drawer start belongs to the *old* tool — drop it.
         obstacleDrawerStartPending = false;
     }
@@ -376,6 +439,10 @@ public class Weapon : MonoBehaviour
             {
                 weaponData = sourceData.CreateRuntimeCopy();
             }
+
+            // Carry over any persistent weapon-stat augments onto the fresh copy.
+            if (weaponData != null && AugmentRegistry.Instance != null)
+                AugmentRegistry.Instance.ReapplyWeaponStatAugments(weaponData);
         }
         else
             Debug.LogError("No weapon data available for runtime copy!");
@@ -411,6 +478,9 @@ public class Weapon : MonoBehaviour
         if (weaponData.isHammer)
             hammerSlamSystem = new HammerSlamSystem(this, weaponData);
 
+        if (weaponData.isMortar)
+            EnsureMortarReticle();
+
         // Tool-side subsystems
         if (toolData != null)
         {
@@ -426,6 +496,9 @@ public class Weapon : MonoBehaviour
             if (toolData.isDecoy) decoyLauncherSystem = new DecoyLauncherSystem(this, toolData);
             if (toolData.isBook) bookSystem = new RevenantNecronomiconSystem(this, toolData);
             if (toolData.isCloak) stealthCloakSystem = new StealthCloakSystem(this, toolData);
+            if (toolData.isTorch) torchPlacerSystem = new TorchPlacerSystem(this, toolData);
+            if (toolData.isClock) clockSystem = new ClockSystem(this, toolData);
+            if (toolData.isSmoke) smokeSystem = new SmokeScreenSystem(this, toolData);
             if (toolData.armorBonus > 0f) shieldSystem = new ShieldSystem(this, toolData);
         }
 
@@ -455,6 +528,7 @@ public class Weapon : MonoBehaviour
 
         // Weapon-side updates
         UpdateFlamethrowerSystem();
+        UpdateMortarSystem();
 
         // Tool-side updates
         UpdateGrapplingSystem();
@@ -466,6 +540,8 @@ public class Weapon : MonoBehaviour
         UpdateShieldSystem();
         UpdateBookSystem();
         UpdateCloakSystem();
+        UpdateTorchSystem();
+        UpdateSmokeSystem();
 
         // Weapon input buffer
         if (attackBuffered)
@@ -503,8 +579,10 @@ public class Weapon : MonoBehaviour
         // pending flag silently — same effect as if they'd never pressed.
         if (obstacleDrawerStartPending)
         {
-            bool rightStillDown = UnityEngine.InputSystem.Mouse.current != null
-                && UnityEngine.InputSystem.Mouse.current.rightButton.isPressed;
+            bool rightStillDown = (UnityEngine.InputSystem.Mouse.current != null
+                    && UnityEngine.InputSystem.Mouse.current.rightButton.isPressed)
+                || (UnityEngine.InputSystem.Gamepad.current != null
+                    && UnityEngine.InputSystem.Gamepad.current.leftTrigger.isPressed);
 
             // Clear the pending flag if the tool changed, the player let go,
             // or the drawer no longer exists — these are all "user no longer
@@ -609,6 +687,12 @@ public class Weapon : MonoBehaviour
     {
         if (toolData?.isCloak != true || stealthCloakSystem == null) return;
         stealthCloakSystem.Update();
+    }
+
+    private void UpdateTorchSystem()
+    {
+        if (toolData?.isTorch != true || torchPlacerSystem == null) return;
+        torchPlacerSystem.Update();
     }
 
     private void UpdateShieldSystem()
@@ -725,6 +809,19 @@ public class Weapon : MonoBehaviour
                 return;
 
             ShootBoomerang();
+            NotifyCloakOffensiveAttack();
+            StartCoroutine(WeaponCooldownRoutine());
+        }
+        else if (weaponData.isMortar)
+        {
+            // Mortar: lob an arcing shell to the aimed ground spot (the red
+            // reticle). It explodes on impact for AoE damage to enemies —
+            // mirrors the Mort enemy. Uses ranged stamina; the 2s fire rate
+            // comes from the asset's attackCooldown.
+            if (playerStats != null && !playerStats.TryConsumeStamina(playerStats.rangedAttackStaminaCost))
+                return;
+
+            ShootMortar();
             NotifyCloakOffensiveAttack();
             StartCoroutine(WeaponCooldownRoutine());
         }
@@ -875,6 +972,14 @@ public class Weapon : MonoBehaviour
                 StartCoroutine(ToolCooldownRoutine());
             }
         }
+        else if (toolData.isTorch)
+        {
+            if (torchPlacerSystem != null)
+            {
+                torchPlacerSystem.PlaceTorch();
+                StartCoroutine(ToolCooldownRoutine());
+            }
+        }
         else if (toolData.isDecoy)
         {
             if (decoyLauncherSystem != null)
@@ -903,6 +1008,26 @@ public class Weapon : MonoBehaviour
             if (stealthCloakSystem != null)
                 stealthCloakSystem.Activate();
         }
+
+
+        else if (toolData.isClock)
+        {
+            if (clockSystem != null) clockSystem.Activate();
+        }
+
+        else if (toolData.isSmoke)
+        {
+            // Lob a smoke canister to the aimed ground spot. Like the book/cloak/
+            // clock, the smoke owns its own cooldown (on PlayerToolCooldownStore),
+            // so we gate on smokeSystem.IsReady here and do NOT start the generic
+            // ToolCooldownRoutine. No stamina cost (a pure utility tool).
+            if (smokeSystem != null && smokeSystem.IsReady)
+            {
+                ShootSmoke();
+                smokeSystem.StartCooldown(toolData.attackCooldown);
+            }
+        }
+
         else if (toolData.armorBonus > 0f)
         {
             // Shield — raise handled via OnToolButtonPressed/Released in PlayerAttack
@@ -955,6 +1080,8 @@ public class Weapon : MonoBehaviour
             CursorManager.Instance.SetCursor(CursorManager.CursorType.Boomerang);
         else if (weaponData.isHammer)
             CursorManager.Instance.SetCursor(CursorManager.CursorType.Hammer);
+        else if (weaponData.isMortar)
+            CursorManager.Instance.SetCursor(CursorManager.CursorType.Mortar);
         else if (weaponData.isRanged)
             CursorManager.Instance.SetCursor(CursorManager.CursorType.Ranged);
         else
@@ -973,6 +1100,10 @@ public class Weapon : MonoBehaviour
         else if (toolData.isDecoy) CursorManager.Instance.SetCursor(CursorManager.CursorType.Decoy);
         else if (toolData.isBook) CursorManager.Instance.SetCursor(CursorManager.CursorType.Book);
         else if (toolData.isCloak) CursorManager.Instance.SetCursor(CursorManager.CursorType.Cloak);
+        else if (toolData.isSmoke) CursorManager.Instance.SetCursor(CursorManager.CursorType.Smoke);
+        // To give the Torch its own cursor, add a CursorType.Torch entry to
+        // CursorManager and uncomment the next line:
+        // else if (toolData.isTorch) CursorManager.Instance.SetCursor(CursorManager.CursorType.Torch);
         else if (toolData.armorBonus > 0f) CursorManager.Instance.SetCursor(CursorManager.CursorType.Shield);
     }
 
@@ -980,22 +1111,23 @@ public class Weapon : MonoBehaviour
     private IEnumerator WeaponCooldownRoutine()
     {
         isOnCooldown = true;
-        yield return new WaitForSeconds(weaponData.attackCooldown);
+        yield return new WaitForSeconds(CooldownModifier.Apply(weaponData.attackCooldown));
         isOnCooldown = false;
     }
 
     private IEnumerator ToolCooldownRoutine()
     {
         isToolOnCooldown = true;
-        yield return new WaitForSeconds(toolData.attackCooldown);
+        yield return new WaitForSeconds(CooldownModifier.Apply(toolData.attackCooldown));
         isToolOnCooldown = false;
     }
 
     //  PROJECTILE & MELEE
     private void ShootProjectile()
     {
-        Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
-        Vector2 direction = (Camera.main.ScreenToWorldPoint(mousePos) - transform.position).normalized;
+        Vector2 direction = PlayerAim.Instance != null
+            ? PlayerAim.Instance.Direction
+            : (Vector2)((Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue()) - transform.position)).normalized;
 
         GameObject projectile = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
         var weaponProjectile = projectile.GetComponent<WeaponProjectile>();
@@ -1005,8 +1137,9 @@ public class Weapon : MonoBehaviour
     //  BOOMERANG — creates the GO entirely from code, no prefab needed
     private void ShootBoomerang()
     {
-        Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
-        Vector2 direction = (Camera.main.ScreenToWorldPoint(mousePos) - transform.position).normalized;
+        Vector2 direction = PlayerAim.Instance != null
+            ? PlayerAim.Instance.Direction
+            : (Vector2)((Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue()) - transform.position)).normalized;
 
         // Build the boomerang GameObject from scratch
         GameObject go = new GameObject("Boomerang");
@@ -1033,6 +1166,205 @@ public class Weapon : MonoBehaviour
             weaponData.boomerangRange,
             weaponData.knockBackForce,
             weaponData.boomerangCurve
+        );
+    }
+
+    //  MORTAR — arcing, exploding shell aimed with the on-ground red reticle.
+    //  Mirrors the Mort enemy: lob to the cursor's ground spot, explode on
+    //  impact for AoE damage to every enemy in the blast radius.
+
+    private void EnsureMortarReticle()
+    {
+        if (mortarReticle != null || weaponData == null || !weaponData.isMortar) return;
+        var go = new GameObject("MortarAimReticle");
+        mortarReticle = go.AddComponent<MortarAimReticle>();
+        mortarReticle.Initialize(weaponData.mortarExplosionRadius, weaponData.mortarReticleColor);
+    }
+
+    private void CleanupMortarReticle()
+    {
+        if (mortarReticle != null)
+        {
+            Destroy(mortarReticle.gameObject);
+            mortarReticle = null;
+        }
+    }
+
+    private void UpdateMortarSystem()
+    {
+        // Only a mortar weapon has a reticle. If we're holding anything else,
+        // make sure no stray reticle lingers.
+        if (weaponData == null || !weaponData.isMortar)
+        {
+            if (mortarReticle != null) CleanupMortarReticle();
+            return;
+        }
+
+        if (mortarReticle == null) EnsureMortarReticle();
+        if (mortarReticle == null) return;
+
+        // Hide the reticle while placing towers or while paused — the player
+        // isn't aiming the mortar in those states.
+        bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
+        bool paused = Time.timeScale == 0f;
+        bool show = !inPlacementMode && !paused;
+
+        mortarReticle.SetVisible(show);
+        if (!show) return;
+
+        mortarReticle.SetRadius(weaponData.mortarExplosionRadius);
+
+        if (PlayerAim.Instance != null)
+        {
+            Vector3 world = PlayerAim.Instance.WorldPoint;
+            mortarReticle.transform.position = new Vector3(world.x, world.y, 0f);
+        }
+
+        // Preview the ballistic arc from the launch point (the weapon, above the
+        // player) down to the reticle centre — matches the real shell's flight.
+        mortarReticle.SetTrajectory(transform.position, weaponData.mortarArcHeight);
+    }
+
+    private void ShootMortar()
+    {
+        Vector3 world = PlayerAim.Instance != null
+            ? PlayerAim.Instance.WorldPoint
+            : Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue());
+        Vector3 landing = new Vector3(world.x, world.y, 0f);
+        Vector3 spawn = transform.position;
+
+        // Build the shell. If the asset supplies a projectilePrefab we use it
+        // for the visuals; otherwise we build a small procedural shell so the
+        // weapon needs no extra art.
+        GameObject shellObj;
+        if (weaponData.projectilePrefab != null)
+        {
+            shellObj = Instantiate(weaponData.projectilePrefab, spawn, Quaternion.identity);
+        }
+        else
+        {
+            shellObj = new GameObject("PlayerMortarShell");
+            shellObj.transform.position = spawn;
+            var sr = shellObj.AddComponent<SpriteRenderer>();
+            sr.sprite = Boss2VFXSprites.GetSoftDisc();
+            sr.color = new Color(0.16f, 0.13f, 0.11f, 1f);
+            sr.sortingOrder = 2500; // above grass Y-sort range
+            shellObj.transform.localScale = Vector3.one * 0.45f;
+        }
+
+        var shell = shellObj.GetComponent<PlayerMortarProjectile>();
+        if (shell == null) shell = shellObj.AddComponent<PlayerMortarProjectile>();
+
+        shell.Initialize(
+            landing,
+            weaponData.damage,
+            weaponData.mortarExplosionRadius,
+            weaponData.mortarFlightTime,
+            weaponData.mortarArcHeight,
+            weaponData.knockBack,
+            weaponData.knockBackForce,
+            weaponData.mortarExplosionColor,
+            weaponData.mortarTelegraphColor,
+            weaponData.mortarShowTelegraph
+        );
+    }
+
+    //  SMOKE SCREEN — arcing canister aimed with the on-ground BLUE reticle.
+    //  Mirrors the mortar's aiming, but on impact it bursts into a
+    //  vision-blocking grey cloud (SmokeScreenCloud) instead of dealing damage.
+
+    private void EnsureSmokeReticle()
+    {
+        if (smokeReticle != null || toolData == null || !toolData.isSmoke) return;
+        var go = new GameObject("SmokeAimReticle");
+        smokeReticle = go.AddComponent<MortarAimReticle>();
+        smokeReticle.Initialize(toolData.smokeCloudRadius * SmokeReticleDisplayScale, toolData.smokeReticleColor);
+        // Retint the dotted ballistic arc blue to match the smoke reticle.
+        smokeReticle.SetDotColor(toolData.smokeReticleColor);
+    }
+
+    private void CleanupSmokeReticle()
+    {
+        if (smokeReticle != null)
+        {
+            Destroy(smokeReticle.gameObject);
+            smokeReticle = null;
+        }
+    }
+
+    private void UpdateSmokeSystem()
+    {
+        // Only the smoke tool has a reticle. If we're holding anything else,
+        // make sure no stray reticle lingers.
+        if (toolData == null || !toolData.isSmoke)
+        {
+            if (smokeReticle != null) CleanupSmokeReticle();
+            return;
+        }
+
+        if (smokeReticle == null) EnsureSmokeReticle();
+        if (smokeReticle == null) return;
+
+        // Hide the reticle while placing towers or while paused — the player
+        // isn't aiming the smoke in those states.
+        bool inPlacementMode = TowerPlacementManager.Instance?.IsInPlacementMode() == true;
+        bool paused = Time.timeScale == 0f;
+        bool show = !inPlacementMode && !paused;
+
+        smokeReticle.SetVisible(show);
+        if (!show) return;
+
+        smokeReticle.SetRadius(toolData.smokeCloudRadius * SmokeReticleDisplayScale);
+
+        if (PlayerAim.Instance != null)
+        {
+            Vector3 world = PlayerAim.Instance.WorldPoint;
+            smokeReticle.transform.position = new Vector3(world.x, world.y, 0f);
+        }
+
+        // Preview the ballistic arc from the launch point (the weapon, above the
+        // player) down to the reticle centre — matches the real canister's flight.
+        smokeReticle.SetTrajectory(transform.position, toolData.smokeArcHeight);
+    }
+
+    private void ShootSmoke()
+    {
+        Vector3 world = PlayerAim.Instance != null
+            ? PlayerAim.Instance.WorldPoint
+            : Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue());
+        Vector3 landing = new Vector3(world.x, world.y, 0f);
+        Vector3 spawn = transform.position;
+
+        // Build the canister. If the asset supplies a projectilePrefab we use it
+        // for the visuals; otherwise build a small procedural canister (no art).
+        GameObject shellObj;
+        if (toolData.projectilePrefab != null)
+        {
+            shellObj = Instantiate(toolData.projectilePrefab, spawn, Quaternion.identity);
+        }
+        else
+        {
+            shellObj = new GameObject("PlayerSmokeCanister");
+            shellObj.transform.position = spawn;
+            var sr = shellObj.AddComponent<SpriteRenderer>();
+            sr.sprite = Boss2VFXSprites.GetSoftDisc();
+            sr.color = new Color(0.40f, 0.45f, 0.52f, 1f);
+            sr.sortingOrder = 2500; // above grass Y-sort range
+            shellObj.transform.localScale = Vector3.one * 0.4f;
+        }
+
+        var canister = shellObj.GetComponent<SmokeScreenProjectile>();
+        if (canister == null) canister = shellObj.AddComponent<SmokeScreenProjectile>();
+
+        canister.Initialize(
+            landing,
+            toolData.smokeFlightTime,
+            toolData.smokeArcHeight,
+            toolData.smokeCloudRadius,
+            toolData.smokeCloudDuration,
+            toolData.smokeCloudColor,
+            toolData.smokeShowTelegraph,
+            toolData.smokeTelegraphColor
         );
     }
 
@@ -1117,6 +1449,8 @@ public class Weapon : MonoBehaviour
     {
         if (flamethrowerSystem != null) flamethrowerSystem.Cleanup();
         if (hammerSlamSystem != null) hammerSlamSystem.Cleanup();
+        CleanupMortarReticle();
         CleanupToolSubsystems();
     }
 }
+

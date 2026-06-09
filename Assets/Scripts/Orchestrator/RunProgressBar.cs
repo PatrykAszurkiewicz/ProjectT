@@ -6,11 +6,11 @@ using UnityEngine.UI;
 
 // Dynamic run-progress bar.
 // Drag sprites into the Inspector, one per phase + state (bright/dark).
-// REQUIRED PREFAB STRUCTURE (minimal):
+// REQUIRED PREFAB STRUCTURE:
 //   StagesTest (this script attaches here)
-//     ├── PanelIcons   (empty RectTransform — generated icons go here)
-//     ├── PanelLines   (empty RectTransform — generated lines go here)
-//     └── HighLight    (Image with your highlight sprite — moved over current node)
+//     PanelIcons   (empty RectTransform — generated icons go here)
+//     PanelLines   (empty RectTransform — generated lines go here)
+//     HighLight    (Image with  highlight sprite — moved over current node)
 
 [DisallowMultipleComponent]
 public class RunProgressBar : MonoBehaviour
@@ -91,6 +91,23 @@ public class RunProgressBar : MonoBehaviour
     [Tooltip("Boss / final-boss icons drawn this much larger than regular icons.")]
     [Min(1f)] public float bossSizeMultiplier = 1.15f;
 
+    [Header("═══ WINDOW / ZOOM ═══")]
+    [Tooltip("ON: show only a WINDOW of icons centred on the active node, so a long run stays " +
+             "readable and 'zoomed in' on where you are. OFF: lay out the whole timeline at once " +
+             "(original behaviour — overflows badly on very long runs).")]
+    public bool windowed = true;
+
+    [Tooltip("How many icons to show on EACH side of the active node.\n" +
+             "Total visible = 2×radius + 1  (e.g. 4 → 9 icons).")]
+    [Min(1)] public int windowRadius = 4;
+
+    [Tooltip("Fade the outermost icon on a side when the timeline continues past the window, " +
+             "so the player can tell there's more before/after the visible portion.")]
+    public bool fadeWindowEdges = true;
+
+    [Tooltip("Alpha applied to a faded edge icon (when 'Fade Window Edges' is on).")]
+    [Range(0.05f, 1f)] public float windowEdgeAlpha = 0.35f;
+
     [Tooltip("Current node icon scaled up by this factor.")]
     [Min(1f)] public float currentIconScale = 1.18f;
 
@@ -112,6 +129,19 @@ public class RunProgressBar : MonoBehaviour
     [Tooltip("Tint applied to completed (dark) icons that don't have a dark sprite.")]
     public Color completedFallbackTint = new Color(0.45f, 0.45f, 0.45f, 1f);
 
+    [Header("═══ RENDER ORDER ═══")]
+    [Tooltip("Force the bar to render ON TOP of other UI (e.g. the weapon-roll popup) by giving it " +
+             "its own sorting canvas. Turn OFF to fall back to normal hierarchy order.")]
+    public bool forceOnTop = true;
+
+    [Tooltip("Sorting order used when 'Force On Top' is on. Higher = drawn later (more on top).\n" +
+             "If something still covers the bar, raise this above that UI's canvas sorting order.")]
+    public int sortingOrder = 1000;
+
+    [Tooltip("Optional sorting layer to place the bar on. Leave EMPTY to keep the current/default " +
+             "layer (recommended unless your weapon-roll UI lives on a higher sorting layer).")]
+    public string sortingLayerName = "";
+
     [Header(" DEBUG ")]
     public bool debugLog = false;
 
@@ -132,6 +162,10 @@ public class RunProgressBar : MonoBehaviour
     private RectTransform highlightRT;
     private Image highlightImage;
 
+    // The StagesTest visual root that actually owns the panels — the GameObject we
+    // attach the sorting Canvas to (may differ from `this` if the script lives elsewhere).
+    private RectTransform barRootRT;
+
     private struct Node
     {
         public SlotPhase phase;
@@ -146,6 +180,12 @@ public class RunProgressBar : MonoBehaviour
     private int currentNodeIndex = -1;
     private float effectiveIconSize;
 
+    // Which slice of `nodes` is currently realised as views (windowed mode).
+    // In full mode these span the whole list. nodeIcons[i] ↔ nodes[windowStart + i].
+    private int windowStart;
+    private int windowCount;
+    private bool windowBuilt;
+
     private CanvasGroup canvasGroup;
     private Coroutine fadeRoutine;
     private bool subscribed;
@@ -158,6 +198,7 @@ public class RunProgressBar : MonoBehaviour
         DiscoverPrefabChildren();
         if (!enabled) return;          // soft-failed inside DiscoverPrefabChildren
         EnsureCanvasGroup();
+        EnsureTopmostCanvas();
         ResolveAutoLoadSprites();
         ClearStockChildren();
         if (!alwaysVisible) FadeTo(0f);
@@ -188,6 +229,7 @@ public class RunProgressBar : MonoBehaviour
         iconsPanelRT = FindChildByName(transform, "PanelIcons") as RectTransform;
         linesPanelRT = FindChildByName(transform, "PanelLines") as RectTransform;
         var hl = FindChildByName(transform, "HighLight");
+        if (iconsPanelRT != null) barRootRT = transform as RectTransform;
 
         // If not found locally, search the entire scene for a StagesTest GameObject and use
         // its children. This makes the script work whether it's attached to the StagesTest
@@ -206,6 +248,7 @@ public class RunProgressBar : MonoBehaviour
                 hl = FindChildByName(rt, "HighLight");
                 if (iconsPanelRT != null)
                 {
+                    barRootRT = rt;
                     if (debugLog)
                         Debug.Log($"[RunProgressBar] Found StagesTest in scene at '{GetPath(rt)}'.");
                     break;
@@ -256,6 +299,39 @@ public class RunProgressBar : MonoBehaviour
         if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
+    }
+
+    /// Give the bar its own nested Canvas with overrideSorting so it draws ABOVE other UI
+    /// (e.g. the weapon-roll popup) regardless of its position in the hierarchy. The prefab
+    /// ships without a Canvas, so its draw order would otherwise be whatever sibling order
+    /// it happens to have under the main canvas.
+    private void EnsureTopmostCanvas()
+    {
+        if (!forceOnTop) return;
+
+        // Attach to the actual visual root (the StagesTest object that owns the panels),
+        // not necessarily `this` — the script may live on a non-UI object.
+        var rootGO = (barRootRT != null ? barRootRT.gameObject : gameObject);
+
+        var canvas = rootGO.GetComponent<Canvas>();
+        if (canvas == null) canvas = rootGO.AddComponent<Canvas>();
+
+        canvas.overrideSorting = true;           // sort independently of the parent canvas
+        canvas.sortingOrder = sortingOrder;       // higher = on top
+        if (!string.IsNullOrEmpty(sortingLayerName))
+            canvas.sortingLayerName = sortingLayerName;
+
+        // Display-only overlay (CanvasGroup.blocksRaycasts = false), so no GraphicRaycaster
+        // is needed — it would only matter for input, which this bar never consumes.
+
+        // Belt-and-suspenders: also push to the end of its siblings so it wins even against
+        // anything that ends up sharing our sorting order.
+        if (barRootRT != null) barRootRT.SetAsLastSibling();
+
+        if (debugLog)
+            Debug.Log($"[RunProgressBar] Forced on top (sortingOrder={sortingOrder}" +
+                      (string.IsNullOrEmpty(sortingLayerName) ? "" : $", layer='{sortingLayerName}'") +
+                      $") on '{rootGO.name}'.");
     }
 
     /// For any sprite slot the user left empty in the Inspector, try to load from Resources by filename.
@@ -386,13 +462,48 @@ public class RunProgressBar : MonoBehaviour
         if (debugLog)
             Debug.Log($"[RunProgressBar] Timeline built: {nodes.Count} nodes for {stages} stages × {wavesPerStage} waves");
 
-        BuildNodeViewsAndLayout();
+        windowBuilt = false;
+        RebuildViews();
 
         if (alwaysVisible && nodes.Count > 0 && currentNodeIndex < 0)
         {
             currentNodeIndex = 0;
             RefreshAllVisuals();
         }
+    }
+
+    // Build (or rebuild) the icon/line views. In windowed mode this realises only the
+    // slice around the active node; in full mode it realises the whole timeline.
+    private void RebuildViews()
+    {
+        if (nodes.Count == 0) return;
+
+        if (!windowed)
+        {
+            BuildNodeViewsAndLayout(0, nodes.Count);
+            windowBuilt = true;
+            return;
+        }
+        EnsureWindowViews(force: true);
+    }
+
+    // Compute the desired window around currentNodeIndex and rebuild the views only
+    // if that window actually shifted (so per-frame RefreshAllVisuals stays cheap).
+    private void EnsureWindowViews(bool force = false)
+    {
+        int total = nodes.Count;
+        if (total == 0) return;
+
+        int size = Mathf.Min(total, windowRadius * 2 + 1);
+        int center = Mathf.Clamp(currentNodeIndex < 0 ? 0 : currentNodeIndex, 0, total - 1);
+        // Keep a FULL window even near the ends (clamp the start, don't shrink the size).
+        int start = Mathf.Clamp(center - windowRadius, 0, Mathf.Max(0, total - size));
+
+        if (!force && windowBuilt && start == windowStart && size == windowCount)
+            return; // window unchanged — nothing to rebuild
+
+        BuildNodeViewsAndLayout(start, size);
+        windowBuilt = true;
     }
 
     private void ClearGeneratedNodes()
@@ -408,11 +519,19 @@ public class RunProgressBar : MonoBehaviour
 
     //   LAYOUT  
 
-    private void BuildNodeViewsAndLayout()
+    private void BuildNodeViewsAndLayout(int rangeStart, int rangeCount)
     {
         if (iconsPanelRT == null || nodes.Count == 0) return;
 
-        int n = nodes.Count;
+        // Clamp the requested range to the real list, then clear and rebuild views.
+        rangeStart = Mathf.Clamp(rangeStart, 0, Mathf.Max(0, nodes.Count - 1));
+        rangeCount = Mathf.Clamp(rangeCount, 1, nodes.Count - rangeStart);
+        windowStart = rangeStart;
+        windowCount = rangeCount;
+
+        ClearGeneratedNodes();
+
+        int n = rangeCount;
 
         // total width = N*iconSize + (N-1)*iconSize*spacingFraction = iconSize * (N + (N-1)*spacingFraction)
         float spacingTerm = (n - 1) * spacingFraction;
@@ -429,7 +548,7 @@ public class RunProgressBar : MonoBehaviour
         // Build icons — fresh GameObjects, not template-instantiated.
         for (int i = 0; i < n; i++)
         {
-            var node = nodes[i];
+            var node = nodes[windowStart + i];
 
             var go = new GameObject($"Node_{i}_{node.phase}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             go.transform.SetParent(iconsPanelRT, false);
@@ -496,6 +615,10 @@ public class RunProgressBar : MonoBehaviour
             }
         }
 
+        // Mark the window as realised BEFORE refreshing, so the RefreshAllVisuals
+        // below (which calls EnsureWindowViews) sees a matching, up-to-date window
+        // and does not recursively rebuild.
+        windowBuilt = true;
         RefreshAllVisuals();
     }
 
@@ -687,20 +810,37 @@ public class RunProgressBar : MonoBehaviour
 
     private void RefreshAllVisuals()
     {
+        // Recentre the window on the active node first (cheap no-op if it hasn't moved).
+        if (windowed) EnsureWindowViews();
+
+        bool moreLeft = windowed && windowStart > 0;
+        bool moreRight = windowed && (windowStart + windowCount < nodes.Count);
+
         for (int i = 0; i < nodeIcons.Count; i++)
         {
-            bool isCurrent = (i == currentNodeIndex);
+            int global = windowStart + i;
+            bool isCurrent = (global == currentNodeIndex);
             // Only the active node is bright. Everything else (past AND future) is dark.
             bool useDarkSprite = !isCurrent;
 
-            var phase = nodes[i].phase;
+            var phase = nodes[global].phase;
             nodeIcons[i].sprite = SpriteForPhase(phase, completed: useDarkSprite);
 
             // If we wanted dark but no dark variant exists, tint grey instead so it still reads as inactive.
+            Color baseColor;
             if (useDarkSprite && useDarkVariants && !HasDarkVariant(phase))
-                nodeIcons[i].color = completedFallbackTint;
+                baseColor = completedFallbackTint;
             else
-                nodeIcons[i].color = Color.white;
+                baseColor = Color.white;
+
+            // Fade the outermost icon on a side that has more timeline beyond the window,
+            // hinting the run continues past what's visible. Never fade the active node.
+            if (fadeWindowEdges && !isCurrent)
+            {
+                if (i == 0 && moreLeft) baseColor.a *= windowEdgeAlpha;
+                else if (i == nodeIcons.Count - 1 && moreRight) baseColor.a *= windowEdgeAlpha;
+            }
+            nodeIcons[i].color = baseColor;
 
             // Current icon scaled up.
             float baseW = effectiveIconSize;
@@ -711,10 +851,12 @@ public class RunProgressBar : MonoBehaviour
             nodeRects[i].sizeDelta = new Vector2(baseW * scale, baseW * scale);
         }
 
-        // Lines: only the two lines flanking the current node are bright
+        // Lines: only the two lines flanking the current node are bright.
+        // currentLocal is the active node's index within the built window.
+        int currentLocal = currentNodeIndex - windowStart;
         for (int i = 0; i < lineIcons.Count; i++)
         {
-            bool adjacentToCurrent = (i == currentNodeIndex) || (i == currentNodeIndex - 1);
+            bool adjacentToCurrent = (i == currentLocal) || (i == currentLocal - 1);
             Sprite chosen = adjacentToCurrent ? lineBright : lineDark;
             if (chosen == null) chosen = lineIcons[i].sprite;
             lineIcons[i].sprite = chosen;
@@ -728,11 +870,14 @@ public class RunProgressBar : MonoBehaviour
     {
         if (highlightRT == null) return;
 
-        bool valid = currentNodeIndex >= 0 && currentNodeIndex < nodeRects.Count;
+        // The active node may be outside the currently built window for a frame
+        // (e.g. mid-rebuild); guard against that by mapping to a local index.
+        int local = currentNodeIndex - windowStart;
+        bool valid = local >= 0 && local < nodeRects.Count;
         highlightRT.gameObject.SetActive(valid);
         if (!valid) return;
 
-        var target = nodeRects[currentNodeIndex];
+        var target = nodeRects[local];
 
         Vector3 worldPos = target.position;
         Vector3 localPos = highlightRT.parent.InverseTransformPoint(worldPos);

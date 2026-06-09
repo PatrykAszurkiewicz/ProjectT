@@ -181,6 +181,8 @@ MonoBehaviour:
   canDropEnergy: 1
   damageFlashDuration: 0.1
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  baseDeathVfxDuration: 0.6
+  baseDestroyHealthBarBeforeVfx: 1
   currentMoveSpeedDebug: 0
 --- !u!114 &1608654102432218712
 MonoBehaviour:

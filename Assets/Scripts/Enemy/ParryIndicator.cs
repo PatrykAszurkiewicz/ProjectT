@@ -52,6 +52,16 @@ public class ParryIndicator : MonoBehaviour
             return;
         }
 
+        // Ranged enemies (Mort, Pitcher, …) deliver damage through a projectile.
+        // Their shots are parried in flight (see ProjectileParry), NOT by reacting
+        // to the throw animation — so the melee-style head "!" is misleading here
+        // (it implied you could melee-parry a Mort). Disable it for them.
+        if (enemyController.HasAttackOverride)
+        {
+            enabled = false;
+            return;
+        }
+
         ReadParryConfig();
         BuildIndicator();
         SetVisible(false);
@@ -86,6 +96,19 @@ public class ParryIndicator : MonoBehaviour
             return;
         }
 
+        // Once this enemy has been successfully parried it gets a ParryStunEffect,
+        // which FREEZES its attack animation on a frame that's still inside the
+        // parry window — so the frame-based check below would keep the "!" up for
+        // the whole stun. The parry is already over, so hide the mark immediately
+        // the moment the enemy is parry-stunned. (A block doesn't stun, so its
+        // animation advances past the window and clears the mark on its own.)
+        var parryStun = GetComponent<ParryStunEffect>();
+        if (parryStun != null && parryStun.IsStunActive)
+        {
+            if (isShowingIndicator) SetVisible(false);
+            return;
+        }
+
         // If ReadParryConfig disabled the indicator (e.g. single-frame attack),
         // never show. parryStart < 0 is the disable sentinel.
         if (parryStart < 0)
@@ -94,13 +117,22 @@ public class ParryIndicator : MonoBehaviour
             return;
         }
 
+        // Augment 332 "Longer Parry Window" opens the parry window earlier by
+        // ExtraParryFrames (see EnemyController.IsInParryWindow). Mirror that here
+        // so the "!" appears as early as the augment allows and the telegraph
+        // stays in lockstep with the actual parry window. Clamp at frame 0 — the
+        // attack animation has no earlier frame to show the "!" on, so on an enemy
+        // whose parry frames start at N, the visible warning can move forward by at
+        // most N frames even if ExtraParryFrames is larger.
+        int effParryStart = Mathf.Max(0, parryStart - ParryUpgrades.ExtraParryFrames);
+
         // Use CurrentAttackFrame from the animation controller for pixel-perfect sync
         bool inParryWindow = false;
 
         if (animController != null && animController.CurrentAttackFrame >= 0)
         {
             int currentFrame = animController.CurrentAttackFrame;
-            inParryWindow = currentFrame >= parryStart && currentFrame <= parryEnd;
+            inParryWindow = currentFrame >= effParryStart && currentFrame <= parryEnd;
         }
         else
         {
@@ -109,7 +141,7 @@ public class ParryIndicator : MonoBehaviour
             if (animSpeed > 0f && enemyController != null)
             {
                 float cycleStart = enemyController.AttackCycleStartTime;
-                float parryWindowStart = cycleStart + parryStart * animSpeed;
+                float parryWindowStart = cycleStart + effParryStart * animSpeed;
                 float parryWindowEnd = cycleStart + (parryEnd + 1) * animSpeed;
                 inParryWindow = Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
             }
@@ -308,3 +340,4 @@ public class ParryIndicator : MonoBehaviour
         return _glowSprite;
     }
 }
+

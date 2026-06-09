@@ -12,7 +12,7 @@ using System.Linq;
 /// Slot indices match WeaponRollController.allWeaponSlots:
 ///   0 Melee, 1 Ranged, 2 GrapplingHook, 3 Shield, 4 ObstacleDrawer,
 ///   5 Flamethrower, 6 BombLauncher, 7 Trap, 8 Turret, 9 Decoy, 10 Boomerang,
-///   11 Book, 12 BattleHammer, 13 StealthCloak
+///   11 Book, 12 BattleHammer, 13 StealthCloak, 14 Torch
 public class WeaponBlueprintRegistry : MonoBehaviour
 {
     public static WeaponBlueprintRegistry Instance { get; private set; }
@@ -46,6 +46,10 @@ public class WeaponBlueprintRegistry : MonoBehaviour
         11, // Revenant Necronomicon (Book)
         12, // Battle Hammer
         13, // Stealth Cloak
+        14, // Torch
+        15, // Time Clock
+        16, // Mortar
+        17, // Smoke Screen
     };
 
     [Header("Debug")]
@@ -111,7 +115,7 @@ public class WeaponBlueprintRegistry : MonoBehaviour
         {
             // No whitelist — anything non-starter is fair game.
             // Slot count must match WeaponRollController.allWeaponSlots.Length.
-            for (int s = 0; s < 14; s++)
+            for (int s = 0; s < 18; s++)
                 if (IsDroppable(s) && !_blueprintedSlots.Contains(s)) result.Add(s);
         }
         return result;
@@ -175,3 +179,5 @@ public class WeaponBlueprintRegistry : MonoBehaviour
         PlayerPrefs.Save();
     }
 }
+
+

@@ -78,6 +78,8 @@ public class TowerDefenseMap : MonoBehaviour
     private GameObject terrainObject;
     private GameObject slotsContainer;
     private GameObject obstaclesContainer; // layout-specific obstacles (walls, buildings)
+    private GameObject augmentArchContainer; // arches added by the "obstacle generation" augment (ID 3)
+    private int augmentArchWaves = 0; // how many times the arch augment has run on the current map
     private CentralCore centralCore;
 
     // Captured on first GenerateMap so we can rescale mapRadius from the
@@ -117,6 +119,13 @@ public class TowerDefenseMap : MonoBehaviour
             rings.Add(new RingConfiguration { radius = 2.3f, slotCount = 6, slotSize = 1.9f });
             rings.Add(new RingConfiguration { radius = 3.8f, slotCount = 6, slotSize = 1.9f });
         }
+
+        // A GameOrchestrator drives the layout per stage via ApplyLayout(). Building
+        // the map here too causes a redundant, race-prone double generation at launch,
+        // so stand down (the orchestrator builds it during the stage intro). The editor
+        // test-layout path below is exempt so standalone testing still works.
+        if (GameOrchestrator.Instance != null && !useTestLayoutOnStart)
+            return;
 
         // Editor-only quick override: if testLayoutName is set, build that
         // layout from MapLayoutExamples directly. No assets needed.
@@ -221,6 +230,15 @@ public class TowerDefenseMap : MonoBehaviour
         {
             DestroyImmediate(obstaclesContainer);
         }
+
+        // Destroy augment-added arches and reset the augment wave counter.
+        // A fresh map (new stage / layout) starts with no augment arches.
+        if (augmentArchContainer != null)
+        {
+            DestroyImmediate(augmentArchContainer);
+            augmentArchContainer = null;
+        }
+        augmentArchWaves = 0;
 
         // Destroy old debug rings and layout connection lines
         var toDelete = new List<GameObject>();
@@ -796,15 +814,7 @@ public class TowerDefenseMap : MonoBehaviour
         return cachedStoneCircleSprite;
     }
 
-    // Stone-textured CRESCENT sprite. The crescent is built by subtracting
-    // a smaller offset circle from a larger one — the result is a single
-    // moon-shaped sprite with rich stone texture and noisy rims on both
-    // the outer convex edge and the inner concave edge.
-    //
-    // Geometry: outer circle radius = size*0.46, centered.
-    //           inner circle radius = size*0.36, offset upward by size*0.18
-    //           so the bite is taken out of the TOP of the sprite.
-    // (Rotate the GameObject to point the bite anywhere you want.)
+    // Stone-textured CRESCENT sprite
     private static Sprite cachedCrescentSprite;
     Sprite CreateCrescentSprite()
     {
@@ -912,13 +922,7 @@ public class TowerDefenseMap : MonoBehaviour
         return cachedCrescentSprite;
     }
 
-    // Crescent obstacle. Renders as a single textured crescent sprite. For
-    // collisions, the convex outer rim is approximated with a chain of small
-    // circle colliders following the outer arc — enemies path smoothly
-    // around the convex side. The concave "bite" stays open (no colliders
-    // inside the cup) so enemies can never get trapped there.
-    //
-    // Convention:
+    // Crescent obstacle. Renders as a single textured crescent sprite.
     //   obs.position        = centre of the bounding box
     //   obs.size.x          = overall width of the crescent
     //   obs.size.y          = overall height of the crescent
@@ -953,39 +957,45 @@ public class TowerDefenseMap : MonoBehaviour
 
             root.layer = obstacleLayer;
 
-            // Approximate the convex outer arc with N small circle colliders
-            // attached to the ROOT (so they rotate with the sprite).
-            // Arc spans 280° around the bottom of the sprite (the bite at the
-            // top stays open). Collider radius scales with the crescent size.
-            //
-            // Local-space: in the sprite's local frame, the outer arc is at
-            // radius ~0.46 of the bounding box. We use unit scale (the root
-            // doesn't have a scale — only the Visual child does). The colliders
-            // need to be placed at the world-space arc, scaled by obs.size.
-            //
-            // Use the smaller of size.x/size.y so the arc fits cleanly when the
-            // crescent is non-square.
-            float worldR = Mathf.Min(obs.size.x, obs.size.y) * 0.46f;
-            float colliderRadius = worldR * 0.16f; // small enough to be smooth
-            int colliderCount = Mathf.Max(7, Mathf.RoundToInt(worldR * 2.5f));
+            // Approximate the convex outer rim
+            const float hornAngleDeg = 43.7f;        // horn position (from +X)
+            const float arcStartDeg = hornAngleDeg;  // right horn
+            const float arcEndDeg = hornAngleDeg - 360f + (180f - 2f * hornAngleDeg);
+            // ^ left horn (180-43.7 = 136.3°) reached by sweeping CLOCKWISE
+            //   around the bottom: 136.3 - 360 = -223.7°. Span ≈ 267.4°.
 
-            // Arc goes from -130° to +130° (relative to the sprite's local
-            // -Y axis — i.e. it follows the bottom 260° of the outer rim,
-            // leaving 100° of the top open where the bite is).
-            const float arcStart = -130f;
-            const float arcEnd = 130f;
+            const float rimFactor = 0.44f;           // just inside the 0.46 rim
+            float rx = obs.size.x * rimFactor;
+            float ry = obs.size.y * rimFactor;
+
+            // Collider count scales with the arc length so the chain stays
+            // continuous (no gaps to snag on) regardless of crescent size.
+            float avgRimR = (rx + ry) * 0.5f;
+            float arcRad = Mathf.Abs(arcStartDeg - arcEndDeg) * Mathf.Deg2Rad;
+            float arcLen = avgRimR * arcRad;
+            int colliderCount = Mathf.Clamp(Mathf.CeilToInt(arcLen / 0.22f), 10, 64);
+
+            // Pre-compute centres so we can size the collider radius from the
+            // largest gap between neighbours — guaranteeing overlap (a solid,
+            // smooth convex wall) even where the ellipse is most stretched.
+            var centers = new System.Collections.Generic.List<Vector2>(colliderCount);
             for (int c = 0; c < colliderCount; c++)
             {
                 float t = colliderCount == 1 ? 0.5f : c / (float)(colliderCount - 1);
-                float ang = Mathf.Lerp(arcStart, arcEnd, t) * Mathf.Deg2Rad;
-                // Sprite's local "down" is -Y. Crescent bite faces +Y, so the
-                // outer rim's bottom is at -Y.
-                float localX = Mathf.Sin(ang) * worldR;
-                float localY = -Mathf.Cos(ang) * worldR;
+                float phi = Mathf.Lerp(arcStartDeg, arcEndDeg, t) * Mathf.Deg2Rad;
+                centers.Add(new Vector2(rx * Mathf.Cos(phi), ry * Mathf.Sin(phi)));
+            }
 
+            float maxGap = 0f;
+            for (int c = 1; c < centers.Count; c++)
+                maxGap = Mathf.Max(maxGap, Vector2.Distance(centers[c], centers[c - 1]));
+            float colliderRadius = Mathf.Max(maxGap * 0.62f, 0.06f);
+
+            for (int c = 0; c < centers.Count; c++)
+            {
                 var colGO = new GameObject($"Col_{c}");
                 colGO.transform.parent = root.transform;
-                colGO.transform.localPosition = new Vector3(localX, localY, 0f);
+                colGO.transform.localPosition = new Vector3(centers[c].x, centers[c].y, 0f);
                 colGO.layer = obstacleLayer;
 
                 var col = colGO.AddComponent<CircleCollider2D>();
@@ -1597,6 +1607,268 @@ public class TowerDefenseMap : MonoBehaviour
         }
     }
 
+    // AUGMENT: Obstacle Generation (augment ID 3)
+
+    public int GenerateAugmentArches()
+    {
+        Debug.Log("[AUGMENT/Arches] GenerateAugmentArches() called.");
+
+        if (augmentArchContainer == null)
+        {
+            augmentArchContainer = new GameObject("Augment Arches");
+            augmentArchContainer.transform.parent = transform;
+            augmentArchContainer.transform.localPosition = Vector3.zero;
+        }
+
+        int obstacleLayerIndex = LayerMask.NameToLayer(obstacleLayerName);
+        if (obstacleLayerIndex < 0) obstacleLayerIndex = 0;
+        int obstacleMask = 1 << obstacleLayerIndex;
+
+        // Each application places a fresh ring. Push successive rings outward a
+        // little and rotate them so they interleave with earlier arches.
+        int wave = augmentArchWaves;
+
+        // --- Choose a placement radius between the outer slots and the edge ---
+        float outerSlotR = 0f;
+        foreach (var s in allTowerSlots)
+        {
+            if (s == null) continue;
+            float r = ((Vector2)s.transform.position).magnitude;
+            if (r > outerSlotR) outerSlotR = r;
+        }
+        float coreSafe = (enableCentralCore ? coreSize : 0f) + 1.0f;
+
+        // Ring radius
+        float baseR = Mathf.Max(outerSlotR + 2.5f, mapRadius * 0.65f);
+        float ringR = Mathf.Min(baseR + wave * 1.4f, mapRadius - 1.4f);
+        if (ringR <= coreSafe + 1.0f)
+        {
+            Debug.LogWarning("[AUGMENT/Arches] No room between core and map edge for arches.");
+            return 0;
+        }
+
+        // Arch sizing scales gently with the ring. Kept modest so five arches
+        // leave wide (~45°+) angular gaps between them for enemy approach lanes.
+        float archWidth = Mathf.Clamp(ringR * 0.42f, 2.0f, 3.2f);
+        float archHeight = archWidth * 0.45f;
+
+        Debug.Log($"[AUGMENT/Arches] wave={wave} outerSlotR={outerSlotR:F1} " +
+                  $"mapRadius={mapRadius:F1} ringR={ringR:F1} " +
+                  $"archSize=({archWidth:F1}x{archHeight:F1}) coreSafe={coreSafe:F1}");
+
+        // Per-wave angular phase so successive augments interleave their arches
+        // and don't stack on the same angles. 18° keeps arches off the cardinal
+        // axes (common enemy approach lanes).
+        float baseOffsetDeg = wave * 31f + 18f;
+
+        //  Candidate placement: scan many angles across a few radii 
+
+        const int maxArches = 5;
+        const int angleSamples = 24;              // every 15° around the ring
+        float minSeparationDeg = 360f / (maxArches + 1); // ~60° apart minimum
+
+        // Try the primary ring first, then nudge in/out if nothing fit, so a
+        // crowded band never leaves the player with zero arches.
+        float[] radiusAttempts =
+        {
+            ringR,
+            Mathf.Min(ringR + 1.2f, mapRadius - 1.2f),
+            Mathf.Max(ringR - 1.2f, coreSafe + 1.5f),
+            Mathf.Min(ringR + 2.4f, mapRadius - 1.1f),
+        };
+
+        int placed = 0;
+        var placedPositions = new List<Vector2>();
+        var placedAngles = new List<float>();
+
+        foreach (float tryR in radiusAttempts)
+        {
+            if (placed >= maxArches) break;
+            // Rotate the sample start per wave so successive augments interleave.
+            float startDeg = baseOffsetDeg + (tryR * 7.13f) % 15f; // small per-radius phase
+
+            for (int s = 0; s < angleSamples && placed < maxArches; s++)
+            {
+                float angDeg = startDeg + s * (360f / angleSamples);
+                float angNorm = Mathf.Repeat(angDeg, 360f);
+
+                // Enforce minimum angular separation from already-placed arches.
+                bool tooClose = false;
+                foreach (float pa in placedAngles)
+                {
+                    float d = Mathf.Abs(Mathf.DeltaAngle(angNorm, pa));
+                    if (d < minSeparationDeg) { tooClose = true; break; }
+                }
+                if (tooClose) continue;
+
+                float angRad = angDeg * Mathf.Deg2Rad;
+                Vector2 pos = new Vector2(Mathf.Cos(angRad) * tryR, Mathf.Sin(angRad) * tryR);
+
+                // Convex side faces away from core, concave mouth cups the core.
+                float rotDeg = angDeg + 90f;
+
+                if (!IsArchPlacementClear(pos, archWidth, archHeight, coreSafe, placedPositions))
+                    continue;
+
+                var arch = new MapLayoutDefinition.LayoutObstacle
+                {
+                    shape = MapLayoutDefinition.ObstacleShape.Crescent,
+                    position = pos,
+                    size = new Vector2(archWidth, archHeight),
+                    rotationDegrees = rotDeg,
+                    color = Color.white,        // crescent texture supplies its own colour
+                    blocksMovement = true,
+                    label = $"AugmentArch_w{wave}_{placed}",
+                };
+
+                SpawnCrescentInto(arch, augmentArchContainer, obstacleLayerIndex, wave * 100 + placed);
+
+                placedPositions.Add(pos);
+                placedAngles.Add(angNorm);
+                placed++;
+            }
+        }
+
+        if (placed == 0)
+        {
+            Debug.LogWarning("[AUGMENT/Arches] Map too crowded — no arches could be placed " +
+                             "without overlapping existing obstacles or slots.");
+            return 0;
+        }
+
+        // Sanity check: confirm the core still has open radial approach lanes.
+
+        if (!CoreHasOpenApproach(coreSafe, obstacleMask))
+        {
+            Debug.LogWarning("[AUGMENT/Arches] Core approach looks tight after placement. " +
+                             "Arches kept, but consider reducing arch count/size if enemies struggle.");
+        }
+
+        augmentArchWaves++;
+        Debug.Log($"[AUGMENT/Arches] Added {placed} arches (wave {wave}) at radius {ringR:F1}.");
+        return placed;
+    }
+
+
+    bool IsArchPlacementClear(Vector2 pos, float width, float height, float coreSafe,
+                              List<Vector2> placedThisWave)
+    {
+        // Bounding radius of the crescent footprint (convex outer rim).
+        float archRadius = Mathf.Max(width, height) * 0.5f;
+
+        // 1) Core clearance.
+        if (pos.magnitude < coreSafe + archRadius)
+        {
+            Debug.Log($"[AUGMENT/Arches]   reject {pos} — too close to core.");
+            return false;
+        }
+
+        // Existing obstacles — biome decorations (trees/rocks) AND layout obstacles (walls/stones/crescents). 
+        float pad = 0.4f;
+        Collider2D[] hits = Physics2D.OverlapCircleAll(pos, archRadius + pad, Physics2D.AllLayers);
+        foreach (var hit in hits)
+        {
+            if (hit == null) continue;
+
+            // Trigger colliders (terrain boundary, tower slots, pickups) are not
+            // solid terrain — never block on them.
+            if (hit.isTrigger) continue;
+
+            // Skip our own arches from prior waves (per-wave spacing keeps them tidy).
+            if (augmentArchContainer != null &&
+                hit.transform.IsChildOf(augmentArchContainer.transform))
+                continue;
+
+            // Skip the central core itself (core clearance handled in step 1).
+            if (centralCore != null && hit.transform.IsChildOf(centralCore.transform))
+                continue;
+
+            // Skip the player — transient, not terrain. ("Player" is a tag the
+            // project defines and uses elsewhere, so CompareTag is safe here.)
+            if (hit.CompareTag("Player"))
+                continue;
+
+            // Skip enemies — they may be passing through the ring as the augment
+            // fires; they're transient and must not veto a placement.
+            if (hit.GetComponent<EnemyController>() != null ||
+                hit.GetComponentInParent<EnemyController>() != null)
+                continue;
+
+            // Anything else with a SOLID collider here is real terrain → block.
+            Debug.Log($"[AUGMENT/Arches]   reject {pos} — overlaps solid collider " +
+                      $"'{hit.name}' (layer {LayerMask.LayerToName(hit.gameObject.layer)}).");
+            return false;
+        }
+
+        // 3) Tower slots — keep arches off buildable ground.
+        foreach (var s in allTowerSlots)
+        {
+            if (s == null) continue;
+            Vector2 sp = s.transform.position;
+            // Slot footprint radius ~ customSlotSize*0.5; use a safe constant.
+            float slotR = 1.1f;
+            if (Vector2.Distance(sp, pos) < archRadius + slotR)
+            {
+                Debug.Log($"[AUGMENT/Arches]   reject {pos} — too close to a tower slot.");
+                return false;
+            }
+        }
+
+        // 4) Other arches placed this wave (defensive — spacing already handles it).
+        foreach (var p in placedThisWave)
+        {
+            if (Vector2.Distance(p, pos) < archRadius * 2f + 0.5f)
+                return false;
+        }
+
+        return true;
+    }
+
+    // Casts a handful of rays from the map edge straight toward the core. If at
+    // least two of them reach the core without hitting an obstacle collider,
+    // the core is considered reachable. Cheap, conservative reachability proxy
+    // that matches how enemies actually approach (radially inward).
+    bool CoreHasOpenApproach(float coreSafe, int obstacleMask)
+    {
+        const int probeCount = 24;            // every 15°
+        float startR = mapRadius - 0.5f;
+        int clearLanes = 0;
+
+        for (int i = 0; i < probeCount; i++)
+        {
+            float ang = (360f / probeCount) * i * Mathf.Deg2Rad;
+            Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+            Vector2 from = dir * startR;
+            // Ray inward toward the core; stop just outside the core safe disc.
+            float rayLen = startR - coreSafe;
+            RaycastHit2D rh = Physics2D.Raycast(from, -dir, rayLen, obstacleMask);
+            if (rh.collider == null)
+            {
+                clearLanes++;
+                if (clearLanes >= 2) return true; // enough open corridors
+            }
+        }
+        return clearLanes >= 2;
+    }
+
+    // Spawns a single Crescent obstacle into an arbitrary container, reusing the
+    // exact collider/visual construction of CreateCrescentObstacle. Kept as a
+    // thin wrapper so the augment shares one source of truth with layout arches.
+    void SpawnCrescentInto(MapLayoutDefinition.LayoutObstacle obs, GameObject container,
+                           int obstacleLayer, int index)
+    {
+        GameObject prevContainer = obstaclesContainer;
+        obstaclesContainer = container;      // CreateCrescentObstacle parents to obstaclesContainer
+        try
+        {
+            CreateCrescentObstacle(obs, index, obstacleLayer);
+        }
+        finally
+        {
+            obstaclesContainer = prevContainer; // restore — never leave it pointing at the arch container
+        }
+    }
+
     public TowerSlot GetSlot(int ringIndex, int slotIndex)
     {
         foreach (var slot in allTowerSlots)
@@ -1696,3 +1968,5 @@ public class TowerDefenseMap : MonoBehaviour
         }
     }
 }
+
+

@@ -15,8 +15,11 @@ public class StageData
     public bool balloonsEnabled;      // randomly rolled — night lantern balloons
     public float enemyCountMultiplier;    // scales up per stage
     public float spawnDelayMultiplier;    // scales down per stage (faster)
+    public float enemyHealthMultiplier = 1f; // scales enemy max HP per stage (compounding)
+    public float enemyDamageMultiplier = 1f; // scales enemy damage per stage (compounding)
     public List<WaveData> waves;      // the actual waves to spawn
     public bool hasStageBoss;         // spawn boss after waves?
+    public GameObject stageBossPrefab; // resolved at plan time — WHICH boss spawns (null = none)
 
     public override string ToString()
     {
@@ -28,6 +31,8 @@ public class StageData
                $"{(rainEnabled ? " [RAIN]" : "")}" +
                $" — {waves?.Count ?? 0} waves" +
                $" — enemies ×{enemyCountMultiplier:F2}" +
+               $" — HP ×{enemyHealthMultiplier:F2} dmg ×{enemyDamageMultiplier:F2}" +
                $"{(hasStageBoss ? " + BOSS" : "")}";
     }
 }
+

@@ -655,6 +655,10 @@ public class HammerSlamRunner : MonoBehaviour
     // space (the same vector CursorPointer uses). Falls back to +X.
     private Vector2 ResolveAimDirection()
     {
+        // Gamepad / unified aim takes priority when present.
+        if (PlayerAim.Instance != null)
+            return PlayerAim.Instance.Direction;
+
         var cam = Camera.main;
         var mouse = UnityEngine.InputSystem.Mouse.current;
         if (cam == null || mouse == null) return Vector2.right;

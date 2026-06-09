@@ -682,6 +682,49 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 
+    // ── Restore support (used by RunPersistence to rebuild saved towers) ──
+
+    /// Find a registered slot by its (ring, slot) identity. Null if none match.
+    public TowerSlot FindSlot(int ringIndex, int slotIndex)
+    {
+        if (allSlots == null) return null;
+        foreach (var s in allSlots)
+            if (s != null && s.ringIndex == ringIndex && s.slotIndex == slotIndex)
+                return s;
+        return null;
+    }
+
+    /// Find the configured tower prefab whose Tower.towerType matches `type`.
+    /// Returns null if no prefab of that type is wired up.
+    public GameObject FindPrefabForType(Tower.TowerType type)
+    {
+        if (towerPrefabs == null || towerPrefabs.Count == 0) BuildTowerList();
+        if (towerPrefabs != null)
+        {
+            foreach (var prefab in towerPrefabs)
+            {
+                if (prefab == null) continue;
+                var t = prefab.GetComponent<Tower>();
+                if (t != null && t.towerType == type) return prefab;
+            }
+        }
+        return null;
+    }
+
+    /// Rebuild a tower into a slot for a RESTORE — bypasses energy cost and the
+    /// build animation, then applies tower augments. Returns the new Tower or null.
+    public Tower RestoreTowerInto(TowerSlot slot, Tower.TowerType type, int upgradeLevel, float currentEnergy)
+    {
+        if (slot == null) return null;
+        var prefab = FindPrefabForType(type);
+        if (prefab == null)
+        {
+            Debug.LogWarning($"[TowerPlacement] No prefab for tower type {type}; cannot restore.");
+            return null;
+        }
+        return slot.PlaceTowerForRestore(prefab, upgradeLevel, currentEnergy);
+    }
+
     public void TogglePlacementMode()
     {
         isPlacementMode = !isPlacementMode;
@@ -905,3 +948,4 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 }
+

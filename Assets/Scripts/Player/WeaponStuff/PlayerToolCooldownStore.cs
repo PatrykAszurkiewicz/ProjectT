@@ -15,6 +15,9 @@ public class PlayerToolCooldownStore : MonoBehaviour
     [System.Serializable]
     public class TwoPhaseTimer
     {
+
+
+
         public float activeTimer;     // counts down while the effect runs
         public float activeTotal;
         public float cooldownTimer;   // counts down during the recharge
@@ -82,13 +85,33 @@ public class PlayerToolCooldownStore : MonoBehaviour
 
     // One timer per tool. Public fields so they're inspectable while playing.
     public TwoPhaseTimer book = new TwoPhaseTimer();
-
+    public float clockCooldownTimer;
+    public float clockCooldownTotal;
+    // Smoke Screen recharge. Like the clock it's a single-phase cooldown; it
+    // lives here (not on SmokeScreenSystem) so scrolling away from the Smoke
+    // tool and back doesn't wipe the cooldown and let the player re-throw
+    // instantly.
+    public float smokeCooldownTimer;
+    public float smokeCooldownTotal;
     // Tick every timer here — independently of whatever tool is equipped — so
     // an in-progress cooldown keeps advancing while the player has scrolled
     // away to another tool. This is the whole point of the persistent store.
     void Update()
     {
         book.Tick(Time.deltaTime);
+
+        if (clockCooldownTimer > 0f)
+        {
+            clockCooldownTimer -= Time.deltaTime;
+            if (clockCooldownTimer < 0f) clockCooldownTimer = 0f;
+        }
+
+        if (smokeCooldownTimer > 0f)
+        {
+            smokeCooldownTimer -= Time.deltaTime;
+            if (smokeCooldownTimer < 0f) smokeCooldownTimer = 0f;
+        }
+
     }
 
     /// Find (or create) the store on the player. Pass any component/transform

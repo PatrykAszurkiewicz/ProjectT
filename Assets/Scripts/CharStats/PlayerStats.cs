@@ -119,6 +119,14 @@ public class PlayerStats : CharacterStats
             amount = berserkerMode.ModifyIncomingDamage(amount);
         }
 
+        // Augment 78 (Increased Shield Defenses): flat % reduction to incoming damage.
+        // Placed here so it covers every damage source, not just one call site.
+        var damageReduction = GetComponent<PlayerDamageReductionEffect>();
+        if (damageReduction != null)
+        {
+            amount = damageReduction.Apply(amount);
+        }
+
         // Check for immunity (augment ID 11)
         var immunityPhases = GetComponent<ImmunityPhasesEffect>();
 
@@ -434,3 +442,4 @@ public class PlayerStats : CharacterStats
         _maxManaTween = null;
     }
 }
+

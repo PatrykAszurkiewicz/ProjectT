@@ -39,15 +39,97 @@ MonoBehaviour:
   drawLineColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
   solidifiedColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
   obstacleHealth: 50
+  isBombLauncher: 0
+  bombMaxMines: 5
+  bombProximityRadius: 1.5
+  bombExplosionRadius: 3
+  bombFriendlyFire: 0
+  bombArmDelay: 0.5
+  isTrap: 0
+  trapMaxCount: 3
+  trapHoldDuration: 8
+  trapBossHoldDuration: 3
+  trapProximityRadius: 1.2
+  trapArmDelay: 0.4
+  isTurret: 0
+  turretRange: 5
+  turretFireRate: 3
+  turretProjectileSpeed: 12
+  turretArmDelay: 0.4
+  turretRotationSpeed: 300
   isFlamethrower: 1
   flameRange: 4.5
   flameConeAngle: 45
   flameDamageInterval: 0.15
   flameSpeed: 6
-  flameFuelMax: 100
+  flameFuelMax: 300
   flameFuelDrain: 25
   flameFuelRegen: 15
   flameFuelRegenDelay: 0.8
   flameParticlesPerSecond: 50
   flameParticleLifetimeMin: 0.25
   flameParticleLifetimeMax: 0.55
+  isDecoy: 0
+  decoyAttractRadius: 5
+  decoyDuration: 7
+  decoyBossDuration: 3
+  decoyArmDelay: 0.3
+  decoyBossVFXOffset: {x: -1, y: 2}
+  isBoomerang: 0
+  boomerangRange: 6
+  boomerangCurve: 2.5
+  isHammer: 0
+  hammerSlamRadius: 2.8
+  hammerWindup: 0.42
+  hammerAoEDamageMultiplier: 1
+  hammerSlamKnockback: 12
+  hammerHitStop: 0.13
+  hammerShakeJolt: 0.42
+  hammerShakeRumble: 0.16
+  hammerShakeRumbleDuration: 0.55
+  hammerShockwaveColor: {r: 0.93, g: 0.74, b: 0.45, a: 1}
+  hammerCrackColor: {r: 0.16, g: 0.12, b: 0.09, a: 1}
+  hammerDebrisCount: 14
+  hammerDustCount: 26
+  hammerGhostSpritePath: Icons/BattleHammerSmall
+  hammerGhostSize: 2.4
+  hammerGhostAlpha: 0.5
+  hammerChargeEnabled: 1
+  hammerChargeTime: 0.9
+  hammerChargeBonus: 0.3
+  hammerChargeRadiusBonus: 1.25
+  hammerReachDistance: 2.6
+  hammerChargeReachBonus: 1.3
+  isBook: 0
+  bookAuraRadius: 5
+  bookAuraDuration: 8
+  bookArmDelay: 0.3
+  bookMaxShadows: 6
+  bookShadowLifetime: 12
+  bookShadowDamage: 12
+  bookShadowAttackRange: 1.2
+  bookShadowAttackInterval: 0.8
+  bookShadowMoveSpeed: 3.5
+  bookCooldown: 6
+  isCloak: 0
+  cloakDuration: 30
+  cloakCooldown: 10
+  cloakPlayerAlpha: 0.28
+  isTorch: 0
+  torchPlayerLightRadius: 4
+  torchPlayerLightIntensity: 0.9
+  torchPlacedLightRadius: 5
+  torchPlacedLightIntensity: 1
+  torchMaxPlaced: 3
+  torchLightColor: {r: 1, g: 0.6, b: 0.25, a: 1}
+  torchFlickerSpeed: 6
+  torchFlickerAmount: 0.12
+  isClock: 0
+  isMortar: 0
+  mortarFlightTime: 1.1
+  mortarArcHeight: 2.5
+  mortarExplosionRadius: 1.5
+  mortarShowTelegraph: 1
+  mortarExplosionColor: {r: 1, g: 0.55, b: 0.1, a: 1}
+  mortarTelegraphColor: {r: 0.65, g: 0.08, b: 0.06, a: 1}
+  mortarReticleColor: {r: 1, g: 0.42, b: 0.38, a: 1}

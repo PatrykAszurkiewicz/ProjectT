@@ -50,6 +50,11 @@ public static class AugmentBlueprintGate
         { 321, 11 }, // Revenant Necronomicon (Book)
         { 322, 12 }, // Battle Hammer
         { 323, 13 }, // Stealth Cloak
+        { 324, 14 }, // Torch
+        { 326, 15 }, // Time Clock
+        { 327, 16 }, // Mortar
+        { 329, 17 }, // Smoke Screen
+
     };
 
     // Default weights — tweak in your AugmentsMenu's serialized fields if you want them inspector-driven.
@@ -195,3 +200,4 @@ public static class AugmentBlueprintGate
         return result;
     }
 }
+

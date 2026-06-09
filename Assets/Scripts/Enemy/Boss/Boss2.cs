@@ -608,6 +608,10 @@ public class Boss2 : BaseBossStats
         HashSet<CharacterStats> damagedCharacters = new HashSet<CharacterStats>();
         HashSet<IEnergyConsumer> damagedConsumers = new HashSet<IEnergyConsumer>();
 
+        // Per-stage scaling for the boss's own special attack (opt-in via
+        // "Scale Bosses With Stage"). 1× when the toggle is off.
+        float scaledMeteorDamage = meteorDamage * BossStageDamageMultiplier;
+
         Collider2D[] hits = Physics2D.OverlapCircleAll(pos, radius, meteorDamageLayers);
         //Debug.Log($"[Boss2] OverlapCircleAll found {(hits != null ? hits.Length : 0)} colliders (mask={meteorDamageLayers.value})");
 
@@ -624,7 +628,7 @@ public class Boss2 : BaseBossStats
                 if (cs != null && damagedCharacters.Add(cs))
                 {
                     //Debug.Log($"[Boss2] Hitting CharacterStats on {cs.gameObject.name} (via collider {hit.name})");
-                    cs.TakeDamage(meteorDamage);
+                    cs.TakeDamage(scaledMeteorDamage);
                     continue;
                 }
 
@@ -634,7 +638,7 @@ public class Boss2 : BaseBossStats
                 {
                     //Debug.Log($"[Boss2] Hitting IEnergyConsumer on {hit.gameObject.name}");
                     if (EnemyDamageSystem.Instance != null)
-                        EnemyDamageSystem.Instance.DamageEnergyConsumer(consumer, meteorDamage, gameObject);
+                        EnemyDamageSystem.Instance.DamageEnergyConsumer(consumer, scaledMeteorDamage, gameObject);
                     continue;
                 }
 
@@ -657,7 +661,7 @@ public class Boss2 : BaseBossStats
             if (!alreadyHit && dist <= radius && playerStats != null)
             {
                 //Debug.Log($"[Boss2] DIRECT player hit via safety net");
-                playerStats.TakeDamage(meteorDamage);
+                playerStats.TakeDamage(scaledMeteorDamage);
             }
         }
         else
@@ -2013,3 +2017,4 @@ public static class Boss2SummonFlashSprites
         return _thinRing;
     }
 }
+

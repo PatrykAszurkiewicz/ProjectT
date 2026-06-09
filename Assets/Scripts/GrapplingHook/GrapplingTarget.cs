@@ -1059,7 +1059,7 @@ public class GrapplingHookSystem
     private IEnumerator CooldownCoroutine()
     {
         isOnCooldown = true;
-        yield return new WaitForSeconds(weaponData.attackCooldown);
+        yield return new WaitForSeconds(CooldownModifier.Apply(weaponData.attackCooldown));
         isOnCooldown = false;
     }
 
@@ -1233,5 +1233,3 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, pullVelocity, 1.0f);
     }
 }
-
-

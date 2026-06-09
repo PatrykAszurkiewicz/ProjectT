@@ -18,6 +18,32 @@ public class StageTransitionOverlay : MonoBehaviour
     [Tooltip("Start with screen fully black (hides the initial biome load).")]
     public bool startBlack = true;
 
+    [Tooltip("Safety net: if the very first reveal has not happened within this many " +
+             "seconds, force the screen to clear so a startup error can't strand the " +
+             "player on a black screen. Set to 0 to disable.")]
+    public float initialRevealFailsafeSeconds = 8f;
+
+    [Tooltip("TEMP: log a timestamped trace of the intro reveal to the Console. Turn off once fixed.")]
+    public bool debugIntroSequence = false;
+    private float _dbgT0 = -1f;
+    private float _dbgLastAlpha = -999f;
+    private float _dbgLastFadeA = -999f;
+    void Update()
+    {
+        if (!debugIntroSequence) return;
+        if (_dbgT0 < 0f) _dbgT0 = Time.realtimeSinceStartup;
+        float t = Time.realtimeSinceStartup - _dbgT0;
+        if (t > 15f) return; // only trace the first 15 seconds
+        float a = canvasGroup != null ? canvasGroup.alpha : -1f;
+        float fa = fadeImage != null ? fadeImage.color.a : -1f;
+        if (Mathf.Abs(a - _dbgLastAlpha) > 0.02f || Mathf.Abs(fa - _dbgLastFadeA) > 0.02f)
+        {
+            _dbgLastAlpha = a; _dbgLastFadeA = fa;
+            //Debug.Log($"[IntroTrace] t={t:F2}s  coverGroupAlpha={a:F2}  fadeImageAlpha={fa:F2}  " +
+            //          $"canvasSort={(canvas != null ? canvas.sortingOrder : -1)}  enabledCanvas={(canvas != null && canvas.enabled)}");
+        }
+    }
+
     [Header("Banner")]
     public float bannerDuration = 0.8f;
     public int bannerFontSize = 52;
@@ -57,6 +83,9 @@ public class StageTransitionOverlay : MonoBehaviour
     private TMPro.TextMeshProUGUI tmpCounterText; // biome-image stage counter, created lazily if counterFont assigned
     private Coroutine flashCoroutine;
     private bool initialized = false;
+    private bool everRevealed = false;  // set true once the screen has been revealed at least once
+    private bool failsafeArmed = false; // ensures the reveal watchdog starts at most once
+    private bool introActive = false; // true once the orchestrator's stage intro is running
 
 
     // Ensures the UI elements exist. Called lazily on first use.
@@ -255,6 +284,77 @@ public class StageTransitionOverlay : MonoBehaviour
         flashRect.anchorMax = new Vector2(1, 0.6f);
         flashRect.offsetMin = Vector2.zero;
         flashRect.offsetMax = Vector2.zero;
+
+        // Boot safety net: arm the watchdog that clears the screen if the first
+        // reveal never happens. (Also armed by SnapToBlack for startBlack=false.)
+        if (startBlack)
+            ArmInitialRevealFailsafe();
+
+        if (debugIntroSequence)
+        {
+            int overlayCount = FindObjectsByType<StageTransitionOverlay>(FindObjectsSortMode.None).Length;
+            string brName = biomeScreensRoot != null ? biomeScreensRoot.name : "<null>";
+            //Debug.Log($"[IntroTrace] EnsureInitialized: created TransitionCanvas (sort={canvas.sortingOrder}, " +
+            //          $"mode={canvas.renderMode}). startBlack={startBlack}. biomeScreensRoot={brName}. " +
+            //          $"StageTransitionOverlay instances in scene={overlayCount}.");
+        }
+    }
+
+    // Instantly force the screen to opaque black with NO animation. Called at the
+    // start of the very first stage so the biome is built behind black regardless of
+    // the startBlack inspector value — otherwise a freshly-built biome can flash on
+    // screen for ~a second before the stage banner appears.
+    public void SnapToBlack()
+    {
+        EnsureInitialized();
+        if (debugIntroSequence) Debug.Log($"[IntroTrace] SnapToBlack @ {Time.realtimeSinceStartup:F2}s (forcing cover opaque).");
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.blocksRaycasts = true;
+        }
+        if (bannerText != null) bannerText.text = "";
+        if (subtitleText != null) subtitleText.text = "";
+        ArmInitialRevealFailsafe();
+    }
+
+    // Called by the orchestrator the instant its stage-intro coroutine begins. Once the
+    // intro is running it WILL reach FadeIn (ApplyBiome is wrapped in try/catch), so the
+    // boot watchdog must stand down — otherwise a slow biome build (a long blocking frame)
+    // can trip the timer mid-intro and reveal the game before the banner.
+    public void NotifyIntroStarted() { introActive = true; }
+
+    // Start the boot reveal watchdog at most once.
+    private void ArmInitialRevealFailsafe()
+    {
+        if (failsafeArmed || everRevealed || initialRevealFailsafeSeconds <= 0f) return;
+        failsafeArmed = true;
+        StartCoroutine(InitialRevealFailsafe());
+    }
+
+    // Watchdog for the initial boot reveal only. Stands down the moment a real
+    // FadeIn() runs (everRevealed). If it times out with the screen still fully
+    // black, it clears the overlay so a startup exception can't strand the player.
+    private IEnumerator InitialRevealFailsafe()
+    {
+        float t = 0f;
+        while (t < initialRevealFailsafeSeconds)
+        {
+            if (everRevealed || introActive) yield break; // intro is running — not stuck
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (!everRevealed && !introActive && canvasGroup != null && canvasGroup.alpha > 0.99f)
+        {
+            Debug.LogWarning("[StageTransitionOverlay] Initial reveal failsafe fired — forcing " +
+                             "screen clear (the stage intro stalled before FadeIn ran).");
+            if (bannerText != null) bannerText.text = "";
+            if (subtitleText != null) subtitleText.text = "";
+            HideBiomeScreens();
+            canvasGroup.alpha = 0f;
+            canvasGroup.blocksRaycasts = false;
+        }
     }
 
     //  PUBLIC API (called by GameOrchestrator)
@@ -359,6 +459,7 @@ public class StageTransitionOverlay : MonoBehaviour
     public IEnumerator FadeOut(float? customDuration = null)
     {
         EnsureInitialized();
+        if (debugIntroSequence) Debug.Log($"[IntroTrace] FadeOut START @ {Time.realtimeSinceStartup:F2}s (covering).");
         float duration = customDuration ?? fadeOutDuration;
 
         bannerText.text = "";
@@ -382,6 +483,7 @@ public class StageTransitionOverlay : MonoBehaviour
 
         // Show the biome-specific screen (if one exists).
         bool hasBiomeImage = ShowBiomeScreen(stage.biome);
+        if (debugIntroSequence) { string caseLabel = hasBiomeImage ? "A" : "B"; Debug.Log($"[IntroTrace] ShowBanner START @ {Time.realtimeSinceStartup:F2}s  (biomeImage={hasBiomeImage} -> CASE {caseLabel})."); }
 
         //  CASE A: biome image exists — the image IS the banner title.
         // Show only the stage counter, moved down to just below the image's title art.
@@ -529,6 +631,8 @@ public class StageTransitionOverlay : MonoBehaviour
     public IEnumerator FadeIn(float? customDuration = null)
     {
         EnsureInitialized();
+        everRevealed = true; // a real reveal is happening — the boot failsafe can stand down
+        if (debugIntroSequence) Debug.Log($"[IntroTrace] FadeIn START @ {Time.realtimeSinceStartup:F2}s  <<< THIS REVEALS GAMEPLAY.");
         float duration = customDuration ?? fadeInDuration;
 
         // Defensive safety net: if anything bailed out of ShowBanner early
@@ -686,13 +790,19 @@ public class StageTransitionOverlay : MonoBehaviour
             }
         }
         biomeScreensCanvas.overrideSorting = true;
-        biomeScreensCanvas.sortingOrder = 9998; // under transition (9999), above main Canvas (usually 0)
+        // Render the biome title screen ABOVE the transition canvas (9999) so it sits ON
+        // TOP of the opaque black cover. The old value (9998) put it BELOW the cover, which
+        // forced the code to make the black fade image transparent to reveal it — and that
+        // transparency let the live map show through wherever the title image wasn't fully
+        // opaque. Rendering on top means the cover never has to be lifted.
+        biomeScreensCanvas.sortingOrder = 10000;
         if (biomeScreensRaycaster != null) biomeScreensRaycaster.enabled = false; // purely visual, no input
 
-        // Hide the black fade image so the biome image shows through.
-        // (The fade CanvasGroup is still at alpha 1 — gameplay behind it stays hidden.)
+        // Keep the black fade image FULLY OPAQUE. The biome title now renders above it, so
+        // the live game stays completely hidden behind black until FadeIn. The title image's
+        // own transparent areas reveal black (and the stage counter), never the gameplay.
         if (fadeImage != null)
-            fadeImage.color = new Color(0, 0, 0, 0);
+            fadeImage.color = fadeColor;
 
         return true;
     }
@@ -931,3 +1041,4 @@ public class StageTransitionOverlay : MonoBehaviour
         }
     }
 }
+

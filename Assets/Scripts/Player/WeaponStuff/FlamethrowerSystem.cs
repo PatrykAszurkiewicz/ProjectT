@@ -159,9 +159,15 @@ public class FlamethrowerSystem
 
     private void UpdateAimDirection()
     {
+        // Gamepad / unified aim takes priority when present.
+        if (PlayerAim.Instance != null)
+        {
+            aimDirection = PlayerAim.Instance.Direction;
+            return;
+        }
+
         if (mainCam == null) return;
 
-#if ENABLE_INPUT_SYSTEM
         var mouse = UnityEngine.InputSystem.Mouse.current;
         if (mouse != null)
         {
@@ -172,13 +178,6 @@ public class FlamethrowerSystem
             if (aimDirection.sqrMagnitude < 0.001f)
                 aimDirection = Vector2.right;
         }
-#else
-        Vector3 mp = mainCam.ScreenToWorldPoint(Input.mousePosition);
-        mp.z = 0f;
-        aimDirection = ((Vector2)(mp - playerTransform.position)).normalized;
-        if (aimDirection.sqrMagnitude < 0.001f)
-            aimDirection = Vector2.right;
-#endif
     }
 
     // FLAME PARTICLE SPAWNING — procedural sprites
@@ -409,3 +408,4 @@ public class FlamethrowerSystem
         public float turbulenceOffset;
     }
 }
+

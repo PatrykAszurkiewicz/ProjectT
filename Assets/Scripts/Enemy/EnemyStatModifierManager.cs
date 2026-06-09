@@ -5,10 +5,18 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
 {
     public static EnemyStatModifierManager Instance { get; private set; }
 
-    [Header("Global Enemy Modifiers")]
+    [Header("Global Enemy Modifiers (augment-driven)")]
     [SerializeField] private float moveSpeedMultiplier = 1f;
     [SerializeField] private float damageMultiplier = 1f;
     [SerializeField] private float healthMultiplier = 1f;
+
+    // Per-stage difficulty scaling 
+    // A SEPARATE dimension from the augment multipliers above. GameOrchestrator
+    // sets these once at the start of each stage.
+    [Header("Per-Stage Scaling (orchestrator-driven, read-only)")]
+    [SerializeField] private float stageHealthMultiplier = 1f;
+    [SerializeField] private float stageDamageMultiplier = 1f;
+    [SerializeField] private bool stageScalingAffectsBosses = false;
 
     // Track all living enemies for retroactive health changes
     private HashSet<EnemyStats> trackedEnemies = new HashSet<EnemyStats>();
@@ -114,12 +122,41 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     public float GetHealthMultiplier() => healthMultiplier;
     #endregion
 
+    #region Per-stage scaling
+    public float GetStageHealthMultiplier() => stageHealthMultiplier;
+    public float GetStageDamageMultiplier() => stageDamageMultiplier;
+    public bool StageScalingAffectsBosses => stageScalingAffectsBosses;
+
+    /// Set the per-stage enemy HP/damage scaling. Called by GameOrchestrator at the
+    /// start of every stage, before that stage's enemies spawn.
+    public static void SetStageScaling(float healthMultiplier, float damageMultiplier, bool affectBosses)
+    {
+        if (Instance == null)
+        {
+            var managerGO = new GameObject("EnemyStatModifierManager");
+            managerGO.AddComponent<EnemyStatModifierManager>(); // Awake sets Instance synchronously
+        }
+
+        Instance.stageHealthMultiplier = Mathf.Max(0f, healthMultiplier);
+        Instance.stageDamageMultiplier = Mathf.Max(0f, damageMultiplier);
+        Instance.stageScalingAffectsBosses = affectBosses;
+    }
+    #endregion
+
     public void ResetModifiers()
     {
         float oldHealthMultiplier = healthMultiplier;
         moveSpeedMultiplier = 1f;
         damageMultiplier = 1f;
         healthMultiplier = 1f;
+
+        // Reset the per-stage dimension too. No retroactive rescale: the stage
+        // value is re-set by GameOrchestrator at the next stage start and is only
+        // read by enemies as they spawn, so there is nothing live to correct here.
+        stageHealthMultiplier = 1f;
+        stageDamageMultiplier = 1f;
+        stageScalingAffectsBosses = false;
+
         ApplyHealthChangeToExistingEnemies(oldHealthMultiplier, 1f);
         //Debug.Log("[ENEMY_MODIFIER] All modifiers reset to 1.0x");
     }
@@ -136,3 +173,4 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     }
 #endif
 }
+

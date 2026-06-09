@@ -1,22 +1,26 @@
 using UnityEngine;
 
 // PARRY STUN EFFECT
-// Added to an enemy when the player successfully parries their attack.
-// - Stuns the enemy for a configurable duration (3s normal, 2s boss).
-// - Increases damage taken by 30% for the stun duration.
-// - Shows a visual indicator (yellow tint + stars VFX).
-// - Self-destructs when the effect expires.
-// Stun works by:
-//   1. Freezing the EnemyController (sets velocity to zero, blocks movement).
-//   2. Stopping the EnemyAnimationController.
-//   3. Applying a damage multiplier via a simple component check in TakeDamage.
-
+// Added to an enemy when the player successfully parries their attack (melee OR
+// projectile parry — both routes call ParryStunEffect.ApplyOrRefresh).
+// Two DECOUPLED phases (so the upgrade augments can tune them independently):
+//   STUN FREEZE  : enemy is frozen (no movement, attack animation halted) for
+//                    `freezeDuration` seconds = base stun + ParryUpgrades.ExtraStunSeconds
+//                    (Augment 330 "Longer Parry Stun").
+//   DAMAGE DEBUFF: enemy takes extra damage for `debuffDuration` seconds. By
+//                    default this matches the stun; with Augment 331 "Powerful
+//                    Parry" it uses ParryUpgrades.PowerfulParry* (e.g. +30% for 5s)
+//                    and can OUTLAST the freeze.
 public class ParryStunEffect : MonoBehaviour
 {
-    private float stunDuration;
-    private float damageBonus;
+    // Phase durations / amounts (resolved from ParryUpgrades at apply time)
+    private float freezeDuration;   // stun freeze length
+    private float debuffDuration;   // how long the damage bonus lasts
+    private float damageBonus;      // e.g. 0.30 = +30%
+
     private float elapsed = 0f;
     private bool initialized = false;
+    private bool stunReleased = false;
 
     // Cached references
     private EnemyController enemyController;
@@ -34,30 +38,86 @@ public class ParryStunEffect : MonoBehaviour
     private const float STAR_Y_OFFSET = 0.7f; // above enemy center (near head)
 
 
-    /// Public accessor: the bonus damage multiplier while stunned.
+    /// Public accessor: the bonus damage multiplier while the debuff is active.
     /// Other systems can check: enemy.GetComponent<ParryStunEffect>()?.DamageMultiplier ?? 1f
+    /// Returns 1f once the damage debuff has expired (even if the component is
+    /// still lingering for some reason).
+    public float DamageMultiplier =>
+        (initialized && elapsed < debuffDuration) ? 1f + damageBonus : 1f;
 
-    public float DamageMultiplier => 1f + damageBonus;
+    /// True while the enemy should be FROZEN by the stun. Once the freeze phase
+    /// ends the enemy may move/attack again even if a longer damage debuff is
+    /// still ticking. EnemyController uses this to gate movement/attacks.
+    public bool IsStunActive => initialized && elapsed < freezeDuration;
 
-    public void Initialize(float duration, float dmgBonus)
+
+    // Convenience entry point used by both the melee parry (ShieldSystem) and any
+    // projectile-parry code
+    public static ParryStunEffect ApplyOrRefresh(GameObject enemyGO)
     {
-        stunDuration = duration;
-        damageBonus = dmgBonus;
+        if (enemyGO == null) return null;
+
+        bool isBoss = enemyGO.GetComponent<BaseBossStats>() != null;
+        float baseStun = isBoss ? ParryUpgrades.BaseStunBoss : ParryUpgrades.BaseStunNormal;
+
+        var existing = enemyGO.GetComponent<ParryStunEffect>();
+        if (existing != null)
+        {
+            existing.Refresh(baseStun, ParryUpgrades.BaseDamageBonus);
+            return existing;
+        }
+
+        var effect = enemyGO.AddComponent<ParryStunEffect>();
+        effect.Initialize(baseStun, ParryUpgrades.BaseDamageBonus);
+        return effect;
+    }
+
+
+    // Backwards-compatible 2-arg entry point. `baseStunDuration` and
+    // `baseDamageBonus` are the un-upgraded values; ParryUpgrades is layered on
+    // here so EVERY caller (melee or projectile) gets the augments for free.
+    public void Initialize(float baseStunDuration, float baseDamageBonus)
+    {
+        ResolveDurations(baseStunDuration, baseDamageBonus);
         elapsed = 0f;
         initialized = true;
+        stunReleased = false;
 
         CacheReferences();
         ApplyStun();
         CreateStarsVFX();
     }
 
-    public void Refresh(float duration, float dmgBonus)
+    public void Refresh(float baseStunDuration, float baseDamageBonus)
     {
-        stunDuration = duration;
-        damageBonus = dmgBonus;
+        ResolveDurations(baseStunDuration, baseDamageBonus);
         elapsed = 0f;
-        // Re-apply stun in case it partially wore off
-        ApplyStun();
+
+        // If the freeze had already been released (long debuff lingering), we are
+        // re-stunning — rebuild the freeze + stars.
+        if (stunReleased || starsHost == null)
+        {
+            stunReleased = false;
+            ApplyStun();
+            if (starsHost == null) CreateStarsVFX();
+        }
+        else
+        {
+            // Re-apply stun in case it partially wore off
+            ApplyStun();
+        }
+    }
+
+    // Layer the upgrade augments onto the passed-in base values.
+    private void ResolveDurations(float baseStunDuration, float baseDamageBonus)
+    {
+        // 330 — Longer Parry Stun
+        freezeDuration = Mathf.Max(0.01f, baseStunDuration + ParryUpgrades.ExtraStunSeconds);
+
+        // 331 — Powerful Parry (or default: debuff lasts as long as the freeze)
+        ParryUpgrades.ResolveDamageDebuff(baseDamageBonus, freezeDuration,
+                                          out damageBonus, out debuffDuration);
+        debuffDuration = Mathf.Max(0.01f, debuffDuration);
     }
 
     private void CacheReferences()
@@ -98,82 +158,103 @@ public class ParryStunEffect : MonoBehaviour
 
         elapsed += Time.deltaTime;
 
-        // Keep the enemy frozen during stun
-        if (rb != null)
-            rb.linearVelocity = Vector2.zero;
+        bool stunActive = elapsed < freezeDuration;
+        float lifetime = Mathf.Max(freezeDuration, debuffDuration);
 
-        // Animate stars — 3D-perspective elliptical orbit around the enemy's head.
-        // Stars orbit in an ellipse (wide horizontally, compressed vertically)
-        // to simulate a tilted circular path viewed from the side.
-        // Stars in "front" (bottom of ellipse) appear larger, stars in "back" smaller.
-        if (starsHost != null)
+        if (stunActive)
         {
-            // Follow the enemy position (offset upward near head)
-            starsHost.transform.position = transform.position + Vector3.up * STAR_Y_OFFSET;
-            // Don't rotate the host — we position each star manually for the 3D effect.
-            starsHost.transform.rotation = Quaternion.identity;
+            // Keep the enemy frozen during stun
+            if (rb != null)
+                rb.linearVelocity = Vector2.zero;
 
-            float orbitAngle = elapsed * STAR_ROTATE_SPEED * Mathf.Deg2Rad;
-            float fadeT = Mathf.Clamp01((elapsed - (stunDuration - 0.5f)) / 0.5f);
+            AnimateStars();
 
-            if (starRenderers != null)
+            // Blink sprite near end of the FREEZE to warn it's ending
+            if (elapsed > freezeDuration - 0.8f && spriteRenderer != null)
             {
-                for (int i = 0; i < starRenderers.Length; i++)
-                {
-                    if (starRenderers[i] == null) continue;
-
-                    // Each star is evenly spaced around the orbit
-                    float starAngle = orbitAngle + (Mathf.PI * 2f / STAR_COUNT) * i;
-
-                    // Elliptical orbit: wide X, compressed Y (perspective tilt)
-                    float x = Mathf.Cos(starAngle) * STAR_ORBIT_RADIUS;
-                    float y = Mathf.Sin(starAngle) * STAR_ORBIT_RADIUS * 0.35f; // squash Y for perspective
-
-                    starRenderers[i].transform.localPosition = new Vector3(x, y, 0f);
-
-                    // Depth simulation: Sin > 0 means "behind" the head, Sin < 0 means "in front"
-                    // Stars in front are larger and brighter, stars behind are smaller and dimmer
-                    float depth = Mathf.Sin(starAngle); // -1 (front) to +1 (back)
-                    float depthScale = Mathf.Lerp(0.45f, 0.22f, (depth + 1f) * 0.5f);
-                    starRenderers[i].transform.localScale = Vector3.one * depthScale;
-
-                    // Sorting: stars in front render above, stars behind render below
-                    starRenderers[i].sortingOrder = depth < 0f ? 9201 : 9199;
-
-                    // Alpha: dimmer when behind, brighter when in front; fade out at end of stun
-                    float depthAlpha = Mathf.Lerp(1f, 0.45f, (depth + 1f) * 0.5f);
-                    Color c = starRenderers[i].color;
-                    c.a = depthAlpha * (1f - fadeT);
-                    starRenderers[i].color = c;
-                }
+                float blink = Mathf.PingPong(elapsed * 8f, 1f);
+                spriteRenderer.color = Color.Lerp(
+                    new Color(1f, 1f, 0.5f, originalColor.a),
+                    originalColor,
+                    blink);
             }
         }
-
-        // Blink sprite near end of stun to warn
-        if (elapsed > stunDuration - 0.8f && spriteRenderer != null)
+        else if (!stunReleased)
         {
-            float blink = Mathf.PingPong(elapsed * 8f, 1f);
-            spriteRenderer.color = Color.Lerp(
-                new Color(1f, 1f, 0.5f, originalColor.a),
-                originalColor,
-                blink);
+            // Freeze phase is over — let the enemy act again, restore visuals.
+            // The damage debuff (if longer, e.g. Powerful Parry) keeps ticking.
+            ReleaseStun();
         }
 
-        if (elapsed >= stunDuration)
+        if (elapsed >= lifetime)
             RemoveEffect();
+    }
+
+    // Animate stars — 3D-perspective elliptical orbit around the enemy's head.
+    private void AnimateStars()
+    {
+        if (starsHost == null) return;
+
+        // Follow the enemy position (offset upward near head)
+        starsHost.transform.position = transform.position + Vector3.up * STAR_Y_OFFSET;
+        starsHost.transform.rotation = Quaternion.identity;
+
+        float orbitAngle = elapsed * STAR_ROTATE_SPEED * Mathf.Deg2Rad;
+        float fadeT = Mathf.Clamp01((elapsed - (freezeDuration - 0.5f)) / 0.5f);
+
+        if (starRenderers == null) return;
+
+        for (int i = 0; i < starRenderers.Length; i++)
+        {
+            if (starRenderers[i] == null) continue;
+
+            float starAngle = orbitAngle + (Mathf.PI * 2f / STAR_COUNT) * i;
+
+            // Elliptical orbit: wide X, compressed Y (perspective tilt)
+            float x = Mathf.Cos(starAngle) * STAR_ORBIT_RADIUS;
+            float y = Mathf.Sin(starAngle) * STAR_ORBIT_RADIUS * 0.35f;
+
+            starRenderers[i].transform.localPosition = new Vector3(x, y, 0f);
+
+            float depth = Mathf.Sin(starAngle); // -1 (front) to +1 (back)
+            float depthScale = Mathf.Lerp(0.45f, 0.22f, (depth + 1f) * 0.5f);
+            starRenderers[i].transform.localScale = Vector3.one * depthScale;
+
+            starRenderers[i].sortingOrder = depth < 0f ? 9201 : 9199;
+
+            float depthAlpha = Mathf.Lerp(1f, 0.45f, (depth + 1f) * 0.5f);
+            Color c = starRenderers[i].color;
+            c.a = depthAlpha * (1f - fadeT);
+            starRenderers[i].color = c;
+        }
+    }
+
+    // End the FREEZE phase: restore visuals + let the enemy resume. Does NOT end
+    // the damage debuff (which may run longer with Powerful Parry).
+    private void ReleaseStun()
+    {
+        stunReleased = true;
+
+        if (spriteRenderer != null)
+            spriteRenderer.color = originalColor;
+
+        if (animController != null)
+            animController.UnfreezeAnimation();
+
+        if (starsHost != null)
+            Destroy(starsHost);
     }
 
     private void RemoveEffect()
     {
-        // Restore original color
+        // Make sure the freeze visuals/anim are restored (in case debuff outlasted
+        // the freeze, ReleaseStun already ran — these are idempotent safety calls).
         if (spriteRenderer != null)
             spriteRenderer.color = originalColor;
 
-        // Unfreeze animation so it can resume
         if (animController != null)
             animController.UnfreezeAnimation();
 
-        // Clean up VFX
         if (starsHost != null)
             Destroy(starsHost);
 
@@ -186,11 +267,9 @@ public class ParryStunEffect : MonoBehaviour
         if (starsHost != null)
             Destroy(starsHost);
 
-        // Restore color if we still have a reference
         if (spriteRenderer != null && initialized)
             spriteRenderer.color = originalColor;
 
-        // Unfreeze animation on destroy (safety)
         if (animController != null && initialized)
             animController.UnfreezeAnimation();
     }
@@ -221,7 +300,6 @@ public class ParryStunEffect : MonoBehaviour
             SpriteRenderer sr = starGO.AddComponent<SpriteRenderer>();
             sr.sprite = starSprite;
             sr.sortingOrder = 9200;
-            // Alternate between yellow and white for variety
             sr.color = (i % 2 == 0)
                 ? new Color(1f, 1f, 0.3f, 1f)   // bright yellow
                 : new Color(1f, 0.95f, 0.6f, 1f); // warm white
@@ -250,13 +328,11 @@ public class ParryStunEffect : MonoBehaviour
                 float nx = (x - center.x) / (S * 0.5f); // -1 to 1
                 float ny = (y - center.y) / (S * 0.5f);
 
-                // 4-pointed star: union of two rotated diamonds
                 float d1 = Mathf.Abs(nx) + Mathf.Abs(ny); // diamond
                 float rx = nx * 0.707f - ny * 0.707f;     // rotated 45°
                 float ry = nx * 0.707f + ny * 0.707f;
                 float d2 = Mathf.Abs(rx) + Mathf.Abs(ry);
 
-                // Thin in one axis, wider in the other → star spikes
                 float star = Mathf.Min(
                     Mathf.Abs(nx) * 3f + Mathf.Abs(ny),
                     Mathf.Abs(nx) + Mathf.Abs(ny) * 3f);

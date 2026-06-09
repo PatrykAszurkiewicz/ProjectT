@@ -25,7 +25,7 @@ public static class CombatJuice
     // Call whenever the player deals damage to an enemy.
     public static void OnPlayerHitEnemy(GameObject enemy, bool isMelee)
     {
-        Debug.Log($"[CombatJuice] OnPlayerHitEnemy called. CameraShake.Instance = {CameraShake.Instance}");
+        //Debug.Log($"[CombatJuice] OnPlayerHitEnemy called. CameraShake.Instance = {CameraShake.Instance}");
 
         if (enemy == null) return;
 

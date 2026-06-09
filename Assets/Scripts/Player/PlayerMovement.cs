@@ -335,7 +335,9 @@ public class PlayerMovement : MonoBehaviour
     {
         if (context.started)
         {
-            if (context.control is KeyControl key && key.wasPressedThisFrame)
+            // ButtonControl covers BOTH keyboard keys and gamepad buttons
+            // (KeyControl derives from ButtonControl), so dash fires on a pad too.
+            if (context.control is ButtonControl btn && btn.wasPressedThisFrame)
             {
                 TryDash();
             }
@@ -400,4 +402,3 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 }
-

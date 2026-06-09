@@ -44,6 +44,14 @@ public class EnemyController : MonoBehaviour
     private float stuckModeTimer = 0f;
     private Vector2 stuckAvoidanceDirection;
 
+    //  Smoke Screen (vision blocking) 
+    // When a SmokeScreenCloud sits on the sightline between this enemy and its
+    // current target, the enemy "loses sight" and mills in place until the
+    // smoke clears (see SmokeBlocksTarget / DoSmokeShuffle). Bosses are exempt
+    // so their scripted attack patterns aren't disrupted.
+    private float smokeShufflePhase;
+    private bool isBoss;
+
     [Header("Freeze System")]
     private bool isFrozen = false;
     private float freezeTimeRemaining = 0f;
@@ -102,6 +110,21 @@ public class EnemyController : MonoBehaviour
     // Kept null for every existing prefab, so behaviour is unchanged.
     public System.Func<Transform> PriorityTargetProvider;
 
+    // Optional attack hook. When assigned (by a companion component, e.g.
+    // PitcherController), it REPLACES the default melee hit at the moment the
+    // attack lands — same composition idiom as PriorityTargetProvider above.
+    // Ranged enemies use this to spawn a projectile instead of dealing instant
+    // melee damage, while still reusing all of EnemyController's movement,
+    // target acquisition, stop-at-range and attack-cycle/animation timing.
+    // Null for every existing prefab, so behaviour is unchanged.
+    public System.Action<Transform> AttackHandlerOverride;
+
+    // True when this enemy delivers its hit through a projectile (Mort, Pitcher,
+    // …) rather than an instant melee connect. Used to suppress the melee-style
+    // head parry indicator on ranged enemies — their shots are parried in flight
+    // by the projectile-parry path, not by reacting to the throw animation.
+    public bool HasAttackOverride => AttackHandlerOverride != null;
+
     private void Start()
     {
         stats = GetComponent<EnemyStats>();
@@ -121,6 +144,11 @@ public class EnemyController : MonoBehaviour
             bool isBoss = GetComponent<Boss1>() != null || GetComponent<BaseBossStats>() != null;
             ysort.sortYOffset = isBoss ? -1.0f : -0.2f;
         }
+
+        // Cache boss status (smoke-blinding is skipped for bosses) and a random
+        // phase so a group of smoke-blinded enemies doesn't shuffle in lock-step.
+        isBoss = GetComponent<Boss1>() != null || GetComponent<BaseBossStats>() != null;
+        smokeShufflePhase = Random.value * 6.2831853f;
 
         GameObject core = GameObject.FindGameObjectWithTag("Core");
         if (core != null)
@@ -200,8 +228,11 @@ public class EnemyController : MonoBehaviour
             return;
         }
 
-        // Parry stun — completely freeze movement
-        if (GetComponent<ParryStunEffect>() != null)
+        // Parry stun — completely freeze movement (only while the stun freeze
+        // phase is active; a longer Powerful-Parry damage debuff must NOT keep the
+        // enemy frozen after the stun itself has ended).
+        var parryStunMove = GetComponent<ParryStunEffect>();
+        if (parryStunMove != null && parryStunMove.IsStunActive)
         {
             if (rb != null) rb.linearVelocity = Vector2.zero;
             return;
@@ -268,6 +299,16 @@ public class EnemyController : MonoBehaviour
         {
             if (!IsValidTarget(currentTarget))
                 UpdateTarget();
+            return;
+        }
+
+        // Smoke Screen: if a smoke cloud blocks our sightline to the target, we
+        // "lose sight" of it. Rather than pathing around (it's a vision wall,
+        // not a solid one — we don't know where to go), mill in place until the
+        // smoke clears. Bosses are exempt.
+        if (!isBoss && SmokeBlocksTarget(currentTarget))
+        {
+            DoSmokeShuffle();
             return;
         }
 
@@ -570,7 +611,7 @@ public class EnemyController : MonoBehaviour
         }
 
         if (currentTarget != null && !isFrozen && !isAttackingCycle
-            && GetComponent<ParryStunEffect>() == null
+            && (GetComponent<ParryStunEffect>()?.IsStunActive != true)
             && (EnergyManager.Instance == null || !EnergyManager.Instance.IsGameOver()))
         {
             float distance = Vector2.Distance(transform.position, currentTarget.position);
@@ -585,6 +626,14 @@ public class EnemyController : MonoBehaviour
                 // really "in range" — moving around the obstacle is the right
                 // response, not standing here flailing the attack animation.
                 if (!HasLineOfSightToTarget(currentTarget))
+                {
+                    attackTimer = 0f;
+                    return;
+                }
+
+                // Smoke Screen blocks the sightline too — can't attack a target
+                // we can't see through the smoke.
+                if (!isBoss && SmokeBlocksTarget(currentTarget))
                 {
                     attackTimer = 0f;
                     return;
@@ -693,8 +742,17 @@ public class EnemyController : MonoBehaviour
             return (Time.time - shieldRaiseTime) <= 0.2f;
         }
 
-        // Calculate absolute times for parry window
-        float parryWindowStart = attackCycleStartTime + pStart * animSpeed;
+        // Calculate absolute times for parry window.
+        // Augment 332 "Longer Parry Window" makes the window OPEN earlier by
+        // ExtraParryFrames. The parry is adjudicated AT the hit frame, so the
+        // closing edge (pEnd+1) already sits at/after the hit — pushing it later
+        // does nothing. The binding edge is the START: opening it earlier is what
+        // lets a slightly-early (mistimed) raise still register as a parry.
+        // Clamp the earlier edge at frame 0 — the parry window can't open before
+        // the attack animation begins, so the augment's benefit is naturally
+        // capped at this enemy's parryFrameStart (matches ParryIndicator).
+        int effParryStart = Mathf.Max(0, pStart - ParryUpgrades.ExtraParryFrames);
+        float parryWindowStart = attackCycleStartTime + effParryStart * animSpeed;
         float parryWindowEnd = attackCycleStartTime + (pEnd + 1) * animSpeed;
 
         // (a) Shield was pressed (raised) during the parry window
@@ -728,7 +786,14 @@ public class EnemyController : MonoBehaviour
 
         if (pStart == 0 && pEnd == 0 && hit == 0) return false;
 
-        float parryWindowStart = attackCycleStartTime + pStart * animSpeed;
+        // Augment 332 "Longer Parry Window" opens the window earlier (see
+        // IsInParryWindow). Mirror that here so any visual/telemetry consumer
+        // of this method reflects the widened window too.
+        // Clamp the earlier edge at frame 0 — the parry window can't open before
+        // the attack animation begins, so the augment's benefit is naturally
+        // capped at this enemy's parryFrameStart (matches ParryIndicator).
+        int effParryStart = Mathf.Max(0, pStart - ParryUpgrades.ExtraParryFrames);
+        float parryWindowStart = attackCycleStartTime + effParryStart * animSpeed;
         float parryWindowEnd = attackCycleStartTime + (pEnd + 1) * animSpeed;
 
         return Time.time >= parryWindowStart && Time.time <= parryWindowEnd;
@@ -736,6 +801,17 @@ public class EnemyController : MonoBehaviour
 
     private void PerformHit(Transform target)
     {
+        // Ranged / custom attack hook. When a companion component has assigned
+        // AttackHandlerOverride (e.g. PitcherController), it fully replaces the
+        // default melee hit below — it fires on the same frame the melee hit
+        // would have landed (driven by EnemyData.hitFrame), so projectile
+        // release stays in sync with the attack animation.
+        if (AttackHandlerOverride != null)
+        {
+            AttackHandlerOverride(target);
+            return;
+        }
+
         PlayAttackSound();
 
         // Boss1 plays an additional ground-hit sound on melee connect
@@ -746,7 +822,7 @@ public class EnemyController : MonoBehaviour
         ApplyDamageToTarget(target);
     }
 
-    public void ApplyDamageToTarget(Transform target)
+    public void ApplyDamageToTarget(Transform target, bool viaProjectile = false)
     {
         if (target == null) return;
 
@@ -755,16 +831,27 @@ public class EnemyController : MonoBehaviour
         var playerStats = target.GetComponent<PlayerStats>();
         if (playerStats != null)
         {
-            // Check for parry stun — if this enemy is stunned, skip the attack entirely
+            // Check for parry stun — if this enemy is still in the stun FREEZE
+            // phase, skip the attack entirely. (A lingering damage debuff from
+            // Powerful Parry does not silence the enemy once the freeze is over.)
             var parryStun = GetComponent<ParryStunEffect>();
-            if (parryStun != null) return;
+            if (parryStun != null && parryStun.IsStunActive) return;
 
-            var weapon = target.GetComponentInChildren<Weapon>();
-            if (weapon != null)
+            // Projectile-delivered damage has ALREADY resolved any shield
+            // interaction during flight (block / parry handled by the projectile
+            // against the shot's own position + timing). Re-running the melee
+            // shield check here would wrongly evaluate the parry against this
+            // enemy's body/animation — the exact bug that let a Mort be
+            // "melee-parried" via its throw. So skip it for projectile hits.
+            if (!viaProjectile)
             {
-                var shield = weapon.GetShieldSystem();
-                if (shield != null && shield.TryBlockOrParry(gameObject))
-                    return; // Attack was blocked or parried — no damage applied
+                var weapon = target.GetComponentInChildren<Weapon>();
+                if (weapon != null)
+                {
+                    var shield = weapon.GetShieldSystem();
+                    if (shield != null && shield.TryBlockOrParry(gameObject))
+                        return; // Attack was blocked or parried — no damage applied
+                }
             }
         }
 
@@ -893,6 +980,37 @@ public class EnemyController : MonoBehaviour
         return t.position;
     }
 
+    // True when an active SmokeScreenCloud lies on the sightline between this
+    // enemy's body and the target's body. Uses the same body-centre logic as
+    // the obstacle LoS check so collider offsets don't skew the line.
+    private bool SmokeBlocksTarget(Transform target)
+    {
+        if (target == null) return false;
+        Vector2 from = GetBodyCentre(transform);
+        Vector2 to = GetBodyCentre(target);
+        return SmokeScreenCloud.BlocksSegment(from, to);
+    }
+
+    // Smoke-blinded behaviour: hold roughly in place with a gentle wander so
+    // the enemy reads as "milling / waiting" rather than frozen, and keep the
+    // stuck-detection baseline reset so it doesn't trip the wall-avoidance
+    // slide the instant the smoke clears.
+    private void DoSmokeShuffle()
+    {
+        if (rb != null)
+        {
+            float speed = stats != null ? stats.MoveSpeed : 2f;
+            float t = Time.time * 2.5f + smokeShufflePhase;
+            Vector2 jitter = new Vector2(Mathf.Sin(t), Mathf.Cos(t * 1.27f));
+            rb.linearVelocity = jitter * (speed * 0.18f);
+        }
+
+        timeSinceLastMovement = 0f;
+        lastKnownPosition = transform.position;
+        isInStuckMode = false;
+        attackTimer = 0f;
+    }
+
     /// SAFE knockback — checks rigidbody type before setting velocity.
     /// Bosses with static/kinematic bodies won't crash.
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.25f)
@@ -928,4 +1046,3 @@ public class EnemyController : MonoBehaviour
     }
 
 }
-

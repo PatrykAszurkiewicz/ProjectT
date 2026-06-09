@@ -286,8 +286,8 @@ public struct BiomeVolumeDefaults
                     globalLightColor = new Color(0.65f, 0.68f, 0.88f, 1f),
                 };
 
-            //  Corruption — sickly green-purple haze, very dark, low saturation.
-            case BiomeType.Corruption:
+            //  PitchBlack — SWAPPED: now uses the old Corruption look (sickly green-purple haze).
+            case BiomeType.PitchBlack:
                 return new BiomeVolumeDefaults
                 {
                     volumeEnabled = true,
@@ -316,8 +316,8 @@ public struct BiomeVolumeDefaults
                     globalLightColor = new Color(0.75f, 0.82f, 0.72f, 1f),
                 };
 
-            //  PitchBlack — only the torch cone is visible, everything else is pure black. 
-            case BiomeType.PitchBlack:
+            //  Corruption — SWAPPED: now uses the old PitchBlack look (only the torch cone is visible).
+            case BiomeType.Corruption:
                 return new BiomeVolumeDefaults
                 {
                     volumeEnabled = true,
@@ -351,4 +351,5 @@ public struct BiomeVolumeDefaults
         }
     }
 }
+
 

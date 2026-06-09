@@ -740,11 +740,15 @@ public class WeaponRollUI : MonoBehaviour
         else if (wd.isTurret) path = "Icons/WeaponIconTurret";
         else if (wd.isDecoy) path = "Icons/WeaponIconDecoy";
         else if (wd.isCloak) path = "Icons/WeaponIconCloak";
+        else if (wd.isTorch) path = "Icons/WeaponIconTorch";
         else if (wd.armorBonus > 0f) path = "Icons/WeaponIconShield";
         else if (wd.isBoomerang) path = "Icons/WeaponIconBoomerang";
         else if (wd.isBook) path = "Icons/WeaponIconBook";
         else if (wd.isHammer) path = "Icons/WeaponIconHammer";
         else if (wd.isRanged) path = "Icons/WeaponIconRanged";
+        else if (wd.isClock) path = "Icons/WeaponIconClock";
+        else if (wd.isMortar) path = "Icons/WeaponIconMortar";
+        else if (wd.isSmoke) path = "Icons/WeaponIconSmoke";
         else path = "Icons/WeaponIconMelee";
         return Resources.Load<Sprite>(path)
             ?? Resources.Load<Sprite>($"Icons/WeaponIcon{wd.weaponName.Replace(" ", "")}");
@@ -875,3 +879,4 @@ public class WeaponRollUI : MonoBehaviour
     bool UsingRingSprites => (_activeRing != null || _inactiveRing != null);
 
 }
+

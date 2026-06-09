@@ -86,10 +86,27 @@ public class EnemyStats : CharacterStats
 
             if (EnemyStatModifierManager.Instance != null)
             {
+                // Augment health multiplier — applies to every enemy, bosses
+                // included (unchanged behaviour).
                 maxHealth *= EnemyStatModifierManager.Instance.GetHealthMultiplier();
+
+                // Per-stage health scaling, composed multiplicatively on top.
+                // Regular enemies always; bosses only when the run opts in, because
+                // a boss's armour pool and special-attack damage do NOT scale, so
+                // inflating only its HP would unbalance the fight by default.
+                if (!(this is BaseBossStats) || EnemyStatModifierManager.Instance.StageScalingAffectsBosses)
+                    maxHealth *= EnemyStatModifierManager.Instance.GetStageHealthMultiplier();
             }
 
             currentHealth = maxHealth;
+
+            // Regular enemies take their armor from EnemyData. Bosses manage
+            // their own armor pool (BaseBossStats.bossArmor); seeding
+            // currentArmor on them would stack a SECOND mitigation layer that
+            // kicks in after their armor is destroyed, making them nearly
+            // unkillable. So skip bosses here.
+            if (!(this is BaseBossStats))
+                currentArmor = enemyData.maxArmor;
         }
 
         EnemyStatModifierManager.Instance?.RegisterEnemy(this);
@@ -105,6 +122,23 @@ public class EnemyStats : CharacterStats
             Destroy(flashMaterial);
         }
     }
+
+#if UNITY_EDITOR
+    // Editor-only: keep the prefab's inspector showing the REAL values that
+    // EnemyData will impose at runtime, instead of stale hand-typed numbers.
+    // Never runs in a build, and never runs during Play so it can't reset a
+    // live enemy's currentHealth mid-fight.
+    private void OnValidate()
+    {
+        if (Application.isPlaying) return;
+        if (enemyData == null) return;
+
+        maxHealth = enemyData.maxHealth;
+        currentHealth = enemyData.maxHealth;
+        if (!(this is BaseBossStats))
+            currentArmor = enemyData.maxArmor;
+    }
+#endif
 
     //private void Start()
     protected virtual void Start()
@@ -306,6 +340,18 @@ public class EnemyStats : CharacterStats
             if (EnemyStatModifierManager.Instance != null)
             {
                 float multiplier = EnemyStatModifierManager.Instance.GetDamageMultiplier();
+
+                // Per-stage damage scaling, composed multiplicatively with the
+                // augment multiplier. Regular enemies always; bosses only when opted
+                // in. (Bosses generally attack via their own damage fields rather
+                // than this property, so this mainly keeps any boss that DOES read
+                // .Damage consistent with the health-scaling gate above.)
+                if (!(this is BaseBossStats) || EnemyStatModifierManager.Instance.StageScalingAffectsBosses)
+                    multiplier *= EnemyStatModifierManager.Instance.GetStageDamageMultiplier();
+
+                // NOTE: baseDamage is the per-enemy CLONED enemyData.damage, so any
+                // per-enemy growth/buff (e.g. the Berserk's eat growth that multiplies
+                // its own clone) is already baked into baseDamage and compounds here.
                 return baseDamage * multiplier;
             }
             return baseDamage;
@@ -353,4 +399,41 @@ public class EnemyStats : CharacterStats
     }
 #endif
 }
+
+#if UNITY_EDITOR
+// Shows maxHealth / currentHealth / currentArmor as READ-ONLY on enemies,
+// because EnemyData is the source of truth and OnValidate keeps them synced.
+// They stay visible (useful for watching HP tick down in Play mode) but can't
+// be hand-edited into a value the runtime will silently overwrite.
+//
+// This targets EnemyStats and its subclasses ONLY (the `true` flag), so the
+// Player — which uses CharacterStats directly and DOES author these in the
+// inspector — is completely unaffected.
+[UnityEditor.CustomEditor(typeof(EnemyStats), true)]
+public class EnemyStatsEditor : UnityEditor.Editor
+{
+    private static readonly string[] DataDriven =
+        { "maxHealth", "currentHealth", "currentArmor" };
+
+    public override void OnInspectorGUI()
+    {
+        serializedObject.Update();
+
+        // Everything except the three data-driven fields, drawn normally.
+        DrawPropertiesExcluding(serializedObject, DataDriven);
+
+        // The three data-driven fields, drawn disabled (read-only).
+        using (new UnityEditor.EditorGUI.DisabledScope(true))
+        {
+            foreach (var prop in DataDriven)
+            {
+                var sp = serializedObject.FindProperty(prop);
+                if (sp != null) UnityEditor.EditorGUILayout.PropertyField(sp);
+            }
+        }
+
+        serializedObject.ApplyModifiedProperties();
+    }
+}
+#endif
 

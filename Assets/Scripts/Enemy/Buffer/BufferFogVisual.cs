@@ -185,7 +185,12 @@ public class BufferFogVisual : MonoBehaviour
                           bool? enableMist = null,
                           bool? enableWisps = null,
                           bool? enableLightning = null,
-                          bool? enableStasisStorm = null)
+                          bool? enableStasisStorm = null,
+                          Color? mistColorOverride = null,
+                          Color? wispColorOverride = null,
+                          Color? lightningColorOverride = null,
+                          Color? stasisColorOverride = null,
+                          Color? outerColorOverride = null)
     {
         this.radius = radius;
         this.duration = duration;
@@ -195,6 +200,16 @@ public class BufferFogVisual : MonoBehaviour
         if (enableWisps.HasValue) this.enableWisps = enableWisps.Value;
         if (enableLightning.HasValue) this.enableLightning = enableLightning.Value;
         if (enableStasisStorm.HasValue) this.enableStasisStorm = enableStasisStorm.Value;
+
+        // Palette overrides — let a non-Buffer caller (e.g. the Parfumer's
+        // poison cloud) recolor the same procedural system without a second
+        // copy of all this code. Any left null keeps the serialized Buffer
+        // default, so existing Buffer fog is bit-for-bit unchanged.
+        if (mistColorOverride.HasValue) this.mistColor = mistColorOverride.Value;
+        if (wispColorOverride.HasValue) this.wispColor = wispColorOverride.Value;
+        if (lightningColorOverride.HasValue) this.lightningColor = lightningColorOverride.Value;
+        if (stasisColorOverride.HasValue) this.stasisColor = stasisColorOverride.Value;
+        if (outerColorOverride.HasValue) this.outerColor = outerColorOverride.Value;
 
         // Lift forward toward the camera.
         var rootPos = transform.position;

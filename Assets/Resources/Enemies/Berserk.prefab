@@ -271,4 +271,4 @@ MonoBehaviour:
   inflateOvershoot: 0.4
   eatParticleCount: 18
   eatParticleColor: {r: 1, g: 0.35, b: 0.15, a: 1}
-  debugLogs: 1
+  debugLogs: 0

@@ -162,7 +162,7 @@ public static class StatParser
         {"generationRange", "generationRange"},
         {"generationInterval", "generationInterval"},
 
-        //{ "player_armor", "currentArmor" },
+        { "player_armor", "currentArmor" }, // augment 35 (Damage resistance)
     };
 
     public static List<StatModification> ParseAffectedStats(string affectedStats, string targetTypes)
@@ -186,6 +186,16 @@ public static class StatParser
         // Split stat expressions
         string[] statExpressions = affectedStats.Split(new char[] { ',', ';' },
             System.StringSplitOptions.RemoveEmptyEntries);
+
+        // Defensive check: positional stat->target mapping is fragile. Warn loudly
+        // when counts disagree (and it isn't the safe single-target broadcast case)
+        // so a reordered/added stat doesn't silently bind to the wrong target.
+        if (statExpressions.Length != targets.Length && targets.Length != 1)
+        {
+            Debug.LogWarning($"StatParser: stat/target count mismatch \u2014 {statExpressions.Length} stat(s) " +
+                             $"'{affectedStats}' vs {targets.Length} target(s) '{targetTypes}'. " +
+                             $"Extra stats fall back to '{targets[0]}'; extra targets are ignored.");
+        }
 
         // Map each stat expression to corresponding target type
         for (int i = 0; i < statExpressions.Length; i++)
@@ -872,6 +882,26 @@ public static class StatApplicator
                 Debug.LogError($"[WEAPON_STAT] Could not find Weapon or WeaponData for stat: {modification.StatName}");
                 return false;
             }
+        }
+
+        // Handle Increased Shield Defenses (augment ID 78) — % reduction to damage taken.
+        if (modification.StatName == "player_damage_reduction" && modification.TargetType == "Player")
+        {
+            PlayerStats playerStats = target.Player;
+            if (playerStats == null)
+                playerStats = UnityEngine.Object.FindFirstObjectByType<PlayerStats>();
+
+            if (playerStats != null)
+            {
+                var playerObj = ((MonoBehaviour)playerStats).gameObject;
+                var existing = playerObj.GetComponent<PlayerDamageReductionEffect>();
+                if (existing == null)
+                    existing = playerObj.AddComponent<PlayerDamageReductionEffect>();
+                existing.damageReductionPercent += modification.Value; // additive stacking
+                return true;
+            }
+            Debug.LogError("[DAMAGE_REDUCTION] Could not find PlayerStats");
+            return false;
         }
 
         // Handle Berserker's Fury (augment ID 6)
@@ -1770,6 +1800,14 @@ public static class StatApplicator
         return type == typeof(float) || type == typeof(int) || type == typeof(double) ||
                type == typeof(decimal) || type == typeof(long) || type == typeof(short);
     }
+
+    // Apply a modification straight to a concrete object (e.g. a WeaponData runtime
+    // copy), bypassing the Player/Weapon target-routing special cases. Used to
+    // re-apply persistent weapon-stat augments after a weapon hot-swap.
+    public static bool ApplyDirectToObject(object targetObject, StatModification modification)
+    {
+        return ApplyToTarget(targetObject, modification);
+    }
 }
 
 public class SymbiosisEffect : PlayerProximityEffect
@@ -1942,6 +1980,16 @@ public class RarityAwareAugmentEffect : IAugmentEffect
 
         foreach (var baseMod in baseModifications)
         {
+            // Parry upgrade augments (330-333) are driven entirely by AugmentEffectHandler,
+            // which reads their raw CSV values. They must never be rarity-scaled, and
+            // PlayerStats has no matching fields, so skip them before they reach the
+            // StatApplicator (avoids the misleading scaling log and the no-op warnings).
+            if (!string.IsNullOrEmpty(baseMod.StatName) &&
+                baseMod.StatName.StartsWith("parry_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var scaledMod = new StatModification
             {
                 StatName = baseMod.StatName,
@@ -1987,6 +2035,14 @@ public class RarityAwareAugmentEffect : IAugmentEffect
     }
     private float CalculateScaledValue(float baseValue, StatModification.ModificationType operationType, string statName)
     {
+        // Parry upgrade augments (330–333) must NEVER be rarity-scaled — their
+        // values are read raw from the CSV by AugmentEffectHandler. This guard is
+        // defense-in-depth in case a "parry_*" stat ever flows through here.
+        if (!string.IsNullOrEmpty(statName) &&
+            statName.StartsWith("parry_", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return baseValue;
+        }
 
         if (statName == "berserker_damage_per_missing_health")
         {
@@ -2077,10 +2133,11 @@ public class RarityAwareAugmentEffect : IAugmentEffect
         // Handle enemy debuff multipliers (values < 1.0)
         if (operationType == StatModification.ModificationType.Multiply && baseValue < 1.0f)
         {
-            if (isEnemyDebuff)
+            if (isEnemyDebuff || IsBeneficialReductionStat(statName))
             {
-                // For enemy debuffs: INCREASE the penalty at higher rarities
-                // Example: 0.85 at Common → 0.764 at Legendary (enemies become slower)
+                // Enemy debuffs AND beneficial player reductions (e.g. attackCooldown
+                // *0.714 = faster attacks) get STRONGER at higher rarity, not weaker.
+                // Example: 0.85 at Common -> 0.764 at Legendary.
                 return Mathf.Pow(baseValue, rarityMultiplier);
             }
             else
@@ -2118,7 +2175,16 @@ public class RarityAwareAugmentEffect : IAugmentEffect
             return -reducedPenalty;
         }
 
-        // For all positive values (bonuses), apply normal scaling
+        // Multiplicative bonuses (value > 1.0): scale ONLY the bonus portion so the
+        // rarity multiplier doesn't compound the implicit 1.0 base.
+        // e.g. damage*1.15 at 1.10x -> 1 + 0.15*1.10 = 1.165 (not 1.265).
+        if (operationType == StatModification.ModificationType.Multiply && baseValue > 1.0f)
+        {
+            float bonus = baseValue - 1.0f;
+            return 1.0f + bonus * rarityMultiplier;
+        }
+
+        // Additive / Set bonuses: scale the added/flat amount directly.
         return baseValue * rarityMultiplier;
     }
 
@@ -2130,6 +2196,15 @@ public class RarityAwareAugmentEffect : IAugmentEffect
                lower == "damage" ||
                lower == "maxhealth" ||
                lower == "enemy_spawn_count";
+    }
+
+    // Stats where a multiplier < 1.0 is a BENEFIT to the player (a reduction that
+    // helps them, e.g. attackCooldown). Higher rarity should make the reduction
+    // stronger, not weaker.
+    private bool IsBeneficialReductionStat(string statName)
+    {
+        string lower = statName.ToLower();
+        return lower == "attackcooldown";
     }
 
     private bool IsCostRelatedStat(string statName)
@@ -2154,6 +2229,13 @@ public class RarityAwareAugmentEffect : IAugmentEffect
                 Debug.Log($"Augment '{augmentData.Name}' has NULL stats, no stat modifications needed, handled by AugmentEffectHandler (unlocks, special abilities, etc.)  ");
                 return;
             }
+            else if (augmentData.AffectedStats.IndexOf("parry_", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // Parry upgrades carry their tunables in AffectedStats for AugmentEffectHandler
+                // to read, but apply no stat modifications here. Empty list is expected.
+                Debug.Log($"Augment '{augmentData.Name}' is a parry upgrade - values applied by AugmentEffectHandler, no stat modifications needed.");
+                return;
+            }
             else
             {
                 Debug.LogWarning($"No scaled modifications found for augment: {augmentData.Name}");
@@ -2170,6 +2252,11 @@ public class RarityAwareAugmentEffect : IAugmentEffect
         }
 
         Debug.Log($"Applied {successfulModifications}/{scaledModifications.Count} modifications for {selectedRarity} augment: {augmentData.Name}");
+
+        // Persist weapon-stat modifications (damage / attackCooldown on the player's
+        // weapon) so they survive weapon hot-swaps, which rebuild a clean runtime copy.
+        if (AugmentRegistry.Instance != null)
+            AugmentRegistry.Instance.RegisterPersistentWeaponMods(scaledModifications);
     }
 
     // TODO: move this method to the common methods for both classes
@@ -2879,6 +2966,38 @@ public class AugmentRegistry : MonoBehaviour
     public bool IsAugmentApplied(int id) => appliedAugments.Contains(id);
     public bool HasImplementation(int id) => registeredEffects.ContainsKey(id);
     public RarityConfiguration[] GetRarityConfigurations() => rarityConfigurations;
+
+    // ===== PERSISTENT WEAPON-STAT AUGMENTS =====
+    // Weapon hot-swaps rebuild a clean WeaponData runtime copy, which would otherwise
+    // discard damage/attackCooldown buffs from augments (1, 7, 31, ...). We remember
+    // the scaled modifications here and re-apply them to each new runtime copy.
+    [System.NonSerialized]
+    private readonly List<StatModification> persistentWeaponStatMods = new List<StatModification>();
+
+    private static bool IsPersistentWeaponStat(StatModification m)
+    {
+        if (m == null) return false;
+        bool rightStat = m.StatName == "damage" || m.StatName == "attackCooldown";
+        bool rightTarget = m.TargetType == "Player" || m.TargetType == "Weapon";
+        return rightStat && rightTarget;
+    }
+
+    // Called when an augment is applied; stores any weapon-stat mods for re-application.
+    public void RegisterPersistentWeaponMods(IEnumerable<StatModification> mods)
+    {
+        if (mods == null) return;
+        foreach (var m in mods)
+            if (IsPersistentWeaponStat(m))
+                persistentWeaponStatMods.Add(m);
+    }
+
+    // Called by Weapon after creating a fresh runtime copy (hot-swap or initial equip).
+    public void ReapplyWeaponStatAugments(WeaponData runtimeCopy)
+    {
+        if (runtimeCopy == null || persistentWeaponStatMods.Count == 0) return;
+        foreach (var m in persistentWeaponStatMods)
+            StatApplicator.ApplyDirectToObject(runtimeCopy, m);
+    }
 }
 
 // ===== INTERFACE DEFINITIONS =====
@@ -2933,3 +3052,4 @@ public class AugmentTarget
         return new AugmentTarget(weapon.GetWeaponData());
     }
 }
+

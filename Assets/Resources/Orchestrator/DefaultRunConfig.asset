@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: DefaultRunConfig
   m_EditorClassIdentifier: 
   stageCount: 2
-  wavesPerStage: 1
+  wavesPerStage: 20
   hasFinalBoss: 1
   availableBiomes: 05000000
   allowRepeatBiomes: 1
@@ -24,17 +24,30 @@ MonoBehaviour:
   spawnDelayScalePerStage: 0.85
   timeBetweenWaves: 3
   timeBetweenStages: 3
+  enemyHealthScalePerStage: 1.03
+  enemyDamageScalePerStage: 1.03
+  scaleBossesWithStage: 1
   nightModeChance: 0.244
   fogChance: 0.25
   rainChance: 0.2
   snowChance: 0.1
   nightBalloonChance: 0.824
+  stageBossPrefabs:
+  - {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
+  - {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
   stageBossPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
-  finalBossPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+  finalBossPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
   baseEnemyDropValue: 10
   enemyDropScalePerStage: 0.2
   baseBossDropValue: 80
   bossDropScalePerStage: 0.25
   bossDropCount: 5
   postStageRewardScalePerStage: 0.15
+  randomizeWaves: 0
+  randomizeBosses: 0
+  useProceduralWaves: 0
+  enemyPool: []
+  baseEnemiesPerWave: 5
+  proceduralMinSpawnDelay: 0.5
+  proceduralMaxSpawnDelay: 1.5
   augmentEveryNWaves: 1

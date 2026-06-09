@@ -76,7 +76,7 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 75,0,Core Energy Siphon,Central Core,Rare,core_energy_from_attacks*0.20,Core gains energy from enemy attacks converting 20% damage to Central Core health energy,Resources/Sprites/Augments/75,Kuba,Global
 76,0,Pheromone Control,Player,Epic,player_enemy_confusion_aura=0.15,Nearby enemies have 15% chance to ignore you or attack each other,Resources/Sprites/Augments/76,Kuba,Player
 77,0,Grappling Hook Damage,Player,"Rare, Epic, Legendary",grappling_hook_damage=15,Grappling Hook deals damage when shot at the enemy,Resources/Sprites/Augments/77,Kuba,Player
-78,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",{player_damage: -0.15},Reduce incoming damage to the Player by 15%,Resources/Sprites/Augments/78,Patryk,
+78,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",player_damage_reduction=0.15,Reduce incoming damage to the Player by 15%,Resources/Sprites/Augments/78,Patryk,
 79,0,Lightning on dodge,Player,Legendary,lightning_dodge_damage=0.8,Row of lightning after dodge on the ground dealing 80% of base damage,Resources/Sprites/Augments/79,Kuba,Player
 80,0,Fire on dodge,Player,Legendary,"fire_dodge_damage=0.2,fire_dodge_dot=0.05,fire_dodge_duration=10",Row of fire after dodge on the ground with 20% initial damage plus 5% damage over time per second for 10 seconds,Resources/Sprites/Augments/80,Kuba,Player
 81,0,Unlock Shield,Player,Epic,NULL,Unlocks the Shield as an equippable weapon,Resources/Sprites/Augments/81,Kuba,Player
@@ -322,3 +322,13 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 321,0,Unlocked revenant necronomicon,Player,"Legendary",NULL,Unlocked revenant necronomicon — activate to raise a purple aura that resurrects enemies slain inside it as friendly shadows for 8 seconds,Resources/Sprites/Augments/321,Kuba,Player
 322,0,Unlocked battle hammer,Player,Epic,NULL,Unlocked battle hammer,Resources/Sprites/Augments/322,Kuba,Player
 323,0,Unlock stealth cloak,Player,Epic,NULL,Unlocked stealth cloak tool grants 30s invisibility on right-click enemies ignore you until you attack 10s cooldown,Resources/Sprites/Augments/323,Kuba,Player
+324,0,Unlock torch,Player,Rare,NULL,Unlocked torch tool — equip to cast a circle of light around you at night and right-click to place up to 3 glowing torches on the map,Resources/Sprites/Augments/324,Kuba,Player
+325,0,Unlock Projectile Parry,Player,Legendary,NULL,"Deflect an incoming Mort shell or Pitcher shot with timely parry",Resources/Sprites/Augments/325,Kuba,Player
+326,0,Unlock time clock,Player,Epic,NULL,Unlocked time clock tool — right-click to rewind to the start of the current wave (30s cooldown),Resources/Sprites/Augments/326,Kuba,Player
+327,0,Unlock mortar,Player,Epic,NULL,Unlocked mortar weapon,Resources/Sprites/Augments/327,Kuba,Player
+328,0,Cooldown reduction,Player,Epic,cooldown_reduction=20,Shorten all weapon and tool cooldowns by 20 percent,Resources/Sprites/Augments/328,Kuba,Player
+329,0,Unlock smoke screen,Player,Epic,NULL,Unlocked Smoke Screen tool,Resources/Sprites/Augments/329,Kuba,Player
+330,0,Longer Parry Stun,Player,Epic,parry_stun_bonus_seconds=1,Parried enemies stay stunned longer,Resources/Sprites/Augments/330,Kuba,Player
+331,0,Powerful Parry,Player,Epic,"parry_damage_bonus=0.30,parry_damage_duration=5",Parried enemies take 30% more damage for 5 seconds,Resources/Sprites/Augments/331,Kuba,Player
+332,0,Longer Parry Window,Player,Epic,parry_window_frames=2,Parry window is 2 frames longer,Resources/Sprites/Augments/332,Kuba,Player
+333,0,Heal on Parry,Player,Epic,parry_heal_percent=0.03,Heal 3% of max health on a successful parry,Resources/Sprites/Augments/333,Kuba,Player

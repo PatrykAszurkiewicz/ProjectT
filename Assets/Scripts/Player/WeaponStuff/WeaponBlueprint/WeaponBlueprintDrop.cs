@@ -219,17 +219,20 @@ public class WeaponBlueprintDrop : MonoBehaviour
                            $"flags: isRanged={d.isRanged} isGrapplingHook={d.isGrapplingHook} " +
                            $"isObstacleDrawer={d.isObstacleDrawer} isFlamethrower={d.isFlamethrower} " +
                            $"isBombLauncher={d.isBombLauncher} isTrap={d.isTrap} isTurret={d.isTurret} " +
-                           $"isDecoy={d.isDecoy} isBoomerang={d.isBoomerang} armorBonus={d.armorBonus}";
+                           $"isDecoy={d.isDecoy} isBoomerang={d.isBoomerang} armorBonus={d.armorBonus} " +
+                           $"isCloak={d.isCloak} isBook={d.isBook} isHammer={d.isHammer} " +
+                           $"isTorch={d.isTorch} isClock={d.isClock} isSmoke={d.isSmoke}";
             }
 
             // Probe every likely Resources path so we know which exists and which don't.
             string[] probes = new[]
             {
-                "Icons/WeaponIconMelee", "Icons/WeaponIconRanged", "Icons/WeaponIconGrapplingHook",
-                "Icons/WeaponIconShield", "Icons/WeaponIconObstacleDrawer", "Icons/WeaponIconFlamethrower",
-                "Icons/WeaponIconBomb", "Icons/WeaponIconBombLauncher", "Icons/WeaponIconTrap",
-                "Icons/WeaponIconTurret", "Icons/WeaponIconDecoy", "Icons/WeaponIconBoomerang",
-            };
+    "Icons/WeaponIconMelee", "Icons/WeaponIconRanged", "Icons/WeaponIconGrapplingHook",
+    "Icons/WeaponIconShield", "Icons/WeaponIconObstacleDrawer", "Icons/WeaponIconFlamethrower",
+    "Icons/WeaponIconBomb",  "Icons/WeaponIconTrap","Icons/WeaponIconTorch",
+    "Icons/WeaponIconTurret", "Icons/WeaponIconDecoy", "Icons/WeaponIconBoomerang","Icons/WeaponIconClock",
+    "Icons/WeaponIconCloak", "Icons/WeaponIconBook", "Icons/WeaponIconHammer", "Icons/WeaponIconSmoke"
+};
             var found = new System.Text.StringBuilder();
             var missing = new System.Text.StringBuilder();
             foreach (var p in probes)

@@ -1037,8 +1037,20 @@ public class BiomeManager : MonoBehaviour
         PatchMapBackground();
     }
 
+    [Tooltip("Force the auto biome apply on Start even when a GameOrchestrator is " +
+             "present. Normally leave OFF: the orchestrator drives the biome per stage, " +
+             "and auto-applying here too causes a redundant, race-prone double biome " +
+             "build at launch. Turn ON only for standalone biome testing.")]
+    public bool forceApplyBiomeOnStart = false;
+
     void Start()
     {
+        // If an orchestrator exists it owns biome selection and will call SetBiome()
+        // itself. Applying here too races that path at launch (and double-builds the
+        // whole biome). Stand down unless explicitly forced for standalone testing.
+        if (!forceApplyBiomeOnStart && GameOrchestrator.Instance != null)
+            return;
+
         StartCoroutine(ApplyBiomeDeferred());
     }
 
@@ -1331,10 +1343,12 @@ public class BiomeManager : MonoBehaviour
                 SetupNightBiome();
                 break;
             case BiomeType.Corruption:
-                SetupCorruptionBiome();
+                // SWAPPED: Corruption now uses the old PitchBlack look.
+                SetupPitchBlackBiome();
                 break;
             case BiomeType.PitchBlack:
-                SetupPitchBlackBiome();
+                // SWAPPED: PitchBlack now uses the old Corruption look.
+                SetupCorruptionBiome();
                 break;
         }
 
@@ -2677,4 +2691,5 @@ public class BiomeManager : MonoBehaviour
         night.GenerateNight();
     }
 }
+
 

@@ -86,6 +86,7 @@ public class BufferController : MonoBehaviour
 
     private float fogDropTimer;
     private Transform currentTarget;
+    private float smokeShufflePhase;
 
     private void Awake()
     {
@@ -111,6 +112,7 @@ public class BufferController : MonoBehaviour
         // Stagger the first drop slightly so a wave of Buffers doesn't fire
         // their initial patches all on the same frame.
         fogDropTimer = Random.Range(0f, fogDropInterval * 0.5f);
+        smokeShufflePhase = SmokeBlind.NewPhase();
     }
 
     private void Update()
@@ -137,6 +139,14 @@ public class BufferController : MonoBehaviour
             // No ally to support — hold position. Killing residual velocity
             // here keeps the Buffer from drifting after a nudge.
             rb.linearVelocity = Vector2.zero;
+            return;
+        }
+
+        // Smoke Screen: if a smoke cloud blocks our sightline to the target, we
+        // lose sight of it and mill in place until the smoke clears.
+        if (SmokeBlind.Blocks(transform.position, currentTarget.position))
+        {
+            rb.linearVelocity = SmokeBlind.ShuffleVelocity(smokeShufflePhase, stats.MoveSpeed);
             return;
         }
 
@@ -268,5 +278,3 @@ public class BufferController : MonoBehaviour
     }
 #endif
 }
-
-

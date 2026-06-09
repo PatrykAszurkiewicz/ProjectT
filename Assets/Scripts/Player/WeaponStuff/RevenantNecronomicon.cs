@@ -112,9 +112,9 @@ public class RevenantNecronomiconSystem
     // Post-aura recharge length. 
     private float BookCooldownDuration()
     {
-        if (data.bookCooldown > 0f) return data.bookCooldown;
-        if (data.attackCooldown > 0f) return data.attackCooldown;
-        return 5f; // default recharge
+        if (data.bookCooldown > 0f) return CooldownModifier.Apply(data.bookCooldown);
+        if (data.attackCooldown > 0f) return CooldownModifier.Apply(data.attackCooldown);
+        return CooldownModifier.Apply(5f); // default recharge
     }
 
     // Called from Weapon.ExecuteToolAttack() when the player right-clicks.
@@ -328,7 +328,7 @@ public class RevenantAura : MonoBehaviour
 
     private static readonly Color AURA_PURPLE = new Color(0.55f, 0.20f, 0.85f, 0.32f);
     private static readonly Color AURA_PURPLE_BRIGHT = new Color(0.70f, 0.35f, 1.00f, 0.55f);
-    private static readonly Color AURA_RING = new Color(0.75f, 0.45f, 1.00f, 0.85f);
+    private static readonly Color AURA_RING = new Color(0.75f, 0.45f, 1.00f, 0.45f);
 
     private const int SORT_ORDER_BASE = 900; // above ground, below cursor (10000)
 
@@ -552,7 +552,10 @@ public class RevenantAura : MonoBehaviour
         auraFillRenderer.sortingOrder = SORT_ORDER_BASE;
         fillObj.transform.localScale = Vector3.one;
 
-        // Bright rotating rim ring.
+        // Single rotating rim ring — kept small and semi-transparent so it
+        // reads as an "occult circle" without obscuring the view. The second
+        // counter-rotating ring stays removed; auraRing2Renderer remains null
+        // (all its uses below are null-guarded).
         var ringObj = new GameObject("AuraRing");
         ringObj.transform.SetParent(transform, false);
         ringObj.transform.localPosition = Vector3.zero;
@@ -560,17 +563,7 @@ public class RevenantAura : MonoBehaviour
         auraRingRenderer.sprite = GenerateRingSprite();
         auraRingRenderer.color = AURA_RING;
         auraRingRenderer.sortingOrder = SORT_ORDER_BASE + 1;
-        ringObj.transform.localScale = Vector3.one;
-
-        // Second counter-rotating rim, slightly inset.
-        var ring2Obj = new GameObject("AuraRing2");
-        ring2Obj.transform.SetParent(transform, false);
-        ring2Obj.transform.localPosition = Vector3.zero;
-        auraRing2Renderer = ring2Obj.AddComponent<SpriteRenderer>();
-        auraRing2Renderer.sprite = GenerateRingSprite();
-        auraRing2Renderer.color = new Color(AURA_RING.r, AURA_RING.g, AURA_RING.b, 0.45f);
-        auraRing2Renderer.sortingOrder = SORT_ORDER_BASE + 1;
-        ring2Obj.transform.localScale = Vector3.one * 0.82f;
+        ringObj.transform.localScale = Vector3.one * 0.78f;
     }
 
     private void UpdateVisual()
@@ -703,7 +696,7 @@ public class ShadowAlly : MonoBehaviour
 
     private const float SORT_PRECISION = 10f;
     private const int SORT_ORDER_BASE = 1000;
-    private const float ENEMY_SEARCH_RANGE = 8f; // how far a shadow looks for foes
+    private const float ENEMY_SEARCH_RANGE = 14f; // how far a shadow looks for foes
 
     // FACTORY 
 
@@ -1049,3 +1042,5 @@ public class SoulBurstVFX : MonoBehaviour
         return _cachedMote;
     }
 }
+
+

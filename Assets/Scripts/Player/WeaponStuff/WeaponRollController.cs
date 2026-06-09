@@ -6,8 +6,8 @@ public enum ScrollTarget { None, Weapon, Tool }
 
 public class WeaponRollController : MonoBehaviour
 {
-    [Header("Slots 0-13: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret, Decoy, Boomerang, Book, BattleHammer, StealthCloak")]
-    public WeaponData[] allWeaponSlots = new WeaponData[14];
+    [Header("Slots 0-17: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret, Decoy, Boomerang, Book, BattleHammer, StealthCloak, Torch, TimeClock, Mortar, SmokeScreen")]
+    public WeaponData[] allWeaponSlots = new WeaponData[18];
 
     Weapon _weapon;
     WeaponRollUI _ui;
@@ -81,6 +81,17 @@ public class WeaponRollController : MonoBehaviour
         // they're typing in a menu. Time.timeScale == 0 is the canonical
         // "paused" signal set by PauseMenuController.
         if (Time.timeScale == 0f) return;
+
+        // Gamepad: D-pad cycles weapons (left/right) and tools (up/down).
+        // wasPressedThisFrame = one step per press, matching one scroll notch.
+        var pad = Gamepad.current;
+        if (pad != null)
+        {
+            if (pad.dpad.right.wasPressedThisFrame) CycleWeapon(+1);
+            if (pad.dpad.left.wasPressedThisFrame) CycleWeapon(-1);
+            if (pad.dpad.down.wasPressedThisFrame) CycleTool(+1);
+            if (pad.dpad.up.wasPressedThisFrame) CycleTool(-1);
+        }
 
         bool shiftHeld = Keyboard.current != null &&
             (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);

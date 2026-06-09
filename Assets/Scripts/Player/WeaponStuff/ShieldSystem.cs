@@ -11,11 +11,24 @@ using System.Collections.Generic;
 public class ShieldSystem
 {
     //  Tuning 
-    private const float BLOCK_ARC_DEGREES = 120f;   // total arc width
+    private const float BLOCK_ARC_DEGREES = 120f;   // total arc width (mouse)
+    // On a gamepad the aim direction is coarser and holds its last value when the
+    // right stick is centered, so a tight directional arc makes blocking feel
+    // unreliable — attacks from off-facing slip through after the player rotates.
+    // 360 = omnidirectional while raised. Lower it (e.g. 240) to keep some
+    // directionality on the pad.
+    private const float BLOCK_ARC_DEGREES_GAMEPAD = 360f;
     private const float PARRY_WINDOW = 0.2f;        // seconds after raise
-    private const float PARRY_STUN_NORMAL = 3f;     // seconds
-    private const float PARRY_STUN_BOSS = 2f;       // seconds
-    private const float PARRY_DAMAGE_BONUS = 0.30f;  // +30%
+    // Base stun durations and the parry damage bonus now live in ParryUpgrades
+    // (ParryUpgrades.BaseStunNormal / BaseStunBoss / BaseDamageBonus) so the
+    // upgrade augments (330 Longer Parry Stun, 331 Powerful Parry) can layer onto
+    // a single source of truth shared by melee and projectile parry.
+
+    // Fraction of damage that still gets through when the shield BLOCKS a hit
+    // (as opposed to fully negating it). 0 = block negates entirely; 0.5 = a
+    // blocked hit deals half damage. Used by the projectile-block path so a
+    // raised shield reduces incoming shots even without the parry augment.
+    private const float BLOCK_DAMAGE_MULTIPLIER = 0.5f;
 
     // Visual arc
     private const float ARC_RADIUS = 1.0f;
@@ -95,6 +108,9 @@ public class ShieldSystem
 
     public bool IsRaised => isRaised;
 
+    // Fraction of damage a blocked hit still deals (see BLOCK_DAMAGE_MULTIPLIER).
+    public float BlockDamageMultiplier => BLOCK_DAMAGE_MULTIPLIER;
+
     /// Expose the arc LineRenderer for visual feedback (ShieldFeedback uses this).
     public LineRenderer ArcLineRenderer => arcLine;
 
@@ -149,7 +165,7 @@ public class ShieldSystem
         Vector2 attackDir = ((Vector2)attackerGO.transform.position - (Vector2)playerTransform.position).normalized;
 
         float angle = Vector2.Angle(cursorDir, attackDir);
-        if (angle > BLOCK_ARC_DEGREES * 0.5f)
+        if (angle > BlockHalfAngle())
         {
             //Debug.Log($"[SHIELD] MISS — outside arc. angle={angle:F1}° (need <{BLOCK_ARC_DEGREES * 0.5f}°) " +
             //          $"cursor toward {cursorDir}, enemy at {attackDir}");
@@ -180,7 +196,7 @@ public class ShieldSystem
             return false;
         }
 
-        // ── Stamina gate ──
+        //  Stamina gate 
         // Parries bypass this — they're one-frame skill, not sustained defense.
         // Blocks require either non-broken state OR enough stamina to re-engage.
         if (!isParry && playerStats != null)
@@ -209,15 +225,15 @@ public class ShieldSystem
             ApplyParry(attackerGO);
             SpawnParryVFX();
 
-            // ── Visual + audio feedback (parry) ──
+            //  Visual + audio feedback (parry) 
             ShieldFeedback.OnParry(playerTransform, attackerGO.transform.position);
         }
         else
         {
-            // ── Audio every tick (constant clang reads as sustained pressure) ──
+            //  Audio every tick (constant clang reads as sustained pressure) 
             ShieldFeedback.OnBlockAudio(playerTransform);
 
-            // ── Visual feedback throttled (sparks/arc flash/shake would otherwise stack
+            //  Visual feedback throttled (sparks/arc flash/shake would otherwise stack
             //    every laser/flame tick and saturate the screen to white) ──
             if (Time.time - lastBlockFeedbackTime >= BLOCK_FEEDBACK_COOLDOWN)
             {
@@ -226,7 +242,7 @@ public class ShieldSystem
             }
         }
 
-        // ── Stamina drain (only on successful block / parry) ──
+        //  Stamina drain (only on successful block / parry) 
         // Detect continuous source: same attacker calling within the sustained window.
         // - Discrete hit / new attacker:  pay the full per-call cost.
         // - Continuous source:            pay per-second rate × elapsed time.
@@ -267,33 +283,143 @@ public class ShieldSystem
         return true;
     }
 
+    //  Projectile interception (Augment 325 — Projectile Parry) 
+
+    public enum ProjectileInterception { None, Blocked, Parried }
+
+    // Evaluates whether the raised / just-pressed shield intercepts an in-flight
+    // enemy projectile, and returns whether it was a parry (bounce back) or a
+    // plain block (absorb). Unlike TryBlockOrParry this is keyed to the SHOT, not
+    // to an enemy's melee animation:
+    //   - Direction: the angle is measured to 'aimReference' (pass the projectile
+    //     for a direct shot, or the firing enemy for a lobbed shell), NOT the
+    //     enemy's body at impact time.
+    //   - Timing:    a parry is a fresh right-click PRESS within PARRY_WINDOW. A
+    //     shield merely held open absorbs the shot as a block instead.
+    // The projectile is responsible for calling this each frame while it is inside
+    // its own reaction radius, and for acting on the result (bounce / destroy).
+    public ProjectileInterception TryInterceptProjectile(Vector3 aimReference)
+    {
+        if (playerTransform == null) return ProjectileInterception.None;
+
+        bool currentlyRaised = isRaised;
+        bool recentlyReleased = !isRaised && (Time.time - lastLowerTime) <= QUICK_PRESS_GRACE;
+        if (!currentlyRaised && !recentlyReleased)
+            return ProjectileInterception.None;
+
+        // Directional gate — the shot must approach from within the shield arc.
+        Vector2 cursorDir = GetCursorDirection();
+        Vector2 toShot = (Vector2)aimReference - (Vector2)playerTransform.position;
+        if (toShot.sqrMagnitude < 1e-6f) return ProjectileInterception.None;
+        float angle = Vector2.Angle(cursorDir, toShot.normalized);
+        if (angle > BlockHalfAngle())
+            return ProjectileInterception.None;
+
+        // Parry = fresh press within the parry window; otherwise it's a block.
+        bool isParry = (Time.time - raiseTime) <= PARRY_WINDOW;
+
+        // Quick-press grace: if the shield is already down, only a parry counts.
+        if (recentlyReleased && !isParry)
+            return ProjectileInterception.None;
+
+        // Stamina gate for blocks (parries bypass — pure timing skill).
+        if (!isParry && playerStats != null)
+        {
+            if (shieldBroken && playerStats.currentStamina < STAMINA_REENGAGE_THRESHOLD)
+                return ProjectileInterception.None;
+            if (playerStats.currentStamina <= 0f)
+            {
+                shieldBroken = true;
+                return ProjectileInterception.None;
+            }
+            shieldBroken = false;
+        }
+
+        // Feedback (parry phantom vs block sparks) is deliberately NOT
+        // played here. Whether a parry-timed hit actually PARRIES depends on
+        // state the projectile owns (augment unlocked + a live firer to bounce
+        // to). The caller decides the final outcome and then calls
+        // PlayProjectileParryFeedback / PlayProjectileBlockFeedback, so the gold
+        // shield phantom only ever shows on a real bounce-back parry.
+
+        // Stamina drain — a single discrete cost per intercepted shot.
+        if (playerStats != null)
+        {
+            playerStats.DrainStamina(playerStats.shieldBlockStaminaCost);
+            if (!isParry && playerStats.currentStamina <= 0f)
+                shieldBroken = true;
+        }
+
+        return isParry ? ProjectileInterception.Parried : ProjectileInterception.Blocked;
+    }
+
+    // Feedback for a projectile interception, fired by the projectile AFTER it
+    // resolves the outcome (so the parry phantom is exclusive to a real bounce).
+    public void PlayProjectileParryFeedback(Vector3 contactPoint)
+    {
+        if (playerTransform == null) return;
+        SpawnParryVFX();
+        ShieldFeedback.OnParry(playerTransform, contactPoint);
+
+        // 333 Heal on Parry — projectile parry counts as a successful parry.
+        HealOnParry();
+    }
+
+    public void PlayProjectileBlockFeedback(Vector3 contactPoint)
+    {
+        if (playerTransform == null) return;
+        ShieldFeedback.OnBlock(playerTransform, contactPoint, arcLine);
+    }
+
     //  Parry Logic 
 
     private void ApplyParry(GameObject attackerGO)
     {
         if (attackerGO == null) return;
 
-        bool isBoss = attackerGO.GetComponent<BaseBossStats>() != null;
-        float stunDuration = isBoss ? PARRY_STUN_BOSS : PARRY_STUN_NORMAL;
+        // Stun + damage-debuff (with augment upgrades layered in by the helper:
+        // 330 Longer Parry Stun, 331 Powerful Parry). Base stun + base bonus come
+        // from ParryUpgrades so melee and projectile parry stay in lockstep.
+        ParryStunEffect.ApplyOrRefresh(attackerGO);
 
-        // Add or refresh ParryStunEffect
-        var existing = attackerGO.GetComponent<ParryStunEffect>();
-        if (existing != null)
-        {
-            existing.Refresh(stunDuration, PARRY_DAMAGE_BONUS);
-        }
-        else
-        {
-            var effect = attackerGO.AddComponent<ParryStunEffect>();
-            effect.Initialize(stunDuration, PARRY_DAMAGE_BONUS);
-        }
+        // 333 Heal on Parry
+        HealOnParry();
+    }
+
+    // Augment 333 — Heal on Parry. Heals a fraction of the player's max health on
+    // a successful parry. Shared by melee (ApplyParry) and projectile parry
+    // (PlayProjectileParryFeedback) so the augment covers both routes.
+    private void HealOnParry()
+    {
+        if (!ParryUpgrades.HealOnParryEnabled) return;
+        if (playerStats == null) return;
+
+        float healAmount = playerStats.maxHealth * ParryUpgrades.HealOnParryPercent;
+        if (healAmount <= 0f) return;
+
+        // CharacterStats.Heal() clamps to maxHealth AND fires OnHealthChanged,
+        // which is the event the player HUD subscribes to (the same path
+        // PlayerStats.Update() uses for passive health regen). So this both
+        // applies the heal and refreshes the bar — no manual GetHealthBar()
+        // call needed (that method only exists on EnemyStats, not PlayerStats).
+        playerStats.Heal(healAmount);
     }
 
     //  Cursor Direction 
 
+    // Half-arc used by the block/parry angle test. Widened on gamepad.
+    private float BlockHalfAngle()
+    {
+        bool pad = PlayerAim.Instance != null && PlayerAim.Instance.UsingGamepad;
+        return (pad ? BLOCK_ARC_DEGREES_GAMEPAD : BLOCK_ARC_DEGREES) * 0.5f;
+    }
+
     private Vector2 GetCursorDirection()
     {
         if (playerTransform == null) return Vector2.right;
+
+        if (PlayerAim.Instance != null)
+            return PlayerAim.Instance.Direction;
 
         Vector2 mouseScreen = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
         Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mouseScreen);

@@ -203,8 +203,8 @@ public class ObstacleGenerator : MonoBehaviour
         float innerRadius = ResolveInnerRadius();
         float outerRadius = ResolveOuterRadius();
 
-        Debug.Log($"[ObstacleGenerator] Zone: inner={innerRadius:F1}, outer={outerRadius:F1}, " +
-                  $"count={obstacleCount}, prefabs={allValid.Count}, solo={hasSolo}");
+        //Debug.Log($"[ObstacleGenerator] Zone: inner={innerRadius:F1}, outer={outerRadius:F1}, " +
+        //          $"count={obstacleCount}, prefabs={allValid.Count}, solo={hasSolo}");
 
         if (outerRadius <= innerRadius)
         {
@@ -275,8 +275,8 @@ public class ObstacleGenerator : MonoBehaviour
             }
         }
 
-        Debug.Log($"[ObstacleGenerator] {placedCount} placements ({clusters} clusters, " +
-                  $"{placedCount - clusters} solo) = {totalSprites} sprites.");
+        //Debug.Log($"[ObstacleGenerator] {placedCount} placements ({clusters} clusters, " +
+        //          $"{placedCount - clusters} solo) = {totalSprites} sprites.");
 
         // Solo-only prefabs — always spawned individually, never in clusters
         int soloSpawned = SpawnSoloOnlyPrefabs(anchors, innerRadius, outerRadius);

@@ -786,7 +786,9 @@ public class Boss1 : BaseBossStats //, IDamageable
         }
 
         float fireFrameTime = laserFireDuration / 29f;
-        float damagePerFrame = laserDamagePerSecond * fireFrameTime;
+        // Per-stage scaling for the boss's own special attack (opt-in via
+        // "Scale Bosses With Stage"). 1× when the toggle is off.
+        float damagePerFrame = laserDamagePerSecond * fireFrameTime * BossStageDamageMultiplier;
 
         // Night mode: spawn point lights along the beam so it illuminates through darkness
         SpawnLaserNightLights();
@@ -1211,3 +1213,4 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 #endif
 }
+

@@ -25,6 +25,12 @@ public class CursorManager : MonoBehaviour
     public string bookCursorPath = "Sprites/Cursors/cursor_spritesheet_book";
     public string hammerCursorPath = "Sprites/Cursors/cursor_spritesheet_hammer";
     public string cloakCursorPath = "Sprites/Cursors/cursor_spritesheet_cloak";
+    public string mortarCursorPath = "Sprites/Cursors/cursor_spritesheet_mortar";
+    public string smokeCursorPath = "Sprites/Cursors/cursor_spritesheet_smoke";
+    // No dedicated smoke cursor art was supplied — leave blank to fall back to
+    // the mortar/ranged cursor (see SetCursor). Point this at a sprite if you
+    // add one later.
+    //public string smokeCursorPath = "";
 
     [Header("Cursor Size")]
     [Tooltip("Desired cursor size in world units. All cursor sprites will be normalized to this size.")]
@@ -47,6 +53,8 @@ public class CursorManager : MonoBehaviour
     private Sprite bookCursorSprite;
     private Sprite hammerCursorSprite;
     private Sprite cloakCursorSprite;
+    private Sprite mortarCursorSprite;
+    private Sprite smokeCursorSprite;
 
     private Sprite previousCursorSprite;
     private CursorType currentCursorType = CursorType.Default;
@@ -73,7 +81,9 @@ public class CursorManager : MonoBehaviour
         Boomerang,
         Book,
         Hammer,
-        Cloak
+        Cloak,
+        Mortar,
+        Smoke
     }
 
     void Awake()
@@ -138,6 +148,9 @@ public class CursorManager : MonoBehaviour
         bookCursorSprite = Resources.Load<Sprite>(bookCursorPath);
         hammerCursorSprite = Resources.Load<Sprite>(hammerCursorPath);
         cloakCursorSprite = Resources.Load<Sprite>(cloakCursorPath);
+        mortarCursorSprite = Resources.Load<Sprite>(mortarCursorPath);
+        smokeCursorSprite = Resources.Load<Sprite>(smokeCursorPath);
+        //smokeCursorSprite = string.IsNullOrEmpty(smokeCursorPath) ? null : Resources.Load<Sprite>(smokeCursorPath);
     }
 
     public void SetCursor(CursorType cursorType)
@@ -184,6 +197,9 @@ public class CursorManager : MonoBehaviour
             CursorType.Book => bookCursorSprite ?? defaultCursorSprite,
             CursorType.Hammer => hammerCursorSprite ?? meleeCursorSprite ?? defaultCursorSprite,
             CursorType.Cloak => cloakCursorSprite ?? defaultCursorSprite,
+            CursorType.Mortar => mortarCursorSprite ?? rangedCursorSprite ?? defaultCursorSprite,
+            CursorType.Smoke => smokeCursorSprite ?? defaultCursorSprite,
+            //CursorType.Smoke => smokeCursorSprite ?? mortarCursorSprite ?? rangedCursorSprite ?? defaultCursorSprite,
             _ => defaultCursorSprite
         };
 
@@ -194,6 +210,7 @@ public class CursorManager : MonoBehaviour
             currentCursorType = cursorType;
 
             NormalizeCursorScale(targetSprite);
+            //Debug.Log($"SetCursor({cursorType}) -> {targetSprite?.name}");
         }
         else
         {
@@ -237,3 +254,5 @@ public class CursorManager : MonoBehaviour
         return currentCursorType;
     }
 }
+
+

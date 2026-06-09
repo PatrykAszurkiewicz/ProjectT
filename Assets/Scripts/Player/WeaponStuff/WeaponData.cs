@@ -24,6 +24,10 @@ public class WeaponData : ScriptableObject
     [Header("Weapon Size Settings")]
     public Vector2 size = Vector2.one;
 
+
+
+
+
     [Header("Grappling Hook Settings")]
     public bool isGrapplingHook = false;
     [ConditionalField("isGrapplingHook")] public float hookRange = 12f;
@@ -160,7 +164,7 @@ public class WeaponData : ScriptableObject
 
     [Header("Revenant Necronomicon Settings")]
     public bool isBook = false;
-    [ConditionalField("isBook")] public float bookAuraRadius = 5f;
+    [ConditionalField("isBook")] public float bookAuraRadius = 4f;
     [ConditionalField("isBook")] public float bookAuraDuration = 8f;
     [ConditionalField("isBook")] public float bookArmDelay = 0.3f;
     [ConditionalField("isBook")] public int bookMaxShadows = 6;
@@ -186,9 +190,87 @@ public class WeaponData : ScriptableObject
     // Player sprite opacity while cloaked (0 = fully invisible, 1 = opaque).
     [ConditionalField("isCloak")][Range(0f, 1f)] public float cloakPlayerAlpha = 0.28f;
 
+    [Header("Torch Settings")]
+    // Right-click tool. While equipped it casts a flickering circle of light
+    // around the player (in addition to the night-mode hand-torch cone). On
+    // use it drops a torch on the map that lights a circle. Up to
+    // torchMaxPlaced torches exist at once — placing one more smoothly removes
+    // the oldest. The torch deals no damage and has no projectile.
+    public bool isTorch = false;
+    [ConditionalField("isTorch")] public float torchPlayerLightRadius = 4f;
+    [ConditionalField("isTorch")] public float torchPlayerLightIntensity = 0.9f;
+    [ConditionalField("isTorch")] public float torchPlacedLightRadius = 5f;
+    [ConditionalField("isTorch")] public float torchPlacedLightIntensity = 1.0f;
+    [ConditionalField("isTorch")] public int torchMaxPlaced = 3;
+    [ConditionalField("isTorch")] public Color torchLightColor = new Color(1f, 0.6f, 0.25f, 1f);
+    [ConditionalField("isTorch")] public float torchFlickerSpeed = 6f;
+    [ConditionalField("isTorch")][Range(0f, 0.4f)] public float torchFlickerAmount = 0.12f;
+
+
+    [Header("Time Clock Settings")]
+    public bool isClock = false;
+
+    [Header("Mortar Settings")]
+    // Left-click WEAPON (NOT a tool). Aim with the on-ground red reticle and
+    // left-click to lob an arcing shell that explodes on impact, dealing AoE
+    // damage to every enemy in the blast radius — mirrors the Mort enemy's
+    // mortar. Set attackCooldown to 2 on the asset for the intended 2s fire rate.
+    public bool isMortar = false;
+    // Seconds the shell spends in the air before it lands (the visible arc).
+    [ConditionalField("isMortar")] public float mortarFlightTime = 1.1f;
+    // Peak visual height of the lobbed arc, in world units (purely cosmetic).
+    [ConditionalField("isMortar")] public float mortarArcHeight = 2.5f;
+    // World-unit radius of the blast at the landing point. The aim reticle and
+    // ground telegraph both match this radius.
+    [ConditionalField("isMortar")] public float mortarExplosionRadius = 1.5f;
+    // If true, a ground telegraph circle is drawn at the landing spot for the
+    // whole flight (matches the Mort enemy's telegraph).
+    [ConditionalField("isMortar")] public bool mortarShowTelegraph = true;
+    // Fire tint of the built-in explosion VFX on impact.
+    [ConditionalField("isMortar")] public Color mortarExplosionColor = new Color(1f, 0.55f, 0.10f, 1f);
+    // Tint of the in-flight ("committed") ground telegraph circle — a DEEPER,
+    // darker red so a locked-in shot reads differently from the aim reticle.
+    [ConditionalField("isMortar")] public Color mortarTelegraphColor = new Color(0.65f, 0.08f, 0.06f, 1f);
+    // Tint of the aiming reticle that follows the cursor while equipped — a
+    // BRIGHTER, lighter coral-red so "about to fire" is visually distinct from
+    // the committed telegraph above.
+    [ConditionalField("isMortar")] public Color mortarReticleColor = new Color(1f, 0.42f, 0.38f, 1f);
+
+    [Header("Smoke Screen Settings")]
+    // Right-click TOOL. Aimed exactly like the Mortar (an on-ground reticle
+    // follows the cursor), it lobs an arcing canister to the aimed spot. On
+    // impact it bursts into an expanding, semi-transparent grey smoke cloud
+    // that lingers smokeCloudDuration seconds and acts as a dynamic "soft wall"
+    // that blocks enemy line-of-sight: any enemy whose sightline to its current
+    // target (core / tower / player) passes through the cloud loses sight and
+    // mills in place until the smoke clears. Deals no damage. Cooldown comes
+    // from the asset's attackCooldown (set it to 5 for the intended 5s) and is
+    // stored on PlayerToolCooldownStore so it survives un-equipping.
+    public bool isSmoke = false;
+    // Seconds the canister spends in the air before it lands (the visible arc).
+    [ConditionalField("isSmoke")] public float smokeFlightTime = 0.9f;
+    // Peak visual height of the lobbed arc, in world units (purely cosmetic).
+    [ConditionalField("isSmoke")] public float smokeArcHeight = 2.2f;
+    // World-unit radius of the smoke cloud (its vision-blocking footprint). The
+    // aim reticle and ground telegraph both match this radius.
+    [ConditionalField("isSmoke")] public float smokeCloudRadius = 3f;
+    // How long the cloud lingers / blocks vision after it lands.
+    [ConditionalField("isSmoke")] public float smokeCloudDuration = 6f;
+    // If true, a faint ground telegraph is drawn at the landing spot in flight.
+    [ConditionalField("isSmoke")] public bool smokeShowTelegraph = true;
+    // Body tint of the grey cloud. Alpha is the cloud's overall opacity — keep
+    // it semi-transparent so shapes stay faintly readable through the smoke.
+    [ConditionalField("isSmoke")] public Color smokeCloudColor = new Color(0.62f, 0.64f, 0.66f, 0.42f);
+    // Tint of the aiming reticle that follows the cursor while equipped — a cool
+    // blue so it reads distinctly from the Mortar's coral-red reticle.
+    [ConditionalField("isSmoke")] public Color smokeReticleColor = new Color(0.42f, 0.66f, 1f, 1f);
+    // Tint of the in-flight ("committed") ground telegraph circle — a deeper,
+    // darker blue so the placement circle reads distinctly from the lighter
+    // aiming reticle.
+    [ConditionalField("isSmoke")] public Color smokeTelegraphColor = new Color(0.13f, 0.22f, 0.58f, 1f);
 
     // Returns true if this weapon data represents a tool (right-hand / right-click slot).
-    // Tools: GrapplingHook, ObstacleDrawer, Shield (armorBonus > 0), BombLauncher, Trap, Turret, Decoy, Book, Cloak.
+    // Tools: GrapplingHook, ObstacleDrawer, Shield (armorBonus > 0), BombLauncher, Trap, Turret, Decoy, Book, Cloak, Torch.
     // Weapons (left-hand / left-click): Melee, Ranged, Flamethrower, Boomerang, Battle Hammer.
 
     public bool IsTool
@@ -196,7 +278,7 @@ public class WeaponData : ScriptableObject
         get
         {
             return isGrapplingHook || isObstacleDrawer || isBombLauncher
-                || isTrap || isTurret || isDecoy || isBook || isCloak || armorBonus > 0f;
+                || isTrap || isTurret || isDecoy || isBook || isCloak || isTorch || isClock || isSmoke || armorBonus > 0f;
         }
     }
 
@@ -318,66 +400,105 @@ public class WeaponData : ScriptableObject
         copy.cloakCooldown = this.cloakCooldown;
         copy.cloakPlayerAlpha = this.cloakPlayerAlpha;
 
+        copy.isTorch = this.isTorch;
+        copy.isClock = this.isClock;
+        copy.torchPlayerLightRadius = this.torchPlayerLightRadius;
+        copy.torchPlayerLightIntensity = this.torchPlayerLightIntensity;
+        copy.torchPlacedLightRadius = this.torchPlacedLightRadius;
+        copy.torchPlacedLightIntensity = this.torchPlacedLightIntensity;
+        copy.torchMaxPlaced = this.torchMaxPlaced;
+        copy.torchLightColor = this.torchLightColor;
+        copy.torchFlickerSpeed = this.torchFlickerSpeed;
+        copy.torchFlickerAmount = this.torchFlickerAmount;
+
+        copy.isMortar = this.isMortar;
+        copy.mortarFlightTime = this.mortarFlightTime;
+        copy.mortarArcHeight = this.mortarArcHeight;
+        copy.mortarExplosionRadius = this.mortarExplosionRadius;
+        copy.mortarShowTelegraph = this.mortarShowTelegraph;
+        copy.mortarExplosionColor = this.mortarExplosionColor;
+        copy.mortarTelegraphColor = this.mortarTelegraphColor;
+        copy.mortarReticleColor = this.mortarReticleColor;
+
+        copy.isSmoke = this.isSmoke;
+        copy.smokeFlightTime = this.smokeFlightTime;
+        copy.smokeArcHeight = this.smokeArcHeight;
+        copy.smokeCloudRadius = this.smokeCloudRadius;
+        copy.smokeCloudDuration = this.smokeCloudDuration;
+        copy.smokeShowTelegraph = this.smokeShowTelegraph;
+        copy.smokeCloudColor = this.smokeCloudColor;
+        copy.smokeReticleColor = this.smokeReticleColor;
+        copy.smokeTelegraphColor = this.smokeTelegraphColor;
+
         return copy;
     }
 
     void OnValidate()
     {
+        if (isClock)
+        {
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false;
+            isTurret = false; isDecoy = false; isBoomerang = false;
+            isBook = false; isHammer = false; isCloak = false; isTorch = false;
+            isMortar = false; isSmoke = false; projectilePrefab = null;
+        }
+
         if (isGrapplingHook)
         {
             isRanged = false; projectilePrefab = null;
             isObstacleDrawer = false; isFlamethrower = false;
             isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isObstacleDrawer)
         {
             isRanged = false; isGrapplingHook = false; projectilePrefab = null;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isFlamethrower)
         {
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false; projectilePrefab = null;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isBombLauncher)
         {
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isTrap = false; isTurret = false; isDecoy = false; projectilePrefab = null;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isTrap)
         {
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTurret = false; isDecoy = false; projectilePrefab = null;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isTurret)
         {
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isDecoy = false; projectilePrefab = null;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isDecoy)
         {
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; projectilePrefab = null;
-            isBoomerang = false; isBook = false; isHammer = false; isCloak = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isBoomerang)
         {
             isRanged = true; // Boomerang uses ranged attack path but with custom projectile
             isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
-            isBook = false; isHammer = false; isCloak = false;
+            isBook = false; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isBook)
         {
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
-            isBoomerang = false; projectilePrefab = null; isHammer = false; isCloak = false;
+            isBoomerang = false; projectilePrefab = null; isHammer = false; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isHammer)
         {
@@ -386,7 +507,7 @@ public class WeaponData : ScriptableObject
             // weapon-slot entry.
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
-            isBoomerang = false; isBook = false; projectilePrefab = null; isCloak = false;
+            isBoomerang = false; isBook = false; projectilePrefab = null; isCloak = false; isTorch = false; isMortar = false; isSmoke = false;
         }
         if (isCloak)
         {
@@ -395,7 +516,37 @@ public class WeaponData : ScriptableObject
             // clean tool-slot entry.
             isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
             isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
-            isBoomerang = false; isBook = false; isHammer = false; projectilePrefab = null;
+            isBoomerang = false; isBook = false; isHammer = false; projectilePrefab = null; isTorch = false; isMortar = false; isSmoke = false;
+        }
+        if (isTorch)
+        {
+            // Torch is a pure utility tool: no projectile, no damage, no other
+            // type flags. It clears everything else so it stays a clean
+            // tool-slot entry.
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; projectilePrefab = null; isMortar = false; isSmoke = false;
+        }
+        if (isMortar)
+        {
+            // Mortar is a ranged-class WEAPON (left-click) that lobs an arcing,
+            // exploding shell. It is NOT classed as isRanged (it uses its own
+            // attack path), and clears every other type flag so it stays a pure
+            // weapon-slot entry. It keeps its own projectilePrefab (optional).
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isClock = false; isSmoke = false;
+        }
+
+        if (isSmoke)
+        {
+            // Smoke Screen is a pure utility TOOL (right-click): no projectile
+            // prefab is required (it lobs a procedural canister), no damage, and
+            // it clears every other type flag so it stays a clean tool-slot entry.
+            isRanged = false; isGrapplingHook = false; isObstacleDrawer = false;
+            isFlamethrower = false; isBombLauncher = false; isTrap = false; isTurret = false; isDecoy = false;
+            isBoomerang = false; isBook = false; isHammer = false; isCloak = false; isTorch = false; isClock = false;
+            isMortar = false; projectilePrefab = null;
         }
     }
 }
@@ -408,3 +559,4 @@ public class ConditionalFieldAttribute : PropertyAttribute
         this.conditionalSourceField = conditionalSourceField;
     }
 }
+

@@ -21,6 +21,11 @@ public class WeaponUnlockRegistry : MonoBehaviour
         { 321, 11 }, // Revenant Necronomicon (Book)
         { 322, 12 }, // Battle Hammer
         { 323, 13 }, // Stealth Cloak
+        { 324, 14 }, // Torch
+        { 326, 15 }, // Time Clock
+        { 327, 16 }, // Mortar
+        { 329, 17 }, // Smoke Screen
+
     };
 
     private readonly HashSet<int> _unlocked = new HashSet<int>();
@@ -81,3 +86,4 @@ public class WeaponUnlockRegistry : MonoBehaviour
     public IReadOnlyCollection<int> UnlockedSlots => _unlocked;
     public bool IsUnlocked(int slot) => _unlocked.Contains(slot);
 }
+

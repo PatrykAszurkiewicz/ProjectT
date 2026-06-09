@@ -33,6 +33,7 @@ public class PlayerCloakEffect : MonoBehaviour
     private bool _onCooldown = false;
     private float _invisTimer = 0f;
     private float _cooldownTimer = 0f;
+    private float _cooldownTotal = 0f;
 
     public bool IsInvisible => _isInvisible;
     public bool IsOnCooldown => _onCooldown;
@@ -43,7 +44,7 @@ public class PlayerCloakEffect : MonoBehaviour
         ? Mathf.Clamp01(_invisTimer / duration) : 0f;
     public float CooldownTimeLeft => _onCooldown ? Mathf.Max(0f, _cooldownTimer) : 0f;
     /// 0..1 cooldown progress (1 = ready). Handy for a future UI radial.
-    public float CooldownNormalized => (cooldown <= 0f || !_onCooldown) ? 1f : 1f - Mathf.Clamp01(_cooldownTimer / cooldown);
+    public float CooldownNormalized => (_cooldownTotal <= 0f || !_onCooldown) ? 1f : 1f - Mathf.Clamp01(_cooldownTimer / _cooldownTotal);
 
     //  Sprite fade 
 
@@ -173,7 +174,8 @@ public class PlayerCloakEffect : MonoBehaviour
         if (cooldown > 0f)
         {
             _onCooldown = true;
-            _cooldownTimer = cooldown;
+            _cooldownTotal = CooldownModifier.Apply(cooldown);
+            _cooldownTimer = _cooldownTotal;
         }
 
         if (playSound)
@@ -372,3 +374,4 @@ public class PlayerCloakEffect : MonoBehaviour
             AudioManager.instance.PlayOneShot(ev, transform.position);
     }
 }
+

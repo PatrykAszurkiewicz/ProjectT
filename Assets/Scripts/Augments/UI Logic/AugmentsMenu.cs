@@ -370,6 +370,12 @@ public class AugmentsMenu : MonoBehaviour
             30,  // God Mode (permanent penalty)
             37,  // Quick revive (once per wave)
             163, // Time Rewind (once per game)
+            328, // Cooldown reduction (flat -20%, doesn't stack)
+            // Parry upgrades (select once each)
+            330, // Longer Parry Stun
+            331, // Powerful Parry
+            332, // Longer Parry Window
+            333, // Heal on Parry
         };
 
         if (AugmentRegistry.Instance != null)
@@ -582,6 +588,8 @@ public class AugmentsMenu : MonoBehaviour
         if (AugmentRegistry.Instance != null)
         {
             bool success = AugmentRegistry.Instance.ApplyAugment(chosenId, selectedRarity);
+            if (success)
+                RunPersistence.Instance?.RecordAugment(chosenId, selectedRarity);
             if (success && debugMode)
             {
                 Debug.Log($"Applied {selectedRarity} augment ID: {chosenId}");
@@ -903,3 +911,4 @@ public class AugmentsMenu : MonoBehaviour
         }
     }
 }
+

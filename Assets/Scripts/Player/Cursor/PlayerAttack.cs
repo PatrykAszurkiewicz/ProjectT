@@ -15,6 +15,13 @@ public class PlayerAttack : MonoBehaviour
     private int activeAttackCount = 0;
     private const int MAX_BUFFERED_ATTACKS = 2;
 
+    // Analog triggers fire the action's "started" phase as soon as they leave rest
+    // (~0.13), but ButtonControl.isPressed only reports true past the 0.5 press point.
+    // The held-button safety nets below must use this lower analog threshold to match
+    // where "started" raised the shield / began firing — otherwise a normal-speed
+    // trigger pull gets lowered the same frame it was raised.
+    private const float TRIGGER_HELD_THRESHOLD = 0.1f;
+
     void Start()
     {
         playerMovement = GetComponent<PlayerMovement>();
@@ -28,7 +35,8 @@ public class PlayerAttack : MonoBehaviour
         // on left click) — if the button comes up without a 'canceled' event.
         if (isWeaponButtonHeld)
         {
-            bool leftStillDown = Mouse.current != null && Mouse.current.leftButton.isPressed;
+            bool leftStillDown = (Mouse.current != null && Mouse.current.leftButton.isPressed)
+                || (Gamepad.current != null && Gamepad.current.rightTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD);
             if (!leftStillDown)
             {
                 isWeaponButtonHeld = false;
@@ -43,7 +51,8 @@ public class PlayerAttack : MonoBehaviour
         // Safety net for held-down tool attacks (obstacle drawer / shield on right click)
         if (isToolButtonHeld)
         {
-            bool rightStillDown = Mouse.current != null && Mouse.current.rightButton.isPressed;
+            bool rightStillDown = (Mouse.current != null && Mouse.current.rightButton.isPressed)
+                || (Gamepad.current != null && Gamepad.current.leftTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD);
             if (!rightStillDown)
             {
                 isToolButtonHeld = false;
@@ -55,24 +64,20 @@ public class PlayerAttack : MonoBehaviour
     }
 
 
-    // Called by the existing Attack action which has both Left Button and Right Button bindings.
-    public void OnAttack(InputAction.CallbackContext context)
+    // Wire these to TWO separate input actions in your .inputactions asset:
+    //   "AttackWeapon" -> Left Mouse Button  + Gamepad Right Trigger
+    //   "AttackTool"   -> Right Mouse Button + Gamepad Left Trigger
+    // (No more parsing control paths to tell left/right apart.)
+    public void OnAttackWeapon(InputAction.CallbackContext context)
     {
         if (weapon == null || InputSuppressed) return;
+        HandleWeaponInput(context);
+    }
 
-        // Determine which mouse button triggered this callback
-        bool isRightClick = false;
-        if (context.control != null)
-        {
-            string controlPath = context.control.path;
-            // path looks like "/Mouse/rightButton"
-            isRightClick = controlPath.Contains("rightButton");
-        }
-
-        if (isRightClick)
-            HandleToolInput(context);
-        else
-            HandleWeaponInput(context);
+    public void OnAttackTool(InputAction.CallbackContext context)
+    {
+        if (weapon == null || InputSuppressed) return;
+        HandleToolInput(context);
     }
 
 

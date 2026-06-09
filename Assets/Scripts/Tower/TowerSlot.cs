@@ -204,6 +204,29 @@ public class TowerSlot : MonoBehaviour
         }
     }
 
+    /// Build a tower into this slot for a RESTORE (rewind / save-resume) — no energy
+    /// cost, no build sound/animation. Sets upgrade level and energy, applies tower
+    /// augments. Returns the new Tower, or null if the slot was occupied.
+    public Tower PlaceTowerForRestore(GameObject towerPrefab, int upgradeLevel, float currentEnergy)
+    {
+        if (isOccupied || towerPrefab == null) return null;
+
+        currentTower = Instantiate(towerPrefab, transform.position, Quaternion.identity);
+        currentTower.transform.parent = transform;
+        isOccupied = true;
+
+        Tower towerComponent = currentTower.GetComponent<Tower>();
+        if (towerComponent != null)
+        {
+            towerComponent.SetUpgradeLevel(upgradeLevel);
+            towerComponent.currentEnergy = currentEnergy;
+            StartCoroutine(ApplyAugmentsAfterFrame(towerComponent));
+        }
+
+        UpdateVisuals();
+        return towerComponent;
+    }
+
     public bool RemoveTower()
     {
         if (!isOccupied) return false;

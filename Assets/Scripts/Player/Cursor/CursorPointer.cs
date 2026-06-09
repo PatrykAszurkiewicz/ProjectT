@@ -41,13 +41,19 @@ public class CursorPointer : MonoBehaviour
 
     void Update()
     {
-        if (Mouse.current == null) return;
-
-        Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
-        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(mouseScreenPos);
-        mouseWorldPos.z = 0;
-
-        Vector3 direction = (mouseWorldPos - player.position).normalized;
+        Vector3 direction;
+        if (PlayerAim.Instance != null)
+        {
+            direction = PlayerAim.Instance.Direction;
+        }
+        else
+        {
+            if (Mouse.current == null) return;
+            Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
+            Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(mouseScreenPos);
+            mouseWorldPos.z = 0;
+            direction = (mouseWorldPos - player.position).normalized;
+        }
 
         transform.position = player.position + direction * radius;
 
@@ -68,3 +74,4 @@ public class CursorPointer : MonoBehaviour
         }
     }
 }
+
