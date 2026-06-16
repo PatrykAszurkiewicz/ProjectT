@@ -282,7 +282,6 @@ public class EnemyStats : CharacterStats
         // Destroy the enemy
         PerformDeath();
     }
-
     private void PerformDeath()
     {
         var gremlinController = GetComponent<GremlinController>();
@@ -297,24 +296,15 @@ public class EnemyStats : CharacterStats
 
         if (canDropEnergy)
         {
-            // Per-enemy override: if the prefab specifies a positive
-            // energyDropValue AND a non-negative drop chance, use those
-            // directly. Otherwise fall back to the stage-driven default
-            // table on EnergyDropManager. This keeps existing enemies
-            // unchanged (defaults are -1 / -1) while letting specific
-            // enemies like the Wolf guarantee a fixed drop (10 energy,
-            // one unit, 100% chance).
-            if (energyDropValue > 0 && energyDropChance >= 0f)
-            {
-                EnergyDropManager.TrySpawnEnergyDrop(transform.position, energyDropChance, energyDropValue);
-            }
-            else
-            {
-                EnergyDropManager.TrySpawnEnemyDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
-            }
+            // Augments 341 / 342 honour the per-enemy override (e.g. the Wolf's
+            // guaranteed drop) and add tower-kill bonuses where applicable.
+            int stageIdx = GameOrchestrator.Instance?.CurrentStageIndex ?? 0;
+            EnemyDropAugments.SpawnEnemyDrop(
+                transform.position, stageIdx, gameObject, energyDropChance, energyDropValue);
+
             // If this is a boss, also spawn the boss burst on top
             if (GetComponent<BaseBossStats>() != null)
-                EnergyDropManager.SpawnBossDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+                EnergyDropManager.SpawnBossDrop(transform.position, stageIdx);
         }
 
         if (healthBar != null)
@@ -324,13 +314,21 @@ public class EnemyStats : CharacterStats
         if (waveSpawner != null)
             waveSpawner.OnEnemyDeath();
 
+        // Augment 335 — Energy Tithe: flat energy when a tower made the kill.
+        TowerKillRewards.OnEnemyKilled(gameObject);
+
         if (EnergyManager.Instance != null)
         {
             EnergyManager.Instance.OnEnemyKilled(gameObject);
         }
 
+        // Clear tower-kill attribution so the lookup table doesn't grow.
+        TowerKillAttribution.Forget(gameObject);
+
         base.Die();
     }
+
+
 
     public float Damage
     {

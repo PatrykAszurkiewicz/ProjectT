@@ -1,17 +1,16 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// Single source of truth for "where is the player aiming". Mouse and gamepad both feed into this via the PlayerInput component.
-/// Two outputs, used by different weapon types:
-///   Direction  normalized absolute aim direction (right stick / mouse vector).
-///                  Used by directional weapons (melee, ranged, flamethrower, shield)
-///                  and the on-screen directional cursor. Snappy.
-///   WorldPoint a world position. For the mouse this is the cursor's world
-///                  position. For the gamepad it's a free-steered "virtual cursor"
-///                  reticle: the right stick MOVES it (like a trackball), it holds
-///                  position when the stick is released, and it's clamped to
-///                  reticleMaxRange of the player. Used by ground-target weapons
-///                  (mortar / smoke).
+// Single source of truth for "where is the player aiming". Mouse and gamepad both feed into this via the PlayerInput component.
+// Two outputs, used by different weapon types:
+//   Direction  normalized absolute aim direction (right stick / mouse vector).
+//                  Used by directional weapons (melee, ranged, flamethrower, shield)
+//                  and the on-screen directional cursor. Snappy.
+//   WorldPoint a world position. For the mouse this is the cursor's world
+//                  position. For the gamepad it's a free-steered "virtual cursor"
+//                  reticle: the right stick MOVES it (like a trackball), it holds
+//                  position when the stick is released, and it's clamped to
+//                  reticleMaxRange of the player. Used by ground-target weapons (mortar / smoke).
 [RequireComponent(typeof(PlayerInput))]
 public class PlayerAim : MonoBehaviour
 {
@@ -44,6 +43,7 @@ public class PlayerAim : MonoBehaviour
 
     private Camera cam;
     private PlayerInput playerInput;
+    private PlayerRef playerRef;
     private Vector2 lookInputVector = Vector2.zero;
 
     // Steered gamepad reticle state.
@@ -52,9 +52,23 @@ public class PlayerAim : MonoBehaviour
 
     void Awake()
     {
+        // NOTE: Instance is kept as a single-player fallback through Phase 2.
+        // It is removed in Phase 3 once every consumer reads its own sibling
+        // PlayerAim. In co-op the last-spawned player wins Instance, which is
+        // fine because the only Phase-2 consumer (the shared cursor) is still
+        // single until Phase 3.
         Instance = this;
-        cam = Camera.main;
+        playerRef = GetComponent<PlayerRef>();
+        cam = ResolveCamera();
         playerInput = GetComponent<PlayerInput>();
+    }
+
+    // Per-player camera: prefer this player's assigned camera (set by
+    // PlayerCameraController in co-op), fall back to Camera.main in single player.
+    private Camera ResolveCamera()
+    {
+        if (playerRef != null && playerRef.Camera != null) return playerRef.Camera;
+        return Camera.main;
     }
 
     void OnDestroy()
@@ -71,7 +85,10 @@ public class PlayerAim : MonoBehaviour
 
     void Update()
     {
-        if (cam == null) cam = Camera.main;
+        // Re-bind to this player's camera once PlayerCameraController assigns it
+        // (it may be null on the spawn frame). Single player keeps Camera.main.
+        if (playerRef != null && playerRef.Camera != null) cam = playerRef.Camera;
+        else if (cam == null) cam = ResolveCamera();
 
         if (playerInput != null)
             UsingGamepad = (playerInput.currentControlScheme == "Gamepad");

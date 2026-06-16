@@ -210,21 +210,9 @@ public class GrassCartoonOverlay : MonoBehaviour
             }
         }
 
-        //  Camera culling
-        Camera cam = Camera.main;
-        if (cam != null)
-        {
-            cam.ResetCullingMatrix();
-
-            float oversizeFactor = 10f;
-            if (cam.orthographic)
-            {
-                float h = cam.orthographicSize * oversizeFactor;
-                float w = h * cam.aspect;
-                Matrix4x4 proj = Matrix4x4.Ortho(-w, w, -h, h, cam.nearClipPlane, cam.farClipPlane);
-                cam.cullingMatrix = proj * cam.worldToCameraMatrix;
-            }
-        }
+        //  Camera culling — apply to EVERY active orthographic camera so the
+        //  baked grass meshes aren't frustum-culled in any split-screen view.
+        ApplyOversizedCullingToAllCameras();
 
         //Debug.Log($"[GrassCartoonOverlay] Baked {spawned} grass quads into {meshCount} band meshes " +
         //          $"(bandSize={bandSize}, {bands.Count} bands, {spriteMeta.Count} sprite(s)).");
@@ -330,10 +318,22 @@ public class GrassCartoonOverlay : MonoBehaviour
 
     void LateUpdate()
     {
-        Camera cam = Camera.main;
-        if (cam != null && cam.orthographic && containerGO != null)
+        if (containerGO != null)
+            ApplyOversizedCullingToAllCameras();
+    }
+
+    // Co-op: every active orthographic camera (both split-screen halves) needs
+    // the oversized culling matrix, otherwise the big combined grass meshes get
+    // frustum-culled in the camera that isn't Camera.main. Single player: this
+    // is just the one camera, same as before.
+    private void ApplyOversizedCullingToAllCameras()
+    {
+        const float oversizeFactor = 10f;
+        var cams = Camera.allCameras; // active+enabled cameras only
+        for (int i = 0; i < cams.Length; i++)
         {
-            float oversizeFactor = 10f;
+            var cam = cams[i];
+            if (cam == null || !cam.orthographic) continue;
             float h = cam.orthographicSize * oversizeFactor;
             float w = h * cam.aspect;
             Matrix4x4 proj = Matrix4x4.Ortho(-w, w, -h, h, cam.nearClipPlane, cam.farClipPlane);
@@ -378,9 +378,9 @@ public class GrassCartoonOverlay : MonoBehaviour
 
     void OnDestroy()
     {
-        Camera cam = Camera.main;
-        if (cam != null)
-            cam.ResetCullingMatrix();
+        var cams = Camera.allCameras;
+        for (int i = 0; i < cams.Length; i++)
+            if (cams[i] != null) cams[i].ResetCullingMatrix();
 
         CleanupContainer();
     }
@@ -399,3 +399,4 @@ public class GrassCartoonOverlay : MonoBehaviour
         public Material material;
     }
 }
+

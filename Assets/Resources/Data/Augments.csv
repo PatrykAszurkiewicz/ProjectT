@@ -332,3 +332,20 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 331,0,Powerful Parry,Player,Epic,"parry_damage_bonus=0.30,parry_damage_duration=5",Parried enemies take 30% more damage for 5 seconds,Resources/Sprites/Augments/331,Kuba,Player
 332,0,Longer Parry Window,Player,Epic,parry_window_frames=2,Parry window is 2 frames longer,Resources/Sprites/Augments/332,Kuba,Player
 333,0,Heal on Parry,Player,Epic,parry_heal_percent=0.03,Heal 3% of max health on a successful parry,Resources/Sprites/Augments/333,Kuba,Player
+334,0,Last Stand,Player,Legendary,"aug_health_threshold=0.30,aug_energy_bonus=0.30,aug_attack_bonus=0.30",While below 30% health gain 30% more energy and 30% more attack power,Resources/Sprites/Augments/334,Kuba,Player
+335,0,Energy Tithe,Tower,Rare,aug_energy_per_kill=2,Towers grant the player 2 energy for every enemy they kill,Resources/Sprites/Augments/335,Kuba,Global
+336,0,Rich Harvest,Energy,Common,globalResourceMultiplier*1.2,Enemies drop 20% more energy,Resources/Sprites/Augments/336,Kuba,Global
+337,0,Lucky Strikes,Energy,Common,aug_drop_chance_bonus=0.20,Enemies are 20% more likely to drop energy,Resources/Sprites/Augments/337,Kuba,Global
+338,0,Siege Doctrine,Synergy,Epic,"damage*0.6,attackCooldown*1.6667,aug_tower_damage_bonus=0.30,aug_tower_firerate_bonus=0.30",Lose 40% player melee damage and attack speed but all towers gain 30% damage and fire rate,Resources/Sprites/Augments/338,Kuba,Player
+339,0,Martyr's Bargain,Synergy,Epic,"maxHealth*0.5,towerBuildCost*0.6,repairCostPerClick*0.6",Halve player max health but towers cost 40% less to build and repair,Resources/Sprites/Augments/339,Kuba,"Player,Global,Global"
+340,0,Phalanx,Tower,Epic,"aug_firerate_per_tower=0.03,aug_range_per_tower=0.02",For every active tower all towers gain 3% fire rate and 2% range,Resources/Sprites/Augments/340,Kuba,Tower
+341,0,Marksman's Bounty,Tower,Rare,aug_tower_kill_chance_bonus=0.30,Enemies killed by a tower are 30% more likely to drop energy,Resources/Sprites/Augments/341,Kuba,Global
+342,0,Plunderer's Payload,Tower,Rare,aug_tower_kill_value_bonus=0.30,Enemies killed by a tower drop 30% more energy,Resources/Sprites/Augments/342,Kuba,Global
+343,0,Efficient Grid,Tower,Common,aug_tower_decay_mult=0.9,Tower energy decays 10% slower,Resources/Sprites/Augments/343,Kuba,Tower
+344,0,Phoenix Protocol,Tower,Legendary,aug_revives_per_stage=1,A random destroyed tower is rebuilt for free at the start of the next stage,Resources/Sprites/Augments/344,Kuba,Tower
+345,0,Overload Aura,Tower,Epic,aug_aoe_damage_mult=4.0,Generator towers deal damage around themselves,Resources/Sprites/Augments/345,Kuba,Tower
+346,0,Conscript's Sacrifice,Synergy,Rare,"damage*0.7,aug_tower_damage_bonus=0.30",Reduce player attack by 30% but increase all tower attack by 30%,Resources/Sprites/Augments/346,Kuba,Player
+347,0,Reckless Calibration,Tower,Rare,"tower_damage*1.15,aug_tower_decay_mult=1.1",Tower energy decays 10% faster but tower damage increases 15%,Resources/Sprites/Augments/347,Kuba,Tower
+348,0,Energy Attunement,Energy,Rare,aug_energy_gain_bonus=0.10,Increase energy received from all sources by 10%,Resources/Sprites/Augments/348,Kuba,Global
+
+

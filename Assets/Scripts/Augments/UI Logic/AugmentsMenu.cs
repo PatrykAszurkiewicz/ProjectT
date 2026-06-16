@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 using System.Collections.Generic;
 using TMPro;
 using System.Linq;
@@ -26,6 +27,43 @@ public class AugmentsMenu : MonoBehaviour
 
     [Header("Settings")]
     public int maxRerolls = 2;
+
+    [Header("Co-op (Phase 6)")]
+    [Tooltip("Which player this menu belongs to: 0 = Player 1, 1 = Player 2. " +
+             "Leave at -1 for a single-player / shared menu (mouse-driven, applies " +
+             "to player 0). Players spawn at runtime, so this is an INDEX — you " +
+             "cannot drag a runtime PlayerRef into the inspector.")]
+    public int boundPlayerIndex = -1;
+
+    // Resolve the bound player's PlayerRef at runtime (null if unbound / not spawned).
+    private PlayerRef BoundRef()
+    {
+        if (boundPlayerIndex < 0 || PlayerRegistry.Count == 0) return null;
+        return PlayerRegistry.Instance.Get(boundPlayerIndex);
+    }
+
+    // Phase 6: gamepad/keyboard navigation for this menu's bound player, so two
+    // viewport menus can be driven independently without a MultiplayerEventSystem.
+    private PlayerInput _boundInput;
+    private int _navSlot;
+
+    // In co-op the GameOrchestrator owns Time.timeScale / cursor / suppression
+    // (otherwise two menus saving & restoring it fight each other). In single
+    // player the menu manages it itself, exactly as before.
+    private bool CoopManaged => PlayerRegistry.Count > 1;
+
+    // The PlayerStats that should receive this menu's picks.
+    private PlayerStats Chooser()
+    {
+        var bound = BoundRef();
+        if (bound != null && bound.Stats != null) return bound.Stats;
+        if (PlayerRegistry.Count > 0)
+        {
+            var p0 = PlayerRegistry.Instance.Get(0);
+            if (p0 != null && p0.Stats != null) return p0.Stats;
+        }
+        return FindAnyObjectByType<PlayerStats>();
+    }
 
     [Header("Debug")]
     public bool debugMode = false;
@@ -59,6 +97,11 @@ public class AugmentsMenu : MonoBehaviour
 
     // State variables
     private bool isHidden = false;
+    // Saved host state so this menu nests correctly (e.g. opened from the
+    // pause menu) instead of forcing timeScale/cursor/input back to defaults.
+    private float prevTimeScale = 1f;
+    private bool prevCursorVisible;
+    private bool prevInputSuppressed;
     private bool isMenuActive = false;
     [System.NonSerialized]
 
@@ -100,11 +143,7 @@ public class AugmentsMenu : MonoBehaviour
         //if (forcedAugmentIDs == null)
         //    forcedAugmentIDs = new int[0];
 
-        if (forcedAugmentIDsList == null)
-            forcedAugmentIDsList = new List<int>();
-        InitializeArrays();
-        LoadSprites();
-        SetupUI();
+        EnsureInitialized();
 
         if (debugMode) Debug.Log("AugmentsMenu: Awake completed");
     }
@@ -137,6 +176,20 @@ public class AugmentsMenu : MonoBehaviour
 
         // Wait for AugmentRegistry to be ready
         StartCoroutine(WaitForRegistryAndGenerate());
+    }
+
+    // Full one-time init. Awake runs this, but an INACTIVE menu (co-op P2's
+    // reward menu starts hidden) never gets Awake — yet the orchestrator/button
+    // can still call ActivateAugments on it. So we also run this on activation.
+    private bool _initialized;
+    private void EnsureInitialized()
+    {
+        if (_initialized) return;
+        if (forcedAugmentIDsList == null) forcedAugmentIDsList = new List<int>();
+        InitializeArrays();
+        LoadSprites();
+        SetupUI();
+        _initialized = true;
     }
 
     private void InitializeArrays()
@@ -283,6 +336,17 @@ public class AugmentsMenu : MonoBehaviour
             return;
         }
 
+        // Defensive: a co-op duplicate (or a menu enabled before its Awake ran
+        // InitializeArrays) can reach here with the per-slot arrays unsized. Build
+        // them now so we never index a null array.
+        if (currentAugmentIDs == null || currentAugmentIDs.Length != augmentImages.Length ||
+            currentSelectedRarities == null || currentSelectedRarities.Length != augmentImages.Length ||
+            rerollsLeft == null || rerollsLeft.Length != augmentImages.Length)
+        {
+            InitializeArrays();
+        }
+        if (currentAugmentIDs == null) return; // InitializeArrays bailed (no images)
+
         for (int i = 0; i < augmentImages.Length; i++)
         {
             AugmentWithRarity result;
@@ -376,6 +440,11 @@ public class AugmentsMenu : MonoBehaviour
             331, // Powerful Parry
             332, // Longer Parry Window
             333, // Heal on Parry
+            // One-time tower augment
+            344, // Phoenix Protocol (revive recurs every stage)
+            334, // Last Stand when player health is below 30%
+            339, // Reduces player Max Health by 50%. In return, all towers cost 40% less energy/resources to build and repair
+            345, // Generator tower deals additional damage around itself equal to the energy generated
         };
 
         if (AugmentRegistry.Instance != null)
@@ -404,7 +473,9 @@ public class AugmentsMenu : MonoBehaviour
             };
             foreach (var (augId, slot) in unlockMap)
             {
-                if (WeaponUnlockRegistry.Instance.IsUnlocked(slot))
+                // Phase 5/6: check THIS menu's player's pool, not a global one.
+                int chooserIdx = boundPlayerIndex >= 0 ? boundPlayerIndex : 0;
+                if (WeaponUnlockRegistry.Instance.IsUnlocked(slot, chooserIdx))
                     excluded.Add(augId);
             }
         }
@@ -419,7 +490,9 @@ public class AugmentsMenu : MonoBehaviour
         // Update image
         if (augmentImages[slotIndex] != null)
         {
-            Sprite sprite = System.Array.Find(allSprites, s => s.name == augment.ID.ToString());
+            Sprite sprite = allSprites != null
+                ? System.Array.Find(allSprites, s => s != null && s.name == augment.ID.ToString())
+                : null;
             if (sprite != null)
             {
                 augmentImages[slotIndex].sprite = sprite;
@@ -470,19 +543,41 @@ public class AugmentsMenu : MonoBehaviour
     // ===== PUBLIC INTERFACE =====
     public void ActivateAugments()
     {
-        //Debug.Log($"🎮 [MENU] ActivateAugments called at {System.DateTime.Now:HH:mm:ss.fff}");
+        // Mode routing (Phase 6): the single-player menu (boundPlayerIndex -1) and
+        // the per-player menus (0/1) must never both open.
+        bool coopMode = PlayerRegistry.Count > 1;
+        if (coopMode && boundPlayerIndex < 0)
+        {
+            // This is the single menu, but we're in co-op (e.g. a debug button wired
+            // to it). Hand off to the per-player menus and don't open this one.
+            foreach (var m in FindObjectsByType<AugmentsMenu>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (m != null && m != this && m.boundPlayerIndex >= 0)
+                    m.ActivateAugments();
+            return;
+        }
+        if (!coopMode && boundPlayerIndex >= 0) return;            // per-player menu in single player
+        if (boundPlayerIndex >= 0 && BoundRef() == null) return;   // bound player not spawned
+
+        EnsureInitialized();   // an inactive (co-op) menu never ran Awake
 
         if (!isMenuActive)
         {
             augmentsMenu.SetActive(true);
-            Cursor.visible = true;
-            Time.timeScale = 0f;
+            if (!CoopManaged)
+            {
+                prevCursorVisible = Cursor.visible;
+                prevTimeScale = Time.timeScale;
+                prevInputSuppressed = PlayerAttack.InputSuppressed;
+                Cursor.visible = true;
+                Time.timeScale = 0f;
+                PlayerAttack.InputSuppressed = true;
+            }
             isMenuActive = true;
-            PlayerAttack.InputSuppressed = true;
 
             // Force regeneration of augments each time menu opens
-            //Debug.Log("🔄 [MENU] Forcing augment regeneration");
             GenerateInitialAugments();
+            SetupNavHighlight();
 
             if (debugMode) Debug.Log("AugmentsMenu: Menu activated");
         }
@@ -557,17 +652,21 @@ public class AugmentsMenu : MonoBehaviour
         // Get the selected rarity for this slot
         string selectedRarity = GetCurrentAugmentRarity(slotIndex);
 
-        // Pass both ID and rarity to the registry
-        bool success = ApplyAugmentNew(chosenId, selectedRarity);
+        // Route this pick to the chooser (Phase 5). Single menu still in Phase 5;
+        // Phase 6 binds one menu per player.
+        PlayerStats chooser = Chooser();
+
+        // Pass ID, rarity and chooser to the registry
+        bool success = ApplyAugmentNew(chosenId, selectedRarity, chooser);
 
         if (success)
         {
             if (debugMode) Debug.Log($"Successfully applied {selectedRarity} augment {chosenId}, closing menu");
 
-            // znajdź handler augmentów i uruchom efekt
+            // znajdź handler augmentów i uruchom efekt (na wybierającego gracza)
             var handler = FindAnyObjectByType<AugmentEffectHandler>();
             if (handler != null)
-                handler.ApplyAugmentEffect(chosenId);
+                handler.ApplyAugmentEffect(chosenId, chooser);
 
             CloseMenu();
         }
@@ -583,13 +682,18 @@ public class AugmentsMenu : MonoBehaviour
 
     }
 
-    private bool ApplyAugmentNew(int chosenId, string selectedRarity)
+    private bool ApplyAugmentNew(int chosenId, string selectedRarity, PlayerStats chooser)
     {
         if (AugmentRegistry.Instance != null)
         {
-            bool success = AugmentRegistry.Instance.ApplyAugment(chosenId, selectedRarity);
+            bool success = AugmentRegistry.Instance.ApplyAugment(chosenId, selectedRarity, chooser);
             if (success)
-                RunPersistence.Instance?.RecordAugment(chosenId, selectedRarity);
+            {
+                int chooserIdx = 0;
+                var pref = chooser != null ? chooser.GetComponent<PlayerRef>() : null;
+                if (pref != null) chooserIdx = pref.PlayerIndex;
+                RunPersistence.Instance?.RecordAugment(chosenId, selectedRarity, chooserIdx);
+            }
             if (success && debugMode)
             {
                 Debug.Log($"Applied {selectedRarity} augment ID: {chosenId}");
@@ -603,13 +707,117 @@ public class AugmentsMenu : MonoBehaviour
         }
     }
 
+    // ── Phase 6: per-player pad/keyboard navigation ──────────────────────
+    // Only menus explicitly bound to a player navigate this way; an unbound
+    // (single-player) menu keeps its mouse-only behaviour untouched.
+    private void Update()
+    {
+        if (!isMenuActive || boundPlayerIndex < 0) return;
+
+        if (_boundInput == null)
+        {
+            var bound = BoundRef();
+            if (bound != null)
+                _boundInput = bound.GetComponent<PlayerInput>()
+                              ?? bound.GetComponentInChildren<PlayerInput>();
+        }
+
+        var pad = BoundPad();
+        var kb = BoundKeyboard();
+
+        int dir = 0;
+        if (pad != null)
+        {
+            if (pad.dpad.right.wasPressedThisFrame) dir = +1;
+            else if (pad.dpad.left.wasPressedThisFrame) dir = -1;
+        }
+        if (dir == 0 && kb != null)
+        {
+            if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame) dir = +1;
+            else if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame) dir = -1;
+        }
+        if (dir != 0) MoveNav(dir);
+
+        bool confirm = (pad != null && pad.buttonSouth.wasPressedThisFrame)
+                    || (kb != null && kb.enterKey.wasPressedThisFrame);
+        if (confirm) ChooseAugment(_navSlot);
+
+        bool reroll = (pad != null && pad.buttonWest.wasPressedThisFrame)
+                   || (kb != null && kb.rKey.wasPressedThisFrame);
+        if (reroll) Reroll(_navSlot);
+    }
+
+    private Gamepad BoundPad()
+    {
+        if (_boundInput == null) return null;
+        foreach (var d in _boundInput.devices) if (d is Gamepad g) return g;
+        return null;
+    }
+
+    private Keyboard BoundKeyboard()
+    {
+        if (_boundInput == null) return null;
+        foreach (var d in _boundInput.devices) if (d is Keyboard k) return k;
+        return null;
+    }
+
+    private void SetupNavHighlight()
+    {
+        _navSlot = FirstValidSlot();
+        ApplyNavHighlight();
+    }
+
+    private int FirstValidSlot()
+    {
+        if (currentAugmentIDs == null) return 0;
+        for (int i = 0; i < currentAugmentIDs.Length; i++)
+            if (currentAugmentIDs[i] != -1) return i;
+        return 0;
+    }
+
+    private void MoveNav(int dir)
+    {
+        if (currentAugmentIDs == null || currentAugmentIDs.Length == 0) return;
+        int n = currentAugmentIDs.Length;
+        for (int step = 0; step < n; step++)
+        {
+            _navSlot = (_navSlot + dir + n) % n;
+            if (currentAugmentIDs[_navSlot] != -1) break;
+        }
+        ApplyNavHighlight();
+    }
+
+    private void ApplyNavHighlight()
+    {
+        if (selectButtons == null) return;
+        for (int i = 0; i < selectButtons.Length; i++)
+        {
+            if (selectButtons[i] == null) continue;
+            selectButtons[i].transform.localScale =
+                (i == _navSlot) ? Vector3.one * 1.12f : Vector3.one;
+        }
+    }
+
+    private void ClearNavHighlight()
+    {
+        if (selectButtons == null) return;
+        for (int i = 0; i < selectButtons.Length; i++)
+            if (selectButtons[i] != null) selectButtons[i].transform.localScale = Vector3.one;
+    }
+
     private void CloseMenu()
     {
         augmentsMenu.SetActive(false);
-        Cursor.visible = false;
-        Time.timeScale = 1f;
+        // Single player restores the host state here. In co-op the orchestrator
+        // owns it (it waits for BOTH menus before un-pausing).
+        if (!CoopManaged)
+        {
+            Cursor.visible = prevCursorVisible;
+            Time.timeScale = prevTimeScale;
+            PlayerAttack.InputSuppressed = prevInputSuppressed;
+        }
         isMenuActive = false;
-        PlayerAttack.InputSuppressed = false;
+        ClearNavHighlight();
 
         if (debugMode) Debug.Log("AugmentsMenu: Menu closed");
     }
@@ -903,12 +1111,13 @@ public class AugmentsMenu : MonoBehaviour
 
         if (weightsMatch && colorsMatch)
         {
-            Debug.Log("✅ Rarity system integration is working correctly!");
+            Debug.Log("Rarity system integration is working correctly");
         }
         else
         {
-            Debug.LogError("❌ Rarity system integration has issues!");
+            Debug.LogError("Rarity system integration has issues");
         }
     }
 }
+
 

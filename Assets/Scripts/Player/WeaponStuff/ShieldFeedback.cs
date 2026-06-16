@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 public static class ShieldFeedback
 {
-    // ── Tuning ──
+    //  Tuning 
 
     // Block
     private const float BLOCK_SHAKE_INTENSITY = 0.15f;

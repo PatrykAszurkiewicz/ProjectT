@@ -542,10 +542,15 @@ public class EnemyController : MonoBehaviour
         // acquire the player as a target. Fall through to towers / core.
         if (!PlayerCloakEffect.IsActive)
         {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player && Vector2.Distance(transform.position, player.transform.position) < detectRange)
+            // Co-op: acquire the nearest alive player within detectRange. The
+            // global cloak gate above already handles invisibility, so we pass
+            // includeCloaked:true and let NearestAlive pick purely by range.
+            // With one player this is identical to the old single lookup.
+            var nearestPlayer = PlayerRegistry.Instance.NearestAlive(
+                transform.position, detectRange, includeCloaked: true);
+            if (nearestPlayer != null)
             {
-                currentTarget = player.transform;
+                currentTarget = nearestPlayer.transform;
                 return;
             }
         }
@@ -724,6 +729,12 @@ public class EnemyController : MonoBehaviour
     // Called by ShieldSystem.TryBlockOrParry().
 
     public bool IsInParryWindow(float shieldRaiseTime)
+        => IsInParryWindow(shieldRaiseTime, 0);
+
+    // Phase 8: the window-widening augment (332) is read for the PARRYING player,
+    // so P1's "Longer Parry Window" only widens P1's parries. The old 1-arg form
+    // above routes here with player 0 (single-player back-compat).
+    public bool IsInParryWindow(float shieldRaiseTime, int parryingIndex)
     {
         if (!isAttackingCycle || attackCycleStartTime < 0f) return false;
         if (stats == null || stats.enemyData == null) return false;
@@ -751,7 +762,7 @@ public class EnemyController : MonoBehaviour
         // Clamp the earlier edge at frame 0 — the parry window can't open before
         // the attack animation begins, so the augment's benefit is naturally
         // capped at this enemy's parryFrameStart (matches ParryIndicator).
-        int effParryStart = Mathf.Max(0, pStart - ParryUpgrades.ExtraParryFrames);
+        int effParryStart = Mathf.Max(0, pStart - ParryUpgrades.ExtraParryFramesFor(parryingIndex));
         float parryWindowStart = attackCycleStartTime + effParryStart * animSpeed;
         float parryWindowEnd = attackCycleStartTime + (pEnd + 1) * animSpeed;
 
@@ -1046,3 +1057,4 @@ public class EnemyController : MonoBehaviour
     }
 
 }
+

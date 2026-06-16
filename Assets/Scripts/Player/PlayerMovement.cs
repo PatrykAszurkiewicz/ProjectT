@@ -15,9 +15,9 @@ public class PlayerMovement : MonoBehaviour
 
     bool isSprinting = false;
 
-    /// While true, PlayerMovement yields control of the Rigidbody2D to whoever
-    /// set this flag (e.g. the grappling hook). FixedUpdate will not call
-    /// MovePosition, so external systems can move the player freely.
+    // While true, PlayerMovement yields control of the Rigidbody2D to whoever
+    // set this flag (e.g. the grappling hook). FixedUpdate will not call
+    // MovePosition, so external systems can move the player freely.
     public bool IsBeingGrappled { get; set; } = false;
 
     private bool isDashing = false;
@@ -139,12 +139,11 @@ public class PlayerMovement : MonoBehaviour
         UpdateAnimationState();
     }
 
-    /// <summary>
-    /// Update the player's sortingOrder based on Y position every frame.
-    /// Same formula as GrassCartoonOverlay baked values:
-    ///   sortingOrder = sortOrderBase + round(-(y + sortYOffset) * sortPrecision)
-    /// This is 1 integer assignment per frame on 1 object — zero performance cost.
-    /// </summary>
+
+    // Update the player's sortingOrder based on Y position every frame.
+    // Same formula as GrassCartoonOverlay baked values:
+    //   sortingOrder = sortOrderBase + round(-(y + sortYOffset) * sortPrecision)
+    // This is 1 integer assignment per frame on 1 object — zero performance cost.
     void LateUpdate()
     {
         if (spriteRenderer != null)
@@ -255,6 +254,30 @@ public class PlayerMovement : MonoBehaviour
         ));
     }
 
+    // Co-op: Dwned freeze + visual
+    // Additive and gated: DownedFreeze defaults false and is only ever set by the
+    // co-op PlayerDownedState component (which only acts when Count > 1), so the
+    // single-player movement path is byte-identical. The component is kept ENABLED
+    // while downed (so the prone-animation coroutine keeps running); FixedUpdate
+    // just bails on DownedFreeze, exactly like the grapple case above.
+    public bool DownedFreeze { get; private set; }
+
+    /// <summary>Enter the downed look: freeze movement and play the prone/dying frames.</summary>
+    public void EnterDownedVisual()
+    {
+        DownedFreeze = true;
+        PlayDeathAnimation();
+    }
+
+    /// <summary>Leave the downed look: unfreeze and return to the idle animation.</summary>
+    public void ExitDownedVisual()
+    {
+        DownedFreeze = false;
+        isDying = false;                                // clear the death lock
+        currentAnimationState = (AnimationState)(-1);   // force the next state to re-play
+        PlayIdleAnimation();
+    }
+
     public void StartMeleeAttack()
     {
         isMeleeAttacking = true;
@@ -290,7 +313,9 @@ public class PlayerMovement : MonoBehaviour
     {
         // Grappling hook owns position while active — bail out completely so
         // we don't fight it with MovePosition or input-based movement.
-        if (IsBeingGrappled)
+        // Phase 7 (co-op): DownedFreeze bails the same way while this player is
+        // downed. Default false → single player is unaffected.
+        if (IsBeingGrappled || DownedFreeze)
             return;
 
         if (isDashing)

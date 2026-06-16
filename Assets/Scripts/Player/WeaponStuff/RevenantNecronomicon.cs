@@ -25,6 +25,7 @@ public class RevenantNecronomiconSystem
     private readonly Weapon weapon;
     private readonly WeaponData data;
     private readonly Transform playerTransform;
+    private readonly int playerIndex; // Phase 8: per-player cooldown reduction
 
     // The currently-active aura (null when the book is idle). This is a
     // transient scene object; only the TIMERS need to persist across swaps.
@@ -48,6 +49,10 @@ public class RevenantNecronomiconSystem
         this.playerTransform = playerStats != null
             ? playerStats.transform
             : (weapon.transform.parent ?? weapon.transform);
+
+        // Phase 8: which player owns this book, for per-player cooldown reduction.
+        var ownerRef = weapon.GetComponentInParent<PlayerRef>();
+        this.playerIndex = ownerRef != null ? ownerRef.PlayerIndex : 0;
 
         // Resolve (or create) the persistent cooldown store on the player.
         store = PlayerToolCooldownStore.GetOrCreate(weapon);
@@ -112,9 +117,9 @@ public class RevenantNecronomiconSystem
     // Post-aura recharge length. 
     private float BookCooldownDuration()
     {
-        if (data.bookCooldown > 0f) return CooldownModifier.Apply(data.bookCooldown);
-        if (data.attackCooldown > 0f) return CooldownModifier.Apply(data.attackCooldown);
-        return CooldownModifier.Apply(5f); // default recharge
+        if (data.bookCooldown > 0f) return CooldownModifier.Apply(data.bookCooldown, playerIndex);
+        if (data.attackCooldown > 0f) return CooldownModifier.Apply(data.attackCooldown, playerIndex);
+        return CooldownModifier.Apply(5f, playerIndex); // default recharge
     }
 
     // Called from Weapon.ExecuteToolAttack() when the player right-clicks.
@@ -1042,5 +1047,4 @@ public class SoulBurstVFX : MonoBehaviour
         return _cachedMote;
     }
 }
-
 

@@ -1985,7 +1985,8 @@ public class RarityAwareAugmentEffect : IAugmentEffect
             // PlayerStats has no matching fields, so skip them before they reach the
             // StatApplicator (avoids the misleading scaling log and the no-op warnings).
             if (!string.IsNullOrEmpty(baseMod.StatName) &&
-                baseMod.StatName.StartsWith("parry_", System.StringComparison.OrdinalIgnoreCase))
+                (baseMod.StatName.StartsWith("parry_", System.StringComparison.OrdinalIgnoreCase) ||
+                 baseMod.StatName.StartsWith("aug_", System.StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
@@ -2039,7 +2040,8 @@ public class RarityAwareAugmentEffect : IAugmentEffect
         // values are read raw from the CSV by AugmentEffectHandler. This guard is
         // defense-in-depth in case a "parry_*" stat ever flows through here.
         if (!string.IsNullOrEmpty(statName) &&
-            statName.StartsWith("parry_", System.StringComparison.OrdinalIgnoreCase))
+            (statName.StartsWith("parry_", System.StringComparison.OrdinalIgnoreCase) ||
+             statName.StartsWith("aug_", System.StringComparison.OrdinalIgnoreCase)))
         {
             return baseValue;
         }
@@ -2317,8 +2319,51 @@ public class AugmentRegistry : MonoBehaviour
     private Dictionary<int, AugmentData> augmentDatabase = new Dictionary<int, AugmentData>();
     private List<int> appliedAugments = new List<int>();
 
+    // Phase 5 (co-op): per-player applied sets, keyed by PlayerIndex. The global
+    // `appliedAugments` above is kept for tower re-application + save/replay; these
+    // per-player lists feed the per-player stat panel / tooltip so each player sees
+    // *their own* picks. Single player only ever fills index 0 → identical to before.
+    private readonly Dictionary<int, List<int>> appliedByPlayer = new Dictionary<int, List<int>>();
+
+    private void RecordApplied(int augmentID, PlayerStats chooser)
+    {
+        appliedAugments.Add(augmentID);
+        int idx = ChooserIndex(chooser);
+        if (!appliedByPlayer.TryGetValue(idx, out var list))
+        {
+            list = new List<int>();
+            appliedByPlayer[idx] = list;
+        }
+        list.Add(augmentID);
+    }
+
+    // Resolve the chooser's player index (0 in single player / for a null chooser).
+    private int ChooserIndex(PlayerStats chooser)
+    {
+        if (chooser == null) return 0;
+        var pref = chooser.GetComponent<PlayerRef>();
+        return pref != null ? pref.PlayerIndex : 0;
+    }
+
+    // The default chooser when a caller doesn't specify one (single-player path,
+    // save-replay re-application): player 0, falling back to the first PlayerStats.
+    private PlayerStats ResolveDefaultChooser()
+    {
+        if (PlayerRegistry.Count > 0)
+        {
+            var p0 = PlayerRegistry.Instance.Get(0);
+            if (p0 != null && p0.Stats != null) return p0.Stats;
+        }
+        return FindFirstObjectByType<PlayerStats>();
+    }
+
     // Events
     public System.Action<AugmentData> OnAugmentApplied;
+
+    // Phase 5/6 (co-op): like OnAugmentApplied but also carries the chooser's
+    // player index, so per-player systems (the weapon unlock pool) know WHO
+    // unlocked. Single player always passes index 0.
+    public System.Action<AugmentData, int> OnAugmentAppliedByPlayer;
     public System.Action OnDatabaseLoaded;
 
     [ContextMenu("Find Broken Priority 0 Augments")]
@@ -2670,8 +2715,15 @@ public class AugmentRegistry : MonoBehaviour
         return ApplyAugment(augmentID, "Common"); // Default to Common rarity
     }
 
-    // Rarity-aware method
+    // Rarity-aware method — resolves the default chooser (player 0) and forwards.
     public bool ApplyAugment(int augmentID, string selectedRarity)
+    {
+        return ApplyAugment(augmentID, selectedRarity, ResolveDefaultChooser());
+    }
+
+    // Phase 5: chooser-aware apply. `chooser` is the player who picked the augment;
+    // Player/Weapon effects route to them, Tower/Enemy/Global stay shared.
+    public bool ApplyAugment(int augmentID, string selectedRarity, PlayerStats chooser)
     {
         if (!augmentDatabase.TryGetValue(augmentID, out AugmentData augmentData))
         {
@@ -2691,7 +2743,7 @@ public class AugmentRegistry : MonoBehaviour
             //Debug.Log($"[AUGMENT] Detected multi-target synergy augment: {augmentData.Name}");
 
             // Create a target with BOTH player and tower
-            AugmentTarget target = CreateTargetForAugment(augmentData);
+            AugmentTarget target = CreateTargetForAugment(augmentData, chooser);
 
             if (target == null || !rarityEffect.CanApplyTo(target))
             {
@@ -2700,7 +2752,7 @@ public class AugmentRegistry : MonoBehaviour
             }
 
             rarityEffect.Apply(target);
-            appliedAugments.Add(augmentID);
+            RecordApplied(augmentID, chooser);
 
             if (debugMode)
             {
@@ -2708,17 +2760,18 @@ public class AugmentRegistry : MonoBehaviour
             }
 
             OnAugmentApplied?.Invoke(augmentData);
+            OnAugmentAppliedByPlayer?.Invoke(augmentData, ChooserIndex(chooser));
             return true;
         }
 
         // Special handling for tower-only augments
         if (augmentData.AffectsTower && !augmentData.AffectsPlayer)
         {
-            return ApplyTowerAugment(augmentID, augmentData, rarityEffect);
+            return ApplyTowerAugment(augmentID, augmentData, rarityEffect, chooser);
         }
 
         // Logic for non-tower augments
-        AugmentTarget target2 = CreateTargetForAugment(augmentData);
+        AugmentTarget target2 = CreateTargetForAugment(augmentData, chooser);
         if (target2 == null || !rarityEffect.CanApplyTo(target2))
         {
             Debug.LogError($"AugmentRegistry: Cannot apply augment {augmentID} to current target");
@@ -2726,7 +2779,7 @@ public class AugmentRegistry : MonoBehaviour
         }
 
         rarityEffect.Apply(target2);
-        appliedAugments.Add(augmentID);
+        RecordApplied(augmentID, chooser);
 
         if (debugMode)
         {
@@ -2734,10 +2787,11 @@ public class AugmentRegistry : MonoBehaviour
         }
 
         OnAugmentApplied?.Invoke(augmentData);
+        OnAugmentAppliedByPlayer?.Invoke(augmentData, ChooserIndex(chooser));
         return true;
     }
 
-    private bool ApplyTowerAugment(int augmentID, AugmentData augmentData, IAugmentEffect effect)
+    private bool ApplyTowerAugment(int augmentID, AugmentData augmentData, IAugmentEffect effect, PlayerStats chooser)
     {
         var allTowers = UnityEngine.Object.FindObjectsByType<Tower>(FindObjectsSortMode.None);
 
@@ -2775,8 +2829,9 @@ public class AugmentRegistry : MonoBehaviour
             //Debug.Log($"Applied tower augment '{augmentData.Name}' to {successCount}/{allTowers.Length} existing towers");
         }
 
-        appliedAugments.Add(augmentID);
+        RecordApplied(augmentID, chooser);
         OnAugmentApplied?.Invoke(augmentData);
+        OnAugmentAppliedByPlayer?.Invoke(augmentData, ChooserIndex(chooser));
 
         //Debug.Log($"Tower augment '{augmentData.Name}' will now apply to all future towers");
         return true;
@@ -2869,17 +2924,27 @@ public class AugmentRegistry : MonoBehaviour
                statName.StartsWith("GLOBAL_");
     }
 
+    // Back-compat wrapper — resolves the default chooser (player 0).
     private AugmentTarget CreateTargetForAugment(AugmentData augment)
+        => CreateTargetForAugment(augment, ResolveDefaultChooser());
+
+    private AugmentTarget CreateTargetForAugment(AugmentData augment, PlayerStats chooser)
     {
         //Debug.Log($"[CreateTargetForAugment] Augment={augment.Name}, TargetTypes={augment.TargetTypes}");
 
         var target = new AugmentTarget(null as PlayerStats);
 
+        // Player + Weapon route to the CHOOSER; fall back to the first found if the
+        // chooser is somehow null (keeps single-player behaviour intact).
         if (augment.AffectsPlayer)
-            target.Player = FindFirstObjectByType<PlayerStats>();
+            target.Player = chooser != null ? chooser : FindFirstObjectByType<PlayerStats>();
 
         if (augment.AffectsWeapon)
-            target.Weapon = FindFirstObjectByType<Weapon>()?.GetWeaponData();
+        {
+            Weapon w = chooser != null ? chooser.GetComponentInChildren<Weapon>() : null;
+            if (w == null) w = FindFirstObjectByType<Weapon>();
+            target.Weapon = w != null ? w.GetWeaponData() : null;
+        }
 
         // Don't require actual enemy for global enemy stat modifiers
         if (augment.AffectsEnemy)
@@ -2963,6 +3028,10 @@ public class AugmentRegistry : MonoBehaviour
     public List<AugmentData> GetAugmentsByRarity(string rarity) =>
         augmentDatabase.Values.Where(a => a.Rarity.Equals(rarity, System.StringComparison.OrdinalIgnoreCase)).ToList();
     public List<int> GetAppliedAugments() => new List<int>(appliedAugments);
+
+    // Phase 5: per-player applied set (copy). Empty if that player picked nothing.
+    public List<int> GetAppliedAugments(int playerIndex) =>
+        appliedByPlayer.TryGetValue(playerIndex, out var list) ? new List<int>(list) : new List<int>();
     public bool IsAugmentApplied(int id) => appliedAugments.Contains(id);
     public bool HasImplementation(int id) => registeredEffects.ContainsKey(id);
     public RarityConfiguration[] GetRarityConfigurations() => rarityConfigurations;

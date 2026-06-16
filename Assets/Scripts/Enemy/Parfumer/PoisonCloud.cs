@@ -43,20 +43,20 @@ public class PoisonCloud : MonoBehaviour
 
     private void ApplyPoisonToPlayerIfInside()
     {
-        GameObject playerGO = GameObject.FindGameObjectWithTag("Player");
-        if (playerGO == null) return;
+        // Co-op: poison every alive player standing in the cloud (two players in
+        // the same cloud should BOTH be poisoned). AllAliveInRadius filters by
+        // distance + dead. PoisonStatusEffect is already per-player (it lives on
+        // the player object), so each player keeps their own DoT. With one player
+        // this is identical to the old single lookup.
+        foreach (var stats in PlayerRegistry.Instance.AllAliveInRadius(transform.position, radius))
+        {
+            if (stats == null) continue;
+            var go = stats.gameObject;
 
-        Vector2 toPlayer = (Vector2)playerGO.transform.position - (Vector2)transform.position;
-        if (toPlayer.sqrMagnitude > radius * radius) return;
-
-        var stats = playerGO.GetComponent<CharacterStats>();
-        if (stats == null || stats.IsDead()) return;
-
-        // Apply or refresh the lingering poison. One PoisonStatusEffect per
-        // player; overlapping clouds refresh the same one.
-        var poison = playerGO.GetComponent<PoisonStatusEffect>();
-        if (poison == null) poison = playerGO.AddComponent<PoisonStatusEffect>();
-        poison.Refresh(poisonDuration, poisonDamagePerSecond, attacker);
+            var poison = go.GetComponent<PoisonStatusEffect>();
+            if (poison == null) poison = go.AddComponent<PoisonStatusEffect>();
+            poison.Refresh(poisonDuration, poisonDamagePerSecond, attacker);
+        }
     }
 
 #if UNITY_EDITOR
@@ -67,3 +67,4 @@ public class PoisonCloud : MonoBehaviour
     }
 #endif
 }
+

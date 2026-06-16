@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-// ── CHEST PATH INDICATOR ────────────────────────────────────────────────────────
+//  CHEST PATH INDICATOR 
 // A standalone twin of GremlinPathIndicator that lays footprints from the player to
 // the nearest LoreChest. Same footprint mechanics and grass Y-sort, but the prints
 // are TINTED (light grey by default) so the chest trail reads differently from the

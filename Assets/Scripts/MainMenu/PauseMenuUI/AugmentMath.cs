@@ -1,29 +1,39 @@
 using System;
 
-/// <summary>
-/// Computes the combined augment multiplier for a given stat / target.
-///
-/// This was previously buried inside StatsUI. It's pulled out into a static
-/// helper so the panel UI and the tooltip (StatWithAugmentInfo) both use the
-/// exact same logic — no drift between what the column shows and what the
-/// hover tooltip explains.
-///
-/// Only Multiply / Percentage modifications fold into a multiplier. Additive
-/// modifications can't be expressed as a multiplier without the base value,
-/// so they're ignored here (the detailed panel shows raw values anyway).
-/// </summary>
+
+// Computes the combined augment multiplier for a given stat / target.
+// Only Multiply / Percentage modifications fold into a multiplier. Additive
+// modifications can't be expressed as a multiplier without the base value,
+// so they're ignored here (the detailed panel shows raw values anyway).
+
 public static class AugmentMath
 {
-    /// <summary>
-    /// Returns the product of every applied augment modification that targets
-    /// (statName, targetType). Returns 1.0 when nothing matches.
-    /// </summary>
+
+    // Returns the product of every applied augment modification that targets
+    // (statName, targetType). Returns 1.0 when nothing matches.
+
     public static float Multiplier(string statName, string targetType)
     {
         if (AugmentRegistry.Instance == null) return 1f;
+        return MultiplierFrom(statName, targetType,
+                              AugmentRegistry.Instance.GetAppliedAugments());
+    }
+
+    // Per-player overload. Folds only the augments that the given
+    // player chose, so each player's stat panel / tooltip reflects their picks.
+
+    public static float Multiplier(string statName, string targetType, int playerIndex)
+    {
+        if (AugmentRegistry.Instance == null) return 1f;
+        return MultiplierFrom(statName, targetType,
+                              AugmentRegistry.Instance.GetAppliedAugments(playerIndex));
+    }
+
+    private static float MultiplierFrom(string statName, string targetType, System.Collections.Generic.List<int> applied)
+    {
+        if (AugmentRegistry.Instance == null || applied == null) return 1f;
 
         float total = 1f;
-        var applied = AugmentRegistry.Instance.GetAppliedAugments();
 
         foreach (int id in applied)
         {
@@ -43,7 +53,7 @@ public static class AugmentMath
                     case StatModification.ModificationType.Percentage:
                         total *= (1f + mod.Value / 100f);
                         break;
-                    // Add: skipped — needs the base value to become a multiplier.
+                        // Add: skipped — needs the base value to become a multiplier.
                 }
             }
         }
@@ -51,10 +61,8 @@ public static class AugmentMath
         return total;
     }
 
-    /// <summary>
-    /// Case-insensitive stat-name match with a few friendly aliases
-    /// (health/maxHealth, speed/moveSpeed).
-    /// </summary>
+    // Case-insensitive stat-name match with a few friendly aliases
+    // (health/maxHealth, speed/moveSpeed).
     public static bool StatMatches(string modStatName, string targetStatName)
     {
         if (string.IsNullOrEmpty(modStatName) || string.IsNullOrEmpty(targetStatName))
@@ -74,3 +82,4 @@ public static class AugmentMath
         return false;
     }
 }
+

@@ -406,10 +406,42 @@ public class Weapon : MonoBehaviour
         hitEnemies.Clear();
     }
 
+    //  CO-OP: resolve THIS player's aim / camera / cursor (siblings) instead of
+    //  the global singletons. Falls back to mouse + Camera.main in single player.
+    private PlayerAim _aim;
+    private PlayerRef _playerRef;
+
+    private Camera OwnerCamera =>
+        (_playerRef != null && _playerRef.Camera != null) ? _playerRef.Camera : Camera.main;
+
+    private CursorManager CM => CursorManager.For(_playerRef);
+
+    private Vector2 AimDirection()
+    {
+        if (_aim != null) return _aim.Direction;
+        var cam = OwnerCamera;
+        var mouse = UnityEngine.InputSystem.Mouse.current;
+        if (cam != null && mouse != null)
+            return ((Vector2)(cam.ScreenToWorldPoint(mouse.position.ReadValue()) - transform.position)).normalized;
+        return Vector2.right;
+    }
+
+    private Vector3 AimWorldPoint()
+    {
+        if (_aim != null) return _aim.WorldPoint;
+        var cam = OwnerCamera;
+        var mouse = UnityEngine.InputSystem.Mouse.current;
+        if (cam != null && mouse != null)
+            return cam.ScreenToWorldPoint(mouse.position.ReadValue());
+        return transform.position;
+    }
+
     //  INITIALIZATION
     private void Awake()
     {
         playerStats = GetComponentInParent<PlayerStats>();
+        _aim = GetComponentInParent<PlayerAim>();
+        _playerRef = GetComponentInParent<PlayerRef>();
         CreateRuntimeWeaponData();
         InitializeWeaponData();
         SetupWeapon();
@@ -579,10 +611,7 @@ public class Weapon : MonoBehaviour
         // pending flag silently — same effect as if they'd never pressed.
         if (obstacleDrawerStartPending)
         {
-            bool rightStillDown = (UnityEngine.InputSystem.Mouse.current != null
-                    && UnityEngine.InputSystem.Mouse.current.rightButton.isPressed)
-                || (UnityEngine.InputSystem.Gamepad.current != null
-                    && UnityEngine.InputSystem.Gamepad.current.leftTrigger.isPressed);
+            bool rightStillDown = isToolRightHeld;
 
             // Clear the pending flag if the tool changed, the player let go,
             // or the drawer no longer exists — these are all "user no longer
@@ -1072,39 +1101,39 @@ public class Weapon : MonoBehaviour
     //  CURSOR MANAGEMENT
     private void UpdateWeaponCursor()
     {
-        if (CursorManager.Instance == null || weaponData == null) return;
+        if (CM == null || weaponData == null) return;
 
         if (weaponData.isFlamethrower)
-            CursorManager.Instance.SetCursor(CursorManager.CursorType.Flamethrower);
+            CM.SetCursor(CursorManager.CursorType.Flamethrower);
         else if (weaponData.isBoomerang)
-            CursorManager.Instance.SetCursor(CursorManager.CursorType.Boomerang);
+            CM.SetCursor(CursorManager.CursorType.Boomerang);
         else if (weaponData.isHammer)
-            CursorManager.Instance.SetCursor(CursorManager.CursorType.Hammer);
+            CM.SetCursor(CursorManager.CursorType.Hammer);
         else if (weaponData.isMortar)
-            CursorManager.Instance.SetCursor(CursorManager.CursorType.Mortar);
+            CM.SetCursor(CursorManager.CursorType.Mortar);
         else if (weaponData.isRanged)
-            CursorManager.Instance.SetCursor(CursorManager.CursorType.Ranged);
+            CM.SetCursor(CursorManager.CursorType.Ranged);
         else
-            CursorManager.Instance.SetCursor(CursorManager.CursorType.Melee);
+            CM.SetCursor(CursorManager.CursorType.Melee);
     }
 
     private void UpdateToolCursor()
     {
-        if (CursorManager.Instance == null || toolData == null) return;
+        if (CM == null || toolData == null) return;
 
-        if (toolData.isGrapplingHook) CursorManager.Instance.SetCursor(CursorManager.CursorType.Hook);
-        else if (toolData.isObstacleDrawer) CursorManager.Instance.SetCursor(CursorManager.CursorType.ObstacleDrawer);
-        else if (toolData.isBombLauncher) CursorManager.Instance.SetCursor(CursorManager.CursorType.BombLauncher);
-        else if (toolData.isTrap) CursorManager.Instance.SetCursor(CursorManager.CursorType.Trap);
-        else if (toolData.isTurret) CursorManager.Instance.SetCursor(CursorManager.CursorType.Turret);
-        else if (toolData.isDecoy) CursorManager.Instance.SetCursor(CursorManager.CursorType.Decoy);
-        else if (toolData.isBook) CursorManager.Instance.SetCursor(CursorManager.CursorType.Book);
-        else if (toolData.isCloak) CursorManager.Instance.SetCursor(CursorManager.CursorType.Cloak);
-        else if (toolData.isSmoke) CursorManager.Instance.SetCursor(CursorManager.CursorType.Smoke);
+        if (toolData.isGrapplingHook) CM.SetCursor(CursorManager.CursorType.Hook);
+        else if (toolData.isObstacleDrawer) CM.SetCursor(CursorManager.CursorType.ObstacleDrawer);
+        else if (toolData.isBombLauncher) CM.SetCursor(CursorManager.CursorType.BombLauncher);
+        else if (toolData.isTrap) CM.SetCursor(CursorManager.CursorType.Trap);
+        else if (toolData.isTurret) CM.SetCursor(CursorManager.CursorType.Turret);
+        else if (toolData.isDecoy) CM.SetCursor(CursorManager.CursorType.Decoy);
+        else if (toolData.isBook) CM.SetCursor(CursorManager.CursorType.Book);
+        else if (toolData.isCloak) CM.SetCursor(CursorManager.CursorType.Cloak);
+        else if (toolData.isSmoke) CM.SetCursor(CursorManager.CursorType.Smoke);
         // To give the Torch its own cursor, add a CursorType.Torch entry to
         // CursorManager and uncomment the next line:
-        // else if (toolData.isTorch) CursorManager.Instance.SetCursor(CursorManager.CursorType.Torch);
-        else if (toolData.armorBonus > 0f) CursorManager.Instance.SetCursor(CursorManager.CursorType.Shield);
+        // else if (toolData.isTorch) CM.SetCursor(CursorManager.CursorType.Torch);
+        else if (toolData.armorBonus > 0f) CM.SetCursor(CursorManager.CursorType.Shield);
     }
 
     //  COOLDOWN ROUTINES
@@ -1125,9 +1154,7 @@ public class Weapon : MonoBehaviour
     //  PROJECTILE & MELEE
     private void ShootProjectile()
     {
-        Vector2 direction = PlayerAim.Instance != null
-            ? PlayerAim.Instance.Direction
-            : (Vector2)((Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue()) - transform.position)).normalized;
+        Vector2 direction = AimDirection();
 
         GameObject projectile = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
         var weaponProjectile = projectile.GetComponent<WeaponProjectile>();
@@ -1137,9 +1164,7 @@ public class Weapon : MonoBehaviour
     //  BOOMERANG — creates the GO entirely from code, no prefab needed
     private void ShootBoomerang()
     {
-        Vector2 direction = PlayerAim.Instance != null
-            ? PlayerAim.Instance.Direction
-            : (Vector2)((Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue()) - transform.position)).normalized;
+        Vector2 direction = AimDirection();
 
         // Build the boomerang GameObject from scratch
         GameObject go = new GameObject("Boomerang");
@@ -1214,9 +1239,8 @@ public class Weapon : MonoBehaviour
 
         mortarReticle.SetRadius(weaponData.mortarExplosionRadius);
 
-        if (PlayerAim.Instance != null)
         {
-            Vector3 world = PlayerAim.Instance.WorldPoint;
+            Vector3 world = AimWorldPoint();
             mortarReticle.transform.position = new Vector3(world.x, world.y, 0f);
         }
 
@@ -1227,9 +1251,7 @@ public class Weapon : MonoBehaviour
 
     private void ShootMortar()
     {
-        Vector3 world = PlayerAim.Instance != null
-            ? PlayerAim.Instance.WorldPoint
-            : Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue());
+        Vector3 world = AimWorldPoint();
         Vector3 landing = new Vector3(world.x, world.y, 0f);
         Vector3 spawn = transform.position;
 
@@ -1316,9 +1338,8 @@ public class Weapon : MonoBehaviour
 
         smokeReticle.SetRadius(toolData.smokeCloudRadius * SmokeReticleDisplayScale);
 
-        if (PlayerAim.Instance != null)
         {
-            Vector3 world = PlayerAim.Instance.WorldPoint;
+            Vector3 world = AimWorldPoint();
             smokeReticle.transform.position = new Vector3(world.x, world.y, 0f);
         }
 
@@ -1329,9 +1350,7 @@ public class Weapon : MonoBehaviour
 
     private void ShootSmoke()
     {
-        Vector3 world = PlayerAim.Instance != null
-            ? PlayerAim.Instance.WorldPoint
-            : Camera.main.ScreenToWorldPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue());
+        Vector3 world = AimWorldPoint();
         Vector3 landing = new Vector3(world.x, world.y, 0f);
         Vector3 spawn = transform.position;
 
@@ -1453,4 +1472,3 @@ public class Weapon : MonoBehaviour
         CleanupToolSubsystems();
     }
 }
-

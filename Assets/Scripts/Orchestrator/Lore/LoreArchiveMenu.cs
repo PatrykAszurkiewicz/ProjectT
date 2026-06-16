@@ -75,6 +75,7 @@ public class LoreArchiveMenu : MonoBehaviour
     private bool builtPanel, isOpen;
     private float prevTimeScale;
     private bool prevInputSuppressed;
+    private bool prevCursorVisible;
 
     private TMP_FontAsset font;                 // resolved font (assigned, else TMP default)
     private Sprite solid, paper;                // generated fallbacks / paper
@@ -119,6 +120,7 @@ public class LoreArchiveMenu : MonoBehaviour
         CombatJuice.StopAllShake();
         prevTimeScale = Time.timeScale;
         Time.timeScale = 0f;
+        prevCursorVisible = Cursor.visible;
         Cursor.visible = true;
         prevInputSuppressed = PlayerAttack.InputSuppressed;
         PlayerAttack.InputSuppressed = true;
@@ -129,7 +131,9 @@ public class LoreArchiveMenu : MonoBehaviour
         if (!isOpen) return;
         Time.timeScale = prevTimeScale;
         PlayerAttack.InputSuppressed = prevInputSuppressed;
-        Cursor.visible = false;
+        // Restore whatever the cursor was before (e.g. the pause menu
+        // underneath had it visible) instead of forcing it off.
+        Cursor.visible = prevCursorVisible;
         if (root != null) root.SetActive(false);
         isOpen = false;
     }
@@ -541,4 +545,3 @@ public class LoreArchiveMenu : MonoBehaviour
     }
 #endif
 }
-

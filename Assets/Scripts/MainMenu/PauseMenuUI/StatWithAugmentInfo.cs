@@ -3,22 +3,22 @@ using TMPro;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
 
-/// <summary>
+
 /// Hover tooltip for a single stat row. When the pointer enters, it lists every
 /// applied augment that modifies this stat.
-///
-/// Unchanged in spirit from the original — just updated to share colour /
-/// formatting with the new stats panel and to format multipliers consistently.
-///
 /// Attach to a stat row GameObject that also has a Graphic with Raycast Target
 /// enabled (so OnPointerEnter fires). Set statName + targetType to match the
 /// augment data (e.g. "maxHealth" / "Player").
-/// </summary>
+
 public class StatWithAugmentInfo : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Stat Info")]
     [SerializeField] private string statName;
     [SerializeField] private string targetType; // "Player", "Weapon", "Tower", "Enemy", "Global"
+
+    [Header("Co-op (Phase 5)")]
+    [Tooltip("Which player's augments this tooltip reflects. 0 in single player.")]
+    [SerializeField] private int playerIndex = 0;
 
     [Header("Tooltip")]
     [SerializeField] private GameObject tooltipPanel;
@@ -26,7 +26,7 @@ public class StatWithAugmentInfo : MonoBehaviour, IPointerEnterHandler, IPointer
     [SerializeField] private Vector3 tooltipOffset = new Vector3(10, 10, 0);
 
     public void OnPointerEnter(PointerEventData eventData) => ShowAugmentInfo();
-    public void OnPointerExit(PointerEventData eventData)  => HideTooltip();
+    public void OnPointerExit(PointerEventData eventData) => HideTooltip();
 
     private void ShowAugmentInfo()
     {
@@ -35,7 +35,7 @@ public class StatWithAugmentInfo : MonoBehaviour, IPointerEnterHandler, IPointer
 
         var lines = new List<string>();
 
-        foreach (int augmentId in AugmentRegistry.Instance.GetAppliedAugments())
+        foreach (int augmentId in AugmentRegistry.Instance.GetAppliedAugments(playerIndex))
         {
             var augmentData = AugmentRegistry.Instance.GetAugmentData(augmentId);
             if (augmentData?.ParsedModifications == null) continue;
@@ -65,30 +65,30 @@ public class StatWithAugmentInfo : MonoBehaviour, IPointerEnterHandler, IPointer
         tooltipPanel.transform.position = transform.position + tooltipOffset;
     }
 
-    /// <summary>Human-readable, colour-coded text for one modification.</summary>
+
     private string DescribeModification(StatModification mod)
     {
         switch (mod.OperationType)
         {
             case StatModification.ModificationType.Add:
-            {
-                bool good = mod.Value >= 0f;
-                Color c = good ? StatRowBuilder.GoodColor : StatRowBuilder.BadColor;
-                string sign = good ? "+" : "";
-                return $"<color=#{StatRowBuilder.Hex(c)}>{sign}{mod.Value:0.##}</color>";
-            }
+                {
+                    bool good = mod.Value >= 0f;
+                    Color c = good ? StatRowBuilder.GoodColor : StatRowBuilder.BadColor;
+                    string sign = good ? "+" : "";
+                    return $"<color=#{StatRowBuilder.Hex(c)}>{sign}{mod.Value:0.##}</color>";
+                }
             case StatModification.ModificationType.Multiply:
-            {
-                Color c = StatRowBuilder.MultiplierColor(mod.Value);
-                return $"<color=#{StatRowBuilder.Hex(c)}>x{mod.Value:0.00}</color>";
-            }
+                {
+                    Color c = StatRowBuilder.MultiplierColor(mod.Value);
+                    return $"<color=#{StatRowBuilder.Hex(c)}>x{mod.Value:0.00}</color>";
+                }
             case StatModification.ModificationType.Percentage:
-            {
-                bool good = mod.Value >= 0f;
-                Color c = good ? StatRowBuilder.GoodColor : StatRowBuilder.BadColor;
-                string sign = good ? "+" : "";
-                return $"<color=#{StatRowBuilder.Hex(c)}>{sign}{mod.Value:0.#}%</color>";
-            }
+                {
+                    bool good = mod.Value >= 0f;
+                    Color c = good ? StatRowBuilder.GoodColor : StatRowBuilder.BadColor;
+                    string sign = good ? "+" : "";
+                    return $"<color=#{StatRowBuilder.Hex(c)}>{sign}{mod.Value:0.#}%</color>";
+                }
             default:
                 return $"{mod.Value:0.##}";
         }
@@ -100,3 +100,4 @@ public class StatWithAugmentInfo : MonoBehaviour, IPointerEnterHandler, IPointer
             tooltipPanel.SetActive(false);
     }
 }
+

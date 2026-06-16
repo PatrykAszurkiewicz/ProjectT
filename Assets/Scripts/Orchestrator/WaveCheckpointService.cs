@@ -37,7 +37,7 @@ public class WaveCheckpointService : MonoBehaviour
     {
         FinalBossSnapshot = BuildSnapshot(-1, -1);
         if (debugLog)
-            Debug.Log($"[Checkpoint] Final-boss snapshot held (playerHP={FinalBossSnapshot.playerHealth:F0}, " +
+            Debug.Log($"[Checkpoint] Final-boss snapshot held (players={FinalBossSnapshot.players.Count}, " +
                       $"core={FinalBossSnapshot.coreEnergy:F0}, energy={FinalBossSnapshot.playerEnergy}).");
     }
 
@@ -70,7 +70,7 @@ public class WaveCheckpointService : MonoBehaviour
 
         if (debugLog)
             Debug.Log($"[Checkpoint] Captured wave-start snapshot @ stage {stageIndex} wave {waveIndex} " +
-                      $"(towers={snap.towers.Count}, playerHP={snap.playerHealth:F0}, core={snap.coreEnergy:F0}, " +
+                      $"(towers={snap.towers.Count}, players={snap.players.Count}, core={snap.coreEnergy:F0}, " +
                       $"energy={snap.playerEnergy}).");
     }
 
@@ -78,19 +78,7 @@ public class WaveCheckpointService : MonoBehaviour
     {
         var snap = new RunSnapshot { stageIndex = stageIndex, waveIndex = waveIndex };
 
-        var player = FindFirstObjectByType<PlayerStats>();
-        if (player != null)
-        {
-            snap.hasPlayer = true;
-            snap.playerHealth = player.currentHealth;
-            snap.playerMaxHealth = player.maxHealth;
-            snap.playerArmor = player.currentArmor;
-            snap.playerMana = player.currentMana;
-            snap.playerMaxMana = player.maxMana;
-            snap.playerStamina = player.currentStamina;
-            snap.playerMaxStamina = player.maxStamina;
-            snap.playerDashesLeft = player.dashesLeft;
-        }
+        snap.players = CapturePlayers();
 
         var core = FindFirstObjectByType<CentralCore>();
         if (core != null)
@@ -137,7 +125,7 @@ public class WaveCheckpointService : MonoBehaviour
 
         ClearLiveEnemies();
         ClearTransientObjects();   // hazard clouds + player deployables
-        RestorePlayer(snap);
+        RestorePlayers(snap.players);
         RestoreCore(snap);
         RestoreEconomy(snap);
         RestoreLore(snap);
@@ -218,23 +206,79 @@ public class WaveCheckpointService : MonoBehaviour
     }
 
 
-    private void RestorePlayer(RunSnapshot snap)
+    // ---- Per-player capture / restore (Phase 7c) ----------------------------
+    // Single player: PlayerRef self-registers at index 0, so this yields a
+    // one-element list and reproduces the old behaviour exactly. The
+    // FindFirstObjectByType fallback only triggers if nothing is registered.
+
+    private List<PlayerSnapshot> CapturePlayers()
     {
-        if (!snap.hasPlayer) return;
-        var player = FindFirstObjectByType<PlayerStats>();
-        if (player == null) return;
+        var list = new List<PlayerSnapshot>();
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0)
+        {
+            foreach (var pr in reg.All)
+                if (pr != null && pr.Stats != null)
+                    list.Add(SnapshotOf(pr.Stats, pr.PlayerIndex));
+        }
+        if (list.Count == 0)
+        {
+            var p = FindFirstObjectByType<PlayerStats>();
+            if (p != null) list.Add(SnapshotOf(p, 0));
+        }
+        return list;
+    }
 
-        player.maxHealth = snap.playerMaxHealth;
-        player.currentArmor = snap.playerArmor;
-        player.SetHealthAndNotify(snap.playerHealth); // clamps to maxHealth + fires OnHealthChanged
+    private PlayerSnapshot SnapshotOf(PlayerStats p, int index) => new PlayerSnapshot
+    {
+        playerIndex = index,
+        playerHealth = p.currentHealth,
+        playerMaxHealth = p.maxHealth,
+        playerArmor = p.currentArmor,
+        playerMana = p.currentMana,
+        playerMaxMana = p.maxMana,
+        playerStamina = p.currentStamina,
+        playerMaxStamina = p.maxStamina,
+        playerDashesLeft = p.dashesLeft,
+    };
 
-        player.maxMana = snap.playerMaxMana;
-        player.currentMana = Mathf.Min(snap.playerMana, player.maxMana);
+    private void RestorePlayers(List<PlayerSnapshot> players)
+    {
+        if (players == null) return;
+        foreach (var ps in players)
+        {
+            var stats = ResolveStats(ps.playerIndex);
+            if (stats == null) continue;
 
-        player.maxStamina = snap.playerMaxStamina;
-        player.currentStamina = Mathf.Min(snap.playerStamina, player.maxStamina);
+            // If this player is currently downed (e.g. mid-wave clock rewind),
+            // clear the downed state first — no heal/immunity, since we set the
+            // exact wave-start HP next.
+            var downed = stats.GetComponent<PlayerDownedState>();
+            if (downed != null && downed.IsDowned) downed.RestoreControl();
 
-        player.dashesLeft = snap.playerDashesLeft;
+            stats.maxHealth = ps.playerMaxHealth;
+            stats.currentArmor = ps.playerArmor;
+            stats.SetHealthAndNotify(ps.playerHealth); // clamps + fires OnHealthChanged
+
+            stats.maxMana = ps.playerMaxMana;
+            stats.currentMana = Mathf.Min(ps.playerMana, stats.maxMana);
+
+            stats.maxStamina = ps.playerMaxStamina;
+            stats.currentStamina = Mathf.Min(ps.playerStamina, stats.maxStamina);
+
+            stats.dashesLeft = ps.playerDashesLeft;
+        }
+    }
+
+    private PlayerStats ResolveStats(int index)
+    {
+        var reg = PlayerRegistry.Instance;
+        if (reg != null)
+        {
+            var pr = reg.Get(index);
+            if (pr != null && pr.Stats != null) return pr.Stats;
+        }
+        return FindFirstObjectByType<PlayerStats>(); // legacy single-player fallback
     }
 
     private void RestoreCore(RunSnapshot snap)
@@ -326,11 +370,8 @@ public class RunSnapshot
     public int stageIndex;
     public int waveIndex;
 
-    public bool hasPlayer;
-    public float playerHealth, playerMaxHealth, playerArmor;
-    public float playerMana, playerMaxMana;
-    public float playerStamina, playerMaxStamina;
-    public int playerDashesLeft;
+    // Phase 7c: one entry per player (single player = one entry at index 0).
+    public List<PlayerSnapshot> players = new List<PlayerSnapshot>();
 
     public bool hasCore;
     public float coreEnergy, coreMaxEnergy;
@@ -345,6 +386,16 @@ public class RunSnapshot
     public List<TowerSnapshot> towers;
 }
 
+// One player's wave-start state, keyed by PlayerIndex.
+public class PlayerSnapshot
+{
+    public int playerIndex;
+    public float playerHealth, playerMaxHealth, playerArmor;
+    public float playerMana, playerMaxMana;
+    public float playerStamina, playerMaxStamina;
+    public int playerDashesLeft;
+}
+
 public class TowerSnapshot
 {
     public Tower tower;        // live reference at capture time (may disable later)
@@ -354,3 +405,4 @@ public class TowerSnapshot
     public float currentEnergy;
     public float maxEnergy;
 }
+

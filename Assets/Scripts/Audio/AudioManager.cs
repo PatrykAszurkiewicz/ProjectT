@@ -72,6 +72,10 @@ public class AudioManager : MonoBehaviour
                 if (masterBus.isValid() && musicBus.isValid() && ambienceBus.isValid() && sfxBus.isValid())
                 {
                     fmodInitialized = true;
+
+                    // Tell FMOD to split spatial audio tracking for 2 players
+                    FMODUnity.RuntimeManager.StudioSystem.setNumListeners(2);
+
                     if (enableDebugLogs) Debug.Log("FMOD buses initialized successfully");
                     break;
                 }

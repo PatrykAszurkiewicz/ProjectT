@@ -21,7 +21,13 @@ public class ScarecrowStasisAura : MonoBehaviour
     // they leave the radius (or when the aura turns off).
     private readonly HashSet<ScarecrowBuffTag> taggedEnemies = new HashSet<ScarecrowBuffTag>();
 
-    private float playerDamageAccumulator = 0f;
+    // Co-op: one damage accumulator PER player so each is taxed independently
+    // (a single shared accumulator would split the aura DPS between them).
+    private readonly Dictionary<CharacterStats, float> playerDamageAccumulators = new Dictionary<CharacterStats, float>();
+    // Reused each Update to avoid per-frame allocations.
+    private readonly HashSet<CharacterStats> _playersInsideThisFrame = new HashSet<CharacterStats>();
+    private readonly List<CharacterStats> _accResetScratch = new List<CharacterStats>();
+
     private float coreDamageAccumulator = 0f;
 
     // Per-frame allocation churn would be nasty here; reuse a buffer.
@@ -55,7 +61,7 @@ public class ScarecrowStasisAura : MonoBehaviour
                 if (tag != null) tag.RemoveBuff();
             }
             taggedEnemies.Clear();
-            playerDamageAccumulator = 0f;
+            playerDamageAccumulators.Clear();
             coreDamageAccumulator = 0f;
         }
     }
@@ -156,27 +162,40 @@ public class ScarecrowStasisAura : MonoBehaviour
 
     private void DamagePlayerIfInside()
     {
-        // Find the player by tag — keep this simple & cheap; the player exists
-        // exactly once.
-        GameObject playerGO = GameObject.FindGameObjectWithTag("Player");
-        if (playerGO == null) return;
+        // Co-op: tax every alive player inside the radius. AllAliveInRadius
+        // filters by distance + dead. Each player gets their own accumulator so
+        // sub-1 DPS doesn't spam TakeDamage and they tick on independent
+        // schedules. A player who leaves has their accumulator reset so re-entry
+        // doesn't dump a frame-1 spike. With one player this matches the old
+        // single-player behavior exactly.
+        _playersInsideThisFrame.Clear();
 
-        Vector2 toPlayer = (Vector2)playerGO.transform.position - (Vector2)transform.position;
-        if (toPlayer.sqrMagnitude > radius * radius)
+        foreach (var stats in PlayerRegistry.Instance.AllAliveInRadius(transform.position, radius))
         {
-            playerDamageAccumulator = 0f; // reset so re-entry doesn't dump a frame-1 spike
-            return;
+            if (stats == null) continue;
+            _playersInsideThisFrame.Add(stats);
+
+            float acc = playerDamageAccumulators.TryGetValue(stats, out var existing) ? existing : 0f;
+            acc += playerDamagePerSecond * Time.deltaTime;
+            if (acc >= 1f)
+            {
+                int whole = Mathf.FloorToInt(acc);
+                acc -= whole;
+                stats.TakeDamage(whole);
+            }
+            playerDamageAccumulators[stats] = acc;
         }
 
-        // Accumulate damage and apply in whole-number ticks so TakeDamage()
-        // doesn't get spammed with sub-1 damage every frame.
-        playerDamageAccumulator += playerDamagePerSecond * Time.deltaTime;
-        if (playerDamageAccumulator >= 1f)
+        // Reset the accumulator for anyone who is no longer inside (or who died).
+        if (playerDamageAccumulators.Count > 0)
         {
-            int whole = Mathf.FloorToInt(playerDamageAccumulator);
-            playerDamageAccumulator -= whole;
-            var stats = playerGO.GetComponent<CharacterStats>();
-            if (stats != null) stats.TakeDamage(whole);
+            _accResetScratch.Clear();
+            foreach (var kv in playerDamageAccumulators)
+                if (!_playersInsideThisFrame.Contains(kv.Key))
+                    _accResetScratch.Add(kv.Key);
+
+            for (int i = 0; i < _accResetScratch.Count; i++)
+                playerDamageAccumulators.Remove(_accResetScratch[i]);
         }
     }
 

@@ -91,6 +91,7 @@ public class GameOrchestrator : MonoBehaviour
     // Auto-found references
     private StageTransitionOverlay transitionOverlay;
     private AugmentsMenu augmentsMenu;
+    private AugmentsMenu[] augmentsMenus;   // Phase 6: one per player in co-op
     private PostStageChoiceMenu postStageChoiceMenu;
 
     //  RUN STATE (read these from other scripts)
@@ -214,6 +215,7 @@ public class GameOrchestrator : MonoBehaviour
 
         // Find augment menu (searches inactive objects too)
         augmentsMenu = FindFirstObjectByType<AugmentsMenu>(FindObjectsInactive.Include);
+        augmentsMenus = FindObjectsByType<AugmentsMenu>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
         // Create post-stage choice menu (runtime-built, no prefab needed)
         if (enablePostStageChoice)
@@ -268,6 +270,14 @@ public class GameOrchestrator : MonoBehaviour
         int runSeed = System.Environment.TickCount;
         UnityEngine.Random.InitState(runSeed);
         RunPersistence.Instance?.BeginRun(runSeed, runConfig != null ? runConfig.name : "");
+
+
+        // Clear per-player static augment state so a previous run's cooldown /
+        // parry / projectile-parry upgrades don't leak into this fresh run (statics
+        // survive scene reloads in a built player).
+        CooldownModifier.Reset();
+        ParryUpgrades.ResetAll();
+        ProjectileParry.Reset();
 
 
         // Generate the run plan
@@ -637,9 +647,15 @@ public class GameOrchestrator : MonoBehaviour
         // If we're rewinding out of the open augment menu, close it so it doesn't
         // linger and so WaitForAugmentMenuClosed's poll exits. JumpToWave / the
         // final-boss restart restore Time.timeScale (the menu sets it to 0).
-        if (CurrentState == RunState.AugmentSelect
-            && augmentsMenu != null && augmentsMenu.augmentsMenu != null)
-            augmentsMenu.augmentsMenu.SetActive(false);
+        if (CurrentState == RunState.AugmentSelect)
+        {
+            // Close EVERY player's menu so the wait-loop can exit on a rewind.
+            if (augmentsMenus != null)
+                foreach (var m in augmentsMenus)
+                    if (m != null && m.augmentsMenu != null) m.augmentsMenu.SetActive(false);
+                    else if (augmentsMenu != null && augmentsMenu.augmentsMenu != null)
+                        augmentsMenu.augmentsMenu.SetActive(false);
+        }
 
         // FINAL BOSS: rewind to the start of the final boss fight only (the final
         // boss is not part of a stage, so we re-run just it — not the last stage).
@@ -730,7 +746,12 @@ public class GameOrchestrator : MonoBehaviour
         var p = RunPersistence.Instance;
         if (p == null || !p.HasSave) return false;
         if (!p.TryLoad(out var data)) return false;
-
+        if (data.saveVersion < 2)
+        {
+            Debug.LogWarning("[Orchestrator] Saved run is from an older version — discarding it and starting fresh.");
+            p.DeleteSave();
+            return false;
+        }
         try
         {
             UnityEngine.Random.InitState(data.runSeed);
@@ -750,9 +771,22 @@ public class GameOrchestrator : MonoBehaviour
 
             p.AdoptLoadedRun(data);
 
+
+            // Clean per-player static slate before replaying saved augments —
+            // each ApplyAugment re-sets the right player's values.
+            CooldownModifier.Reset();
+            ParryUpgrades.ResetAll();
+            ProjectileParry.Reset();
+
+
             if (AugmentRegistry.Instance != null)
                 foreach (var a in data.augments)
-                    AugmentRegistry.Instance.ApplyAugment(a.id, a.rarity);
+                {
+                    PlayerStats chooser = null;
+                    var pr = PlayerRegistry.Instance != null ? PlayerRegistry.Instance.Get(a.playerIndex) : null;
+                    if (pr != null) chooser = pr.Stats;
+                    AugmentRegistry.Instance.ApplyAugment(a.id, a.rarity, chooser);
+                }
 
             // Towers can't be rebuilt yet — slots don't exist until the stage
             // layout is applied inside RunStage. Defer to there.
@@ -988,13 +1022,50 @@ public class GameOrchestrator : MonoBehaviour
         if (debugLog)
             Debug.Log($"[Orchestrator] Augment selection after {reason}...");
 
-        augmentsMenu.ResetRerolls();
-        augmentsMenu.ActivateAugments();
+        // Co-op: the orchestrator owns the freeze so two menus don't fight over
+        // Time.timeScale, and it opens every player's menu and waits for ALL.
+        bool coop = PlayerRegistry.Count > 1;
+        float prevTimeScale = Time.timeScale;
+        if (coop)
+        {
+            Time.timeScale = 0f;
+            Cursor.visible = true;
+            PlayerAttack.SetAllSuppressed(true);
+        }
+
+        var menus = (augmentsMenus != null && augmentsMenus.Length > 0)
+            ? augmentsMenus
+            : (augmentsMenu != null ? new[] { augmentsMenu } : new AugmentsMenu[0]);
+
+        foreach (var m in menus)
+        {
+            if (m == null) continue;
+            m.ResetRerolls();
+            m.ActivateAugments();
+        }
 
         yield return WaitForAugmentMenuClosed();
 
+        if (coop)
+        {
+            Time.timeScale = prevTimeScale;
+            Cursor.visible = false;
+            PlayerAttack.SetAllSuppressed(false);
+        }
+
         if (debugLog)
             Debug.Log($"[Orchestrator] Augment selected, continuing...");
+    }
+
+    // True while ANY player's augment menu is still open.
+    private bool AnyAugmentMenuOpen()
+    {
+        if (augmentsMenus != null)
+            foreach (var m in augmentsMenus)
+                if (m != null && m.augmentsMenu != null && m.augmentsMenu.activeSelf)
+                    return true;
+        return augmentsMenu != null && augmentsMenu.augmentsMenu != null
+               && augmentsMenu.augmentsMenu.activeSelf;
     }
 
     // Waits until the AugmentsMenu is closed (player made a selection).
@@ -1004,8 +1075,7 @@ public class GameOrchestrator : MonoBehaviour
         // The augment menu sets Time.timeScale = 0 when open.
         // Normal yield return null won't advance when timeScale is 0.
         // So we poll using realtime waits.
-        while (augmentsMenu != null && augmentsMenu.augmentsMenu != null
-               && augmentsMenu.augmentsMenu.activeSelf)
+        while (AnyAugmentMenuOpen())
         {
             yield return new WaitForSecondsRealtime(0.1f);
         }
@@ -1447,4 +1517,6 @@ public class GameOrchestrator : MonoBehaviour
             Instance = null;
     }
 }
+
+
 

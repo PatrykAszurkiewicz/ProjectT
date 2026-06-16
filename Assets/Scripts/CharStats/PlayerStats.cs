@@ -55,6 +55,14 @@ public class PlayerStats : CharacterStats
 
     private void Awake()
     {
+        // Co-op: player should be represented in the PlayerRegistry.
+        // PlayerRef self-registers in its own OnEnable. If one wasn't added on
+        // the prefab/object, add it now so the single player still registers as
+        // index 0 with no editor work. The guard avoids a duplicate when the
+        // Phase 2 prefab already carries a PlayerRef.
+        if (GetComponent<PlayerRef>() == null)
+            gameObject.AddComponent<PlayerRef>();
+
         spriteRenderer = GetComponent<SpriteRenderer>();
 
         if (spriteRenderer == null)
@@ -88,6 +96,16 @@ public class PlayerStats : CharacterStats
             //Debug.Log("[PLAYER] Death intercepted ");
             // Not calling base.Die() - let QuickReviveEffect handle the revival
             return;
+        }
+
+        // Phase 7 (co-op): don't die — enter a revivable downed state. Gated on
+        // Count > 1 so single player keeps the original destroy path byte-for-byte.
+        if (PlayerRegistry.Count > 1)
+        {
+            var downed = GetComponent<PlayerDownedState>();
+            if (downed == null) downed = gameObject.AddComponent<PlayerDownedState>();
+            if (downed.EnterDowned())
+                return; // stay alive, downed, awaiting revive or team-wipe
         }
 
         // No Quick Revive available - proceed with normal death

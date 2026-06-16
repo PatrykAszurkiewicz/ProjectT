@@ -483,8 +483,9 @@ public class Boss2 : BaseBossStats
         // Same priority as Boss1: prefer the player, fall back to the core.
         if (!PlayerCloakEffect.IsActive)
         {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null) { currentTarget = player.transform; return; }
+            // Co-op: target the nearest alive player (no range limit, as before).
+            var nearestPlayer = PlayerRegistry.Instance.NearestAlive(transform.position, includeCloaked: true);
+            if (nearestPlayer != null) { currentTarget = nearestPlayer.transform; return; }
         }
 
         GameObject core = GameObject.FindGameObjectWithTag("Core");
@@ -646,27 +647,17 @@ public class Boss2 : BaseBossStats
             }
         }
 
-        // Final safety net: explicit player lookup. Catches the case where the player's
-        // collider somehow wasn't in OverlapCircleAll's results (wrong layer mask, etc.).
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
+        // Final safety net: explicitly cover every alive player inside the
+        // radius, in case a player's collider wasn't in OverlapCircleAll's
+        // results (wrong layer mask, etc.). AllAliveInRadius already filters by
+        // distance + dead; damagedCharacters dedups so a player already hit by
+        // the overlap pass above isn't hit twice. With one player this is
+        // identical to the old single-player safety net.
+        foreach (var ps in PlayerRegistry.Instance.AllAliveInRadius(pos, radius))
         {
-            var playerStats = player.GetComponentInChildren<CharacterStats>();
-            if (playerStats == null) playerStats = player.GetComponentInParent<CharacterStats>();
-
-            float dist = Vector2.Distance(player.transform.position, pos);
-            bool alreadyHit = playerStats != null && damagedCharacters.Contains(playerStats);
-            //Debug.Log($"[Boss2] Player safety check: distance={dist} radius={radius} alreadyHit={alreadyHit} playerStats={(playerStats != null ? playerStats.GetType().Name : "NULL")}");
-
-            if (!alreadyHit && dist <= radius && playerStats != null)
-            {
-                //Debug.Log($"[Boss2] DIRECT player hit via safety net");
-                playerStats.TakeDamage(scaledMeteorDamage);
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[Boss2] No GameObject with tag 'Player' found — explosion cannot damage player.");
+            if (ps == null) continue;
+            if (damagedCharacters.Add(ps))
+                ps.TakeDamage(scaledMeteorDamage);
         }
     }
 
@@ -2017,4 +2008,5 @@ public static class Boss2SummonFlashSprites
         return _thinRing;
     }
 }
+
 

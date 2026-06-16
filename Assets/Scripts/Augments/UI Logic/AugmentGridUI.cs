@@ -8,6 +8,12 @@ using TMPro;
 
 public class AugmentGridUI : MonoBehaviour
 {
+    [Header("Co-op (Phase 6)")]
+    [Tooltip("Which player's augments this panel shows. " +
+             "-1 = single player / shared list (original behaviour); " +
+             "0 = P1; 1 = P2.")]
+    public int playerIndex = -1;
+
     [Header("Where the grid renders")]
     [Tooltip("Panel the icon cells fill. Leave empty -> uses this.transform. " +
              "Resize this object in the inspector to control the visible area.")]
@@ -16,6 +22,10 @@ public class AugmentGridUI : MonoBehaviour
     [Header("Grid layout")]
     [Tooltip("How many cells per row. 4 fits a panel nicely; raise for smaller tiles.")]
     [Range(1, 10)] public int columns = 4;
+    [Tooltip("Force a single vertical column so icons stack (for the narrow " +
+             "co-op RightPanels). When ON this overrides Columns. " +
+             "OFF = the original multi-column grid (single-player default).")]
+    public bool forceSingleColumn = false;
     [Tooltip("Pixel gap between cells (both directions).")]
     public Vector2 cellSpacing = new Vector2(12, 12);
     [Tooltip("Padding around the whole grid (left, right, top, bottom).")]
@@ -100,6 +110,21 @@ public class AugmentGridUI : MonoBehaviour
     private float _refreshTimer;
     private int _lastAugmentCountSeen = -1;
 
+    // Effective columns: co-op panels force a single vertical column; otherwise
+    // the inspector's Columns value. Single player keeps its original grid.
+    private int EffectiveColumns => forceSingleColumn ? 1 : Mathf.Max(1, columns);
+
+    // Applied-augment IDs this panel should show. -1 (single player / unset)
+    // keeps the ORIGINAL shared-list read so single player stays byte-identical
+    // to before; >= 0 reads that one player's per-player set (co-op P1/P2).
+    private List<int> AppliedIdsForPanel()
+    {
+        var reg = AugmentRegistry.Instance;
+        if (reg == null) return null;
+        return playerIndex >= 0 ? reg.GetAppliedAugments(playerIndex)
+                                : reg.GetAppliedAugments();
+    }
+
     //  Lifecycle
     private void Reset()
     {
@@ -132,7 +157,7 @@ public class AugmentGridUI : MonoBehaviour
         // Cheap change-detection: only repopulate when the applied-augments
         // list size changes. (If you ever need finer detection, hash the IDs.)
         if (AugmentRegistry.Instance == null) return;
-        int count = AugmentRegistry.Instance.GetAppliedAugments()?.Count ?? 0;
+        int count = AppliedIdsForPanel()?.Count ?? 0;
         if (count == _lastAugmentCountSeen) return;
         _lastAugmentCountSeen = count;
         PopulateFromRegistry();
@@ -149,7 +174,7 @@ public class AugmentGridUI : MonoBehaviour
             if (verbose) Debug.LogWarning("[AugmentGridUI] AugmentRegistry.Instance is null.");
             return;
         }
-        var applied = AugmentRegistry.Instance.GetAppliedAugments();
+        var applied = AppliedIdsForPanel();
         var datas = new List<AugmentData>(applied?.Count ?? 0);
         if (applied != null)
         {
@@ -212,7 +237,7 @@ public class AugmentGridUI : MonoBehaviour
         _grid.startAxis = GridLayoutGroup.Axis.Horizontal;
         _grid.childAlignment = TextAnchor.UpperCenter;
         _grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        _grid.constraintCount = Mathf.Max(1, columns);
+        _grid.constraintCount = EffectiveColumns;
 
         // ContentSizeFitter on Content so it grows taller as rows are added.
         var sizeFit = _gridRoot.GetComponent<ContentSizeFitter>();
@@ -282,8 +307,8 @@ public class AugmentGridUI : MonoBehaviour
         // constrained — Content grows as tall as needed and the user scrolls.
         float availW = _viewport.rect.width
                        - _grid.padding.left - _grid.padding.right
-                       - _grid.spacing.x * (columns - 1);
-        float cellW = Mathf.Max(32f, availW / Mathf.Max(1, columns));
+                       - _grid.spacing.x * (EffectiveColumns - 1);
+        float cellW = Mathf.Max(32f, availW / EffectiveColumns);
 
         // Square icon area + label area below.
         float labelExtra = showNameLabel ? nameFontSize * 2.4f + 6f : 0f;
@@ -758,11 +783,9 @@ public class TooltipUI : MonoBehaviour
         return inst;
     }
 
-    /// <summary>
-    /// Apply a custom font to both the title and body. Called per-Show by the
-    /// AugmentCellHover so the tooltip picks up whatever font the grid owner
-    /// has assigned in its Inspector field.
-    /// </summary>
+    // Apply a custom font to both the title and body. Called per-Show by the
+    // AugmentCellHover so the tooltip picks up whatever font the grid owner
+    // has assigned in its Inspector field.
     public void SetFont(TMP_FontAsset font)
     {
         if (font == null) return;

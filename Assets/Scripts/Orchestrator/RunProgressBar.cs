@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-
 // Dynamic run-progress bar.
 // Drag sprites into the Inspector, one per phase + state (bright/dark).
-// REQUIRED PREFAB STRUCTURE:
+// REQUIRED PREFAB STRUCTURE (minimal):
 //   StagesTest (this script attaches here)
-//     PanelIcons   (empty RectTransform — generated icons go here)
-//     PanelLines   (empty RectTransform — generated lines go here)
-//     HighLight    (Image with  highlight sprite — moved over current node)
+//     ├── PanelIcons   (empty RectTransform — generated icons go here)
+//     ├── PanelLines   (empty RectTransform — generated lines go here)
+//     └── HighLight    (Image with your highlight sprite — moved over current node)
 
 [DisallowMultipleComponent]
 public class RunProgressBar : MonoBehaviour
@@ -135,15 +134,17 @@ public class RunProgressBar : MonoBehaviour
     public bool forceOnTop = true;
 
     [Tooltip("Sorting order used when 'Force On Top' is on. Higher = drawn later (more on top).\n" +
-             "If something still covers the bar, raise this above that UI's canvas sorting order.")]
-    public int sortingOrder = 1000;
+             "Reference points in this project: ARCHIVE button canvas = 9990, opened Archive menu = 9996, " +
+             "lore scroll popup = 9998. Default 9995 sits ABOVE the persistent ARCHIVE button but BELOW " +
+             "the modal archive menu / lore scroll (which should cover the HUD when open).")]
+    public int sortingOrder = 9995;
 
     [Tooltip("Optional sorting layer to place the bar on. Leave EMPTY to keep the current/default " +
              "layer (recommended unless your weapon-roll UI lives on a higher sorting layer).")]
     public string sortingLayerName = "";
 
     [Header(" DEBUG ")]
-    public bool debugLog = false;
+    public bool debugLog = true;
 
     [Tooltip("If true, the bar starts visible and stays visible — useful for debugging positioning. " +
              "Wave-start/Hide events are ignored while this is on.")]
@@ -163,8 +164,11 @@ public class RunProgressBar : MonoBehaviour
     private Image highlightImage;
 
     // The StagesTest visual root that actually owns the panels — the GameObject we
-    // attach the sorting Canvas to (may differ from `this` if the script lives elsewhere).
+    // reparent onto our dedicated sorting canvas (may differ from `this`).
     private RectTransform barRootRT;
+
+    // Dedicated root overlay canvas we create so the bar sorts above other root canvases.
+    private GameObject ownCanvasGO;
 
     private struct Node
     {
@@ -190,11 +194,13 @@ public class RunProgressBar : MonoBehaviour
     private Coroutine fadeRoutine;
     private bool subscribed;
     private bool builtForRun;
+    private bool diagnosedOnce;
 
     //   LIFECYCLE  
 
     private void Awake()
     {
+        ApplyDefaultsIfUnconfigured();
         DiscoverPrefabChildren();
         if (!enabled) return;          // soft-failed inside DiscoverPrefabChildren
         EnsureCanvasGroup();
@@ -212,6 +218,7 @@ public class RunProgressBar : MonoBehaviour
     {
         TrySubscribe();
         TryBuildTimeline();
+        if (!diagnosedOnce) { diagnosedOnce = true; DiagnoseLayering(); }
     }
 
     private void Update()
@@ -301,37 +308,162 @@ public class RunProgressBar : MonoBehaviour
         canvasGroup.blocksRaycasts = false;
     }
 
-    /// Give the bar its own nested Canvas with overrideSorting so it draws ABOVE other UI
-    /// (e.g. the weapon-roll popup) regardless of its position in the hierarchy. The prefab
-    /// ships without a Canvas, so its draw order would otherwise be whatever sibling order
-    /// it happens to have under the main canvas.
+    /// Unity serialization gotcha guard. When these fields were ADDED to the script, an
+    /// already-placed component keeps its old serialized data and the NEW fields arrive at
+    /// their TYPE defaults (false / 0), ignoring the C# initializers above. The fingerprint
+    /// "everything zero at once" means the bar was never reconfigured for these features, so
+    /// we apply the intended defaults at runtime instead of silently rendering wrong (full
+    /// stretched bar, no on-top canvas). If the user deliberately changed ANY of these, the
+    /// fingerprint won't match and we leave their choices alone.
+    private void ApplyDefaultsIfUnconfigured()
+    {
+        bool looksUnconfigured = !forceOnTop && sortingOrder == 0 && !windowed && windowRadius == 0;
+        if (!looksUnconfigured) return;
+
+        forceOnTop = true;
+        sortingOrder = 9995;
+        windowed = true;
+        windowRadius = 4;
+        fadeWindowEdges = true;
+        if (windowEdgeAlpha <= 0f) windowEdgeAlpha = 0.35f;
+
+        Debug.LogWarning(
+            "[RunProgressBar] New Inspector fields were at their serialized defaults " +
+            "(Force On Top off, Sorting Order 0, Windowed off, Window Radius 0) — Unity kept the " +
+            "OLD component data when the fields were added, ignoring the script defaults. " +
+            "Applied runtime defaults: on-top @ sortingOrder 9995, windowed (radius 4). " +
+            "To make this permanent, set those values in the Inspector on the RunProgressBar component " +
+            "(or use the component gear menu → 'Fix Layering + Window Defaults').");
+    }
+
+    // Gear-menu helper: fixes ONLY the layering/window fields without touching assigned sprites
+    // (unlike the component's built-in Reset, which would wipe sprite references).
+    [ContextMenu("Fix Layering + Window Defaults")]
+    private void FixLayeringAndWindowDefaults()
+    {
+        forceOnTop = true;
+        sortingOrder = 9995;
+        windowed = true;
+        windowRadius = Mathf.Max(1, windowRadius == 0 ? 4 : windowRadius);
+        fadeWindowEdges = true;
+        if (windowEdgeAlpha <= 0f) windowEdgeAlpha = 0.35f;
+        Debug.Log("[RunProgressBar] Layering + window defaults applied (on-top @9995, windowed). " +
+                  "Save the scene/prefab to persist.");
+    }
+
+    /// Move the bar onto its OWN root Screen Space - Overlay canvas so it competes in the
+    /// global overlay sort by `sortingOrder`. A nested canvas with overrideSorting can only
+    /// reorder the bar WITHIN its parent root canvas — it cannot rise above a *separate* root
+    /// canvas (e.g. the ARCHIVE button's canvas at 9990, or the lore popup at 9998). The other
+    /// procedural UIs in this project each create their own root canvas for exactly this reason.
     private void EnsureTopmostCanvas()
     {
-        if (!forceOnTop) return;
+        if (!forceOnTop)
+        {
+            Debug.LogWarning(
+                "[RunProgressBar] 'Force On Top' is OFF on this component — the bar stays on the main HUD " +
+                "canvas and will render UNDER other root canvases (e.g. the ARCHIVE button @9990). " +
+                "If that's not what you want: tick 'Force On Top' + set 'Sorting Order' 9995 in the Inspector, " +
+                "or use the component gear-menu → 'Fix Layering + Window Defaults', then save.");
+            return;
+        }
 
-        // Attach to the actual visual root (the StagesTest object that owns the panels),
-        // not necessarily `this` — the script may live on a non-UI object.
-        var rootGO = (barRootRT != null ? barRootRT.gameObject : gameObject);
+        // Safety: a stale serialized 0 would put us at the bottom of the overlay sort. If we've
+        // been asked to force on top, a non-positive order is never intended — use a high default.
+        if (sortingOrder <= 0) sortingOrder = 9995;
 
-        var canvas = rootGO.GetComponent<Canvas>();
-        if (canvas == null) canvas = rootGO.AddComponent<Canvas>();
+        // The visual root that owns the panels (normally `this` / the StagesTest object).
+        var root = (barRootRT != null ? barRootRT : transform as RectTransform);
+        if (root == null) return;
 
-        canvas.overrideSorting = true;           // sort independently of the parent canvas
-        canvas.sortingOrder = sortingOrder;       // higher = on top
+        // Already hosted on our dedicated canvas? Just refresh the order and bail.
+        if (ownCanvasGO != null && root.parent == ownCanvasGO.transform)
+        {
+            var existing = ownCanvasGO.GetComponent<Canvas>();
+            if (existing != null)
+            {
+                existing.sortingOrder = sortingOrder;
+                if (!string.IsNullOrEmpty(sortingLayerName)) existing.sortingLayerName = sortingLayerName;
+            }
+            return;
+        }
+
+        // Build a dedicated root overlay canvas (mirrors LoreArchiveMenu / LoreScrollPopup).
+        ownCanvasGO = new GameObject("RunProgressBarCanvas");
+        var canvas = ownCanvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = sortingOrder;          // competes globally now (root canvas)
         if (!string.IsNullOrEmpty(sortingLayerName))
             canvas.sortingLayerName = sortingLayerName;
 
-        // Display-only overlay (CanvasGroup.blocksRaycasts = false), so no GraphicRaycaster
-        // is needed — it would only matter for input, which this bar never consumes.
+        // Same scaler the rest of the UI uses, so size/responsiveness match.
+        var scaler = ownCanvasGO.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight = 0.5f;
+        // No GraphicRaycaster — the bar is display-only (CanvasGroup.blocksRaycasts = false).
 
-        // Belt-and-suspenders: also push to the end of its siblings so it wins even against
-        // anything that ends up sharing our sorting order.
-        if (barRootRT != null) barRootRT.SetAsLastSibling();
+        // Reparent the bar under our canvas, KEEPING its current on-screen position and size
+        // (worldPositionStays = true), so moving it between canvases doesn't make it jump.
+        root.SetParent(ownCanvasGO.transform, worldPositionStays: true);
 
         if (debugLog)
-            Debug.Log($"[RunProgressBar] Forced on top (sortingOrder={sortingOrder}" +
+            Debug.Log($"[RunProgressBar] Hosted on dedicated root canvas (sortingOrder={sortingOrder}" +
                       (string.IsNullOrEmpty(sortingLayerName) ? "" : $", layer='{sortingLayerName}'") +
-                      $") on '{rootGO.name}'.");
+                      $"). Now competes globally — above ARCHIVE button (9990).");
+    }
+
+    // One-shot (and gear-menu) diagnostic that prints the exact state of the bar's layering:
+    // how many bars/StagesTest objects exist, this component's live settings, whether the
+    // dedicated canvas was created, the full parent→canvas chain, and any Archive canvases'
+    // orders — so we can see *why* it is or isn't on top. Always logs (not gated by debugLog).
+    [ContextMenu("Diagnose Layering")]
+    public void DiagnoseLayering()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("════════ [RunProgressBar] LAYERING DIAGNOSTIC ════════");
+
+        var bars = FindObjectsByType<RunProgressBar>(FindObjectsSortMode.None);
+        int stagesCount = 0;
+        foreach (var rt in Resources.FindObjectsOfTypeAll<RectTransform>())
+        {
+            if (rt == null || !rt.gameObject.scene.IsValid()) continue;
+            if (rt.name == "StagesTest") stagesCount++;
+        }
+        sb.AppendLine($"RunProgressBar instances in scene: {bars.Length}   |   'StagesTest' objects: {stagesCount}" +
+                      (bars.Length > 1 || stagesCount > 1 ? "   ⚠ MORE THAN ONE — the wrong copy may be the visible bar!" : ""));
+
+        sb.AppendLine($"This component: GO='{gameObject.name}', enabled={enabled}, activeInHierarchy={gameObject.activeInHierarchy}");
+        sb.AppendLine($"Live settings: forceOnTop={forceOnTop}, sortingOrder={sortingOrder}, windowed={windowed}, windowRadius={windowRadius}");
+        sb.AppendLine($"barRootRT='{(barRootRT != null ? barRootRT.name : "NULL (panels not found — soft-failed?)")}', " +
+                      $"ownCanvasGO={(ownCanvasGO != null ? "CREATED (reparent happened)" : "NULL (NO reparent — not on its own canvas)")}");
+
+        // Walk from the visual root upward, noting every Canvas (this is what actually decides draw order).
+        var node = (barRootRT != null ? barRootRT.transform : transform);
+        sb.AppendLine("Parent chain (bar → up):");
+        int guard = 0;
+        while (node != null && guard++ < 50)
+        {
+            var cv = node.GetComponent<Canvas>();
+            string c = cv != null
+                ? $"   ◀ Canvas[renderMode={cv.renderMode}, overrideSorting={cv.overrideSorting}, sortingOrder={cv.sortingOrder}, layer='{cv.sortingLayerName}', isRoot={cv.isRootCanvas}]"
+                : "";
+            sb.AppendLine($"   • {node.name}{c}");
+            node = node.parent;
+        }
+
+        // List every overlay canvas in the scene with its order, so we can see who wins.
+        sb.AppendLine("All scene canvases (name : renderMode : sortingOrder):");
+        foreach (var cv in Resources.FindObjectsOfTypeAll<Canvas>())
+        {
+            if (cv == null || !cv.gameObject.scene.IsValid()) continue;
+            if (!cv.isRootCanvas && !cv.overrideSorting) continue; // only sorting-relevant canvases
+            sb.AppendLine($"   • '{cv.name}' : {cv.renderMode} : {cv.sortingOrder}" +
+                          (cv.name.ToLower().Contains("archive") ? "   ← ARCHIVE" : "") +
+                          (cv == (ownCanvasGO != null ? ownCanvasGO.GetComponent<Canvas>() : null) ? "   ← THIS BAR" : ""));
+        }
+        sb.AppendLine("══════════════════════════════════════════════════════");
+        Debug.Log(sb.ToString());
     }
 
     /// For any sprite slot the user left empty in the Inspector, try to load from Resources by filename.

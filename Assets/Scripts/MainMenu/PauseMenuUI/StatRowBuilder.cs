@@ -1,21 +1,19 @@
 using UnityEngine;
 using TMPro;
 
-/// <summary>
-/// Small helper that builds and styles a single line of stat text.
-/// Used by StatsPanelUI for both the basic (left column) and detailed (mid panel) views.
-///
-/// It does NOT need a custom prefab — it just needs SOME TextMeshProUGUI prefab to clone.
-/// The same statTextPrefab the old StatsUI already referenced works fine.
-///
-/// Colour coding rules (kept deliberately simple):
-///   multiplier  > 1  -> green   (buffed)
-///   multiplier  < 1  -> red     (nerfed)        ... unless lowerIsBetter, then swapped
-///   multiplier == 1  -> grey    (unchanged)
-/// </summary>
+
+// Helper that builds and styles a single line of stat text.
+// Used by StatsPanelUI for both the basic (left column) and detailed (mid panel) views.
+// It does NOT need a custom prefab — it just needs SOME TextMeshProUGUI prefab to clone.
+// The same statTextPrefab the old StatsUI already referenced works fine.
+// Colour coding rules (kept deliberately simple):
+//   multiplier  > 1  -> green   (buffed)
+//   multiplier  < 1  -> red     (nerfed)        ... unless lowerIsBetter, then swapped
+//   multiplier == 1  -> grey    (unchanged)
+
 public static class StatRowBuilder
 {
-    // ---- Shared palette -------------------------------------------------
+
     public static readonly Color HeaderColor = new Color(1f, 1f, 1f);
     public static readonly Color LabelColor = new Color(0.82f, 0.82f, 0.85f);
     public static readonly Color ValueColor = new Color(1f, 1f, 1f);
@@ -25,12 +23,12 @@ public static class StatRowBuilder
     public static readonly Color WarningColor = new Color(1f, 0.78f, 0.30f);    // amber
     public static readonly Color AccentColor = new Color(0.55f, 0.80f, 1f);    // cyan/info
 
-    /// <summary>Hex (no #) for inline &lt;color&gt; tags.</summary>
+
     public static string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
 
-    /// <summary>
+
     /// Returns green / red / grey depending on how a multiplier compares to 1.
-    /// </summary>
+
     public static Color MultiplierColor(float multiplier, bool lowerIsBetter = false)
     {
         const float epsilon = 0.001f;
@@ -41,10 +39,10 @@ public static class StatRowBuilder
         return isUp ? GoodColor : BadColor;
     }
 
-    /// <summary>
+
     /// Formats a multiplier as a compact coloured suffix, e.g. "x1.4".
     /// Hidden entirely when the multiplier is effectively 1 (keeps rows clean).
-    /// </summary>
+
     public static string FormatMultiplierSuffix(float multiplier, bool lowerIsBetter = false, bool hideWhenNeutral = false)
     {
         const float epsilon = 0.005f;
@@ -58,11 +56,11 @@ public static class StatRowBuilder
         return $" <size=80%><color=#{Hex(c)}>x{multiplier:0.0}</color></size>";
     }
 
-    /// <summary>
+
     /// Returns the LEFT (label) and RIGHT (value + multiplier) parts of a stat
     /// row as separate rich-text strings. The caller places them in two text
     /// objects — left-aligned and right-aligned — for a clean two-column row.
-    /// </summary>
+
     public static (string left, string right) ComposeParts(
         string label, string value, float multiplier = 1f,
         bool lowerIsBetter = false, bool hideWhenNeutral = false)
@@ -73,10 +71,10 @@ public static class StatRowBuilder
         return (left, right);
     }
 
-    /// <summary>
+
     /// Single-string form (label + value together), kept for the LEFT panel
     /// rows which are single pre-existing TMP objects.
-    /// </summary>
+
     public static string Compose(string label, string value, float multiplier = 1f,
                                  bool lowerIsBetter = false, bool hideWhenNeutral = false)
     {
@@ -85,13 +83,13 @@ public static class StatRowBuilder
                $"<color=#{Hex(ValueColor)}>{value}</color>{suffix}";
     }
 
-    /// <summary>A section header line, e.g. "PLAYER".</summary>
+
     public static string ComposeHeader(string text)
     {
         return $"<b><size=115%><color=#{Hex(HeaderColor)}>{text}</color></size></b>";
     }
 
-    /// <summary>A plain coloured line (used for info / warning sub-headers).</summary>
+
     public static string ComposeNote(string text, Color color)
     {
         return $"<b><color=#{Hex(color)}>{text}</color></b>";

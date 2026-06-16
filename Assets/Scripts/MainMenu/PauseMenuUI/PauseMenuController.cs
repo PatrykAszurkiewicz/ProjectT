@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
@@ -6,7 +7,10 @@ public class PauseMenuController : MonoBehaviour
 {
     public GameObject pauseMenu;
     private bool activated;
-    private GameObject _weaponRollCanvas;
+
+    // Co-op: there can be one weapon-roll canvas per player, so we hide ALL of
+    // them rather than a single GameObject.Find("WeaponRoll_Canvas").
+    private readonly List<GameObject> _weaponRollCanvases = new List<GameObject>();
 
     private void Awake()
     {
@@ -20,23 +24,28 @@ public class PauseMenuController : MonoBehaviour
         // runs regardless of Time.timeScale, so this still un-pauses at 0.
         if (Gamepad.current != null && Gamepad.current.startButton.wasPressedThisFrame)
             ActivatePauseMenu();
+
+        // Esc on the keyboard toggles the pause menu too.
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            ActivatePauseMenu();
     }
 
     public void ActivatePauseMenu()
     {
-        // The WeaponRollUI builds its own canvas at runtime, so we look it up
-        // lazily by name the first time we pause.
-        if (_weaponRollCanvas == null)
-            _weaponRollCanvas = GameObject.Find("WeaponRoll_Canvas");
-
         if (activated == false)
         {
             activated = true;
             Time.timeScale = 0f;
             Cursor.visible = true;
             pauseMenu.SetActive(true);
-            if (_weaponRollCanvas != null) _weaponRollCanvas.SetActive(false);
-            PlayerAttack.InputSuppressed = true;
+
+            // Collect the weapon-roll canvases WHILE THEY ARE STILL ACTIVE, then
+            // hide them. We reuse this same list on resume — re-collecting on
+            // resume would miss them (they're inactive) and they'd never come
+            // back. The WeaponRollUI builds one canvas per player at runtime.
+            CollectWeaponRollCanvases();
+            SetWeaponRollCanvasesActive(false);
+            PlayerAttack.SetAllSuppressed(true);
 
             // Kill any in-flight shake so the menu doesn't wobble.
             CombatJuice.StopAllShake();
@@ -47,9 +56,29 @@ public class PauseMenuController : MonoBehaviour
             Time.timeScale = 1f;
             Cursor.visible = false;
             pauseMenu.SetActive(false);
-            if (_weaponRollCanvas != null) _weaponRollCanvas.SetActive(true);
-            PlayerAttack.InputSuppressed = false;
+            SetWeaponRollCanvasesActive(true);
+            PlayerAttack.SetAllSuppressed(false);
         }
+    }
+
+    // Find every weapon-roll canvas in the scene. Phase 3 gives each player's
+    // canvas a unique name (e.g. "WeaponRoll_Canvas_P0"), so we match by prefix.
+    private void CollectWeaponRollCanvases()
+    {
+        _weaponRollCanvases.Clear();
+        foreach (var t in FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (t == null || t.parent != null) continue; // canvas roots only
+            if (t.name.StartsWith("WeaponRoll_Canvas"))
+                _weaponRollCanvases.Add(t.gameObject);
+        }
+    }
+
+    private void SetWeaponRollCanvasesActive(bool active)
+    {
+        for (int i = 0; i < _weaponRollCanvases.Count; i++)
+            if (_weaponRollCanvases[i] != null)
+                _weaponRollCanvases[i].SetActive(active);
     }
 }
 

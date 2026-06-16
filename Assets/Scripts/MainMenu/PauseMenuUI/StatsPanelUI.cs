@@ -18,6 +18,21 @@ public class StatsPanelUI : MonoBehaviour
     [Header("Behaviour")]
     public float refreshInterval = 0.5f;
 
+    [Header("Co-op (Phase 6)")]
+    [Tooltip("Which player's stats this panel shows: 0 = Player 1, 1 = Player 2, " +
+             "-1 = single-player / first found. Players spawn at runtime, so this " +
+             "is an index (you can't drag a runtime player in).")]
+    public int playerIndex = -1;
+
+    [Tooltip("Untick to hide a section on THIS panel. Use it to make a per-player " +
+             "panel (Player + Weapon only) and a shared panel (Base/Tower/Enemy/Global).")]
+    public bool showPlayer = true;
+    public bool showWeapon = true;
+    public bool showBase = true;
+    public bool showTower = true;
+    public bool showEnemy = true;
+    public bool showGlobal = true;
+
     //  Section model
     private enum Cat { Player, Weapon, Base, Tower, Enemy, Global }
 
@@ -50,6 +65,43 @@ public class StatsPanelUI : MonoBehaviour
 
     //  Runtime state
     private PlayerStats _player;
+
+    // Resolve the bound player (index >= 0) or fall back to the first found.
+    private PlayerStats ResolvePlayer()
+    {
+        if (playerIndex >= 0 && PlayerRegistry.Count > 0)
+        {
+            var pr = PlayerRegistry.Instance.Get(playerIndex);
+            if (pr != null && pr.Stats != null) return pr.Stats;
+        }
+        return FindAnyObjectByType<PlayerStats>();
+    }
+
+    // Per-player augment multiplier for Player/Weapon stats; shared (global)
+    // for Tower/Enemy/Global so the common panel stays correct.
+    private float Mult(string stat, string target)
+    {
+        bool perPlayer = playerIndex >= 0 &&
+            (string.Equals(target, "Player", System.StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(target, "Weapon", System.StringComparison.OrdinalIgnoreCase));
+        return perPlayer
+            ? AugmentMath.Multiplier(stat, target, playerIndex)
+            : AugmentMath.Multiplier(stat, target);
+    }
+
+    private bool IsSectionVisible(Cat c)
+    {
+        switch (c)
+        {
+            case Cat.Player: return showPlayer;
+            case Cat.Weapon: return showWeapon;
+            case Cat.Base: return showBase;
+            case Cat.Tower: return showTower;
+            case Cat.Enemy: return showEnemy;
+            case Cat.Global: return showGlobal;
+            default: return true;
+        }
+    }
     private Transform _detailContainer;
     private int _detailCursor;
     private Cat _currentDetail = Cat.Player;
@@ -62,7 +114,7 @@ public class StatsPanelUI : MonoBehaviour
     private void Start()
     {
         if (!_bound) Bind();
-        _player = FindAnyObjectByType<PlayerStats>();
+        _player = ResolvePlayer();
         RefreshAll();
         ShowDetail(_currentDetail);
     }
@@ -72,7 +124,7 @@ public class StatsPanelUI : MonoBehaviour
         // Start may not have run yet on the very first enable — guard with _bound.
         if (_bound)
         {
-            _player = FindAnyObjectByType<PlayerStats>();
+            _player = ResolvePlayer();
             RefreshAll();
             ShowDetail(_currentDetail);
         }
@@ -93,7 +145,7 @@ public class StatsPanelUI : MonoBehaviour
         _timer += Time.unscaledDeltaTime;   // game is paused (timeScale 0)
         if (_timer < refreshInterval) return;
         _timer = 0f;
-        if (_player == null) _player = FindAnyObjectByType<PlayerStats>();
+        if (_player == null) _player = ResolvePlayer();
         RefreshAll();
     }
 
@@ -122,6 +174,11 @@ public class StatsPanelUI : MonoBehaviour
                 continue;
             }
             sectionsFound++;
+
+            // Co-op: hide this whole section on panels that shouldn't show it.
+            bool sectionVisible = IsSectionVisible(s.category);
+            sectionT.gameObject.SetActive(sectionVisible);
+            if (!sectionVisible) continue;
 
             // Button — wire its click to show this category's detail.
             s.button = sectionT.GetComponent<Button>();
@@ -155,6 +212,11 @@ public class StatsPanelUI : MonoBehaviour
                     Debug.LogWarning($"[StatsPanelUI] Row '{rowName}' has no TextMeshProUGUI.");
             }
         }
+
+        // Default the detail view to the first VISIBLE section (so a shared panel
+        // that hides Player/Weapon opens on Base instead of an empty Player view).
+        foreach (var s in _sections)
+            if (IsSectionVisible(s.category)) { _currentDetail = s.category; break; }
 
         // Detail container resolution.
         // Priority: explicit override -> StatsUI scroll-view 'Content' -> RightPanel.
@@ -420,17 +482,17 @@ public class StatsPanelUI : MonoBehaviour
         if (_player == null) return;
 
         Set(s, "Hp", "Health", $"{_player.maxHealth:0}",
-            AugmentMath.Multiplier("maxHealth", "Player"));
+            Mult("maxHealth", "Player"));
         Set(s, "Regen", "Regen", $"{_player.healthRegenRate:0.#}/s",
-            AugmentMath.Multiplier("healthRegenRate", "Player"));
+            Mult("healthRegenRate", "Player"));
         Set(s, "Stamina", "Stamina", $"{_player.maxStamina:0.#}",
-            AugmentMath.Multiplier("maxStamina", "Player"));
+            Mult("maxStamina", "Player"));
         Set(s, "MoveSpeed", "Move Speed", $"{_player.moveSpeed:0.#}",
-            AugmentMath.Multiplier("moveSpeed", "Player"));
+            Mult("moveSpeed", "Player"));
         Set(s, "Armor", "Armor", $"{_player.currentArmor:0.#}",
-            AugmentMath.Multiplier("currentArmor", "Player"));
+            Mult("currentArmor", "Player"));
         Set(s, "DashCooldown", "Dash Cooldown", $"{_player.dashCooldown:0.#}s",
-            AugmentMath.Multiplier("dashCooldown", "Player"), lowerIsBetter: true);
+            Mult("dashCooldown", "Player"), lowerIsBetter: true);
     }
 
     private void FillWeapon(Section s)
@@ -444,7 +506,7 @@ public class StatsPanelUI : MonoBehaviour
             return;
         }
 
-        float dmgMul = AugmentMath.Multiplier("damage", "Weapon");
+        float dmgMul = Mult("damage", "Weapon");
         string dpsText = ComputeDpsText(w);
 
         SetNote(s, "Name", w.weaponName, StatRowBuilder.AccentColor);
@@ -509,11 +571,11 @@ public class StatsPanelUI : MonoBehaviour
 
         Set(s, "Amount", "Tower Amount", $"{towers.Length}", 1f);
         Set(s, "Damage", "Damage", $"{sample.GetDamage():0.#}",
-            AugmentMath.Multiplier("damage", "Tower"));
+            Mult("damage", "Tower"));
         Set(s, "FireRate", "Fire Rate", $"{sample.GetFireRate():0.00}/s",
-            AugmentMath.Multiplier("fireRate", "Tower"));
+            Mult("fireRate", "Tower"));
         Set(s, "Range", "Range", $"{sample.GetRange():0.#}",
-            AugmentMath.Multiplier("range", "Tower"));
+            Mult("range", "Tower"));
     }
 
     private void FillEnemy(Section s)
@@ -685,7 +747,7 @@ public class StatsPanelUI : MonoBehaviour
         var w = ResolveWeaponData();
         if (w == null) { DNote("No weapon equipped", StatRowBuilder.WarningColor); return; }
 
-        float dmgMul = AugmentMath.Multiplier("damage", "Weapon");
+        float dmgMul = Mult("damage", "Weapon");
 
         DNote(w.weaponName, StatRowBuilder.AccentColor);
         DRow("Damage", $"{w.damage:0.#}", dmgMul);
@@ -785,16 +847,16 @@ public class StatsPanelUI : MonoBehaviour
             if (t.IsGenerator())
             {
                 DRow("Gen Rate", $"{t.GetGenerationRate():0.#}/s",
-                     AugmentMath.Multiplier("energyGenerationRate", "Tower"));
+                     Mult("energyGenerationRate", "Tower"));
                 DRow("Gen Range", $"{t.generationRange:0.#}", 1f);
                 DRow("Self Cost", $"{t.generatorSelfConsumption * 100f:0}%", 1f,
                      lowerIsBetter: true);
             }
             else
             {
-                DRow("Damage", $"{t.GetDamage():0.#}", AugmentMath.Multiplier("damage", "Tower"));
-                DRow("Range", $"{t.GetRange():0.#}", AugmentMath.Multiplier("range", "Tower"));
-                DRow("Fire Rate", $"{t.GetFireRate():0.00}/s", AugmentMath.Multiplier("fireRate", "Tower"));
+                DRow("Damage", $"{t.GetDamage():0.#}", Mult("damage", "Tower"));
+                DRow("Range", $"{t.GetRange():0.#}", Mult("range", "Tower"));
+                DRow("Fire Rate", $"{t.GetFireRate():0.00}/s", Mult("fireRate", "Tower"));
                 if (t.freezeChance > 0)
                     DRowColored("Freeze Chance", $"{t.freezeChance * 100f:0}%", StatRowBuilder.AccentColor);
                 if (!Mathf.Approximately(t.energyCostMultiplier, 1f))
@@ -804,7 +866,7 @@ public class StatsPanelUI : MonoBehaviour
 
             // Shared between attacker and generator towers.
             DRow("Max Energy", $"{t.GetMaxEnergy():0}",
-                 AugmentMath.Multiplier("maxEnergy", "Tower"));
+                 Mult("maxEnergy", "Tower"));
             if (t.GetArmor() > 0)
                 DRowColored("Armor", $"{t.GetArmor() * 100f:0}%", StatRowBuilder.GoodColor);
             if (t.healthRegenRate > 0)
@@ -1083,4 +1145,5 @@ public class StatsPanelUI : MonoBehaviour
         return null;
     }
 }
+
 

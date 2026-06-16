@@ -83,6 +83,7 @@ public class LoreScrollPopup : MonoBehaviour
         CombatJuice.StopAllShake();
         float prevTimeScale = Time.timeScale;
         Time.timeScale = 0f;
+        bool prevCursorVisible = Cursor.visible;
         Cursor.visible = true;
         bool prevInputSuppressed = PlayerAttack.InputSuppressed;
         PlayerAttack.InputSuppressed = true;
@@ -98,7 +99,7 @@ public class LoreScrollPopup : MonoBehaviour
 
         Time.timeScale = prevTimeScale;
         PlayerAttack.InputSuppressed = prevInputSuppressed;
-        Cursor.visible = false;
+        Cursor.visible = prevCursorVisible;
         root.SetActive(false);
         isOpen = false;
     }
@@ -276,5 +277,3 @@ public class LoreScrollPopup : MonoBehaviour
         if (_instance == this) _instance = null;
     }
 }
-
-

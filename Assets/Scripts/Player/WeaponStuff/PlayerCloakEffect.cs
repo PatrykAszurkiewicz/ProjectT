@@ -1,18 +1,18 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-/// Drives the Stealth Cloak's invisibility state on the PLAYER.
-///   • StealthCloakSystem.Activate() calls TryActivate() on right-click.
-///   • A second right-click while cloaked calls Deactivate() (early uncloak).
-///   • While active the player's sprite goes semi-transparent and a soft
-///     shimmer / refraction ring orbits the player.
-///   • Invisibility ends when ANY of: the duration runs out, the player
-///     attacks an enemy/boss (NotifyPlayerAttacked()), or the player
-///     right-clicks again (Deactivate()).
-///   • After it ends a cooldown must elapse before it can be re-activated.
-/// "Enemies ignore the player" is implemented via the static isActive
-/// flag, which EnemyController.UpdateTarget() and Boss1.FindTarget() consult.
-/// This component is the single source of truth for that flag.
+// Drives the Stealth Cloak's invisibility state on the PLAYER.
+//    StealthCloakSystem.Activate() calls TryActivate() on right-click.
+//    A second right-click while cloaked calls Deactivate() (early uncloak).
+//    While active the player's sprite goes semi-transparent and a soft
+//     shimmer / refraction ring orbits the player.
+//    Invisibility ends when ANY of: the duration runs out, the player
+//     attacks an enemy/boss (NotifyPlayerAttacked()), or the player
+//     right-clicks again (Deactivate()).
+//    After it ends a cooldown must elapse before it can be re-activated.
+// "Enemies ignore the player" is implemented via the static isActive
+// flag, which EnemyController.UpdateTarget() and Boss1.FindTarget() consult.
+// This component is the single source of truth for that flag.
 
 public class PlayerCloakEffect : MonoBehaviour
 {
@@ -321,7 +321,7 @@ public class PlayerCloakEffect : MonoBehaviour
         _shimmerRings = null;
     }
 
-    /// <summary>Procedural soft ring sprite — no art asset needed.</summary>
+
     private static Sprite GetRingSprite()
     {
         if (_cachedRingSprite != null) return _cachedRingSprite;
@@ -351,7 +351,7 @@ public class PlayerCloakEffect : MonoBehaviour
         return _cachedRingSprite;
     }
 
-    // ── Audio (best-effort; silent if events aren't wired) ──
+    //  Audio (best-effort; silent if events aren't wired) 
 
     private void PlayCloakSound()
     {

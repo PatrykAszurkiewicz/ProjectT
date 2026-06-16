@@ -18,7 +18,10 @@ using System.Collections.Generic;
 [System.Serializable]
 public class RunSaveData
 {
-    public int saveVersion = 1;
+    // v2 (Phase 7c): players[] replaces the single flat player block so co-op
+    // runs save/resume every player. Saves written by v1 are rejected on load
+    // (resume saves are transient crash-recovery, so this costs nothing).
+    public int saveVersion = 2;
     public long timestampUnix;     // for "continue run from 12:04" UI, optional
     public string runConfigName;     // informational / sanity check on load
 
@@ -29,12 +32,9 @@ public class RunSaveData
     public int stageIndex;
     public int waveIndex;
 
-    // Player (absolutes).
-    public bool hasPlayer;
-    public float playerHealth, playerMaxHealth, playerArmor;
-    public float playerMana, playerMaxMana;
-    public float playerStamina, playerMaxStamina;
-    public int playerDashesLeft;
+    // Players (absolutes), one entry per registered player, keyed by playerIndex.
+    // Single player = a one-element list at index 0.
+    public List<PlayerSaveEntry> players = new List<PlayerSaveEntry>();
 
     // Core (absolutes).
     public bool hasCore;
@@ -61,17 +61,33 @@ public class RunSaveData
     public string equippedToolAsset;
 }
 
+// One player's run-mutated absolutes, keyed by playerIndex (0 = P1, 1 = P2…).
+[System.Serializable]
+public class PlayerSaveEntry
+{
+    public int playerIndex;
+    public float playerHealth, playerMaxHealth, playerArmor;
+    public float playerMana, playerMaxMana;
+    public float playerStamina, playerMaxStamina;
+    public int playerDashesLeft;
+}
+
 [System.Serializable]
 public class AugmentSaveEntry
 {
     public int id;
     public string rarity = "Common";
+    // Phase 7c: which player picked this augment, so resume replays it onto the
+    // right player (Player/Weapon effects + their weapon unlocks). 0 in single player.
+    public int playerIndex = 0;
 
     public AugmentSaveEntry() { }
-    public AugmentSaveEntry(int id, string rarity)
+    public AugmentSaveEntry(int id, string rarity) : this(id, rarity, 0) { }
+    public AugmentSaveEntry(int id, string rarity, int playerIndex)
     {
         this.id = id;
         this.rarity = string.IsNullOrEmpty(rarity) ? "Common" : rarity;
+        this.playerIndex = playerIndex;
     }
 }
 

@@ -12,7 +12,13 @@ public class BufferFog : MonoBehaviour
     private GameObject attacker;
 
     private float elapsed = 0f;
-    private float playerDamageAccumulator = 0f;
+
+    // Co-op: one damage accumulator PER player so each is taxed independently
+    // (a single shared accumulator would split the fog DPS between them).
+    private readonly Dictionary<CharacterStats, float> playerDamageAccumulators = new Dictionary<CharacterStats, float>();
+    // Reused each frame to avoid allocations.
+    private readonly HashSet<CharacterStats> _playersInsideThisFrame = new HashSet<CharacterStats>();
+    private readonly List<CharacterStats> _accResetScratch = new List<CharacterStats>();
 
     // Enemies we've tagged. Tracked so we can strip buffs cleanly on expiry.
     private readonly HashSet<ScarecrowBuffTag> taggedEnemies = new HashSet<ScarecrowBuffTag>();
@@ -103,27 +109,40 @@ public class BufferFog : MonoBehaviour
 
     private void DamagePlayerIfInside()
     {
-        GameObject playerGO = GameObject.FindGameObjectWithTag("Player");
-        if (playerGO == null) return;
+        // Co-op: damage every alive player inside the fog. AllAliveInRadius
+        // filters by distance + dead. Each player keeps their own accumulator so
+        // sub-1 DPS doesn't spam TakeDamage and they tick on independent
+        // schedules; a player who leaves has their accumulator reset so re-entry
+        // doesn't dump a frame-1 spike. With one player this matches the old
+        // single-player behavior exactly.
+        _playersInsideThisFrame.Clear();
 
-        Vector2 toPlayer = (Vector2)playerGO.transform.position - (Vector2)transform.position;
-        if (toPlayer.sqrMagnitude > radius * radius)
+        foreach (var stats in PlayerRegistry.Instance.AllAliveInRadius(transform.position, radius))
         {
-            // Reset accumulator on exit so re-entry doesn't dump a frame-1
-            // damage spike from leftover fractional accumulation.
-            playerDamageAccumulator = 0f;
-            return;
+            if (stats == null) continue;
+            _playersInsideThisFrame.Add(stats);
+
+            float acc = playerDamageAccumulators.TryGetValue(stats, out var existing) ? existing : 0f;
+            acc += playerDamagePerSecond * Time.deltaTime;
+            if (acc >= 1f)
+            {
+                int whole = Mathf.FloorToInt(acc);
+                acc -= whole;
+                stats.TakeDamage(whole);
+            }
+            playerDamageAccumulators[stats] = acc;
         }
 
-        // Accumulate and apply in whole-number ticks; same pattern as the
-        // scarecrow aura so TakeDamage isn't spammed with sub-1 values.
-        playerDamageAccumulator += playerDamagePerSecond * Time.deltaTime;
-        if (playerDamageAccumulator >= 1f)
+        // Reset the accumulator for anyone who is no longer inside (or who died).
+        if (playerDamageAccumulators.Count > 0)
         {
-            int whole = Mathf.FloorToInt(playerDamageAccumulator);
-            playerDamageAccumulator -= whole;
-            var stats = playerGO.GetComponent<CharacterStats>();
-            if (stats != null) stats.TakeDamage(whole);
+            _accResetScratch.Clear();
+            foreach (var kv in playerDamageAccumulators)
+                if (!_playersInsideThisFrame.Contains(kv.Key))
+                    _accResetScratch.Add(kv.Key);
+
+            for (int i = 0; i < _accResetScratch.Count; i++)
+                playerDamageAccumulators.Remove(_accResetScratch[i]);
         }
     }
 
@@ -149,5 +168,4 @@ public class BufferFog : MonoBehaviour
     }
 #endif
 }
-
 

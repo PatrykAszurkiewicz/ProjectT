@@ -61,7 +61,9 @@ public class ClockSystem
 
         if (s != null)
         {
-            float cd = CooldownModifier.Apply(cooldownDuration);
+            int ownerIndex = weapon != null
+                ? (weapon.GetComponentInParent<PlayerRef>()?.PlayerIndex ?? 0) : 0;
+            float cd = CooldownModifier.Apply(cooldownDuration, ownerIndex);
             s.clockCooldownTotal = cd;
             s.clockCooldownTimer = cd;
         }

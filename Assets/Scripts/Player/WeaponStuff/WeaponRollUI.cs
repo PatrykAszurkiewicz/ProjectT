@@ -60,6 +60,7 @@ public class WeaponRollUI : MonoBehaviour
     [Range(0f, 1f)] public float gaugeLowFuelMaxBlend = 0.6f;
 
     WeaponRollController _ctrl;
+    PlayerRef _playerRef;
     Canvas _canvas;
     Weapon _weapon; // resolved lazily; used for live gauge state
 
@@ -113,7 +114,11 @@ public class WeaponRollUI : MonoBehaviour
     IEnumerator Init()
     {
         yield return null;
-        _ctrl = FindFirstObjectByType<WeaponRollController>();
+        _playerRef = GetComponentInParent<PlayerRef>();
+        // Bind to THIS player's controller (sibling). Fallback to scene search
+        // for the single-player / legacy layout.
+        _ctrl = GetComponent<WeaponRollController>();
+        if (_ctrl == null) _ctrl = FindFirstObjectByType<WeaponRollController>();
         if (_ctrl == null) yield break;
         BuildCanvas();
         if (WeaponUnlockRegistry.Instance != null)
@@ -131,8 +136,15 @@ public class WeaponRollUI : MonoBehaviour
 
     void BuildCanvas()
     {
-        var go = new GameObject("WeaponRoll_Canvas");
+        int idx = _playerRef != null ? _playerRef.PlayerIndex : 0;
+        var go = new GameObject($"WeaponRoll_Canvas_P{idx}");
         _canvas = go.AddComponent<Canvas>();
+
+        // Co-op: keep ScreenSpaceOverlay (always on top of the world, so the
+        // grass can't draw over the hotbar and menus behave as before). To put
+        // each player's hotbar in its own half we offset the roots by the
+        // owning camera's viewport rect (see PositionRootsForViewport). Single
+        // player has a full-screen camera, so the offset is zero — unchanged.
         _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         _canvas.sortingOrder = 100;
         go.AddComponent<CanvasScaler>();
@@ -143,6 +155,7 @@ public class WeaponRollUI : MonoBehaviour
         wGo.transform.SetParent(_canvas.transform, false);
         _weaponRoot = wGo.GetComponent<RectTransform>();
         _weaponRoot.anchorMin = _weaponRoot.anchorMax = _weaponRoot.pivot = Vector2.zero;
+        // base (set every frame in PositionRootsForViewport with the viewport offset)
         _weaponRoot.anchoredPosition = bottomLeftPadding;
 
         // Tool root: active icon at Y=0 (bottom of tool roll), inactive go UP
@@ -154,6 +167,31 @@ public class WeaponRollUI : MonoBehaviour
             bottomLeftPadding.x,
             bottomLeftPadding.y + circleSize + gapBetweenRolls
         );
+
+        PositionRootsForViewport();
+    }
+
+    // Co-op: shift both roots into the owning player's split-screen half using
+    // the camera's pixel viewport. Single player (full-screen camera) → zero
+    // offset, so the hotbar stays exactly where it was. Recomputed each frame
+    // so it survives window/viewport resizes.
+    void PositionRootsForViewport()
+    {
+        if (_weaponRoot == null || _toolRoot == null) return;
+
+        Vector2 off = Vector2.zero;
+        Camera cam = _playerRef != null ? _playerRef.Camera : null;
+        if (cam != null)
+        {
+            Rect pr = cam.pixelRect;
+            off = new Vector2(pr.xMin, pr.yMin);
+        }
+
+        _weaponRoot.anchoredPosition = bottomLeftPadding + off;
+        _toolRoot.anchoredPosition = new Vector2(
+            bottomLeftPadding.x,
+            bottomLeftPadding.y + circleSize + gapBetweenRolls
+        ) + off;
     }
 
     //  REFRESH
@@ -204,9 +242,12 @@ public class WeaponRollUI : MonoBehaviour
     {
         if (_canvas == null || _ctrl == null) return;
 
-        // Resolve the Weapon lazily (it may not exist when this UI starts).
-        if (_weapon == null) _weapon = FindFirstObjectByType<Weapon>();
+        // Resolve THIS player's Weapon lazily (sibling under the player).
+        if (_weapon == null)
+            _weapon = _playerRef != null ? _playerRef.GetComponentInChildren<Weapon>()
+                                         : FindFirstObjectByType<Weapon>();
 
+        PositionRootsForViewport();
         UpdateGauges();
     }
 
@@ -879,4 +920,5 @@ public class WeaponRollUI : MonoBehaviour
     bool UsingRingSprites => (_activeRing != null || _inactiveRing != null);
 
 }
+
 

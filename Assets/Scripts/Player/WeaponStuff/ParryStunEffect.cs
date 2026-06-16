@@ -53,7 +53,10 @@ public class ParryStunEffect : MonoBehaviour
 
     // Convenience entry point used by both the melee parry (ShieldSystem) and any
     // projectile-parry code
-    public static ParryStunEffect ApplyOrRefresh(GameObject enemyGO)
+    // Phase 8: the parry upgrades applied come from the PARRYING player. Pass
+    // their index so Longer Parry Stun (330) / Powerful Parry (331) read that
+    // player's values. The old 1-arg form below routes to player 0 (back-compat).
+    public static ParryStunEffect ApplyOrRefresh(GameObject enemyGO, int parryingIndex)
     {
         if (enemyGO == null) return null;
 
@@ -63,22 +66,26 @@ public class ParryStunEffect : MonoBehaviour
         var existing = enemyGO.GetComponent<ParryStunEffect>();
         if (existing != null)
         {
-            existing.Refresh(baseStun, ParryUpgrades.BaseDamageBonus);
+            existing.Refresh(baseStun, ParryUpgrades.BaseDamageBonus, parryingIndex);
             return existing;
         }
 
         var effect = enemyGO.AddComponent<ParryStunEffect>();
-        effect.Initialize(baseStun, ParryUpgrades.BaseDamageBonus);
+        effect.Initialize(baseStun, ParryUpgrades.BaseDamageBonus, parryingIndex);
         return effect;
     }
+
+    // Back-compat (player 0) — used by call sites not yet converted.
+    public static ParryStunEffect ApplyOrRefresh(GameObject enemyGO)
+        => ApplyOrRefresh(enemyGO, 0);
 
 
     // Backwards-compatible 2-arg entry point. `baseStunDuration` and
     // `baseDamageBonus` are the un-upgraded values; ParryUpgrades is layered on
     // here so EVERY caller (melee or projectile) gets the augments for free.
-    public void Initialize(float baseStunDuration, float baseDamageBonus)
+    public void Initialize(float baseStunDuration, float baseDamageBonus, int parryingIndex = 0)
     {
-        ResolveDurations(baseStunDuration, baseDamageBonus);
+        ResolveDurations(baseStunDuration, baseDamageBonus, parryingIndex);
         elapsed = 0f;
         initialized = true;
         stunReleased = false;
@@ -88,9 +95,9 @@ public class ParryStunEffect : MonoBehaviour
         CreateStarsVFX();
     }
 
-    public void Refresh(float baseStunDuration, float baseDamageBonus)
+    public void Refresh(float baseStunDuration, float baseDamageBonus, int parryingIndex = 0)
     {
-        ResolveDurations(baseStunDuration, baseDamageBonus);
+        ResolveDurations(baseStunDuration, baseDamageBonus, parryingIndex);
         elapsed = 0f;
 
         // If the freeze had already been released (long debuff lingering), we are
@@ -108,14 +115,15 @@ public class ParryStunEffect : MonoBehaviour
         }
     }
 
-    // Layer the upgrade augments onto the passed-in base values.
-    private void ResolveDurations(float baseStunDuration, float baseDamageBonus)
+    // Layer the upgrade augments onto the passed-in base values, using the
+    // PARRYING player's per-player upgrades (Phase 8).
+    private void ResolveDurations(float baseStunDuration, float baseDamageBonus, int parryingIndex = 0)
     {
         // 330 — Longer Parry Stun
-        freezeDuration = Mathf.Max(0.01f, baseStunDuration + ParryUpgrades.ExtraStunSeconds);
+        freezeDuration = Mathf.Max(0.01f, baseStunDuration + ParryUpgrades.ExtraStunSecondsFor(parryingIndex));
 
         // 331 — Powerful Parry (or default: debuff lasts as long as the freeze)
-        ParryUpgrades.ResolveDamageDebuff(baseDamageBonus, freezeDuration,
+        ParryUpgrades.ResolveDamageDebuff(parryingIndex, baseDamageBonus, freezeDuration,
                                           out damageBonus, out debuffDuration);
         debuffDuration = Mathf.Max(0.01f, debuffDuration);
     }
@@ -357,3 +365,4 @@ public class ParryStunEffect : MonoBehaviour
         return _starSprite;
     }
 }
+

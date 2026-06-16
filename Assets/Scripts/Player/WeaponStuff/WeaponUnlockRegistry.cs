@@ -28,8 +28,20 @@ public class WeaponUnlockRegistry : MonoBehaviour
 
     };
 
-    private readonly HashSet<int> _unlocked = new HashSet<int>();
+    // Phase 5/6 (co-op): unlocks are PER PLAYER. Each player only sees the
+    // weapons/tools THEY unlocked; slot 0 (Melee) is the default for everyone.
+    private readonly Dictionary<int, HashSet<int>> _unlockedByPlayer = new Dictionary<int, HashSet<int>>();
     public System.Action OnUnlocksChanged;
+
+    private HashSet<int> PoolFor(int playerIndex)
+    {
+        if (!_unlockedByPlayer.TryGetValue(playerIndex, out var set))
+        {
+            set = new HashSet<int> { 0 }; // Melee always available
+            _unlockedByPlayer[playerIndex] = set;
+        }
+        return set;
+    }
 
     void Awake()
     {
@@ -39,15 +51,15 @@ public class WeaponUnlockRegistry : MonoBehaviour
 
     void Start()
     {
-        // Slot 0 (Melee) is always available as default
-        _unlocked.Add(0);
-
         if (AugmentRegistry.Instance != null)
         {
-            foreach (int id in AugmentRegistry.Instance.GetAppliedAugments())
-                TryUnlock(id, silent: true);
+            // Seed each player's pool from THEIR applied set (single-player / replay).
+            int players = PlayerRegistry.Count > 0 ? PlayerRegistry.Count : 1;
+            for (int idx = 0; idx < Mathf.Max(players, 1); idx++)
+                foreach (int id in AugmentRegistry.Instance.GetAppliedAugments(idx))
+                    TryUnlock(id, idx, silent: true);
 
-            AugmentRegistry.Instance.OnAugmentApplied += OnAugmentApplied;
+            AugmentRegistry.Instance.OnAugmentAppliedByPlayer += OnAugmentAppliedByPlayer;
         }
 
         // Notify after all initial unlocks are set
@@ -58,32 +70,40 @@ public class WeaponUnlockRegistry : MonoBehaviour
     {
         if (Instance == this) Instance = null;
         if (AugmentRegistry.Instance != null)
-            AugmentRegistry.Instance.OnAugmentApplied -= OnAugmentApplied;
+            AugmentRegistry.Instance.OnAugmentAppliedByPlayer -= OnAugmentAppliedByPlayer;
     }
 
-    void OnAugmentApplied(AugmentData data) => TryUnlock(data.ID);
+    void OnAugmentAppliedByPlayer(AugmentData data, int playerIndex) => TryUnlock(data.ID, playerIndex);
 
-    public void TryUnlock(int augmentID, bool silent = false)
+    // Per-player unlock (Phase 5/6).
+    public void TryUnlock(int augmentID, int playerIndex, bool silent = false)
     {
         if (!AugmentToSlot.TryGetValue(augmentID, out int slot)) return;
-        if (!_unlocked.Add(slot)) return;
+        if (!PoolFor(playerIndex).Add(slot)) return;
 
         if (!silent)
-            Debug.Log($"[WeaponUnlockRegistry] Unlocked slot {slot} via augment {augmentID}");
+            Debug.Log($"[WeaponUnlockRegistry] P{playerIndex} unlocked slot {slot} via augment {augmentID}");
 
         OnUnlocksChanged?.Invoke();
     }
 
-    public void ForceUnlock(int slot)
+    // Back-compat: single-player path unlocks for player 0.
+    public void TryUnlock(int augmentID, bool silent = false) => TryUnlock(augmentID, 0, silent);
+
+    public void ForceUnlock(int slot, int playerIndex = 0)
     {
-        if (_unlocked.Add(slot))
-        {
-            //Debug.Log($"[WeaponUnlockRegistry] Force-unlocked slot {slot}");
+        if (PoolFor(playerIndex).Add(slot))
             OnUnlocksChanged?.Invoke();
-        }
     }
 
-    public IReadOnlyCollection<int> UnlockedSlots => _unlocked;
-    public bool IsUnlocked(int slot) => _unlocked.Contains(slot);
+    public bool IsUnlocked(int slot, int playerIndex)
+    {
+        if (slot == 0) return true; // Melee default for everyone
+        return _unlockedByPlayer.TryGetValue(playerIndex, out var set) && set.Contains(slot);
+    }
+
+    // Back-compat (player 0).
+    public bool IsUnlocked(int slot) => IsUnlocked(slot, 0);
+    public IReadOnlyCollection<int> UnlockedSlots => PoolFor(0);
 }
 

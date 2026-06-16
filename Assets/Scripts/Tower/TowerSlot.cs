@@ -70,7 +70,28 @@ public class TowerSlot : MonoBehaviour
         // step 1 when the player walks above the slot — without this clamp,
         // walking high above the slot would give the player a smaller
         // sortingOrder than the slot, and the slot would pop in front.
-        if (playerSpriteRenderer == null || playerTransform == null)
+        // Co-op: clamp behind the NEAREST player so the slot sits behind whoever
+        // is standing over it. Single player falls back to the tagged player.
+        SpriteRenderer nearSR = ResolveNearestPlayerSprite();
+        if (nearSR != null)
+        {
+            int maxAllowed = nearSR.sortingOrder - 1;
+            if (order > maxAllowed) order = maxAllowed;
+        }
+
+        spriteRenderer.sortingOrder = order;
+    }
+
+    private SpriteRenderer ResolveNearestPlayerSprite()
+    {
+        if (PlayerRegistry.Count > 0)
+        {
+            PlayerStats near = PlayerRegistry.Instance.NearestAlive(transform.position, Mathf.Infinity, true);
+            if (near != null) return near.GetComponentInChildren<SpriteRenderer>();
+            return null;
+        }
+        // Single player: cache the tagged player's renderer.
+        if (playerSpriteRenderer == null)
         {
             GameObject p = GameObject.FindGameObjectWithTag("Player");
             if (p != null)
@@ -79,13 +100,7 @@ public class TowerSlot : MonoBehaviour
                 playerSpriteRenderer = p.GetComponent<SpriteRenderer>();
             }
         }
-        if (playerSpriteRenderer != null)
-        {
-            int maxAllowed = playerSpriteRenderer.sortingOrder - 1;
-            if (order > maxAllowed) order = maxAllowed;
-        }
-
-        spriteRenderer.sortingOrder = order;
+        return playerSpriteRenderer;
     }
 
     void Start()
@@ -341,3 +356,4 @@ public class TowerSlot : MonoBehaviour
 #endif
     }
 }
+

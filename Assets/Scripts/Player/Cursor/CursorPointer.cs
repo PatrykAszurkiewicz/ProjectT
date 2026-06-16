@@ -6,11 +6,27 @@ public class CursorPointer : MonoBehaviour
     public Transform player;
     public float radius = 1.5f;
 
+    [Tooltip("Optional explicit aim binding. If left null, the PlayerAim on the " +
+             "pointed-at player is used (falling back to PlayerAim.Instance).")]
+    public PlayerAim aim;
+
     private SpriteRenderer spriteRenderer;
+    private PlayerRef playerRef;
+    private Camera cam;
 
     private void Start()
     {
         Cursor.visible = false;
+
+        // Resolve this cursor's player bindings. In single player `player` is the
+        // one player; in co-op each player has its own CursorPointer pointing at
+        // itself, so these resolve per-player.
+        if (player != null)
+        {
+            if (aim == null) aim = player.GetComponent<PlayerAim>();
+            playerRef = player.GetComponent<PlayerRef>();
+        }
+        cam = ResolveCamera();
 
         // Get SpriteRenderer — it's on the child CursorVisual, not on this GameObject
         spriteRenderer = GetComponentInChildren<SpriteRenderer>();
@@ -39,18 +55,30 @@ public class CursorPointer : MonoBehaviour
         }
     }
 
+    private Camera ResolveCamera()
+    {
+        if (playerRef != null && playerRef.Camera != null) return playerRef.Camera;
+        return Camera.main;
+    }
+
     void Update()
     {
+        // Re-bind to this player's camera once it becomes available.
+        if (playerRef != null && playerRef.Camera != null) cam = playerRef.Camera;
+        else if (cam == null) cam = ResolveCamera();
+
+        PlayerAim activeAim = aim != null ? aim : PlayerAim.Instance;
+
         Vector3 direction;
-        if (PlayerAim.Instance != null)
+        if (activeAim != null)
         {
-            direction = PlayerAim.Instance.Direction;
+            direction = activeAim.Direction;
         }
         else
         {
-            if (Mouse.current == null) return;
+            if (Mouse.current == null || cam == null) return;
             Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
-            Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(mouseScreenPos);
+            Vector3 mouseWorldPos = cam.ScreenToWorldPoint(mouseScreenPos);
             mouseWorldPos.z = 0;
             direction = (mouseWorldPos - player.position).normalized;
         }

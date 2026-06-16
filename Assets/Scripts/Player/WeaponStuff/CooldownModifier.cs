@@ -1,37 +1,55 @@
+using System.Collections.Generic;
 using UnityEngine;
 
-//  CooldownModifier
-//  Single source of truth for the global cooldown multiplier. Augment 328
-//  ("Shorten cooldown") sets it
+//  CooldownModifier  (per-player)
+//  Augment 328 ("Shorten cooldown") shortens cooldowns. In co-op each player
+//  only gets the reduction THEY picked, so it's keyed by playerIndex now.
+//  Single player is byte-identical: every call site that doesn't pass an index
+//  resolves to player 0 via the back-compat overloads below, and player 0 is the
+//  only player, so nothing changes.
 public static class CooldownModifier
 {
-    // 0..1 factor every cooldown duration is multiplied by. Clamped so it can
-    // never go negative or above 1 (we only ever SHORTEN cooldowns here).
-    public static float Multiplier { get; private set; } = 1f;
+    // Per-player 0..1 factor every cooldown duration is multiplied by. Absent =
+    // 1.0 (no reduction). We only ever SHORTEN, so values stay clamped to [0,1].
+    private static readonly Dictionary<int, float> _byPlayer = new Dictionary<int, float>();
 
-    /// Multiply a cooldown duration by the current modifier.
-    /// Use this everywhere a cooldown is armed.
-    public static float Apply(float seconds) => seconds * Multiplier;
+    /// This player's current multiplier (1 when they have no reduction).
+    public static float MultiplierFor(int playerIndex)
+        => _byPlayer.TryGetValue(playerIndex, out float m) ? m : 1f;
 
-    /// Set the reduction to a flat percentage (idempotent — re-applying the
-    /// same augment will NOT double-reduce). reductionPercent = 20 → x0.8.
-    public static void SetReductionPercent(float reductionPercent)
+    /// Back-compat single-player read (player 0).
+    public static float Multiplier => MultiplierFor(0);
+
+    /// Multiply a cooldown duration by THIS player's modifier.
+    /// Use this everywhere a cooldown is armed, passing the owning player's index.
+    public static float Apply(float seconds, int playerIndex) => seconds * MultiplierFor(playerIndex);
+
+    /// Back-compat: single-player / unspecified caller → player 0.
+    public static float Apply(float seconds) => Apply(seconds, 0);
+
+    /// Set one player's reduction to a flat percentage (idempotent — re-applying
+    /// the same augment will NOT double-reduce). reductionPercent = 20 → x0.8.
+    public static void SetReductionPercent(float reductionPercent, int playerIndex)
     {
         float factor = 1f - (reductionPercent / 100f);
-        Multiplier = Mathf.Clamp01(factor);
+        _byPlayer[playerIndex] = Mathf.Clamp01(factor);
     }
 
-    /// Alternative API: stack a reduction multiplicatively (picking 20% twice
-    /// would give 0.8 * 0.8 = 0.64). Not used by augment 328 by default — call
-    /// this instead of SetReductionPercent if you want the augment to stack.
-    public static void StackReductionPercent(float reductionPercent)
+    /// Back-compat (player 0).
+    public static void SetReductionPercent(float reductionPercent) => SetReductionPercent(reductionPercent, 0);
+
+    /// Stack a reduction multiplicatively for one player (20% twice → 0.64).
+    public static void StackReductionPercent(float reductionPercent, int playerIndex)
     {
         float factor = 1f - (reductionPercent / 100f);
-        Multiplier = Mathf.Clamp01(Multiplier * factor);
+        _byPlayer[playerIndex] = Mathf.Clamp01(MultiplierFor(playerIndex) * factor);
     }
 
-    /// Reset to "no reduction". Call this when a new run starts (wherever you
-    /// clear applied augments), since a static survives scene reloads in a
-    /// built player.
-    public static void Reset() => Multiplier = 1f;
+    /// Back-compat (player 0).
+    public static void StackReductionPercent(float reductionPercent) => StackReductionPercent(reductionPercent, 0);
+
+    /// Reset ALL players to "no reduction". Call when a new run starts (a static
+    /// survives scene reloads in a built player).
+    public static void Reset() => _byPlayer.Clear();
 }
+

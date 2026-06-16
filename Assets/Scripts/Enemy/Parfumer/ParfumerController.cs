@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// AI controller for the Parfumer enemy.
+// Controller for the Parfumer enemy.
 //   Chases only the player (falls back to the core if there is no player, so it
 //   never idles and soft-locks the wave — same safeguard the Buffer uses).
 //   On a fixed cadence, drops a lingering greenish PoisonCloud at its current
@@ -158,20 +158,18 @@ public class ParfumerController : MonoBehaviour
 
     private void UpdateTarget()
     {
-        // Chase the player. Cache it and only re-find when the reference goes
-        // stale (player destroyed / respawned) — cheaper than tagging every
-        // frame, and FindGameObjectWithTag returns null for inactive objects.
-        if (playerTransform == null || !playerTransform.gameObject.activeInHierarchy)
+        // Co-op: chase the nearest alive player. Resolving every frame means the
+        // Parfumer retargets automatically when a player goes down. includeCloaked
+        // is true to preserve the Parfumer's original cloak-agnostic chasing.
+        // With one player this is identical to the old single lookup.
+        var nearest = PlayerRegistry.Instance.NearestAlive(transform.position, includeCloaked: true);
+        if (nearest != null)
         {
-            GameObject playerGO = GameObject.FindGameObjectWithTag("Player");
-            playerTransform = playerGO != null ? playerGO.transform : null;
-        }
-
-        if (playerTransform != null)
-        {
+            playerTransform = nearest.transform;
             currentTarget = playerTransform;
             return;
         }
+        playerTransform = null;
 
         // Fallback to the core so we never idle and soft-lock the wave.
         if (fallbackToCoreIfNoPlayer)
@@ -245,3 +243,5 @@ public class ParfumerController : MonoBehaviour
     }
 #endif
 }
+
+

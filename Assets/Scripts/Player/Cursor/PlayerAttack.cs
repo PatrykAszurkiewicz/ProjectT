@@ -1,14 +1,44 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
+using System.Collections.Generic;
 
 public class PlayerAttack : MonoBehaviour
 {
     [SerializeField] private Weapon weapon;
     [SerializeField] private float attackAnimationDuration = 0.3f;
-    public static bool InputSuppressed { get; set; } = false;
+
+    // Co-op: input suppression is now per-player. A shared global gate
+    // (_globalSuppressed) still exists for things that must freeze EVERY player
+    // at once — the pause menu — and new players inherit it on enable. Effective
+    // suppression = global OR this instance's own flag.
+    private static bool _globalSuppressed = false;
+    private bool _instanceSuppressed = false;
+    private bool Suppressed => _globalSuppressed || _instanceSuppressed;
+
+    // Reset static gate between Play sessions (domain reload off).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() { _globalSuppressed = false; }
+
+    /// <summary>Suppress/unsuppress THIS player's attack input.</summary>
+    public void SetSuppressed(bool suppressed) { _instanceSuppressed = suppressed; }
+
+    /// <summary>Suppress/unsuppress ALL players at once (used by the shared pause menu).</summary>
+    public static void SetAllSuppressed(bool suppressed) { _globalSuppressed = suppressed; }
+
+    /// <summary>
+    /// Backward-compatible shim for old call sites that used the static property.
+    /// Setting it routes to the global gate; getting reports the global gate.
+    /// Prefer <see cref="SetAllSuppressed"/> in new code.
+    /// </summary>
+    public static bool InputSuppressed
+    {
+        get => _globalSuppressed;
+        set => _globalSuppressed = value;
+    }
 
     private PlayerMovement playerMovement;
+    private PlayerInput playerInput;
     private bool isWeaponButtonHeld = false;
     private bool isToolButtonHeld = false;
 
@@ -25,6 +55,43 @@ public class PlayerAttack : MonoBehaviour
     void Start()
     {
         playerMovement = GetComponent<PlayerMovement>();
+        // Co-op: read this player's own paired devices for the held-fire safety
+        // nets, instead of polling the global Mouse.current / Gamepad.current.
+        playerInput = GetComponent<PlayerInput>();
+    }
+
+    // Is this player's WEAPON button (LMB / right trigger) still physically down?
+    // Reads THIS player's paired devices; falls back to the global devices if
+    // there's no PlayerInput (legacy single-player object).
+    private bool WeaponButtonStillDown()
+    {
+        if (playerInput != null && playerInput.devices.Count > 0)
+        {
+            foreach (var d in playerInput.devices)
+            {
+                if (d is Mouse m && m.leftButton.isPressed) return true;
+                if (d is Gamepad g && g.rightTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD) return true;
+            }
+            return false;
+        }
+        return (Mouse.current != null && Mouse.current.leftButton.isPressed)
+            || (Gamepad.current != null && Gamepad.current.rightTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD);
+    }
+
+    // Is this player's TOOL button (RMB / left trigger) still physically down?
+    private bool ToolButtonStillDown()
+    {
+        if (playerInput != null && playerInput.devices.Count > 0)
+        {
+            foreach (var d in playerInput.devices)
+            {
+                if (d is Mouse m && m.rightButton.isPressed) return true;
+                if (d is Gamepad g && g.leftTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD) return true;
+            }
+            return false;
+        }
+        return (Mouse.current != null && Mouse.current.rightButton.isPressed)
+            || (Gamepad.current != null && Gamepad.current.leftTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD);
     }
 
     void Update()
@@ -35,9 +102,7 @@ public class PlayerAttack : MonoBehaviour
         // on left click) — if the button comes up without a 'canceled' event.
         if (isWeaponButtonHeld)
         {
-            bool leftStillDown = (Mouse.current != null && Mouse.current.leftButton.isPressed)
-                || (Gamepad.current != null && Gamepad.current.rightTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD);
-            if (!leftStillDown)
+            if (!WeaponButtonStillDown())
             {
                 isWeaponButtonHeld = false;
                 WeaponData heldWeaponData = weapon.GetWeaponData();
@@ -51,9 +116,7 @@ public class PlayerAttack : MonoBehaviour
         // Safety net for held-down tool attacks (obstacle drawer / shield on right click)
         if (isToolButtonHeld)
         {
-            bool rightStillDown = (Mouse.current != null && Mouse.current.rightButton.isPressed)
-                || (Gamepad.current != null && Gamepad.current.leftTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD);
-            if (!rightStillDown)
+            if (!ToolButtonStillDown())
             {
                 isToolButtonHeld = false;
                 weapon.LowerShield(); // no-op if shield isn't active
@@ -70,13 +133,13 @@ public class PlayerAttack : MonoBehaviour
     // (No more parsing control paths to tell left/right apart.)
     public void OnAttackWeapon(InputAction.CallbackContext context)
     {
-        if (weapon == null || InputSuppressed) return;
+        if (weapon == null || Suppressed) return;
         HandleWeaponInput(context);
     }
 
     public void OnAttackTool(InputAction.CallbackContext context)
     {
-        if (weapon == null || InputSuppressed) return;
+        if (weapon == null || Suppressed) return;
         HandleToolInput(context);
     }
 
@@ -224,3 +287,4 @@ public class PlayerAttack : MonoBehaviour
         }
     }
 }
+

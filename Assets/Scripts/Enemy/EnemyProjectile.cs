@@ -52,7 +52,6 @@ public class EnemyProjectile : MonoBehaviour
 
     // Parry state
     private bool parried;                 // true once bounced back at the firer
-    private Weapon cachedPlayerWeapon;    // cached so we don't FindGameObjectWithTag every frame
     private ProjectileParryIndicator parryPrompt;
 
     public void Initialize(EnemyController firer, Transform target, float damage,
@@ -168,7 +167,7 @@ public class EnemyProjectile : MonoBehaviour
     // frame whether it intercepts.
     private void TryProjectileParry()
     {
-        if (!ProjectileParry.TryResolve(ref cachedPlayerWeapon, out var shield, out var playerT)
+        if (!ProjectileParry.TryResolve(transform.position, out var shield, out var playerT, out int parryingIndex)
             || playerT == null)
         {
             HideParryPrompt();
@@ -182,27 +181,29 @@ public class EnemyProjectile : MonoBehaviour
             return;
         }
 
+        // Per-player unlock: only THIS (nearest) player's projectile-parry augment counts.
+        bool parryUnlocked = ProjectileParry.UnlockedFor(parryingIndex);
+
         // The "!" prompt only advertises a parry, so only show it once the
         // bounce-back augment is unlocked. Blocking needs no prompt (just hold).
-        if (ProjectileParry.Unlocked) ShowParryPrompt();
+        if (parryUnlocked) ShowParryPrompt();
         else HideParryPrompt();
 
         var result = shield.TryInterceptProjectile(transform.position);
 
         bool canBounce = result == ShieldSystem.ProjectileInterception.Parried
-                         && ProjectileParry.Unlocked;
+                         && parryUnlocked;
 
         if (canBounce)
         {
             shield.PlayProjectileParryFeedback(transform.position);
             // Stun + debuff the firer exactly like a melee parry does (ShieldSystem
-            // .ApplyParry). This is what activates the parry-damage bonus read back
-            // in DamageFirer() — so Powerful Parry (331), Longer Parry Stun (330)
-            // and the base parry debuff all apply to projectile parries too. The
-            // firer can be null (it died); ApplyOrRefresh + BecomeParried both
-            // handle that, so guard here.
+            // .ApplyParry), using the PARRYING player's upgrades — so Powerful Parry
+            // (331) and Longer Parry Stun (330) apply per-player to projectile
+            // parries too. The firer can be null (it died); ApplyOrRefresh +
+            // BecomeParried both handle that, so guard here.
             if (firer != null)
-                ParryStunEffect.ApplyOrRefresh(firer.gameObject);
+                ParryStunEffect.ApplyOrRefresh(firer.gameObject, parryingIndex);
             BecomeParried();
         }
         else if (result != ShieldSystem.ProjectileInterception.None)

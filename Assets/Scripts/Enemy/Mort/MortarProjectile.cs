@@ -103,7 +103,6 @@ public class MortarProjectile : MonoBehaviour
     private bool parried;                 // true once the blast has been bounced back
     private bool blocked;                 // true once the shield has reduced this shell
     private float playerBlockScale = 1f;  // <1 → reduced blast damage to the player
-    private Weapon cachedPlayerWeapon;    // cached player Weapon for shield lookups
     private ProjectileParryIndicator parryPrompt;
 
     // Called by MortController at the moment the attack animation lands.
@@ -196,7 +195,7 @@ public class MortarProjectile : MonoBehaviour
     //  Shield interaction path 
     private void TryProjectileParry()
     {
-        if (!ProjectileParry.TryResolve(ref cachedPlayerWeapon, out var shield, out var playerT)
+        if (!ProjectileParry.TryResolve(transform.position, out var shield, out var playerT, out int parryingIndex)
             || playerT == null)
         {
             HideParryPrompt();
@@ -207,27 +206,31 @@ public class MortarProjectile : MonoBehaviour
         // nothing to bounce toward, but a held shield can still soften the blast.
         Vector3 aimRef = firer != null ? firer.transform.position : transform.position;
 
+        // Per-player unlock: only THIS (nearest) player's projectile-parry augment counts.
+        bool parryUnlocked = ProjectileParry.UnlockedFor(parryingIndex);
+
         // The "!" prompt only advertises a parry, so only show it once the
         // bounce-back augment is unlocked.
-        if (ProjectileParry.Unlocked) ShowParryPrompt();
+        if (parryUnlocked) ShowParryPrompt();
         else HideParryPrompt();
 
         var result = shield.TryInterceptProjectile(aimRef);
 
         bool canBounce = result == ShieldSystem.ProjectileInterception.Parried
-                         && ProjectileParry.Unlocked
+                         && parryUnlocked
                          && firer != null;
 
         if (canBounce)
         {
             shield.PlayProjectileParryFeedback(aimRef);
-            // Stun + debuff the firer like a melee parry (ShieldSystem.ApplyParry).
-            // This activates the parry-damage bonus read back in
-            // ApplyAreaDamageToEnemies(), so Powerful Parry (331), Longer Parry
-            // Stun (330) and the base debuff apply to mortar parries too. canBounce
-            // already guarantees firer != null, but guard defensively.
+            // Stun + debuff the firer like a melee parry (ShieldSystem.ApplyParry),
+            // using the PARRYING player's upgrades. This activates the parry-damage
+            // bonus read back in ApplyAreaDamageToEnemies(), so Powerful Parry (331),
+            // Longer Parry Stun (330) and the base debuff apply per-player to mortar
+            // parries too. canBounce already guarantees firer != null, but guard
+            // defensively.
             if (firer != null)
-                ParryStunEffect.ApplyOrRefresh(firer.gameObject);
+                ParryStunEffect.ApplyOrRefresh(firer.gameObject, parryingIndex);
             BecomeParried();
         }
         else if (result != ShieldSystem.ProjectileInterception.None)
@@ -700,4 +703,3 @@ public class MortarExplosionVFX : MonoBehaviour
         if (sr != null) Destroy(sr.gameObject);
     }
 }
-

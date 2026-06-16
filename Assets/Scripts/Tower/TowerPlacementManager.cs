@@ -209,9 +209,7 @@ public class TowerPlacementManager : MonoBehaviour
 
     void CreateSelectionWheel()
     {
-        GameObject wheelObj = new GameObject("TowerSelectionWheel");
-        selectionWheel = wheelObj.AddComponent<TowerSelectionWheel>();
-        wheelObj.SetActive(false);
+        // Per-player wheels are created by each PlayerTowerPlacer (Phase 4).
     }
 
     // Public method to expose placement mode state for EnergyManager
@@ -222,14 +220,13 @@ public class TowerPlacementManager : MonoBehaviour
 
     void Update()
     {
-        HandleInput();
-        HandleMouseClicks();
-
+        // Per-player placement (toggle / aim / build) is owned by PlayerTowerPlacer.
+        // The hub keeps the shared services: economy, slot registry, supply, repair.
+        HandleMouseClicks();   // consumer energy-supply for the mouse player only
         UpdateRepairSound();
 
-        if (isPlacementMode && requirePlayerProximity && playerTransform != null && Time.frameCount % 5 == 0)
+        if (isPlacementMode && requirePlayerProximity && Time.frameCount % 5 == 0)
         {
-            UpdateSlotHighlights();
             UpdateEnergyConsumerHighlights();
         }
     }
@@ -466,8 +463,6 @@ public class TowerPlacementManager : MonoBehaviour
 
                         if (target != null && IsPlayerInRange(target))
                         {
-                            //Debug.Log($"[TowerPlacement] Fallback detection found consumer: {GetConsumerDisplayName(target)}");
-
                             if (useContinuousSupply)
                             {
                                 StartContinuousSupplyToConsumer(target);
@@ -480,16 +475,9 @@ public class TowerPlacementManager : MonoBehaviour
                                 }
                             }
                         }
-                        else
-                        {
-                            //Debug.Log("[TowerPlacement] No valid consumer found for click, handling slot click");
-                            HandleSlotClick();
-                        }
+                        // else: slot placement is handled per-player by PlayerTowerPlacer.
                     }
-                    else
-                    {
-                        HandleSlotClick();
-                    }
+                    // else: no cursor -> nothing to supply; placement is per-player.
                 }
             }
             StartCoroutine(ResetClickProcessing());
@@ -665,6 +653,44 @@ public class TowerPlacementManager : MonoBehaviour
         return nearestSlot;
     }
 
+    // ── Phase 4: per-player placement API (shared service) ───────────────
+    private readonly HashSet<PlayerTowerPlacer> _activePlacers = new HashSet<PlayerTowerPlacer>();
+
+    /// A PlayerTowerPlacer reports entering/leaving placement mode. isPlacementMode
+    /// (used to gate supply + consumer highlight) is true while ANY player builds.
+    public void NotifyPlacementMode(PlayerTowerPlacer placer, bool active)
+    {
+        if (placer == null) return;
+        if (active) _activePlacers.Add(placer); else _activePlacers.Remove(placer);
+        isPlacementMode = _activePlacers.Count > 0;
+    }
+
+    /// Configured tower prefabs as an array (for a player's selection wheel).
+    public GameObject[] GetTowerPrefabsArray()
+    {
+        if (towerPrefabs == null || towerPrefabs.Count == 0) BuildTowerList();
+        return towerPrefabs != null ? towerPrefabs.ToArray() : new GameObject[0];
+    }
+
+    /// True if `byPlayer` may build in `slot` (available + within build range).
+    public bool CanBuildAt(TowerSlot slot, Transform byPlayer)
+    {
+        if (slot == null || !slot.IsAvailable) return false;
+        if (requirePlayerProximity && byPlayer != null &&
+            Vector2.Distance(byPlayer.position, slot.transform.position) > buildRange) return false;
+        return true;
+    }
+
+    /// Build `towerIndex` into `slot` on behalf of `byPlayer` (proximity + energy
+    /// checked; spends from the shared wallet). Returns true on success.
+    public bool BuildAt(TowerSlot slot, int towerIndex, Transform byPlayer)
+    {
+        if (!CanBuildAt(slot, byPlayer)) return false;
+        if (towerPrefabs == null || towerIndex < 0 || towerIndex >= towerPrefabs.Count) return false;
+        PlaceTowerDirectly(slot, towerIndex);
+        return true;
+    }
+
     public void RegisterSlot(TowerSlot slot)
     {
         if (allSlots == null) allSlots = new List<TowerSlot>();
@@ -797,12 +823,9 @@ public class TowerPlacementManager : MonoBehaviour
 
         if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) return;
 
-        // Show wheel if we have multiple tower types, otherwise place directly
-        if (towerPrefabs.Count > 1 && selectionWheel != null)
-        {
-            selectionWheel.OpenWheel(towerPrefabs.ToArray(), slot);
-        }
-        else if (towerPrefabs.Count > 0)
+        // Per-player wheel lives on PlayerTowerPlacer; this legacy path places
+        // the currently-selected tower directly.
+        if (towerPrefabs.Count > 0)
         {
             PlaceTowerDirectly(slot, selectedTowerIndex);
         }

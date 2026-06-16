@@ -210,7 +210,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     // Properties
     public bool CanUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && upgradeTowerPrefab != null;
-    public bool CanFire => Time.time >= lastFireTime + (1f / fireRate);
+    //public bool CanFire => Time.time >= lastFireTime + (1f / fireRate);
+    public bool CanFire => Time.time >= lastFireTime +
+    (1f / Mathf.Max(0.0001f, fireRate * TowerCombatModifiers.FireRateMultiplier));
     public float ProjectileRange { get; private set; }
     public Transform FirePoint => firePoint;
 
@@ -453,6 +455,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             var stats = target.GetComponent<EnemyStats>();
             if (stats != null)
             {
+                TowerKillAttribution.MarkTowerHit(target);
                 stats.TakeDamage(effectiveDamage);
                 ApplyFreezeEffect(target);
             }
@@ -873,10 +876,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
 
         // Apply damage
-        float damageThisFrame = damage * Time.deltaTime;
+        float damageThisFrame = damage * Time.deltaTime * TowerCombatModifiers.DamageMultiplier;
         var targetStats = currentTarget.GetComponent<EnemyStats>();
         if (targetStats != null)
         {
+            TowerKillAttribution.MarkTowerHit(targetStats.gameObject);
             targetStats.TakeDamage(damageThisFrame);
         }
     }
@@ -913,7 +917,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             UpdateGenerationEffects();
         }
     }
-
     void GenerateEnergy()
     {
         if (EnergyManager.Instance == null) return;
@@ -949,6 +952,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // Give energy to the player
         EnergyManager.Instance.GivePlayerEnergy(energyAmount);
 
+        // Augment 345 — Overload Aura: deal AoE damage (= energy generated) and
+        // pulse the stasis visual. No-op unless the augment is active.
+        GeneratorAoeDamage.Apply(this, energyAmount);
+
         // Energy cost for energy generation
         //float selfEnergyCost = energyToGenerate * 0.1f; // 10% of generated energy
         float selfEnergyCost = energyToGenerate * generatorSelfConsumption;
@@ -967,8 +974,8 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             CreateGenerationPulse();
         }
-        //Debug.Log($"Energy Generator '{towerName}' generated {energyAmount} energy for player");
     }
+
 
     void UpdateGenerationEffects()
     {
@@ -1564,7 +1571,6 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         if (currentTarget != null && CanFire) FireAtTarget(currentTarget);
     }
-
     private float GetEffectiveDamage()
     {
         float baseDamage = damage;
@@ -1582,6 +1588,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             baseDamage *= symbiosisBoost.GetDamageMultiplier();
         }
+
+        // Augments 338 / 346 — global tower damage multiplier (1.0 when unused).
+        baseDamage *= TowerCombatModifiers.DamageMultiplier;
 
         return baseDamage;
     }
@@ -1636,6 +1645,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             }
 
             //Debug.Log($"[TOWER] {towerName} MELEE attack: {effectiveBaseDamage} * {meleeConfig.damageMultiplier} = {meleeDamage} damage to {target.name}");
+            TowerKillAttribution.MarkTowerHit(target);
             stats?.TakeDamage(meleeDamage);
             ApplyFreezeEffect(target);
             AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, FirePoint?.position ?? transform.position);
@@ -1678,6 +1688,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 if (enemyStats != null)
                 {
                     //Debug.Log($"[TOWER] {towerName} DIRECT attack dealing {effectiveBaseDamage} damage to {target.name}");
+                    TowerKillAttribution.MarkTowerHit(target);
                     enemyStats.TakeDamage(effectiveBaseDamage);
                     ApplyFreezeEffect(target);
                 }
@@ -2076,8 +2087,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             {
                 int refundValue = EnergyManager.Instance.GetTowerSellValue();
                 EnergyManager.Instance.GivePlayerEnergy(refundValue);
-                //Debug.Log($"Tower '{towerName}' destroyed by enemy, refunded {refundValue} energy");
             }
+
+            // Augment 344 — Phoenix Protocol: remember this tower so it can be
+            // rebuilt next stage. No-op unless the augment is active.
+            //TowerRevivalManager.RecordDestroyed(this, parentSlot);
 
             DisableTower();
             OnTowerDestroyed?.Invoke(damageSource);
@@ -2085,6 +2099,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         return false;
     }
+
     public bool CanTakeDamage() => !immuneToEnemyDamage && !isDisabledByDamage && !isDestroyed;
     public float GetCurrentHealth() => currentEnergy;
     public float GetMaxHealth() => maxEnergy;

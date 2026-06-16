@@ -382,14 +382,14 @@ public class PlayerTowerTether : MonoBehaviour
     {
         if (tower == null || tower.IsDestroyed()) return;
 
-        // Clean any stale boost component (shouldn't happen, but be defensive).
-        var stale = tower.GetComponent<TowerTetherBoost>();
-        if (stale != null) Destroy(stale);
-
+        // CO-OP: the boost component is shared per tower (one instance), and each player
+        // registers its own keyed contribution. We must NOT destroy an existing boost here —
+        // doing so would wipe the OTHER player's contribution and corrupt the tower's base
+        // stat. GetOrCreate returns the existing shared boost if another player already made one.
         var at = new ActiveTether
         {
             tower = tower,
-            boost = tower.gameObject.AddComponent<TowerTetherBoost>(),
+            boost = TowerTetherBoost.GetOrCreate(tower),
             zone = TetherZone.None,
         };
         BuildChainVisualsFor(at);
@@ -437,14 +437,15 @@ public class PlayerTowerTether : MonoBehaviour
 
         if (at.boost != null)
         {
-            at.boost.RestoreSnapshot();
-            Destroy(at.boost);
+            // Remove ONLY this tether's contribution. The shared boost restores the tower's
+            // true base and self-destructs once its last contributor (the other player) leaves.
+            at.boost.ClearContribution(at);
             at.boost = null;
         }
 
         if (at.nearDecayBoost != null)
         {
-            Destroy(at.nearDecayBoost);
+            at.nearDecayBoost.ClearContribution(at);
             at.nearDecayBoost = null;
         }
 
@@ -458,45 +459,45 @@ public class PlayerTowerTether : MonoBehaviour
     //Restore the tower stat and apply the buff matching the new zone.
     private void ApplyZone(ActiveTether at, TetherZone newZone)
     {
-        if (at.boost != null)
-            at.boost.RestoreSnapshot();
-
         // Update core-decay aggregate
         bool wasNear = at.contributesToCoreDecay;
         bool isNear = newZone == TetherZone.Near;
         if (wasNear && !isNear) { at.contributesToCoreDecay = false; DecrementNearCount(); }
         else if (!wasNear && isNear) { at.contributesToCoreDecay = true; IncrementNearCount(); }
 
-        // Detach decay boost when leaving NEAR zone.
-        if (!isNear && at.nearDecayBoost != null)
-        {
-            Destroy(at.nearDecayBoost);
-            at.nearDecayBoost = null;
-        }
-
         int tetherCount = activeTethers.Count;
 
+        // Each tether contributes to AT MOST one boost type at a time (its current zone).
+        // We Set the contribution for the new zone and Clear the boost type(s) we no longer use.
+        // The aggregator captures the tower's true base once and applies the PRODUCT of all
+        // players' contributions, so two players stack correctly and the base restores cleanly.
         switch (newZone)
         {
             case TetherZone.Far:
-                at.boost?.ApplyRangeBuff(at.tower, ComputeRangeMultiplier(tetherCount));
+                if (at.nearDecayBoost != null) { at.nearDecayBoost.ClearContribution(at); at.nearDecayBoost = null; }
+                at.boost = TowerTetherBoost.GetOrCreate(at.tower);
+                at.boost?.SetRangeContribution(at, ComputeRangeMultiplier(tetherCount)); // also drops this key's damage contribution
                 break;
-            case TetherZone.Mid:
-                at.boost?.ApplyDamageBuff(at.tower, ComputeDamageMultiplier(tetherCount));
-                break;
-            case TetherZone.Near:
-                // Attach a decay-multiplier component to the tower's GameObject. EnergyManager checks
-                // for this in GetDecayRate() and multiplies the tower's per-tick decay by our value.
-                // Composes naturally with TowerCommanderBoost / GeneratorProximityBoost.
-                if (at.nearDecayBoost == null)
-                {
-                    // Clean any stale instance defensively.
-                    var stale = at.tower.GetComponent<TowerTetherDecayBoost>();
-                    if (stale != null) Destroy(stale);
 
-                    at.nearDecayBoost = at.tower.gameObject.AddComponent<TowerTetherDecayBoost>();
-                }
-                at.nearDecayBoost.decayMultiplier = ComputeDecayMultiplier(tetherCount);
+            case TetherZone.Mid:
+                if (at.nearDecayBoost != null) { at.nearDecayBoost.ClearContribution(at); at.nearDecayBoost = null; }
+                at.boost = TowerTetherBoost.GetOrCreate(at.tower);
+                at.boost?.SetDamageContribution(at, ComputeDamageMultiplier(tetherCount)); // also drops this key's range contribution
+                break;
+
+            case TetherZone.Near:
+                // NEAR uses the decay boost, not the damage/range boost — drop the latter contribution.
+                if (at.boost != null) { at.boost.ClearContribution(at); at.boost = null; }
+                // Shared decay aggregator (EnergyManager reads GetDecayMultiplier()). Composes with
+                // TowerCommanderBoost / GeneratorProximityBoost, and now with the OTHER player's tether.
+                at.nearDecayBoost = TowerTetherDecayBoost.GetOrCreate(at.tower);
+                at.nearDecayBoost?.SetContribution(at, ComputeDecayMultiplier(tetherCount));
+                break;
+
+            case TetherZone.None:
+                // No buff zone — withdraw this tether's contributions entirely.
+                if (at.boost != null) { at.boost.ClearContribution(at); at.boost = null; }
+                if (at.nearDecayBoost != null) { at.nearDecayBoost.ClearContribution(at); at.nearDecayBoost = null; }
                 break;
         }
 
@@ -504,23 +505,17 @@ public class PlayerTowerTether : MonoBehaviour
     }
 
     // Buff scaling helpers — buff strength scales with the total number of currently tethered towers.
+    // Formulas live in the pure, static TetherMath class (bottom of file) so they can be
+    // unit-tested without a scene. These instance methods just feed in this player's
+    // serialized tuning values. Behavior is byte-identical to the original inline math.
     private float ComputeRangeMultiplier(int count)
-    {
-        float bonus = Mathf.Min(maxBuffBonus, farRangeBonusPerTether * Mathf.Max(0, count));
-        return 1f + bonus;
-    }
+        => TetherMath.RangeMultiplier(count, farRangeBonusPerTether, maxBuffBonus);
 
     private float ComputeDamageMultiplier(int count)
-    {
-        float bonus = Mathf.Min(maxBuffBonus, midDamageBonusPerTether * Mathf.Max(0, count));
-        return 1f + bonus;
-    }
+        => TetherMath.DamageMultiplier(count, midDamageBonusPerTether, maxBuffBonus);
 
     private float ComputeDecayMultiplier(int count)
-    {
-        float reduction = nearDecayReductionPerTether * Mathf.Max(0, count);
-        return Mathf.Clamp01(1f - reduction);
-    }
+        => TetherMath.DecayMultiplier(count, nearDecayReductionPerTether);
 
     // Re-apply every active tether's current-zone buff using the up-to-date tether count.
     // Called whenever tethers are added or removed so existing tethers reflect the new count.
@@ -537,22 +532,16 @@ public class PlayerTowerTether : MonoBehaviour
             switch (at.zone)
             {
                 case TetherZone.Far:
-                    if (at.boost != null)
-                    {
-                        at.boost.RestoreSnapshot();
-                        at.boost.ApplyRangeBuff(at.tower, ComputeRangeMultiplier(count));
-                    }
+                    at.boost = TowerTetherBoost.GetOrCreate(at.tower);
+                    at.boost?.SetRangeContribution(at, ComputeRangeMultiplier(count));
                     break;
                 case TetherZone.Mid:
-                    if (at.boost != null)
-                    {
-                        at.boost.RestoreSnapshot();
-                        at.boost.ApplyDamageBuff(at.tower, ComputeDamageMultiplier(count));
-                    }
+                    at.boost = TowerTetherBoost.GetOrCreate(at.tower);
+                    at.boost?.SetDamageContribution(at, ComputeDamageMultiplier(count));
                     break;
                 case TetherZone.Near:
-                    if (at.nearDecayBoost != null)
-                        at.nearDecayBoost.decayMultiplier = ComputeDecayMultiplier(count);
+                    at.nearDecayBoost = TowerTetherDecayBoost.GetOrCreate(at.tower);
+                    at.nearDecayBoost?.SetContribution(at, ComputeDecayMultiplier(count));
                     break;
             }
         }
@@ -814,115 +803,136 @@ public class PlayerTowerTether : MonoBehaviour
 }
 
 
-/// Helper component attached to a tower while it is tethered. Snapshots the affected
-/// stat on application and restores it on RestoreSnapshot() / OnDestroy()
-/// Mirrors the "boost component" pattern used by TowerSynergyBoost / TowerCommanderBoost.
+/// Shared, per-TOWER aggregator (ONE instance per tower, regardless of how many players
+/// tether it). Each contributor (one player's tether to this tower) registers a keyed
+/// multiplier; the tower stat = trueBase × PRODUCT(all contributions). The true base is
+/// captured lazily the first time a contribution of that kind is added, and restored when
+/// the last contributor leaves (then the component self-destructs). This is what lets two
+/// players' tether buffs STACK correctly on the same tower instead of clobbering each other.
+/// Single player (one contributor) is byte-identical to the old snapshot/apply behavior.
 public class TowerTetherBoost : MonoBehaviour
 {
-    private enum BuffKind { None, Range, Damage }
+    private Tower tower;
 
-    private BuffKind kind = BuffKind.None;
+    // True base stats, captured lazily (before any contribution of that kind is live).
+    private float baseDamage;
+    private bool hasBaseDamage;
+    private float baseProjectileRange;
+    private bool hasBaseRange;
 
-    // Damage snapshot (single value)
-    private float damageSnapshot;
-    private bool hasDamageSnapshot;
+    // Per-contributor multipliers. A given tether contributes EITHER damage OR range,
+    // depending on its current zone — never both at once.
+    private readonly Dictionary<object, float> damageContribs = new Dictionary<object, float>();
+    private readonly Dictionary<object, float> rangeContribs = new Dictionary<object, float>();
 
-    // Range snapshot. We snapshot ONLY ProjectileRange. We deliberately do NOT touch the
-    // tower's physical trigger collider, because doing so would let physics queries (e.g.
-    // Physics2D.RaycastAll from the boss laser) hit the inflated trigger zones of distant
-    // tethered towers — causing them to take damage they shouldn't. See ApplyRangeBuff.
-    private float projectileRangeSnapshot;
-    private bool hasRangeSnapshot;
-    // Retained for any future re-introduction of collider-based effects (currently null).
-    private CircleCollider2D cachedTriggerCollider;
-
-    // Cached reflection handle for the private ProjectileRange setter.
-    // Tower.ProjectileRange has a public getter and a private setter, so we cache the
-    // setter MethodInfo using BindingFlags.NonPublic to guarantee we can invoke it.
+    // Cached reflection handle for the private ProjectileRange setter (see TrySetProjectileRange).
     private static System.Reflection.MethodInfo s_projectileRangeSetter;
     private static bool s_projectileRangeReflectionInit;
 
-    public void ApplyRangeBuff(Tower tower, float multiplier)
+    /// Get the single shared boost for a tower, creating it if absent. NEVER destroys an
+    /// existing one — that would wipe another player's contribution.
+    public static TowerTetherBoost GetOrCreate(Tower tower)
     {
-        if (tower == null) return;
-
-        // IMPORTANT: We deliberately DO NOT inflate the tower's physical trigger collider
-        // (rangeCollider). Doing so causes Physics2D raycasts (e.g. boss lasers) targeting
-        // the player to incorrectly hit the inflated trigger zones of nearby tethered towers,
-        // because Physics2D.queriesHitTriggers defaults to true. The result was towers taking
-        // laser damage even when they were nowhere near the laser line.
-        //
-        // Instead we ONLY scale ProjectileRange. Tower.IsValidTarget uses ProjectileRange to
-        // decide if a tracked enemy is still shootable, so this lets the tower fire at enemies
-        // up to the buffed range — provided those enemies passed through the base trigger at
-        // some point (they are then kept in enemiesInRange until OnTriggerExit2D removes them).
-        //
-        // Net effect: a real but more modest FAR-zone buff. No physical collider changes, so
-        // raycasts/lasers/projectiles in the world cannot interact with anything we modified.
-        projectileRangeSnapshot = tower.ProjectileRange;
-        cachedTriggerCollider = null;       // we no longer touch any collider
-        hasRangeSnapshot = true;
-        kind = BuffKind.Range;
-
-        float m = Mathf.Max(0.01f, multiplier);
-        TrySetProjectileRange(tower, projectileRangeSnapshot * m);
+        if (tower == null || tower.IsDestroyed()) return null;
+        var b = tower.GetComponent<TowerTetherBoost>();
+        if (b == null) b = tower.gameObject.AddComponent<TowerTetherBoost>();
+        b.tower = tower;
+        return b;
     }
 
-    public void ApplyDamageBuff(Tower tower, float multiplier)
+    /// Register/replace this contributor's DAMAGE multiplier (and drop any RANGE one it had).
+    public void SetDamageContribution(object key, float multiplier)
     {
-        if (tower == null) return;
-        damageSnapshot = tower.GetDamage();
-        hasDamageSnapshot = true;
-        kind = BuffKind.Damage;
-        tower.SetDamage(damageSnapshot * Mathf.Max(0f, multiplier));
+        if (key == null) return;
+        if (rangeContribs.Remove(key)) { /* zone switched range->damage */ }
+        damageContribs[key] = Mathf.Max(0f, multiplier);
+        Recompute();
     }
 
-    //Restore whatever stat(s) we touched. Safe to call multiple times.
-    public void RestoreSnapshot()
+    /// Register/replace this contributor's RANGE multiplier (and drop any DAMAGE one it had).
+    public void SetRangeContribution(object key, float multiplier)
     {
-        var tower = GetComponent<Tower>();
-        bool towerAlive = tower != null && !tower.IsDestroyed();
+        if (key == null) return;
+        if (damageContribs.Remove(key)) { /* zone switched damage->range */ }
+        rangeContribs[key] = Mathf.Max(0.01f, multiplier);
+        Recompute();
+    }
 
-        if (hasRangeSnapshot)
+    /// Remove this contributor entirely. The tower's true base is restored once the last
+    /// contributor leaves; the (now idle) component stays for cheap reuse. We deliberately do
+    /// NOT Destroy() here — a deferred destroy could hand a doomed instance to another player's
+    /// GetOrCreate in the same frame. Idle = no contributions = base restored = no effect.
+    public void ClearContribution(object key)
+    {
+        if (key == null) return;
+        bool removed = damageContribs.Remove(key);
+        removed |= rangeContribs.Remove(key);
+        if (removed) Recompute(); // empties restore base; remaining contributors keep their product
+    }
+
+    private void Recompute()
+    {
+        if (tower == null) tower = GetComponent<Tower>();
+        if (tower == null) return;
+        bool alive = !tower.IsDestroyed();
+
+        // DAMAGE = trueBase × product(contribs)
+        if (damageContribs.Count > 0)
         {
-            if (towerAlive)
-            {
-                // Restore ProjectileRange to the snapshotted value. We no longer touch the
-                // physical trigger collider, so there's nothing else to undo here.
-                TrySetProjectileRange(tower, projectileRangeSnapshot);
-            }
-            hasRangeSnapshot = false;
-            cachedTriggerCollider = null;
+            if (!hasBaseDamage) { baseDamage = tower.GetDamage(); hasBaseDamage = true; }
+            float p = 1f;
+            foreach (var kv in damageContribs) p *= kv.Value;
+            if (alive) tower.SetDamage(baseDamage * Mathf.Max(0f, p));
+        }
+        else if (hasBaseDamage)
+        {
+            if (alive) tower.SetDamage(baseDamage);
+            hasBaseDamage = false;
         }
 
-        if (hasDamageSnapshot)
+        // RANGE = trueBase × product(contribs). ProjectileRange only — never the physical
+        // trigger collider (see note below), so world raycasts/lasers are unaffected.
+        if (rangeContribs.Count > 0)
         {
-            if (towerAlive)
-                tower.SetDamage(damageSnapshot);
-            hasDamageSnapshot = false;
+            if (!hasBaseRange) { baseProjectileRange = tower.ProjectileRange; hasBaseRange = true; }
+            float p = 1f;
+            foreach (var kv in rangeContribs) p *= kv.Value;
+            if (alive) TrySetProjectileRange(tower, baseProjectileRange * Mathf.Max(0.01f, p));
         }
-
-        kind = BuffKind.None;
+        else if (hasBaseRange)
+        {
+            if (alive) TrySetProjectileRange(tower, baseProjectileRange);
+            hasBaseRange = false;
+        }
     }
 
-    void OnDestroy()
+    private void RestoreBase()
     {
-        RestoreSnapshot();
+        if (tower == null) tower = GetComponent<Tower>();
+        bool alive = tower != null && !tower.IsDestroyed();
+        if (hasBaseDamage)
+        {
+            if (alive) tower.SetDamage(baseDamage);
+            hasBaseDamage = false;
+        }
+        if (hasBaseRange)
+        {
+            if (alive) TrySetProjectileRange(tower, baseProjectileRange);
+            hasBaseRange = false;
+        }
+        damageContribs.Clear();
+        rangeContribs.Clear();
     }
 
-    // Helpers
+    void OnDestroy() => RestoreBase();
 
-    // Find the trigger CircleCollider2D on the tower (the targeting/range one).
-    // Mirrors the same isTrigger filter Tower.cs uses internally.
-    private static CircleCollider2D FindTriggerCollider(Tower tower)
-    {
-        var all = tower.GetComponents<CircleCollider2D>();
-        foreach (var c in all)
-            if (c != null && c.isTrigger) return c;
-        return null;
-    }
+    // NOTE on range: we intentionally scale ONLY ProjectileRange, never the tower's physical
+    // trigger collider. Inflating the collider would let Physics2D queries (e.g. boss lasers,
+    // because queriesHitTriggers defaults to true) hit the enlarged trigger zones of distant
+    // tethered towers, causing them to take damage they shouldn't. Tower.IsValidTarget reads
+    // ProjectileRange, so scaling it alone is a real but world-safe FAR-zone buff.
 
-    /// Set Tower.ProjectileRange via reflection (its setter is private). 
+    /// Set Tower.ProjectileRange via reflection (its setter is private).
     private static void TrySetProjectileRange(Tower tower, float value)
     {
         if (!s_projectileRangeReflectionInit)
@@ -956,8 +966,62 @@ public class TowerTetherBoost : MonoBehaviour
 /// Set 0.5 to halve, 1.0 for no effect.
 public class TowerTetherDecayBoost : MonoBehaviour
 {
-    [Range(0f, 1f)]
-    public float decayMultiplier = 0f;
+    // Per-contributor decay multipliers (each in [0,1]; lower = more decay reduction).
+    private readonly Dictionary<object, float> contribs = new Dictionary<object, float>();
 
-    public float GetDecayMultiplier() => decayMultiplier;
+    // Effective multiplier = clamp01(product of all contributors). 1 = no effect (neutral).
+    private float effective = 1f;
+
+    // Read-only so external code (EnergyManager) keeps compiling against `.decayMultiplier`,
+    // while only this class can change it. EnergyManager calls GetDecayMultiplier().
+    public float decayMultiplier => effective;
+    public float GetDecayMultiplier() => effective;
+
+    /// One shared decay boost per tower; never destroys an existing one.
+    public static TowerTetherDecayBoost GetOrCreate(Tower tower)
+    {
+        if (tower == null || tower.IsDestroyed()) return null;
+        var b = tower.GetComponent<TowerTetherDecayBoost>();
+        if (b == null) b = tower.gameObject.AddComponent<TowerTetherDecayBoost>();
+        return b;
+    }
+
+    public void SetContribution(object key, float multiplier)
+    {
+        if (key == null) return;
+        contribs[key] = Mathf.Clamp01(multiplier);
+        Recompute();
+    }
+
+    public void ClearContribution(object key)
+    {
+        if (key == null) return;
+        if (contribs.Remove(key)) Recompute(); // empty -> product 1 -> neutral (no decay change)
+    }
+
+    private void Recompute()
+    {
+        float p = 1f;
+        foreach (var kv in contribs) p *= kv.Value;
+        effective = Mathf.Clamp01(p);
+    }
+}
+
+
+/// Pure, static tether buff math — no scene, no state — so it can be unit-tested directly.
+/// PlayerTowerTether's instance Compute* methods delegate here with their serialized tuning
+/// values. Behavior is byte-identical to the original inline formulas.
+public static class TetherMath
+{
+    /// FAR-zone range multiplier: 1 + min(maxBonus, perTether × count).
+    public static float RangeMultiplier(int count, float perTether, float maxBonus)
+        => 1f + Mathf.Min(maxBonus, perTether * Mathf.Max(0, count));
+
+    /// MID-zone damage multiplier: 1 + min(maxBonus, perTether × count).
+    public static float DamageMultiplier(int count, float perTether, float maxBonus)
+        => 1f + Mathf.Min(maxBonus, perTether * Mathf.Max(0, count));
+
+    /// NEAR-zone decay multiplier: clamp01(1 − reductionPerTether × count). Lower = slower decay.
+    public static float DecayMultiplier(int count, float reductionPerTether)
+        => Mathf.Clamp01(1f - reductionPerTether * Mathf.Max(0, count));
 }

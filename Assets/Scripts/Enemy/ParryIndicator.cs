@@ -124,7 +124,7 @@ public class ParryIndicator : MonoBehaviour
         // attack animation has no earlier frame to show the "!" on, so on an enemy
         // whose parry frames start at N, the visible warning can move forward by at
         // most N frames even if ExtraParryFrames is larger.
-        int effParryStart = Mathf.Max(0, parryStart - ParryUpgrades.ExtraParryFrames);
+        int effParryStart = Mathf.Max(0, parryStart - ParryUpgrades.MaxExtraParryFrames());
 
         // Use CurrentAttackFrame from the animation controller for pixel-perfect sync
         bool inParryWindow = false;
@@ -164,6 +164,27 @@ public class ParryIndicator : MonoBehaviour
     private void CheckPlayerShield()
     {
         playerHasShield = false;
+
+        // Co-op: the "!" should show if ANY alive player has a shield equipped,
+        // not just whichever object carries the "Player" tag. Falls back to the
+        // old tag lookup if the registry isn't available.
+        var reg = PlayerRegistry.Instance;
+        if (reg != null)
+        {
+            var all = reg.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var p = all[i];
+                if (p == null || p.Stats == null || p.Stats.IsDead()) continue;
+                var w = p.Stats.GetComponentInChildren<Weapon>();
+                if (w != null && w.GetShieldSystem() != null)
+                {
+                    playerHasShield = true;
+                    break;
+                }
+            }
+            return;
+        }
 
         if (playerTransform == null || playerWeapon == null)
         {

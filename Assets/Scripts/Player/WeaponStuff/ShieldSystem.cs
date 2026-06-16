@@ -78,6 +78,9 @@ public class ShieldSystem
     private Transform playerTransform;
     private PlayerStats playerStats;
 
+    // Phase 8: which player owns this shield (for per-player parry upgrades).
+    private int ownerIndex = 0;
+
     //  Construction / Cleanup 
 
     public ShieldSystem(Weapon weapon, WeaponData data)
@@ -85,12 +88,26 @@ public class ShieldSystem
         this.weapon = weapon;
         this.shieldData = data;
 
-        // Cache player transform + stats
-        var player = GameObject.FindGameObjectWithTag("Player");
-        if (player != null)
+        // Cache player transform + stats. Resolve the OWNER from this weapon
+        // (Phase 8) so in co-op each shield heals/credits its own player instead
+        // of whichever object happens to carry the "Player" tag. Falls back to the
+        // old tag lookup only if the weapon isn't parented under a player.
+        var ownerStats = weapon != null ? weapon.GetComponentInParent<PlayerStats>() : null;
+        if (ownerStats != null)
         {
-            playerTransform = player.transform;
-            playerStats = player.GetComponent<PlayerStats>();
+            playerStats = ownerStats;
+            playerTransform = ownerStats.transform;
+            var ownerRef = weapon.GetComponentInParent<PlayerRef>();
+            ownerIndex = ownerRef != null ? ownerRef.PlayerIndex : 0;
+        }
+        else
+        {
+            var player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                playerTransform = player.transform;
+                playerStats = player.GetComponent<PlayerStats>();
+            }
         }
 
         CreateArcVisual();
@@ -178,7 +195,7 @@ public class ShieldSystem
         var ec = attackerGO.GetComponent<EnemyController>();
         if (ec != null)
         {
-            isParry = ec.IsInParryWindow(raiseTime);
+            isParry = ec.IsInParryWindow(raiseTime, ownerIndex);
 
             //Debug.Log($"[PARRY EVAL] {attackerGO.name}: raiseInWindow={isParry} " +
             //          $"=> {(isParry ? "PARRY!" : "BLOCK")}");
@@ -380,7 +397,7 @@ public class ShieldSystem
         // Stun + damage-debuff (with augment upgrades layered in by the helper:
         // 330 Longer Parry Stun, 331 Powerful Parry). Base stun + base bonus come
         // from ParryUpgrades so melee and projectile parry stay in lockstep.
-        ParryStunEffect.ApplyOrRefresh(attackerGO);
+        ParryStunEffect.ApplyOrRefresh(attackerGO, ownerIndex);
 
         // 333 Heal on Parry
         HealOnParry();
@@ -391,10 +408,10 @@ public class ShieldSystem
     // (PlayProjectileParryFeedback) so the augment covers both routes.
     private void HealOnParry()
     {
-        if (!ParryUpgrades.HealOnParryEnabled) return;
+        if (!ParryUpgrades.HealOnParryEnabledFor(ownerIndex)) return;
         if (playerStats == null) return;
 
-        float healAmount = playerStats.maxHealth * ParryUpgrades.HealOnParryPercent;
+        float healAmount = playerStats.maxHealth * ParryUpgrades.HealOnParryPercentFor(ownerIndex);
         if (healAmount <= 0f) return;
 
         // CharacterStats.Heal() clamps to maxHealth AND fires OnHealthChanged,
@@ -961,3 +978,4 @@ public class ParryVFXHost : MonoBehaviour
         return _shardSprite;
     }
 }
+

@@ -1,9 +1,9 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-/// Boss1 Features: Laser attack, Detachable Head armor system.
-/// Melee attacks and movement are handled by EnemyController.
-/// Melee hit timing is driven by EnemyData.hitFrame through the unified system.
+// Boss1 Features: Laser attack, Detachable Head armor system.
+// Melee attacks and movement are handled by EnemyController.
+// Melee hit timing is driven by EnemyData.hitFrame through the unified system.
 
 public class Boss1 : BaseBossStats //, IDamageable
 {
@@ -162,7 +162,7 @@ public class Boss1 : BaseBossStats //, IDamageable
         bossSmoothFlip = GetComponent<SmoothSpriteFlip>();
         if (bossSmoothFlip == null)
             bossSmoothFlip = gameObject.AddComponent<SmoothSpriteFlip>();
-        // Minimal mode: skip color writes and motion trail. Boss has
+        // Skip color writes and motion trail. Boss has
         // other scripts reading flipX (collider offset, health bar, grapple
         // point) and writing color (armor-break flash, damage flash) — a
         // minimal flip avoids stepping on them.
@@ -590,10 +590,12 @@ public class Boss1 : BaseBossStats //, IDamageable
         // acquire the player as a target. Fall through to the core.
         if (!PlayerCloakEffect.IsActive)
         {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
+            // Co-op: target the nearest alive player (no range limit, as before).
+            var nearestPlayer = PlayerRegistry.Instance.NearestAlive(
+                transform.position, includeCloaked: true);
+            if (nearestPlayer != null)
             {
-                currentTarget = player.transform;
+                currentTarget = nearestPlayer.transform;
                 return;
             }
         }
@@ -1213,4 +1215,5 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 #endif
 }
+
 

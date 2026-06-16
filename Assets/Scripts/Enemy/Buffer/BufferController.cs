@@ -1,8 +1,6 @@
 using UnityEngine;
 
-// AI controller for the Buffer enemy.
-//   Walks toward the nearest non-Buffer enemy on the field 
-//   On a fixed cadence (fogDropInterval), spawns a BufferFog patch at its current position.
+// Controller for the Buffer enemy. Walks toward the nearest non-Buffer enemy on the field. On a fixed cadence (fogDropInterval), spawns a BufferFog patch at its current position.
 
 [RequireComponent(typeof(EnemyStats))]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -197,13 +195,16 @@ public class BufferController : MonoBehaviour
         }
 
         // Fallback: if no ally was found and the option is on, walk toward
-        // the player (preferred) or the core. 
+        // the player (preferred) or the core.
         if (best == null && fallbackToPlayerOrCoreIfNoAlly)
         {
-            GameObject playerGO = GameObject.FindGameObjectWithTag("Player");
-            if (playerGO != null)
+            // Co-op: nearest alive player (retargets if one goes down).
+            // includeCloaked:true preserves the Buffer's original cloak-agnostic
+            // fallback. With one player this is identical to the old single lookup.
+            var nearestPlayer = PlayerRegistry.Instance.NearestAlive(transform.position, includeCloaked: true);
+            if (nearestPlayer != null)
             {
-                best = playerGO.transform;
+                best = nearestPlayer.transform;
             }
             else
             {
@@ -278,3 +279,4 @@ public class BufferController : MonoBehaviour
     }
 #endif
 }
+

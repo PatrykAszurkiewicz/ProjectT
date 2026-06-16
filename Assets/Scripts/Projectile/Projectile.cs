@@ -130,6 +130,12 @@ public class Projectile : MonoBehaviour
         EnemyStats targetStats = hitTarget.GetComponent<EnemyStats>();
         if (targetStats != null)
         {
+            // Augments 335/341/342 — this is a TOWER projectile (the player's
+            // ranged weapons use WeaponProjectile, not this class), so credit the
+            // hit to towers for tower-kill attribution. No-op unless an augment
+            // that cares is active.
+            TowerKillAttribution.MarkTowerHit(hitTarget);
+
             targetStats.TakeDamage(damage);
 
             // Apply freeze effect if chance > 0

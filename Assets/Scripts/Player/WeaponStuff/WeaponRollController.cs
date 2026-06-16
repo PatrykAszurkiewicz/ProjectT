@@ -4,6 +4,20 @@ using System.Collections.Generic;
 
 public enum ScrollTarget { None, Weapon, Tool }
 
+
+// Per-player weapon/tool hotbar controller. Lives on the PLAYER prefab (root).
+// Co-op changes vs. the old scene singleton:
+//   Binds to its OWN sibling Weapon (GetComponentInChildren) and sibling
+//    WeaponRollUI — not FindFirstObjectByType, which would grab P1's.
+//   Reads input from THIS player's PlayerInput devices (the paired gamepad,
+//    or keyboard+mouse) instead of the global Gamepad/Keyboard/Mouse.current,
+//    so each player cycles their own hotbar.
+//   The unlock POOL is still shared (WeaponUnlockRegistry) — both players see
+//    the same unlocked weapons — but each player independently SELECTS which
+//    one they hold (_weaponIndex/_toolIndex are per-instance).
+// Single player: with one player the bound devices are just the only ones, so
+// behaviour matches the old global polling exactly.
+
 public class WeaponRollController : MonoBehaviour
 {
     [Header("Slots 0-17: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret, Decoy, Boomerang, Book, BattleHammer, StealthCloak, Torch, TimeClock, Mortar, SmokeScreen")]
@@ -11,6 +25,8 @@ public class WeaponRollController : MonoBehaviour
 
     Weapon _weapon;
     WeaponRollUI _ui;
+    PlayerInput _playerInput;
+    int _playerIndex;   // this player's index, for the per-player unlock pool
 
     readonly List<int> _activeWeapons = new List<int>();
     readonly List<int> _activeTools = new List<int>();
@@ -45,14 +61,24 @@ public class WeaponRollController : MonoBehaviour
 
     void Awake()
     {
-        _weapon = FindFirstObjectByType<Weapon>();
+        // Sibling weapon (child of this player) and this player's PlayerInput.
+        _weapon = GetComponentInChildren<Weapon>();
+        _playerInput = GetComponent<PlayerInput>() ?? GetComponentInParent<PlayerInput>();
+
+        var pref = GetComponent<PlayerRef>() ?? GetComponentInParent<PlayerRef>();
+        _playerIndex = pref != null ? pref.PlayerIndex : 0;
+
         if (_weapon == null)
-            Debug.LogError("[WeaponRollController] No Weapon component found in scene.");
+            Debug.LogWarning("[WeaponRollController] No sibling Weapon found under this player. " +
+                             "This controller should live on the Player prefab root, with the Weapon as a child.");
     }
 
     void Start()
     {
-        _ui = FindFirstObjectByType<WeaponRollUI>();
+        // Sibling UI (on the same player). Fallback to scene search for the
+        // single-player / legacy layout.
+        _ui = GetComponent<WeaponRollUI>() ?? GetComponentInChildren<WeaponRollUI>();
+        if (_ui == null) _ui = FindFirstObjectByType<WeaponRollUI>();
 
         if (WeaponUnlockRegistry.Instance != null)
             WeaponUnlockRegistry.Instance.OnUnlocksChanged += OnUnlocksChanged;
@@ -73,18 +99,36 @@ public class WeaponRollController : MonoBehaviour
             WeaponUnlockRegistry.Instance.OnUnlocksChanged -= OnUnlocksChanged;
     }
 
+    // ---- This player's input devices (not the global *.current) -----------
+
+    Gamepad PlayerPad()
+    {
+        if (_playerInput == null) return null;
+        foreach (var d in _playerInput.devices) if (d is Gamepad g) return g;
+        return null;
+    }
+
+    Keyboard PlayerKeyboard()
+    {
+        if (_playerInput == null) return null;
+        foreach (var d in _playerInput.devices) if (d is Keyboard k) return k;
+        return null;
+    }
+
+    Mouse PlayerMouse()
+    {
+        if (_playerInput == null) return null;
+        foreach (var d in _playerInput.devices) if (d is Mouse m) return m;
+        return null;
+    }
+
     void Update()
     {
-        // Suspend ALL input handling when the game is paused (e.g. pause menu
-        // is open). Otherwise the mouse wheel cycles weapons while the player
-        // is scrolling the augment list, and number keys swap weapons while
-        // they're typing in a menu. Time.timeScale == 0 is the canonical
-        // "paused" signal set by PauseMenuController.
+        // Suspend ALL input handling when the game is paused (pause menu open).
         if (Time.timeScale == 0f) return;
 
         // Gamepad: D-pad cycles weapons (left/right) and tools (up/down).
-        // wasPressedThisFrame = one step per press, matching one scroll notch.
-        var pad = Gamepad.current;
+        var pad = PlayerPad();
         if (pad != null)
         {
             if (pad.dpad.right.wasPressedThisFrame) CycleWeapon(+1);
@@ -93,59 +137,53 @@ public class WeaponRollController : MonoBehaviour
             if (pad.dpad.up.wasPressedThisFrame) CycleTool(-1);
         }
 
-        bool shiftHeld = Keyboard.current != null &&
-            (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
+        var kb = PlayerKeyboard();
+        bool shiftHeld = kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
 
-        // Mouse scroll: up = cycle tool, down = cycle weapon
-        if (Mouse.current != null)
+        // Mouse scroll: up = cycle tool, down = cycle weapon (shift = tool).
+        var mouse = PlayerMouse();
+        if (mouse != null)
         {
-            float s = Mouse.current.scroll.ReadValue().y;
+            float s = mouse.scroll.ReadValue().y;
             if (s > 0f)
             {
-                // Scroll up → tool
-                if (shiftHeld)
-                    CycleTool(-1);
-                else
-                    CycleTool(-1);
+                CycleTool(-1);
             }
             else if (s < 0f)
             {
-                // Scroll down → weapon (shift overrides to tool)
-                if (shiftHeld)
-                    CycleTool(+1);
-                else
-                    CycleWeapon(+1);
+                if (shiftHeld) CycleTool(+1);
+                else CycleWeapon(+1);
             }
         }
 
-        // Number keys: plain = weapon, shift = tool
-        if (Keyboard.current != null)
+        // Number keys: plain = weapon, shift = tool.
+        if (kb != null)
         {
             if (shiftHeld)
             {
-                if (Keyboard.current.digit1Key.wasPressedThisFrame) PickTool(0);
-                if (Keyboard.current.digit2Key.wasPressedThisFrame) PickTool(1);
-                if (Keyboard.current.digit3Key.wasPressedThisFrame) PickTool(2);
-                if (Keyboard.current.digit4Key.wasPressedThisFrame) PickTool(3);
-                if (Keyboard.current.digit5Key.wasPressedThisFrame) PickTool(4);
-                if (Keyboard.current.digit6Key.wasPressedThisFrame) PickTool(5);
-                if (Keyboard.current.digit7Key.wasPressedThisFrame) PickTool(6);
-                if (Keyboard.current.digit8Key.wasPressedThisFrame) PickTool(7);
-                if (Keyboard.current.digit9Key.wasPressedThisFrame) PickTool(8);
-                if (Keyboard.current.digit0Key.wasPressedThisFrame) PickTool(9);
+                if (kb.digit1Key.wasPressedThisFrame) PickTool(0);
+                if (kb.digit2Key.wasPressedThisFrame) PickTool(1);
+                if (kb.digit3Key.wasPressedThisFrame) PickTool(2);
+                if (kb.digit4Key.wasPressedThisFrame) PickTool(3);
+                if (kb.digit5Key.wasPressedThisFrame) PickTool(4);
+                if (kb.digit6Key.wasPressedThisFrame) PickTool(5);
+                if (kb.digit7Key.wasPressedThisFrame) PickTool(6);
+                if (kb.digit8Key.wasPressedThisFrame) PickTool(7);
+                if (kb.digit9Key.wasPressedThisFrame) PickTool(8);
+                if (kb.digit0Key.wasPressedThisFrame) PickTool(9);
             }
             else
             {
-                if (Keyboard.current.digit1Key.wasPressedThisFrame) PickWeapon(0);
-                if (Keyboard.current.digit2Key.wasPressedThisFrame) PickWeapon(1);
-                if (Keyboard.current.digit3Key.wasPressedThisFrame) PickWeapon(2);
-                if (Keyboard.current.digit4Key.wasPressedThisFrame) PickWeapon(3);
-                if (Keyboard.current.digit5Key.wasPressedThisFrame) PickWeapon(4);
-                if (Keyboard.current.digit6Key.wasPressedThisFrame) PickWeapon(5);
-                if (Keyboard.current.digit7Key.wasPressedThisFrame) PickWeapon(6);
-                if (Keyboard.current.digit8Key.wasPressedThisFrame) PickWeapon(7);
-                if (Keyboard.current.digit9Key.wasPressedThisFrame) PickWeapon(8);
-                if (Keyboard.current.digit0Key.wasPressedThisFrame) PickWeapon(9);
+                if (kb.digit1Key.wasPressedThisFrame) PickWeapon(0);
+                if (kb.digit2Key.wasPressedThisFrame) PickWeapon(1);
+                if (kb.digit3Key.wasPressedThisFrame) PickWeapon(2);
+                if (kb.digit4Key.wasPressedThisFrame) PickWeapon(3);
+                if (kb.digit5Key.wasPressedThisFrame) PickWeapon(4);
+                if (kb.digit6Key.wasPressedThisFrame) PickWeapon(5);
+                if (kb.digit7Key.wasPressedThisFrame) PickWeapon(6);
+                if (kb.digit8Key.wasPressedThisFrame) PickWeapon(7);
+                if (kb.digit9Key.wasPressedThisFrame) PickWeapon(8);
+                if (kb.digit0Key.wasPressedThisFrame) PickWeapon(9);
             }
         }
     }
@@ -174,7 +212,6 @@ public class WeaponRollController : MonoBehaviour
         else
             _toolIndex = Mathf.Clamp(_toolIndex, 0, Mathf.Max(_activeTools.Count - 1, 0));
 
-        if (_ui == null) _ui = FindFirstObjectByType<WeaponRollUI>();
         ScrollTarget target = newTool >= 0 ? ScrollTarget.Tool : (newWeapon >= 0 ? ScrollTarget.Weapon : ScrollTarget.None);
         _ui?.Refresh(_weaponIndex, _toolIndex, target);
 
@@ -191,7 +228,7 @@ public class WeaponRollController : MonoBehaviour
         for (int i = 0; i < allWeaponSlots.Length; i++)
         {
             if (allWeaponSlots[i] == null) continue;
-            if (reg != null && !reg.IsUnlocked(i)) continue;
+            if (reg != null && !reg.IsUnlocked(i, _playerIndex)) continue;
 
             if (allWeaponSlots[i].IsTool)
                 _activeTools.Add(i);
@@ -227,8 +264,6 @@ public class WeaponRollController : MonoBehaviour
         if (chosen == null) return;
 
         _weapon.HotSwapWeapon(chosen);
-
-        if (_ui == null) _ui = FindFirstObjectByType<WeaponRollUI>();
         _ui?.Refresh(_weaponIndex, _toolIndex, scrollTarget);
     }
 
@@ -253,8 +288,7 @@ public class WeaponRollController : MonoBehaviour
         if (chosen == null) return;
 
         _weapon.HotSwapTool(chosen);
-
-        if (_ui == null) _ui = FindFirstObjectByType<WeaponRollUI>();
         _ui?.Refresh(_weaponIndex, _toolIndex, scrollTarget);
     }
 }
+

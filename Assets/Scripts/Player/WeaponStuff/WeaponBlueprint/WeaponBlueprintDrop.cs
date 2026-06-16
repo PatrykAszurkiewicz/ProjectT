@@ -129,6 +129,11 @@ public class WeaponBlueprintDrop : MonoBehaviour
 
     void FindPlayer()
     {
+        // Co-op: anchor to the nearest alive player so either player can magnet
+        // the drop. Falls back to the old lookups if the registry is empty.
+        var nearest = PlayerRegistry.Instance.NearestAlive(transform.position, includeCloaked: true);
+        if (nearest != null) { playerTransform = nearest.transform; return; }
+
         var pm = FindFirstObjectByType<PlayerMovement>();
         if (pm != null) { playerTransform = pm.transform; return; }
         var go = GameObject.FindGameObjectWithTag("Player");
@@ -326,6 +331,12 @@ public class WeaponBlueprintDrop : MonoBehaviour
 
     void UpdateMagnet()
     {
+        // Co-op: re-anchor to the nearest alive player each frame so the drop is
+        // pulled toward whichever player is closest (and retargets if one goes
+        // down). With one player this is a no-op re-resolve of the same player.
+        var nearest = PlayerRegistry.Instance.NearestAlive(transform.position, includeCloaked: true);
+        if (nearest != null) playerTransform = nearest.transform;
+
         if (playerTransform == null) return;
 
         // Don't engage the magnet or auto-collect while still arming
@@ -365,16 +376,19 @@ public class WeaponBlueprintDrop : MonoBehaviour
             || other.GetComponent<PlayerMovement>() != null
             || other.GetComponent<PlayerStats>() != null)
         {
-            Collect();
+            var collector = other.GetComponent<PlayerRef>() ?? other.GetComponentInParent<PlayerRef>();
+            Collect(collector);
         }
     }
 
-    public void Collect()
+    public void Collect(PlayerRef collector = null)
     {
         if (isCollected) return;
         isCollected = true;
 
-        // 1) Persistent blueprint registry (cross-run permanence)
+        // 1) Persistent blueprint registry (cross-run permanence). SHARED: this
+        //    makes the matching unlock-augment eligible in the reward pool for
+        //    BOTH players (the perma-upgrade the player asked for).
         if (WeaponBlueprintRegistry.Instance != null && slotIndex >= 0)
             WeaponBlueprintRegistry.Instance.UnlockBlueprint(slotIndex);
 
@@ -384,9 +398,12 @@ public class WeaponBlueprintDrop : MonoBehaviour
         // list, sets the new slot as the current index, and calls
         // EquipWeapon()/EquipTool() automatically. We get the full behavior
         // for free with a single call.
+        // Per-run hotbar equip goes to the COLLECTOR only (their hotbar), since
+        // the per-run unlock pool is per-player. The other player gains it by
+        // picking the now-eligible augment from their own reward menu.
         if (autoEquipOnCollect && slotIndex >= 0 && WeaponUnlockRegistry.Instance != null)
         {
-            WeaponUnlockRegistry.Instance.ForceUnlock(slotIndex);
+            WeaponUnlockRegistry.Instance.ForceUnlock(slotIndex, ResolveCollectorIndex(collector));
         }
 
         // NOTE: We intentionally do NOT call AugmentRegistry.ApplyAugment here.
@@ -400,6 +417,20 @@ public class WeaponBlueprintDrop : MonoBehaviour
 
         PlayCollectSound();
         StartCoroutine(CollectionEffect());
+    }
+
+    // The collector's player index: the explicit collider if known, else the
+    // player the magnet is anchored to, else player 0 (single player).
+    int ResolveCollectorIndex(PlayerRef collector)
+    {
+        if (collector != null) return collector.PlayerIndex;
+        if (playerTransform != null)
+        {
+            var pref = playerTransform.GetComponent<PlayerRef>()
+                       ?? playerTransform.GetComponentInParent<PlayerRef>();
+            if (pref != null) return pref.PlayerIndex;
+        }
+        return 0;
     }
 
     void PlayCollectSound()
@@ -459,4 +490,5 @@ public class WeaponBlueprintDrop : MonoBehaviour
         Destroy(gameObject);
     }
 }
+
 

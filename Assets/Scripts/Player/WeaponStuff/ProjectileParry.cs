@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // PROJECTILE PARRY  (Augment 325 — "Unlock Projectile Parry")
@@ -8,13 +9,74 @@ using UnityEngine;
 
 public static class ProjectileParry
 {
-    // Flipped on by AugmentEffectHandler when augment 325 is applied.
-    // Static so any in-flight projectile can read it without a scene lookup.
-    public static bool Unlocked = false;
+    // Per-player unlock (augment 325). Absent index = locked. In co-op each
+    // player only gains projectile parry if THEY picked 325.
+    private static readonly HashSet<int> _unlocked = new HashSet<int>();
 
-    // Resolves the player's currently-equipped ShieldSystem (if any) and the
-    // player transform, caching the Weapon component so projectiles don't spam
-    // FindGameObjectWithTag every frame.
+    // Back-compat global flag. Reading = "any player has it"; setting true =
+    // unlock player 0 (single-player path). Kept so older callers still compile.
+    public static bool Unlocked
+    {
+        get => _unlocked.Count > 0;
+        set { if (value) _unlocked.Add(0); else _unlocked.Clear(); }
+    }
+
+    public static bool UnlockedFor(int playerIndex) => _unlocked.Contains(playerIndex);
+
+    public static void SetUnlocked(int playerIndex, bool unlocked = true)
+    {
+        if (unlocked) _unlocked.Add(playerIndex);
+        else _unlocked.Remove(playerIndex);
+    }
+
+    /// Clear all players' unlock state (call on a fresh run).
+    public static void Reset() => _unlocked.Clear();
+
+    // Co-op resolve: the alive, shield-equipped player NEAREST to `nearPos`
+    // (the projectile). Replaces the old single FindGameObjectWithTag("Player")
+    // lookup so whichever player is closest to the shot is the one who can parry
+    // it, and reports that player's index so the right unlock + parry upgrades apply.
+    public static bool TryResolve(Vector3 nearPos,
+                                  out ShieldSystem shield,
+                                  out Transform playerTransform,
+                                  out int playerIndex)
+    {
+        shield = null;
+        playerTransform = null;
+        playerIndex = 0;
+
+        var reg = PlayerRegistry.Instance;
+        if (reg == null) return false;
+
+        float bestSqr = float.PositiveInfinity;
+        var all = reg.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            var p = all[i];
+            if (p == null || p.Stats == null || p.Stats.IsDead()) continue;
+
+            var weapon = p.Stats.GetComponentInChildren<Weapon>();
+            if (weapon == null) continue;
+
+            var sh = weapon.GetShieldSystem();
+            if (sh == null) continue;
+
+            float d = ((Vector2)p.transform.position - (Vector2)nearPos).sqrMagnitude;
+            if (d < bestSqr)
+            {
+                bestSqr = d;
+                shield = sh;
+                playerTransform = p.transform;
+                playerIndex = p.PlayerIndex;
+            }
+        }
+
+        return shield != null;
+    }
+
+    // Back-compat (pre-co-op signature). Resolves the first alive shielded player
+    // — in single player that's the only player. Any projectile script not yet
+    // updated keeps compiling; converted ones use the index-aware overload above.
     public static bool TryResolve(ref Weapon cachedWeapon,
                                   out ShieldSystem shield,
                                   out Transform playerTransform)
@@ -22,21 +84,28 @@ public static class ProjectileParry
         shield = null;
         playerTransform = null;
 
-        if (cachedWeapon == null)
+        var reg = PlayerRegistry.Instance;
+        if (reg == null) return false;
+
+        var all = reg.All;
+        for (int i = 0; i < all.Count; i++)
         {
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
-                cachedWeapon = player.GetComponentInChildren<Weapon>();
+            var p = all[i];
+            if (p == null || p.Stats == null || p.Stats.IsDead()) continue;
+
+            var w = p.Stats.GetComponentInChildren<Weapon>();
+            if (w == null) continue;
+
+            var sh = w.GetShieldSystem();
+            if (sh == null) continue;
+
+            cachedWeapon = w;
+            shield = sh;
+            playerTransform = p.transform;
+            return true;
         }
 
-        if (cachedWeapon == null) return false;
-
-        shield = cachedWeapon.GetShieldSystem();
-
-        PlayerStats ps = cachedWeapon.GetComponentInParent<PlayerStats>();
-        playerTransform = ps != null ? ps.transform : cachedWeapon.transform;
-
-        return shield != null;
+        return false;
     }
 }
 
@@ -150,3 +219,4 @@ public class ProjectileParryIndicator : MonoBehaviour
         return _glow;
     }
 }
+

@@ -10,24 +10,34 @@ public class TowerSelectionWheel : MonoBehaviour
     private int hoveredIndex = -1;
     private bool isActive = false;
 
+    // Co-op: this wheel belongs to one player. Hover comes from that player's
+    // reticle (PlayerAim.Direction); confirm from their Build action.
+    private PlayerAim _aim;
+    private UnityEngine.InputSystem.InputAction _confirm;
+    private PlayerRef _owner;
+    private Transform _byPlayer;
+
+    public bool IsOpen => isActive;
+
+    public void Configure(PlayerAim aim, UnityEngine.InputSystem.InputAction confirm, PlayerRef owner)
+    {
+        _aim = aim;
+        _confirm = confirm;
+        _owner = owner;
+    }
+
     void Update()
     {
         if (!isActive) return;
-        if (Mouse.current == null || Keyboard.current == null) return;
-
         HandleInput();
-
-        if (Keyboard.current.escapeKey.wasPressedThisFrame || Mouse.current.rightButton.wasPressedThisFrame)
-        {
-            CloseWheel();
-        }
     }
 
-    public void OpenWheel(GameObject[] towerArray, TowerSlot slot)
+    public void OpenWheel(GameObject[] towerArray, TowerSlot slot, Transform byPlayer)
     {
         if (towerArray == null || towerArray.Length <= 1 || slot == null) return;
         towers = towerArray;
         targetSlot = slot;
+        _byPlayer = byPlayer;
         transform.position = slot.transform.position;
         if (slices != null)
         {
@@ -182,13 +192,10 @@ public class TowerSelectionWheel : MonoBehaviour
     {
         if (slices == null) return;
 
-        Vector3 mouse = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
-        mouse.z = 0f;
+        // Hover direction = this player's reticle direction (mouse or stick).
+        Vector2 direction = _aim != null ? _aim.Direction : Vector2.right;
+        if (direction.sqrMagnitude < 0.0001f) direction = Vector2.right;
 
-        // Calculate direction from wheel center to mouse position
-        Vector2 direction = (mouse - transform.position).normalized;
-
-        // Convert direction to angle
         float mouseAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
         if (mouseAngle < 0) mouseAngle += 360f;
 
@@ -231,8 +238,8 @@ public class TowerSelectionWheel : MonoBehaviour
             hoveredIndex = newHover;
         }
 
-        // Handle click
-        if (Mouse.current.leftButton.wasPressedThisFrame && hoveredIndex >= 0)
+        // Confirm with this player's Build action.
+        if (_confirm != null && _confirm.WasPressedThisFrame() && hoveredIndex >= 0)
         {
             SelectSlice(hoveredIndex);
         }
@@ -242,7 +249,7 @@ public class TowerSelectionWheel : MonoBehaviour
     {
         if (TowerPlacementManager.Instance != null && index < towers.Length)
         {
-            TowerPlacementManager.Instance.PlaceTowerFromWheel(index, towers[index], targetSlot);
+            TowerPlacementManager.Instance.BuildAt(targetSlot, index, _byPlayer);
         }
         CloseWheel();
     }

@@ -3,17 +3,16 @@ using System.IO;
 using UnityEngine;
 
 
-/// Cross-session persistence for a run. Sits alongside the in-memory
-/// WaveCheckpointService (which powers the rewind clock); this one writes a small
-/// JSON save to disk at every wave start so a crash or exit can resume the run.
-
-/// It keeps a running LEDGER for the things that must be replayed rather than dumped:
-///   • the run seed (set once at StartRun)
-///   • the ordered (augmentId, rarity) list (recorded as the player picks them)
-/// At each wave start it combines that ledger with the live player/core/economy/tower
-/// state and writes RunSaveData to disk.
-/// It is a RESUME save, not a save-anywhere system. By default the file
-/// is deleted the moment it is consumed on load 
+// Cross-session persistence for a run. Sits alongside the in-memory
+// WaveCheckpointService (which powers the rewind clock); this one writes a small
+// JSON save to disk at every wave start so a crash or exit can resume the run.
+// It keeps a running LEDGER for the things that must be replayed rather than dumped:
+//   - the run seed (set once at StartRun)
+//   - the ordered (augmentId, rarity) list (recorded as the player picks them)
+// At each wave start it combines that ledger with the live player/core/economy/tower
+// state and writes RunSaveData to disk.
+// It is a RESUME save, not a save-anywhere system. By default the file
+// is deleted the moment it is consumed on load 
 
 public class RunPersistence : MonoBehaviour
 {
@@ -57,12 +56,15 @@ public class RunPersistence : MonoBehaviour
         if (debugLog) Debug.Log($"[Persistence] New run started (seed={seed}).");
     }
 
-    /// Record an augment the moment it is applied, WITH its rolled rarity.
-    /// Call this anywhere ApplyAugment(id, rarity) is called (see integration note).
-    public void RecordAugment(int augmentId, string rarity)
+    /// Record an augment the moment it is applied, WITH its rolled rarity and the
+    /// player who picked it (Phase 7c) so resume replays it onto the right player.
+    public void RecordAugment(int augmentId, string rarity, int playerIndex)
     {
-        augmentLedger.Add(new AugmentSaveEntry(augmentId, rarity));
+        augmentLedger.Add(new AugmentSaveEntry(augmentId, rarity, playerIndex));
     }
+
+    /// Back-compat: single-player path records for player 0.
+    public void RecordAugment(int augmentId, string rarity) => RecordAugment(augmentId, rarity, 0);
 
     //  AUTOSAVE  (called by GameOrchestrator at wave start)
 
@@ -84,19 +86,8 @@ public class RunPersistence : MonoBehaviour
             augments = new List<AugmentSaveEntry>(augmentLedger),
         };
 
-        var player = FindFirstObjectByType<PlayerStats>();
-        if (player != null)
-        {
-            data.hasPlayer = true;
-            data.playerHealth = player.currentHealth;
-            data.playerMaxHealth = player.maxHealth;
-            data.playerArmor = player.currentArmor;
-            data.playerMana = player.currentMana;
-            data.playerMaxMana = player.maxMana;
-            data.playerStamina = player.currentStamina;
-            data.playerMaxStamina = player.maxStamina;
-            data.playerDashesLeft = player.dashesLeft;
-        }
+        // Players (per-player; single player = one entry at index 0).
+        data.players = CapturePlayers();
 
         var core = FindFirstObjectByType<CentralCore>();
         if (core != null)
@@ -161,7 +152,7 @@ public class RunPersistence : MonoBehaviour
             File.Move(tmp, FilePath);
             if (debugLog)
                 Debug.Log($"[Persistence] Saved @ stage {data.stageIndex} wave {data.waveIndex} " +
-                          $"(augments={data.augments.Count}, towers={data.towers.Count}).");
+                          $"(players={data.players.Count}, augments={data.augments.Count}, towers={data.towers.Count}).");
         }
         catch (System.Exception e)
         {
@@ -197,19 +188,21 @@ public class RunPersistence : MonoBehaviour
     /// replay) so one-time augment-on-pick grants don't overwrite the saved totals.
     public void RestoreAbsolutes(RunSaveData data)
     {
-        if (data.hasPlayer)
+        if (data.players != null)
         {
-            var player = FindFirstObjectByType<PlayerStats>();
-            if (player != null)
+            foreach (var ps in data.players)
             {
-                player.maxHealth = data.playerMaxHealth;
-                player.currentArmor = data.playerArmor;
-                player.SetHealthAndNotify(data.playerHealth);
-                player.maxMana = data.playerMaxMana;
-                player.currentMana = Mathf.Min(data.playerMana, player.maxMana);
-                player.maxStamina = data.playerMaxStamina;
-                player.currentStamina = Mathf.Min(data.playerStamina, player.maxStamina);
-                player.dashesLeft = data.playerDashesLeft;
+                var player = ResolveStats(ps.playerIndex);
+                if (player == null) continue;
+
+                player.maxHealth = ps.playerMaxHealth;
+                player.currentArmor = ps.playerArmor;
+                player.SetHealthAndNotify(ps.playerHealth);
+                player.maxMana = ps.playerMaxMana;
+                player.currentMana = Mathf.Min(ps.playerMana, player.maxMana);
+                player.maxStamina = ps.playerMaxStamina;
+                player.currentStamina = Mathf.Min(ps.playerStamina, player.maxStamina);
+                player.dashesLeft = ps.playerDashesLeft;
             }
         }
 
@@ -229,6 +222,51 @@ public class RunPersistence : MonoBehaviour
         // Lore codex — restore the saved discovered set so the resumed run matches.
         if (data.loreFragmentIds != null && LoreCodex.Instance != null)
             LoreCodex.Instance.RestoreDiscoveredExact(data.loreFragmentIds);
+    }
+
+    //  PLAYERS (Phase 7c) — per-player capture / resolve, mirroring the in-memory
+    //  checkpoint service. Single player yields one entry at index 0.
+
+    private List<PlayerSaveEntry> CapturePlayers()
+    {
+        var list = new List<PlayerSaveEntry>();
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0)
+        {
+            foreach (var pr in reg.All)
+                if (pr != null && pr.Stats != null)
+                    list.Add(EntryOf(pr.Stats, pr.PlayerIndex));
+        }
+        if (list.Count == 0)
+        {
+            var p = FindFirstObjectByType<PlayerStats>();
+            if (p != null) list.Add(EntryOf(p, 0));
+        }
+        return list;
+    }
+
+    private PlayerSaveEntry EntryOf(PlayerStats p, int index) => new PlayerSaveEntry
+    {
+        playerIndex = index,
+        playerHealth = p.currentHealth,
+        playerMaxHealth = p.maxHealth,
+        playerArmor = p.currentArmor,
+        playerMana = p.currentMana,
+        playerMaxMana = p.maxMana,
+        playerStamina = p.currentStamina,
+        playerMaxStamina = p.maxStamina,
+        playerDashesLeft = p.dashesLeft,
+    };
+
+    private PlayerStats ResolveStats(int index)
+    {
+        var reg = PlayerRegistry.Instance;
+        if (reg != null)
+        {
+            var pr = reg.Get(index);
+            if (pr != null && pr.Stats != null) return pr.Stats;
+        }
+        return FindFirstObjectByType<PlayerStats>();
     }
 
     //  TOWERS  — the one piece that needs files I don't have yet.
@@ -284,3 +322,4 @@ public class RunPersistence : MonoBehaviour
             Debug.Log($"[Persistence] Tower restore: {restored} rebuilt, {skipped} skipped (of {data.towers.Count} saved).");
     }
 }
+

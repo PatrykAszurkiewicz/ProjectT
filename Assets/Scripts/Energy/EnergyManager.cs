@@ -353,7 +353,11 @@ public class EnergyManager : MonoBehaviour
     {
         if (amount <= 0) return;
 
-        //Debug.Log($"[ENERGY DEBUG] +{amount} energy. Called from: {new System.Diagnostics.StackTrace(1, true).GetFrame(0).GetMethod().Name}");
+        // Augments 334 (Last Stand) & 348 (Energy Attunement) — global multiplier
+        // on all energy the player receives. Defaults to 1.0 (no change).
+        amount = Mathf.RoundToInt(amount * PlayerEconomyModifiers.EnergyGainMultiplier);
+        if (amount <= 0) return;
+
         currentPlayerEnergy += amount;
         OnPlayerEnergyGained?.Invoke(amount);
         OnPlayerEnergyChanged?.Invoke(currentPlayerEnergy);

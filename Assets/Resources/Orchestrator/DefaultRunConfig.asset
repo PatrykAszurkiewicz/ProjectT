@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: DefaultRunConfig
   m_EditorClassIdentifier: 
   stageCount: 2
-  wavesPerStage: 20
+  wavesPerStage: 1
   hasFinalBoss: 1
-  availableBiomes: 05000000
+  availableBiomes: 01000000
   allowRepeatBiomes: 1
   mapLayoutLibrary: {fileID: 11400000, guid: 938991bd3fb9cfd4bba2cfc169709e4d, type: 2}
   waveConfigPool:

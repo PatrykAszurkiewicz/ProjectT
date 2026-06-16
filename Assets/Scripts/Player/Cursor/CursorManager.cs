@@ -1,8 +1,18 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class CursorManager : MonoBehaviour
 {
     public static CursorManager Instance;
+
+    [Header("Co-op")]
+    [Tooltip("Optional. Leave null for the legacy single shared cursor (single player). " +
+             "Assign the owning PlayerRef on a per-player cursor so two coexist; resolve with CursorManager.For(playerRef).")]
+    public PlayerRef owner;
+
+    // All live cursor managers, so per-player consumers (Phase 3) can resolve
+    // the right one. In single player there's exactly one and it's Instance.
+    private static readonly List<CursorManager> _all = new List<CursorManager>();
 
     [Header("Cursor Sprites")]
     public SpriteRenderer cursorSpriteRenderer;
@@ -88,15 +98,48 @@ public class CursorManager : MonoBehaviour
 
     void Awake()
     {
-        if (Instance == null)
+        _all.Add(this);
+
+        if (owner == null)
         {
-            Instance = this;
-            LoadCursorSprites();
+            // Legacy global-singleton path (single player / shared cursor) —
+            // identical behavior to before: first one wins, duplicates destroyed.
+            if (Instance == null)
+            {
+                Instance = this;
+                LoadCursorSprites();
+            }
+            else
+            {
+                _all.Remove(this);
+                Destroy(gameObject);
+            }
         }
         else
         {
-            Destroy(gameObject);
+            // Per-player cursor (co-op): coexists with other players' cursors.
+            if (Instance == null) Instance = this;
+            LoadCursorSprites();
         }
+    }
+
+    void OnDestroy()
+    {
+        _all.Remove(this);
+        if (Instance == this)
+            Instance = _all.Count > 0 ? _all[0] : null;
+    }
+
+    /// <summary>
+    /// Resolve the cursor manager for a given player. Returns that player's
+    /// owned manager if one exists, otherwise the primary Instance (single-player).
+    /// </summary>
+    public static CursorManager For(PlayerRef player)
+    {
+        if (player != null)
+            for (int i = 0; i < _all.Count; i++)
+                if (_all[i] != null && _all[i].owner == player) return _all[i];
+        return Instance;
     }
 
     void Start()
@@ -254,5 +297,4 @@ public class CursorManager : MonoBehaviour
         return currentCursorType;
     }
 }
-
 

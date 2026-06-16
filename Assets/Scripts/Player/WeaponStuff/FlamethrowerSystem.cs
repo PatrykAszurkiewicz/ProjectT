@@ -3,8 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using FMOD.Studio;
 
-
-
+// Flamethrower logic + visuals.
+// The fire is built from layered Unity ParticleSystems (Shuriken) rather than
+// hand-spawned SpriteRenderers
 public class FlamethrowerSystem
 {
     //  References 
@@ -18,11 +19,14 @@ public class FlamethrowerSystem
     private float damageTickTimer;
     private float lastFireTime;
 
-    // Flame visuals 
+    //  Flame visuals (ParticleSystems) 
     private GameObject flameRoot;
-    private readonly List<FlameParticle> particles = new List<FlameParticle>();
-    private const int MAX_PARTICLES = 40;
-    private float spawnAccumulator;
+    private ParticleSystem psCore;
+    private ParticleSystem psOuter;
+    private ParticleSystem psSmoke;
+    private ParticleSystem psGlow;
+    private ParticleSystem psSparks;
+    private ParticleSystem[] allSystems;
 
     //  AoE tracking 
     private readonly HashSet<int> damagedThisTickIds = new HashSet<int>();
@@ -55,10 +59,7 @@ public class FlamethrowerSystem
         this.currentFuel = data.flameFuelMax;
         this.mainCam = Camera.main;
 
-        // Create a root object for all flame visuals
-        flameRoot = new GameObject("_FlamethrowerFX");
-        flameRoot.transform.SetParent(playerTransform, false);
-        flameRoot.transform.localPosition = Vector3.zero;
+        BuildFlameVisuals();
 
         // Looping flamethrower SFX. Created here, started/stopped in StartFiring/StopFiring,
         // and released in Cleanup. We don't start it now — it only plays while firing.
@@ -74,8 +75,6 @@ public class FlamethrowerSystem
     {
         StopFiring();
 
-        // Release FMOD instance (StopFiring already stopped it with fade-out;
-        // we use IMMEDIATE here because the system is going away regardless).
         if (flamethrowerSfxValid && flamethrowerSfx.isValid())
         {
             flamethrowerSfx.stop(STOP_MODE.IMMEDIATE);
@@ -85,7 +84,6 @@ public class FlamethrowerSystem
 
         if (flameRoot != null)
             Object.Destroy(flameRoot);
-        particles.Clear();
     }
 
 
@@ -94,6 +92,7 @@ public class FlamethrowerSystem
     {
         if (mainCam == null) mainCam = Camera.main;
         UpdateAimDirection();
+        UpdateEmitterTransform();
 
         if (isFiring)
         {
@@ -106,7 +105,6 @@ public class FlamethrowerSystem
             }
             else
             {
-                SpawnFlameParticles();
                 TickAoEDamage();
             }
         }
@@ -118,8 +116,6 @@ public class FlamethrowerSystem
                 currentFuel = Mathf.Min(currentFuel + data.flameFuelRegen * Time.deltaTime, data.flameFuelMax);
             }
         }
-
-        UpdateParticles();
     }
 
     // FIRING CONTROL
@@ -128,6 +124,10 @@ public class FlamethrowerSystem
     {
         if (currentFuel <= 0f) return;
         isFiring = true;
+
+        if (allSystems != null)
+            foreach (var ps in allSystems)
+                if (ps != null) ps.Play();
 
         // Start looping SFX if not already playing (idempotent — guard against rapid re-clicks
         // and the case where StartFiring is called while StopFiring's fadeout is still running)
@@ -143,6 +143,11 @@ public class FlamethrowerSystem
     {
         isFiring = false;
         lastFireTime = Time.time;
+
+        // Stop emitting but let live particles finish their lifetime for a clean tail.
+        if (allSystems != null)
+            foreach (var ps in allSystems)
+                if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
 
         // Stop looping SFX (allow fade-out for a smoother tail)
         if (flamethrowerSfxValid && flamethrowerSfx.isValid())
@@ -180,132 +185,373 @@ public class FlamethrowerSystem
         }
     }
 
-    // FLAME PARTICLE SPAWNING — procedural sprites
+    // Point the emitter at the nozzle and orient it along the aim direction.
 
-    private void SpawnFlameParticles()
+    private void UpdateEmitterTransform()
     {
-        float spawnRate = data.flameParticlesPerSecond;
-        spawnAccumulator += spawnRate * Time.deltaTime;
+        if (flameRoot == null) return;
 
-        while (spawnAccumulator >= 1f && particles.Count < MAX_PARTICLES)
-        {
-            spawnAccumulator -= 1f;
-            SpawnOneParticle();
-        }
+        Vector3 nozzle = playerTransform.position + (Vector3)(aimDirection * 0.4f);
+        flameRoot.transform.position = nozzle;
+        flameRoot.transform.rotation = Quaternion.LookRotation(
+            new Vector3(aimDirection.x, aimDirection.y, 0f), Vector3.forward);
     }
 
-    private void SpawnOneParticle()
+    //  VISUAL CONSTRUCTION
+
+    private void BuildFlameVisuals()
     {
-        GameObject go = new GameObject("FlamePart");
-        go.transform.SetParent(flameRoot.transform, true);
+        flameRoot = new GameObject("_FlamethrowerFX");
+        flameRoot.transform.SetParent(playerTransform, false);
+        UpdateEmitterTransform();
 
-        SpriteRenderer sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = GenerateFlameSprite();
-        sr.sortingOrder = 2000 + Random.Range(0, 100);
-        sr.material = new Material(Shader.Find("Sprites/Default"));
+        Material fireMat = GetFireMaterial();   // soft round texture, alpha-blended
+        Material smokeMat = GetSmokeMaterial();  // puffy texture, alpha-blended
 
-        float angleOffset = Random.Range(-data.flameConeAngle * 0.5f, data.flameConeAngle * 0.5f);
-        float baseAngle = Mathf.Atan2(aimDirection.y, aimDirection.x) * Mathf.Rad2Deg;
-        float particleAngle = (baseAngle + angleOffset) * Mathf.Deg2Rad;
-        Vector2 dir = new Vector2(Mathf.Cos(particleAngle), Mathf.Sin(particleAngle));
+        float lifeMin = data.flameParticleLifetimeMin;
+        float lifeMax = data.flameParticleLifetimeMax;
+        float speed = Mathf.Max(0.5f, data.flameSpeed);
+        // Baseline density so the stream always reads as a solid flame even if the
+        // data's particles-per-second is tuned low. Raise flameParticlesPerSecond
+        // (or these multipliers) for a thicker jet.
+        float rate = Mathf.Max(data.flameParticlesPerSecond, 45f);
+        float coneAngle = Mathf.Clamp(data.flameConeAngle * 0.6f, 8f, 35f);
 
-        Vector2 perp = new Vector2(-dir.y, dir.x);
-        float lateralJitter = Random.Range(-0.15f, 0.15f);
+        //  SMOKE (back) 
+        psSmoke = CreateSystem("Smoke", 1985, smokeMat);
+        ConfigureCommon(psSmoke, coneAngle * 1.15f, 0.18f,
+            speedMin: speed * 0.28f, speedMax: speed * 0.5f,
+            lifeMin: lifeMax * 0.9f, lifeMax: lifeMax * 1.7f,
+            sizeMin: 0.45f, sizeMax: 0.75f, rate: rate * 0.22f, maxParticles: 80);
+        SetGradient(psSmoke, BuildSmokeGradient());
+        SetSizeOverLife(psSmoke, AnimationCurve.EaseInOut(0f, 0.5f, 1f, 1.9f));
+        SetNoise(psSmoke, strength: 0.35f, frequency: 0.4f, scroll: 0.6f);
+        SetSpin(psSmoke, 90f);
 
-        Vector3 spawnPos = playerTransform.position + (Vector3)(aimDirection * 0.4f) + (Vector3)(perp * lateralJitter);
-        go.transform.position = spawnPos;
+        //  OUTER FLAME 
+        psOuter = CreateSystem("OuterFlame", 2000, fireMat);
+        ConfigureCommon(psOuter, coneAngle, 0.13f,
+            speedMin: speed * 0.8f, speedMax: speed * 1.15f,
+            lifeMin: lifeMin, lifeMax: lifeMax,
+            sizeMin: 0.32f, sizeMax: 0.58f, rate: rate * 0.85f, maxParticles: 250);
+        SetGradient(psOuter, BuildOuterGradient());
+        SetSizeOverLife(psOuter, AnimationCurve.EaseInOut(0f, 0.55f, 1f, 1.35f));
+        SetNoise(psOuter, strength: 0.55f, frequency: 0.55f, scroll: 1.1f);
+        SetDrag(psOuter, dampen: 0.22f, limit: speed * 0.25f);
+        SetSpin(psOuter, 160f);
 
-        float lifetime = Random.Range(data.flameParticleLifetimeMin, data.flameParticleLifetimeMax);
-        float speed = data.flameSpeed * Random.Range(0.8f, 1.2f);
-        float startSize = Random.Range(0.18f, 0.35f);
-        float endSize = Random.Range(0.5f, 0.9f);
+        //  HOT CORE 
+        psCore = CreateSystem("FlameCore", 2010, fireMat);
+        ConfigureCommon(psCore, coneAngle * 0.8f, 0.10f,
+            speedMin: speed * 0.9f, speedMax: speed * 1.25f,
+            lifeMin: lifeMin * 0.7f, lifeMax: lifeMax * 0.85f,
+            sizeMin: 0.18f, sizeMax: 0.34f, rate: rate, maxParticles: 250);
+        SetGradient(psCore, BuildCoreGradient());
+        SetSizeOverLife(psCore, AnimationCurve.EaseInOut(0f, 0.45f, 1f, 1.15f));
+        SetNoise(psCore, strength: 0.45f, frequency: 0.6f, scroll: 1.3f);
+        SetDrag(psCore, dampen: 0.25f, limit: speed * 0.3f);
+        SetSpin(psCore, 200f);
 
-        var p = new FlameParticle
+        //  NOZZLE GLOW 
+        psGlow = CreateSystem("MuzzleGlow", 2005, fireMat);
+        ConfigureCommon(psGlow, 18f, 0.05f,
+            speedMin: speed * 0.05f, speedMax: speed * 0.12f,
+            lifeMin: 0.12f, lifeMax: 0.22f,
+            sizeMin: 0.55f, sizeMax: 0.85f, rate: 22f, maxParticles: 30);
+        SetGradient(psGlow, BuildGlowGradient());
+        SetSizeOverLife(psGlow, AnimationCurve.EaseInOut(0f, 1f, 1f, 0.4f));
+
+        //  SPARKS / EMBERS (front) 
+        psSparks = CreateSystem("Sparks", 2020, fireMat);
+        ConfigureCommon(psSparks, coneAngle * 1.3f, 0.10f,
+            speedMin: speed * 1.1f, speedMax: speed * 1.8f,
+            lifeMin: lifeMin * 0.6f, lifeMax: lifeMax * 0.9f,
+            sizeMin: 0.05f, sizeMax: 0.12f, rate: rate * 0.5f, maxParticles: 100);
+        SetGradient(psSparks, BuildSparkGradient());
+        SetSizeOverLife(psSparks, AnimationCurve.EaseInOut(0f, 1f, 1f, 0.15f));
+        SetNoise(psSparks, strength: 0.7f, frequency: 0.9f, scroll: 1.6f);
+
+        allSystems = new[] { psSmoke, psOuter, psCore, psGlow, psSparks };
+
+        // Built in the "stopped/cleared" state — nothing emits until StartFiring().
+        foreach (var ps in allSystems)
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+    }
+
+    private ParticleSystem CreateSystem(string name, int sortingOrder, Material mat)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(flameRoot.transform, false);
+        go.transform.localPosition = Vector3.zero;
+        go.transform.localRotation = Quaternion.identity;
+
+        var ps = go.AddComponent<ParticleSystem>();
+
+        var main = ps.main;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 0f; // top-down: no falling
+        main.startColor = Color.white;
+
+        var r = go.GetComponent<ParticleSystemRenderer>();
+        r.sharedMaterial = mat;
+        r.renderMode = ParticleSystemRenderMode.Billboard;
+        r.sortingOrder = sortingOrder;
+        r.alignment = ParticleSystemRenderSpace.View;
+
+        return ps;
+    }
+
+    private void ConfigureCommon(ParticleSystem ps, float coneAngle, float coneRadius,
+        float speedMin, float speedMax, float lifeMin, float lifeMax,
+        float sizeMin, float sizeMax, float rate, int maxParticles)
+    {
+        var main = ps.main;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(lifeMin, lifeMax);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(speedMin, speedMax);
+        main.startSize = new ParticleSystem.MinMaxCurve(sizeMin, sizeMax);
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f); // random spin start
+        main.maxParticles = maxParticles;
+
+        var emission = ps.emission;
+        emission.enabled = true;
+        emission.rateOverTime = rate;
+
+        var shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = coneAngle;
+        shape.radius = coneRadius;
+    }
+
+    private void SetGradient(ParticleSystem ps, Gradient g)
+    {
+        var col = ps.colorOverLifetime;
+        col.enabled = true;
+        col.color = new ParticleSystem.MinMaxGradient(g);
+    }
+
+    private void SetSizeOverLife(ParticleSystem ps, AnimationCurve curve)
+    {
+        var sol = ps.sizeOverLifetime;
+        sol.enabled = true;
+        sol.size = new ParticleSystem.MinMaxCurve(1f, curve);
+    }
+
+    private void SetNoise(ParticleSystem ps, float strength, float frequency, float scroll)
+    {
+        var noise = ps.noise;
+        noise.enabled = true;
+        noise.strength = strength;
+        noise.frequency = frequency;
+        noise.scrollSpeed = scroll;
+        noise.quality = ParticleSystemNoiseQuality.Medium;
+        noise.damping = true;
+    }
+
+    private void SetDrag(ParticleSystem ps, float dampen, float limit)
+    {
+        var lim = ps.limitVelocityOverLifetime;
+        lim.enabled = true;
+        lim.dampen = dampen;
+        lim.limit = limit;
+    }
+
+    private void SetSpin(ParticleSystem ps, float degPerSec)
+    {
+        var rot = ps.rotationOverLifetime;
+        rot.enabled = true;
+        float r = degPerSec * Mathf.Deg2Rad;
+        rot.z = new ParticleSystem.MinMaxCurve(-r, r);
+    }
+
+    //  Gradients 
+
+    private static Gradient BuildCoreGradient()
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(1f, 1f, 0.88f), 0.0f),  // white-hot
+                new GradientColorKey(new Color(1f, 0.93f, 0.5f), 0.2f), // pale yellow
+                new GradientColorKey(new Color(1f, 0.6f, 0.2f), 0.55f), // orange
+                new GradientColorKey(new Color(0.95f, 0.35f, 0.12f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(1f, 0.08f),
+                new GradientAlphaKey(0.95f, 0.5f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return g;
+    }
+
+    private static Gradient BuildOuterGradient()
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(1f, 0.72f, 0.28f), 0.0f),
+                new GradientColorKey(new Color(1f, 0.45f, 0.12f), 0.3f),
+                new GradientColorKey(new Color(0.82f, 0.2f, 0.06f), 0.7f),
+                new GradientColorKey(new Color(0.45f, 0.1f, 0.04f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(0.85f, 0.12f),
+                new GradientAlphaKey(0.6f, 0.6f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return g;
+    }
+
+    private static Gradient BuildSmokeGradient()
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(0.26f, 0.23f, 0.21f), 0f),
+                new GradientColorKey(new Color(0.12f, 0.11f, 0.10f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(0.28f, 0.25f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return g;
+    }
+
+    private static Gradient BuildGlowGradient()
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(1f, 0.85f, 0.5f), 0f),
+                new GradientColorKey(new Color(1f, 0.55f, 0.2f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(0.55f, 0.4f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return g;
+    }
+
+    private static Gradient BuildSparkGradient()
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[]
+            {
+                new GradientColorKey(new Color(1f, 0.95f, 0.7f), 0f),
+                new GradientColorKey(new Color(1f, 0.7f, 0.3f), 0.5f),
+                new GradientColorKey(new Color(1f, 0.4f, 0.15f), 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(1f, 0f),
+                new GradientAlphaKey(1f, 0.7f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        return g;
+    }
+
+    // Materials & textures 
+
+
+    private static Material _fireMat;
+    private static Material _smokeMat;
+    private static Texture2D _softTex;
+    private static Texture2D _puffTex;
+
+    private static Material GetFireMaterial()
+    {
+        if (_fireMat != null) return _fireMat;
+        _fireMat = new Material(Shader.Find("Sprites/Default"));
+        _fireMat.mainTexture = GetSoftTexture();
+        return _fireMat;
+    }
+
+    private static Material GetSmokeMaterial()
+    {
+        if (_smokeMat != null) return _smokeMat;
+        _smokeMat = new Material(Shader.Find("Sprites/Default"));
+        _smokeMat.mainTexture = GetPuffTexture();
+        return _smokeMat;
+    }
+
+    // Soft round particle with a bright, tight hot core.
+    private static Texture2D GetSoftTexture()
+    {
+        if (_softTex != null) return _softTex;
+
+        const int SIZE = 64;
+        var tex = new Texture2D(SIZE, SIZE, TextureFormat.ARGB32, false)
         {
-            go = go,
-            sr = sr,
-            velocity = dir * speed + perp * Random.Range(-0.5f, 0.5f),
-            lifetime = lifetime,
-            maxLifetime = lifetime,
-            startSize = startSize,
-            endSize = endSize,
-            rotationSpeed = Random.Range(-180f, 180f),
-            turbulenceOffset = Random.Range(0f, 100f)
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
         };
 
-        go.transform.localScale = Vector3.one * startSize;
-        go.transform.rotation = Quaternion.Euler(0, 0, Random.Range(0f, 360f));
+        var pixels = new Color[SIZE * SIZE];
+        var center = new Vector2(SIZE * 0.5f, SIZE * 0.5f);
+        float radius = SIZE * 0.5f - 1f;
 
-        particles.Add(p);
-    }
-
-    // PARTICLE UPDATE
-
-    private void UpdateParticles()
-    {
-        for (int i = particles.Count - 1; i >= 0; i--)
-        {
-            var p = particles[i];
-
-            if (p.go == null)
+        for (int y = 0; y < SIZE; y++)
+            for (int x = 0; x < SIZE; x++)
             {
-                particles.RemoveAt(i);
-                continue;
+                float d = Vector2.Distance(new Vector2(x, y), center);
+                float t = Mathf.Clamp01(d / radius);
+                float a = Mathf.Pow(1f - t, 1.5f);  // bright core, soft edge
+                pixels[y * SIZE + x] = new Color(1f, 1f, 1f, a);
             }
 
-            p.lifetime -= Time.deltaTime;
-            if (p.lifetime <= 0f)
+        tex.SetPixels(pixels);
+        tex.Apply();
+        _softTex = tex;
+        return _softTex;
+    }
+
+    // Puffier, noisier blob for smoke so it doesn't read as a clean disc.
+    private static Texture2D GetPuffTexture()
+    {
+        if (_puffTex != null) return _puffTex;
+
+        const int SIZE = 64;
+        var tex = new Texture2D(SIZE, SIZE, TextureFormat.ARGB32, false)
+        {
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
+        };
+
+        var pixels = new Color[SIZE * SIZE];
+        var center = new Vector2(SIZE * 0.5f, SIZE * 0.5f);
+        float radius = SIZE * 0.5f - 1f;
+
+        for (int y = 0; y < SIZE; y++)
+            for (int x = 0; x < SIZE; x++)
             {
-                Object.Destroy(p.go);
-                particles.RemoveAt(i);
-                continue;
+                float d = Vector2.Distance(new Vector2(x, y), center);
+                float falloff = Mathf.Clamp01(1f - d / radius);
+                float n = Mathf.PerlinNoise(x * 0.16f, y * 0.16f);
+                float a = Mathf.Clamp01(falloff * (0.55f + 0.45f * n));
+                pixels[y * SIZE + x] = new Color(1f, 1f, 1f, a);
             }
 
-            float t = 1f - (p.lifetime / p.maxLifetime); // 0 → 1
-
-            float turbX = (Mathf.PerlinNoise(p.turbulenceOffset, Time.time * 3f) - 0.5f) * 2f;
-            float turbY = (Mathf.PerlinNoise(p.turbulenceOffset + 50f, Time.time * 3f) - 0.5f) * 2f;
-            Vector2 turbulence = new Vector2(turbX, turbY) * 1.2f;
-
-            float speedDecay = 1f - t * 0.4f;
-            p.go.transform.position += (Vector3)(p.velocity * speedDecay + turbulence) * Time.deltaTime;
-
-            float size = Mathf.Lerp(p.startSize, p.endSize, t);
-            p.go.transform.localScale = Vector3.one * size;
-
-            p.go.transform.Rotate(0, 0, p.rotationSpeed * Time.deltaTime);
-
-            Color c = GetFlameColor(t);
-            p.sr.color = c;
-        }
+        tex.SetPixels(pixels);
+        tex.Apply();
+        _puffTex = tex;
+        return _puffTex;
     }
 
-    private Color GetFlameColor(float t)
-    {
-        Color c;
-        if (t < 0.1f)
-        {
-            c = Color.Lerp(new Color(1f, 1f, 0.9f, 0.9f), new Color(1f, 0.95f, 0.3f, 0.85f), t / 0.1f);
-        }
-        else if (t < 0.3f)
-        {
-            float sub = (t - 0.1f) / 0.2f;
-            c = Color.Lerp(new Color(1f, 0.85f, 0.2f, 0.8f), new Color(1f, 0.5f, 0.1f, 0.7f), sub);
-        }
-        else if (t < 0.6f)
-        {
-            float sub = (t - 0.3f) / 0.3f;
-            c = Color.Lerp(new Color(1f, 0.45f, 0.05f, 0.65f), new Color(0.8f, 0.15f, 0.05f, 0.45f), sub);
-        }
-        else
-        {
-            float sub = (t - 0.6f) / 0.4f;
-            c = Color.Lerp(new Color(0.7f, 0.1f, 0.02f, 0.4f), new Color(0.2f, 0.15f, 0.1f, 0f), sub);
-        }
-        return c;
-    }
-
-    // AoE DAMAGE — cone-shaped area in front of player
+    //  AoE DAMAGE — cone-shaped area in front of player (point-blank safe)
 
     private void TickAoEDamage()
     {
@@ -319,19 +565,31 @@ public class FlamethrowerSystem
         float halfAngle = data.flameConeAngle * 0.5f;
         Vector2 playerPos = (Vector2)playerTransform.position;
 
+        // Inside this radius the cone/angle test is skipped. At point-blank the
+        // direction to an enemy is a tiny, jittery vector that can point anywhere
+        // (even backward) — which is exactly why very-close enemies used to land
+        // in a "grey zone" and take no damage. Anything this close is in the fire.
+        float pointBlankRadius = Mathf.Max(1.0f, data.flameRange * 0.3f);
+
         foreach (var hit in hits)
         {
             if (!hit.CompareTag("Enemy")) continue;
 
-            Vector2 hitCenter = (Vector2)hit.bounds.center;
-            Vector2 toEnemy = hitCenter - playerPos;
+            // Measure to the CLOSEST point on the collider, not its centre, so
+            // large / overlapping enemies register (ClosestPoint returns the
+            // player's own position when it's inside the collider, i.e. dist 0).
+            Vector2 closest = hit.ClosestPoint(playerPos);
+            Vector2 toEnemy = closest - playerPos;
             float dist = toEnemy.magnitude;
 
-            // No minimum distance, flamethrower should damage at point-blank range
             if (dist > data.flameRange) continue;
 
-            float angle = Vector2.Angle(aimDirection, toEnemy);
-            if (angle > halfAngle) continue;
+            if (dist > pointBlankRadius)
+            {
+                Vector2 dir = toEnemy.sqrMagnitude > 1e-4f ? toEnemy.normalized : aimDirection;
+                float angle = Vector2.Angle(aimDirection, dir);
+                if (angle > halfAngle) continue;
+            }
 
             int id = hit.GetInstanceID();
             if (damagedThisTickIds.Contains(id)) continue;
@@ -356,56 +614,4 @@ public class FlamethrowerSystem
             }
         }
     }
-
-    // PROCEDURAL FLAME SPRITE
-
-    private static Sprite _cachedFlameSprite;
-
-    private static Sprite GenerateFlameSprite()
-    {
-        if (_cachedFlameSprite != null) return _cachedFlameSprite;
-
-        const int SIZE = 32;
-        var tex = new Texture2D(SIZE, SIZE, TextureFormat.ARGB32, false)
-        {
-            filterMode = FilterMode.Bilinear,
-            wrapMode = TextureWrapMode.Clamp
-        };
-
-        Color[] pixels = new Color[SIZE * SIZE];
-        Vector2 center = new Vector2(SIZE * 0.5f, SIZE * 0.5f);
-        float radius = SIZE * 0.5f - 1f;
-
-        for (int y = 0; y < SIZE; y++)
-        {
-            for (int x = 0; x < SIZE; x++)
-            {
-                float dist = Vector2.Distance(new Vector2(x, y), center);
-                float t = Mathf.Clamp01(dist / radius);
-                float alpha = 1f - t * t * t;
-                alpha = Mathf.Clamp01(alpha);
-                pixels[y * SIZE + x] = new Color(1f, 1f, 1f, alpha);
-            }
-        }
-
-        tex.SetPixels(pixels);
-        tex.Apply();
-
-        _cachedFlameSprite = Sprite.Create(tex, new Rect(0, 0, SIZE, SIZE), Vector2.one * 0.5f, SIZE);
-        return _cachedFlameSprite;
-    }
-
-    private class FlameParticle
-    {
-        public GameObject go;
-        public SpriteRenderer sr;
-        public Vector2 velocity;
-        public float lifetime;
-        public float maxLifetime;
-        public float startSize;
-        public float endSize;
-        public float rotationSpeed;
-        public float turbulenceOffset;
-    }
 }
-
