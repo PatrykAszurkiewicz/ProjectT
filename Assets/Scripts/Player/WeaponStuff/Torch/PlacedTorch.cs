@@ -20,7 +20,8 @@ public class PlacedTorch : MonoBehaviour
     private SpriteRenderer haloRenderer;     // soft ground halo for readability
     private SpriteRenderer flameGlowRenderer; // additive warm glow at the flame head
     private float flameHeadLocalY;           // local-space Y of the flame head
-    private float targetWorldHeight = 1.3f;  // how tall the placed torch is, in world units
+    private float targetWorldHeight = 1.625f; // how tall the placed torch is, in world units (25% larger)
+    private float sortFootLocalY = 0f;       // local Y of the torch's ground foot, used for Y-sorting
 
     //  Night light handle 
     private NightOverlay.NightLightHandle lightHandle;
@@ -34,6 +35,19 @@ public class PlacedTorch : MonoBehaviour
 
     private const float SORT_PRECISION = 10f;
     private const int SORT_ORDER_BASE = 1000;
+
+    // Small bump so the torch renders ABOVE the cartoon grass at the same ground Y, while staying
+    // BELOW the player/enemies. Players & enemies Y-sort from their FEET (sortYOffset ~-0.3/-0.2),
+    // which puts their order ~3 above an object that sorts from the same Y with no offset. The
+    // grass sorts from its foot with no offset. So a clearance of +1 lands the torch cleanly in the
+    // gap: above grass (+0) and a couple of orders below the player (+3). Keep this < 3 or the
+    // torch will start to cover the player it's dropped next to.
+    private const int GRASS_CLEARANCE = 1;
+
+    // Overall damping for the procedural flame flicker (glow/halo/body brightness swing).
+    // Lower = calmer, more subtle fire. The animated prefab provides the flame motion itself,
+    // so the procedural glow only needs a gentle pulse.
+    private const float FLAME_SUBTLETY = 0.5f;
 
     // Spawn timer for occasional embers
     private float emberTimer;
@@ -119,7 +133,7 @@ public class PlacedTorch : MonoBehaviour
         float t = Time.time;
         float noise = Mathf.PerlinNoise(flickerSeed, t * flickerSpeed) * 2f - 1f;       // -1..1
         float breath = Mathf.Sin(t * flickerSpeed * 0.45f + flickerSeed);                // -1..1
-        float flicker = (noise * 0.7f + breath * 0.3f) * flickerAmount;                  // small swing
+        float flicker = (noise * 0.7f + breath * 0.3f) * flickerAmount * FLAME_SUBTLETY; // small, gentle swing
 
         // Vanish fade overrides everything.
         float fade = 1f;
@@ -138,24 +152,24 @@ public class PlacedTorch : MonoBehaviour
         // Drive the flame glow renderer.
         if (flameGlowRenderer != null)
         {
-            float glowScale = (1.0f + flicker * 2.2f);
-            flameGlowRenderer.transform.localScale = Vector3.one * (targetWorldHeight * 0.85f) * glowScale;
+            float glowScale = (1.0f + flicker * 1.1f);
+            flameGlowRenderer.transform.localScale = Vector3.one * (targetWorldHeight * 0.7f) * glowScale;
 
-            Color gc = new Color(1f, 0.72f, 0.32f, (0.55f + flicker * 1.4f) * fade);
+            Color gc = new Color(1f, 0.72f, 0.32f, (0.34f + flicker * 0.7f) * fade);
             flameGlowRenderer.color = gc;
         }
 
         // Subtle warm brightness flicker on the torch body itself.
         if (bodyRenderer != null)
         {
-            float b = 1f + flicker * 0.6f;
+            float b = 1f + flicker * 0.35f;
             bodyRenderer.color = new Color(b, b * 0.97f, b * 0.92f, fade);
         }
 
         if (haloRenderer != null)
         {
             Color hc = haloRenderer.color;
-            hc.a = (0.18f + flicker * 0.6f) * fade;
+            hc.a = (0.14f + flicker * 0.35f) * fade;
             haloRenderer.color = hc;
         }
 
@@ -175,17 +189,21 @@ public class PlacedTorch : MonoBehaviour
             emberTimer -= Time.deltaTime;
             if (emberTimer <= 0f)
             {
-                emberTimer = Random.Range(0.12f, 0.28f);
+                emberTimer = Random.Range(0.30f, 0.6f);
                 SpawnEmber();
             }
         }
 
         // Y-sort so the torch occludes correctly against grass/units.
-        float sortY = transform.position.y - targetWorldHeight * 0.5f;
-        int order = SORT_ORDER_BASE + Mathf.RoundToInt(-sortY * SORT_PRECISION);
-        if (haloRenderer != null) haloRenderer.sortingOrder = order - 2;
+        // Y-sort by the torch's true ground FOOT so it occludes correctly against grass and
+        // characters — a character standing in front (lower on screen) renders over it. The
+        // grass-clearance bump keeps it above the grass at the same ground Y; characters on a
+        // higher sorting layer stay in front regardless.
+        float sortY = transform.position.y + sortFootLocalY;
+        int order = SORT_ORDER_BASE + Mathf.RoundToInt(-sortY * SORT_PRECISION) + GRASS_CLEARANCE;
+        if (haloRenderer != null) haloRenderer.sortingOrder = order - 1;
         if (bodyRenderer != null) bodyRenderer.sortingOrder = order;
-        if (flameGlowRenderer != null) flameGlowRenderer.sortingOrder = order + 2;
+        if (flameGlowRenderer != null) flameGlowRenderer.sortingOrder = order + 1;
     }
 
     public void BeginVanish()
@@ -224,47 +242,92 @@ public class PlacedTorch : MonoBehaviour
         Active.Remove(this);
     }
 
+    // Resources path to the animated torch prefab
+    // (Assets/Resources/Sprites/Torch/TorchPrefab.prefab).
+    private const string TORCH_PREFAB_PATH = "Sprites/Torch/TorchPrefab";
+
     // VISUALS
     private void BuildVisual(Sprite bodySprite)
     {
-        if (bodySprite == null)
-            bodySprite = Resources.Load<Sprite>("Sprites/torch");
+        // BODY — prefer the animated prefab; fall back to the legacy static sprite if it's missing.
+        GameObject torchPrefab = Resources.Load<GameObject>(TORCH_PREFAB_PATH);
+        bool usePrefab = torchPrefab != null;
 
-        // Ground halo — keeps the torch readable on any background even in daylight.
+        if (usePrefab)
+        {
+            GameObject body = Instantiate(torchPrefab, transform);
+            body.name = "TorchBodyAnimated";
+            body.transform.localRotation = Quaternion.identity;
+            body.transform.localPosition = Vector3.zero;
+
+            // The prefab's SpriteRenderer (it animates its own flame via its Animator).
+            bodyRenderer = body.GetComponent<SpriteRenderer>();
+            if (bodyRenderer == null) bodyRenderer = body.GetComponentInChildren<SpriteRenderer>();
+
+            // Scale the whole prefab so it stands targetWorldHeight tall.
+            if (bodyRenderer != null && bodyRenderer.sprite != null
+                && bodyRenderer.sprite.bounds.size.y > 0.0001f)
+            {
+                float h = targetWorldHeight / bodyRenderer.sprite.bounds.size.y;
+                body.transform.localScale = Vector3.one * h;
+            }
+
+            // The prefab sprite is bottom-left pivoted; re-anchor (using the rendered bounds, so
+            // pivot doesn't matter) so the torch's BASE sits on the spawn point and it's centred.
+            if (bodyRenderer != null)
+            {
+                Bounds b = bodyRenderer.bounds;
+                Vector3 bottomCenter = new Vector3(b.center.x, b.min.y, transform.position.z);
+                body.transform.position += (transform.position - bottomCenter);
+            }
+
+            // Flame head sits near the top of the upright torch.
+            flameHeadLocalY = targetWorldHeight * 0.78f;
+            // Base-anchored: the torch's ground foot is at the transform origin.
+            sortFootLocalY = 0f;
+        }
+        else
+        {
+            if (bodySprite == null)
+                bodySprite = Resources.Load<Sprite>("Sprites/torch");
+
+            GameObject bodyObj = new GameObject("TorchBody");
+            bodyObj.transform.SetParent(transform, false);
+            bodyRenderer = bodyObj.AddComponent<SpriteRenderer>();
+            bodyRenderer.sprite = bodySprite;
+
+            float bodyScale = 1f;
+            if (bodySprite != null && bodySprite.bounds.size.y > 0.0001f)
+                bodyScale = targetWorldHeight / bodySprite.bounds.size.y;
+            bodyObj.transform.localScale = Vector3.one * bodyScale;
+
+            // Centred sprite: flame head ≈ a bit above centre (top of the sprite).
+            flameHeadLocalY = targetWorldHeight * 0.34f;
+            // Centre-pivoted sprite: its ground foot is half a height below the origin.
+            sortFootLocalY = -targetWorldHeight * 0.5f;
+        }
+
+        // GROUND HALO — keeps the torch readable on any background even in daylight.
+        // Sits at the torch base (ground) for both body modes.
         GameObject haloObj = new GameObject("TorchHalo");
         haloObj.transform.SetParent(transform, false);
-        haloObj.transform.localPosition = new Vector3(0f, -targetWorldHeight * 0.45f, 0f);
+        haloObj.transform.localPosition = new Vector3(
+            0f, usePrefab ? targetWorldHeight * 0.04f : -targetWorldHeight * 0.45f, 0f);
         haloRenderer = haloObj.AddComponent<SpriteRenderer>();
         haloRenderer.sprite = GenerateSoftCircleSprite();
         haloRenderer.color = new Color(1f, 0.7f, 0.3f, 0.18f);
         haloObj.transform.localScale = Vector3.one * (targetWorldHeight * 0.9f);
 
-        // Torch body.
-        GameObject bodyObj = new GameObject("TorchBody");
-        bodyObj.transform.SetParent(transform, false);
-        bodyRenderer = bodyObj.AddComponent<SpriteRenderer>();
-        bodyRenderer.sprite = bodySprite;
-
-        float bodyScale = 1f;
-        if (bodySprite != null && bodySprite.bounds.size.y > 0.0001f)
-            bodyScale = targetWorldHeight / bodySprite.bounds.size.y;
-        bodyObj.transform.localScale = Vector3.one * bodyScale;
-
-        // Flame head ≈ top 35% of the sprite. With a centred pivot the top edge
-        // is at +halfHeight; the flame's visual centre sits a bit below that.
-        flameHeadLocalY = targetWorldHeight * 0.34f;
-
-        // Warm additive glow sitting on the flame.
+        // WARM FLAME GLOW — additive-style bloom around the (now animated) flame head.
         GameObject glowObj = new GameObject("TorchFlameGlow");
         glowObj.transform.SetParent(transform, false);
         glowObj.transform.localPosition = new Vector3(0f, flameHeadLocalY, 0f);
         flameGlowRenderer = glowObj.AddComponent<SpriteRenderer>();
         flameGlowRenderer.sprite = GenerateSoftCircleSprite();
-        flameGlowRenderer.color = new Color(1f, 0.72f, 0.32f, 0.55f);
-        // Additive-ish: use the default sprite material but a bright warm colour;
-        // if you have an additive sprite material, assign it here for a stronger
-        // bloom (e.g. flameGlowRenderer.sharedMaterial = yourAdditiveMat;).
-        glowObj.transform.localScale = Vector3.one * (targetWorldHeight * 0.85f);
+        flameGlowRenderer.color = new Color(1f, 0.72f, 0.32f, 0.34f);
+        // If you have an additive sprite material, assign it here for a stronger bloom
+        // (e.g. flameGlowRenderer.sharedMaterial = yourAdditiveMat;).
+        glowObj.transform.localScale = Vector3.one * (targetWorldHeight * 0.7f);
     }
 
     private void SpawnEmber()
@@ -277,8 +340,8 @@ public class PlacedTorch : MonoBehaviour
         SpriteRenderer sr = ember.AddComponent<SpriteRenderer>();
         sr.sprite = GenerateSoftCircleSprite();
         sr.color = new Color(1f, Random.Range(0.55f, 0.8f), 0.2f, 0.9f);
-        float startY = transform.position.y - targetWorldHeight * 0.5f;
-        sr.sortingOrder = SORT_ORDER_BASE + Mathf.RoundToInt(-startY * SORT_PRECISION) + 3;
+        float startY = transform.position.y + sortFootLocalY;
+        sr.sortingOrder = SORT_ORDER_BASE + Mathf.RoundToInt(-startY * SORT_PRECISION) + GRASS_CLEARANCE + 1;
 
         ember.AddComponent<TorchEmber>().Initialize(
             Random.Range(0.06f, 0.12f),
@@ -349,3 +412,4 @@ public class TorchEmber : MonoBehaviour
         }
     }
 }
+

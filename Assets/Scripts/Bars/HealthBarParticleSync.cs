@@ -9,18 +9,19 @@ public class HealthBarParticleSync : MonoBehaviour
     [SerializeField] private ResourceBarUI bar;
 
     private ParticleSystem ps;
-    private ParticleSystem.ShapeModule shapeModule;
-    private ParticleSystem.EmissionModule emissionModule;
     private ParticleSystem.Particle[] particleBuffer;
-
     private float fullWidth;
+    private bool ready;
 
     private void Awake()
     {
         ps = GetComponent<ParticleSystem>();
-        shapeModule = ps.shape;
-        emissionModule = ps.emission;
-        fullWidth = shapeModule.scale.x;
+        if (ps != null)
+        {
+            // Read the initial width ONCE from a valid PS (a float copy is safe to keep).
+            fullWidth = ps.shape.scale.x;
+            ready = true;
+        }
 
         if (bar == null && fillImage != null)
             bar = fillImage.GetComponentInParent<ResourceBarUI>();
@@ -28,19 +29,29 @@ public class HealthBarParticleSync : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Guard: PS destroyed, not yet initialized, or this object is inactive.
+        if (!ready || ps == null) return;
+
         float fill = bar != null
             ? bar.CurrentFill
             : (fillImage != null ? fillImage.fillAmount : 1f);
 
+        // Fetch the modules FRESH every frame. Never cache a ShapeModule/
+        // EmissionModule in a field — those structs hold a back-pointer to the PS that goes
+        // stale when the PS is disabled/re-enabled/recreated, and using a stale one throws
+        // "Do not create your own module instances, get them from a ParticleSystem instance".
+        var shape = ps.shape;
+        var emission = ps.emission;
+
         float newWidth = fullWidth * fill;
         float offsetX = -(fullWidth - newWidth) / 2f;
 
-        shapeModule.scale = new Vector3(newWidth, shapeModule.scale.y, shapeModule.scale.z);
-        shapeModule.position = new Vector3(offsetX, shapeModule.position.y, shapeModule.position.z);
+        shape.scale = new Vector3(newWidth, shape.scale.y, shape.scale.z);
+        shape.position = new Vector3(offsetX, shape.position.y, shape.position.z);
 
-        emissionModule.enabled = fill > 0.01f;
+        emission.enabled = fill > 0.01f;
 
-        float rightEdgeX = shapeModule.position.x + shapeModule.scale.x * 0.5f;
+        float rightEdgeX = shape.position.x + shape.scale.x * 0.5f;
 
         int count = ps.particleCount;
         if (count > 0)
@@ -50,18 +61,6 @@ public class HealthBarParticleSync : MonoBehaviour
                 particleBuffer = new ParticleSystem.Particle[max];
 
             int alive = ps.GetParticles(particleBuffer);
-
-            // DEBUG: print every ~30 frames
-            if (Time.frameCount % 30 == 0 && alive > 0)
-            {
-                /*
-                Debug.Log($"[ParticleSync] fill={fill:F2}, fullWidth={fullWidth:F2}, " +
-                          $"shape.scale.x={shapeModule.scale.x:F2}, shape.pos.x={shapeModule.position.x:F2}, " +
-                          $"rightEdgeX={rightEdgeX:F2}, " +
-                          $"first particle.position={particleBuffer[0].position}, " +
-                          $"simSpace={ps.main.simulationSpace}, scalingMode={ps.main.scalingMode}");
-                          */
-            }
 
             bool changed = false;
             for (int i = 0; i < alive; i++)

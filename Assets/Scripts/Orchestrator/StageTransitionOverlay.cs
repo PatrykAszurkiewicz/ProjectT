@@ -81,6 +81,14 @@ public class StageTransitionOverlay : MonoBehaviour
     private Text waveCounterText;
     private Text waveFlashText;
     private TMPro.TextMeshProUGUI tmpCounterText; // biome-image stage counter, created lazily if counterFont assigned
+
+    // Dedicated stage-counter overlay. Lives on its OWN canvas at a sort order ABOVE the biome
+    // art (which renders at 10000). The old counter sat on the transition canvas (9999), i.e.
+    // BELOW the biome image, so the biome art covered it and the stage text vanished. This
+    // canvas (10001) guarantees the "Stage X/Y" text always draws on top of the biome screen.
+    private Canvas stageCounterCanvas;
+    private Text stageCounterText;                 // legacy fallback, always created
+    private TMPro.TextMeshProUGUI stageCounterTmp; // styled, only if counterFont assigned
     private Coroutine flashCoroutine;
     private bool initialized = false;
     private bool everRevealed = false;  // set true once the screen has been revealed at least once
@@ -285,6 +293,63 @@ public class StageTransitionOverlay : MonoBehaviour
         flashRect.offsetMin = Vector2.zero;
         flashRect.offsetMax = Vector2.zero;
 
+        //  Dedicated stage-counter canvas (ABOVE the biome art) 
+        // Separate top-level overlay canvas so its sort order can sit above the biome title
+        // image (10000). The stage text is parented here, not on the transition canvas, so the
+        // biome art can never cover it.
+        GameObject stageCounterCanvasObj = new GameObject("StageCounterCanvas");
+        stageCounterCanvasObj.transform.SetParent(null, false);
+        stageCounterCanvas = stageCounterCanvasObj.AddComponent<Canvas>();
+        stageCounterCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        stageCounterCanvas.sortingOrder = 10001; // above biome art (10000) and transition canvas (9999)
+
+        CanvasScaler stageCounterScaler = stageCounterCanvasObj.AddComponent<CanvasScaler>();
+        stageCounterScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        stageCounterScaler.referenceResolution = new Vector2(1920, 1080);
+        stageCounterScaler.matchWidthOrHeight = 0.5f;
+        stageCounterScaler.referencePixelsPerUnit = 100;
+        // No GraphicRaycaster: this is display-only text and must never eat clicks.
+
+        // Legacy Text (always present so the counter shows even without a TMP font).
+        GameObject scObj = new GameObject("StageCounterText");
+        scObj.transform.SetParent(stageCounterCanvasObj.transform, false);
+        stageCounterText = scObj.AddComponent<Text>();
+        stageCounterText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        stageCounterText.fontSize = bannerFontSize;
+        stageCounterText.fontStyle = FontStyle.Bold;
+        stageCounterText.alignment = TextAnchor.MiddleCenter;
+        stageCounterText.color = new Color(1, 1, 1, 0);
+        stageCounterText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        stageCounterText.verticalOverflow = VerticalWrapMode.Overflow;
+        stageCounterText.raycastTarget = false;
+        Outline scOutline = scObj.AddComponent<Outline>();
+        scOutline.effectColor = new Color(0, 0, 0, 0.85f);
+        scOutline.effectDistance = new Vector2(2, -2);
+        RectTransform scRect = scObj.GetComponent<RectTransform>();
+        scRect.anchorMin = new Vector2(0, 0.30f);
+        scRect.anchorMax = new Vector2(1, 0.40f);
+        scRect.offsetMin = Vector2.zero;
+        scRect.offsetMax = Vector2.zero;
+
+        // Optional styled TMP counter (used in preference to the legacy Text when assigned).
+        if (counterFont != null)
+        {
+            GameObject scTmpObj = new GameObject("StageCounterTMP");
+            scTmpObj.transform.SetParent(stageCounterCanvasObj.transform, false);
+            stageCounterTmp = scTmpObj.AddComponent<TMPro.TextMeshProUGUI>();
+            stageCounterTmp.font = counterFont;
+            stageCounterTmp.fontSize = counterFontSize;
+            stageCounterTmp.alignment = TMPro.TextAlignmentOptions.Center;
+            stageCounterTmp.color = new Color(1, 1, 1, 0);
+            stageCounterTmp.raycastTarget = false;
+            stageCounterTmp.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
+            RectTransform scTmpRect = scTmpObj.GetComponent<RectTransform>();
+            scTmpRect.anchorMin = new Vector2(0, 0.30f);
+            scTmpRect.anchorMax = new Vector2(1, 0.40f);
+            scTmpRect.offsetMin = Vector2.zero;
+            scTmpRect.offsetMax = Vector2.zero;
+        }
+
         // Boot safety net: arm the watchdog that clears the screen if the first
         // reveal never happens. (Also armed by SnapToBlack for startBlack=false.)
         if (startBlack)
@@ -486,44 +551,38 @@ public class StageTransitionOverlay : MonoBehaviour
         if (debugIntroSequence) { string caseLabel = hasBiomeImage ? "A" : "B"; Debug.Log($"[IntroTrace] ShowBanner START @ {Time.realtimeSinceStartup:F2}s  (biomeImage={hasBiomeImage} -> CASE {caseLabel})."); }
 
         //  CASE A: biome image exists — the image IS the banner title.
-        // Show only the stage counter, moved down to just below the image's title art.
+        // Show only the stage counter, on the dedicated counter canvas that renders ABOVE the
+        // biome art (sort 10001 > 10000), so the stage text is never hidden behind the image.
         if (hasBiomeImage)
         {
             subtitleText.text = "";
             subtitleText.color = new Color(0.75f, 0.75f, 0.75f, 0);
+            bannerText.text = ""; // counter lives on its own top-most canvas now
 
             string counterString = $"Stage {stage.stageIndex + 1}/{totalStages}";
-            bool useTmp = (tmpCounterText != null);
-
-            // Prepare whichever text object we're using; hide the other so they don't double up.
-            RectTransform rect = bannerText.GetComponent<RectTransform>();
-            Vector2 origMin = rect.anchorMin;
-            Vector2 origMax = rect.anchorMax;
+            bool useTmp = (stageCounterTmp != null);
 
             if (useTmp)
             {
-                tmpCounterText.text = counterString;
-                tmpCounterText.color = new Color(1, 1, 1, 0);
-                bannerText.text = "";
+                stageCounterTmp.text = counterString;
+                stageCounterTmp.color = new Color(1, 1, 1, 0);
+                if (stageCounterText != null) stageCounterText.text = "";
             }
-            else
+            else if (stageCounterText != null)
             {
-                rect.anchorMin = new Vector2(0, 0.30f);
-                rect.anchorMax = new Vector2(1, 0.40f);
-                ApplyBannerStyle(BiomeTextStyle.Default());
-                bannerText.text = counterString;
-                bannerText.color = new Color(1, 1, 1, 0);
+                stageCounterText.text = counterString;
+                stageCounterText.color = new Color(1, 1, 1, 0);
             }
 
-            // Fade counter in, hold, fade out — same timing as the text-only path
+            // Fade counter in, hold, fade out — same timing as the text-only path.
             float counterFadeIn = 0.4f;
             float counterElapsed = 0f;
             while (counterElapsed < counterFadeIn)
             {
                 counterElapsed += Time.unscaledDeltaTime;
                 float a = Mathf.Clamp01(counterElapsed / counterFadeIn);
-                if (useTmp) tmpCounterText.color = new Color(1, 1, 1, a);
-                else bannerText.color = new Color(1, 1, 1, a);
+                if (useTmp) stageCounterTmp.color = new Color(1, 1, 1, a);
+                else if (stageCounterText != null) stageCounterText.color = new Color(1, 1, 1, a);
                 yield return null;
             }
 
@@ -535,21 +594,12 @@ public class StageTransitionOverlay : MonoBehaviour
             {
                 counterElapsed += Time.unscaledDeltaTime;
                 float a = 1f - Mathf.Clamp01(counterElapsed / counterFadeOut);
-                if (useTmp) tmpCounterText.color = new Color(1, 1, 1, a);
-                else bannerText.color = new Color(1, 1, 1, a);
+                if (useTmp) stageCounterTmp.color = new Color(1, 1, 1, a);
+                else if (stageCounterText != null) stageCounterText.color = new Color(1, 1, 1, a);
                 yield return null;
             }
 
-            if (useTmp) tmpCounterText.text = "";
-            else bannerText.text = "";
-
-            // Restore original anchors for CASE B if we touched them
-            if (!useTmp)
-            {
-                rect.anchorMin = origMin;
-                rect.anchorMax = origMax;
-            }
-
+            ClearStageCounter();
             HideBiomeScreens();
             yield break;
         }
@@ -640,6 +690,7 @@ public class StageTransitionOverlay : MonoBehaviour
         // a lingering banner. Clear both before fading gameplay back in.
         if (bannerText != null) bannerText.text = "";
         if (subtitleText != null) subtitleText.text = "";
+        ClearStageCounter();
         HideBiomeScreens();
 
         float elapsed = 0f;
@@ -805,6 +856,13 @@ public class StageTransitionOverlay : MonoBehaviour
             fadeImage.color = fadeColor;
 
         return true;
+    }
+
+    // Clears and hides the dedicated stage-counter overlay text.
+    private void ClearStageCounter()
+    {
+        if (stageCounterTmp != null) { stageCounterTmp.text = ""; stageCounterTmp.color = new Color(1, 1, 1, 0); }
+        if (stageCounterText != null) { stageCounterText.text = ""; stageCounterText.color = new Color(1, 1, 1, 0); }
     }
 
     // Restores every GameObject we touched to its original active state.

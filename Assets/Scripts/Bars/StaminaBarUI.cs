@@ -1,11 +1,11 @@
 using UnityEngine;
 
 
-// Drives  player's stamina bar.
-// Co-op: set <see cref="playerIndex"/> (0 = P1, 1 = P2). Duplicate the bar
-// group for the second player and set its index to 1. Binding is lazy.
-// Single player: the P2 bar (index 1) is auto-HIDDEN. The P1 bar (index 0)
-// behaves exactly as before.
+// Drives one player's stamina bar.
+// HIDING uses a CanvasGroup (alpha) + child Renderer toggle, NOT SetActive — so the WHOLE
+// group hides (not just the fill), the script keeps running (re-appears when P2 joins), and
+// no GameObject toggling destabilizes child particle systems.
+
 public class StaminaBarUI : MonoBehaviour
 {
     public ResourceBarUI staminaBarUI;
@@ -13,13 +13,15 @@ public class StaminaBarUI : MonoBehaviour
     [Tooltip("Which player this bar tracks. 0 = first player, 1 = second player.")]
     [SerializeField] private int playerIndex = 0;
 
-    [Tooltip("Optional. The visual root to show/hide when this player slot is absent " +
-             "(used to hide P2's bar in single player). If empty, the assigned bar's " +
-             "GameObject is used. For drop-in co-op safety, point this at the bar VISUAL " +
-             "(a child), not the GameObject holding THIS script.")]
+    [Tooltip("Optional. The visual root to show/hide when this player slot is absent. If empty, " +
+             "THIS GameObject is used (the whole bar group).")]
     [SerializeField] private GameObject hideRootWhenAbsent;
 
     private PlayerStats pstats;
+
+    private CanvasGroup _cg;
+    private Renderer[] _renderers;
+    private bool? _lastVisible;
 
     private void Update()
     {
@@ -32,23 +34,32 @@ public class StaminaBarUI : MonoBehaviour
             staminaBarUI.SetValue(pstats.currentStamina, pstats.maxStamina);
     }
 
-    /// Co-op registry populated -> index must be within the player count.
-    /// Registry empty (single player) -> only slot 0 is real.
     private bool SlotExists()
     {
         if (PlayerRegistry.Count > 0) return playerIndex < PlayerRegistry.Count;
         return playerIndex == 0;
     }
 
-    private void ApplyVisibility()
-    {
-        var root = hideRootWhenAbsent != null
-            ? hideRootWhenAbsent
-            : (staminaBarUI != null ? staminaBarUI.gameObject : null);
-        if (root == null) return;
+    private void ApplyVisibility() => SetGroupVisible(SlotExists());
 
-        bool visible = SlotExists();
-        if (root.activeSelf != visible) root.SetActive(visible);
+    private void SetGroupVisible(bool visible)
+    {
+        if (_lastVisible == visible) return;
+        _lastVisible = visible;
+
+        var root = hideRootWhenAbsent != null ? hideRootWhenAbsent : gameObject;
+
+        if (_cg == null || _cg.gameObject != root)
+        {
+            _cg = root.GetComponent<CanvasGroup>();
+            if (_cg == null) _cg = root.AddComponent<CanvasGroup>();
+        }
+        _cg.alpha = visible ? 1f : 0f;
+        _cg.interactable = visible;
+        _cg.blocksRaycasts = visible;
+
+        if (_renderers == null) _renderers = root.GetComponentsInChildren<Renderer>(true);
+        foreach (var r in _renderers) if (r != null) r.enabled = visible;
     }
 
     private PlayerStats ResolveStats()
@@ -63,3 +74,4 @@ public class StaminaBarUI : MonoBehaviour
         return FindAnyObjectByType<PlayerStats>();
     }
 }
+

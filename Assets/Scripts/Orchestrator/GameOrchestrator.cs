@@ -93,6 +93,7 @@ public class GameOrchestrator : MonoBehaviour
     private AugmentsMenu augmentsMenu;
     private AugmentsMenu[] augmentsMenus;   // Phase 6: one per player in co-op
     private PostStageChoiceMenu postStageChoiceMenu;
+    private StageClearScreenMenu stageClearMenu;   // Phase 8: prefab-based reward screen (single + co-op split)
 
     //  RUN STATE (read these from other scripts)
 
@@ -223,6 +224,13 @@ public class GameOrchestrator : MonoBehaviour
             postStageChoiceMenu = GetComponent<PostStageChoiceMenu>();
             if (postStageChoiceMenu == null)
                 postStageChoiceMenu = gameObject.AddComponent<PostStageChoiceMenu>();
+
+            // Phase 8: prefab-based reward screen. When its prefab is present it supersedes the
+            // procedural menu (single-player full-screen, co-op split). If the prefab is missing,
+            // IsAvailable stays false and we use the legacy menu — single player never regresses.
+            stageClearMenu = GetComponent<StageClearScreenMenu>();
+            if (stageClearMenu == null)
+                stageClearMenu = gameObject.AddComponent<StageClearScreenMenu>();
         }
 
         if (WaveCheckpointService.Instance == null) gameObject.AddComponent<WaveCheckpointService>();
@@ -935,6 +943,69 @@ public class GameOrchestrator : MonoBehaviour
             Debug.Log($"[Orchestrator] Post-stage rewards (stage {stage.stageIndex + 1}): " +
                       $"Heal={scaledHealBonus} Augment={scaledAugmentBonus}");
 
+        // PHASE 8: prefer the prefab-based reward screen when its prefab is present.
+        // Single player -> one full-screen instance. Co-op -> one half-size instance per player,
+        // each choosing independently; we then apply each player's reward to that player.
+        if (stageClearMenu != null && stageClearMenu.IsAvailable)
+        {
+            int playerCount = Mathf.Max(1, PlayerRegistry.Count);
+            StageClearScreenMenu.Choice[] choices = null;
+            yield return StartCoroutine(
+                stageClearMenu.ShowChoices(
+                    scaledHealBonus,
+                    scaledAugmentBonus,
+                    c => choices = c
+                )
+            );
+
+            if (choices == null || choices.Length == 0)
+            {
+                // Defensive: treat as everyone healed so the run can't stall.
+                choices = new StageClearScreenMenu.Choice[playerCount];
+                for (int i = 0; i < choices.Length; i++) choices[i] = StageClearScreenMenu.Choice.Heal;
+            }
+
+            // Collect who picked what.
+            bool anyHeal = false;
+            var augmentPlayers = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < choices.Length; i++)
+            {
+                if (choices[i] == StageClearScreenMenu.Choice.Heal) anyHeal = true;
+                else if (choices[i] == StageClearScreenMenu.Choice.Augment) augmentPlayers.Add(i);
+            }
+
+            // Shared world heal happens once if ANYONE chose restore (core + towers are shared).
+            if (anyHeal) HealSharedCoreAndTowers();
+
+            // Per-player application: heal that player's own health + grant the energy bonus.
+            for (int i = 0; i < choices.Length; i++)
+            {
+                if (choices[i] == StageClearScreenMenu.Choice.Heal)
+                {
+                    if (debugLog) Debug.Log($"[Orchestrator] P{i} picked RESTORE + energy bonus");
+                    HealPlayerOnly(i);
+                    GiveEnergyBonus(scaledHealBonus);
+                }
+                else if (choices[i] == StageClearScreenMenu.Choice.Augment)
+                {
+                    if (debugLog) Debug.Log($"[Orchestrator] P{i} picked EMPOWER + small energy");
+                    GiveEnergyBonus(scaledAugmentBonus);
+                }
+            }
+
+            // Augment menus for the players who chose Empower.
+            if (augmentPlayers.Count > 0 && enableAugmentSelection)
+            {
+                if (PlayerRegistry.Count > 1)
+                    yield return ShowAugmentSelectionForPlayers(augmentPlayers);
+                else if (augmentsMenu != null)
+                    yield return ShowAugmentSelection($"stage {stage.stageIndex + 1} post-stage choice");
+            }
+
+            yield break;
+        }
+
+        // LEGACY fallback (prefab missing): original single procedural menu.
         PostStageChoiceMenu.Choice chosen = PostStageChoiceMenu.Choice.None;
         yield return StartCoroutine(
             postStageChoiceMenu.ShowChoice(
@@ -996,6 +1067,111 @@ public class GameOrchestrator : MonoBehaviour
 
         if (debugLog)
             Debug.Log($"[Orchestrator] Healed: core={(core != null)}, towers={(towers?.Length ?? 0)}, player={(player != null)}");
+    }
+
+    // Heal the SHARED world objects only — core + all towers. Called once per post-stage choice
+    // if any player chose Restore (these are shared in co-op, so healing them per-player would be
+    // redundant). Mirrors the core/tower half of HealEverything.
+    private void HealSharedCoreAndTowers()
+    {
+        var core = FindFirstObjectByType<CentralCore>();
+        if (core != null)
+        {
+            float missing = core.maxEnergy - core.currentEnergy;
+            if (missing > 0f) core.SupplyEnergy(missing);
+        }
+
+        var towers = FindObjectsByType<Tower>(FindObjectsSortMode.None);
+        if (towers != null)
+        {
+            foreach (var t in towers)
+            {
+                if (t == null) continue;
+                float missing = t.maxEnergy - t.currentEnergy;
+                if (missing > 0f) t.SupplyEnergy(missing);
+            }
+        }
+
+        if (debugLog)
+            Debug.Log($"[Orchestrator] Healed shared core+towers (towers={(towers?.Length ?? 0)}).");
+    }
+
+    // Heal one specific player's health. In co-op the player is resolved from the registry; in
+    // single player (registry empty) it falls back to the lone PlayerStats — identical to the
+    // player half of HealEverything.
+    private void HealPlayerOnly(int playerIndex)
+    {
+        PlayerStats player = null;
+        if (PlayerRegistry.Count > 0)
+        {
+            var pref = PlayerRegistry.Instance.Get(playerIndex);
+            player = pref != null ? pref.Stats : null;
+        }
+        else
+        {
+            player = FindFirstObjectByType<PlayerStats>();
+        }
+
+        if (player != null)
+        {
+            float missing = player.maxHealth - player.currentHealth;
+            if (missing > 0f) player.Heal(missing);
+            if (debugLog) Debug.Log($"[Orchestrator] Healed P{playerIndex} health.");
+        }
+    }
+
+    // Co-op: open the augment menu for ONLY the players who chose Empower, and wait until those
+    // specific menus close. The orchestrator owns the freeze (as in ShowAugmentSelection) so the
+    // two menus don't fight over Time.timeScale.
+    private IEnumerator ShowAugmentSelectionForPlayers(System.Collections.Generic.List<int> playerIndices)
+    {
+        SetState(RunState.AugmentSelect);
+        if (playerIndices == null || playerIndices.Count == 0) yield break;
+
+        float prevTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
+        Cursor.visible = true;
+        PlayerAttack.SetAllSuppressed(true);
+
+        // Resolve each chosen player's bound menu and open it.
+        var opened = new System.Collections.Generic.List<AugmentsMenu>();
+        foreach (int idx in playerIndices)
+        {
+            var menu = FindAugmentMenuForPlayer(idx);
+            if (menu == null)
+            {
+                if (debugLog) Debug.LogWarning($"[Orchestrator] No AugmentsMenu bound to player {idx}; skipping its augment.");
+                continue;
+            }
+            menu.ResetRerolls();
+            menu.ActivateAugments();
+            opened.Add(menu);
+        }
+
+        // Wait until every opened menu has closed.
+        bool anyOpen = true;
+        while (anyOpen)
+        {
+            anyOpen = false;
+            foreach (var m in opened)
+                if (m != null && m.augmentsMenu != null && m.augmentsMenu.activeSelf) { anyOpen = true; break; }
+            if (anyOpen) yield return new WaitForSecondsRealtime(0.1f);
+        }
+
+        Time.timeScale = prevTimeScale;
+        Cursor.visible = false;
+        PlayerAttack.SetAllSuppressed(false);
+
+        if (debugLog) Debug.Log("[Orchestrator] Per-player augment selection complete.");
+    }
+
+    // Find the AugmentsMenu whose boundPlayerIndex matches (Phase 6 per-player menus).
+    private AugmentsMenu FindAugmentMenuForPlayer(int playerIndex)
+    {
+        if (augmentsMenus != null)
+            foreach (var m in augmentsMenus)
+                if (m != null && m.boundPlayerIndex == playerIndex) return m;
+        return null;
     }
 
     /// Give the player bonus energy through the EnergyManager.
@@ -1517,6 +1693,4 @@ public class GameOrchestrator : MonoBehaviour
             Instance = null;
     }
 }
-
-
 

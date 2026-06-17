@@ -353,7 +353,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   checkInterval: 0.25
+  heartbeatInterval: 5
   maxPlayersToCheck: 4
+  verbose: 0
   monitoring: 1
 --- !u!114 &32431555
 MonoBehaviour:
@@ -3587,7 +3589,7 @@ MonoBehaviour:
   maxRerolls: 99
   boundPlayerIndex: -1
   debugMode: 1
-  forcedAugmentIDsList: 510000004501000046010000
+  forcedAugmentIDsList: 510000004501000044010000
 --- !u!1 &455828981
 GameObject:
   m_ObjectHideFlags: 0
@@ -16507,7 +16509,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7e69200c04c21764ba63b01a0028e5d8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceCoopInEditor: 0
+  forceCoopInEditor: 1
   autoJoinDevicesOnStart: 1
   debugLog: 1
   playerPrefab: {fileID: 2052934577418199866, guid: da0818b169e996442afdafb8e400ed33, type: 3}
@@ -17589,7 +17591,7 @@ MonoBehaviour:
   maxRerolls: 99
   boundPlayerIndex: 1
   debugMode: 1
-  forcedAugmentIDsList: 510000004501000046010000
+  forcedAugmentIDsList: 510000004501000044010000
 --- !u!1 &976995306
 GameObject:
   m_ObjectHideFlags: 0
@@ -38809,7 +38811,7 @@ MonoBehaviour:
   maxRerolls: 99
   boundPlayerIndex: 0
   debugMode: 1
-  forcedAugmentIDsList: 510000004501000046010000
+  forcedAugmentIDsList: 510000004501000044010000
 --- !u!1 &1551689855
 GameObject:
   m_ObjectHideFlags: 0

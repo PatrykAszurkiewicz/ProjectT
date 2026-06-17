@@ -1,13 +1,13 @@
 using UnityEngine;
 
 
-// Drives player's health bar.
-// Co-op: set <see cref="playerIndex"/> to choose which player this bar tracks
-// (0 = P1, 1 = P2). Duplicate the bar group for the second player and set its
-// index to 1. Binding is lazy — it waits until that player has spawned.
-// Single player: the P2 bar (index 1) is auto-HIDDEN, because that player slot
-// doesn't exist. The P1 bar (index 0) behaves exactly as before (binds to the
-// only PlayerStats in the scene).
+// Drives one player's health bar.
+// Co-op: set <see cref="playerIndex"/> (0 = P1, 1 = P2). Duplicate the bar group for the
+// second player and set its index to 1. Binding is lazy.
+// Single player: the P2 bar (index 1) is auto-HIDDEN. P1 (index 0) behaves exactly as before.
+// HIDING is done with a CanvasGroup (alpha) + disabling child Renderers (particles), NOT
+// SetActive — so this script keeps running and the bar re-appears correctly if a second player
+// joins, and the WHOLE group hides (frame, shadow, blur, particles), not just the fill image.
 
 public class HealthBarUI : MonoBehaviour
 {
@@ -16,15 +16,17 @@ public class HealthBarUI : MonoBehaviour
     [Tooltip("Which player this bar tracks. 0 = first player, 1 = second player.")]
     [SerializeField] private int playerIndex = 0;
 
-    [Tooltip("Optional. The visual root to show/hide when this player slot is absent " +
-             "(used to hide P2's bar in single player). If empty, the assigned bar's " +
-             "GameObject is used. NOTE: for drop-in co-op safety, point this at the bar " +
-             "VISUAL (a child), not the GameObject that holds THIS script — hiding the " +
-             "script's own object would stop it from ever showing the bar again.")]
+    [Tooltip("Optional. The visual root to show/hide when this player slot is absent. If empty, " +
+             "THIS GameObject is used (the whole bar group). Hiding uses a CanvasGroup + child " +
+             "Renderer toggle, so it is safe to point at the script's own object.")]
     [SerializeField] private GameObject hideRootWhenAbsent;
 
     private PlayerStats stats;
     private bool bound;
+
+    private CanvasGroup _cg;
+    private Renderer[] _renderers;
+    private bool? _lastVisible;
 
     private void Start()
     {
@@ -34,8 +36,6 @@ public class HealthBarUI : MonoBehaviour
 
     private void Update()
     {
-        // Player may spawn after frame 0 (CoopManager), and players can appear/leave,
-        // so keep visibility + binding in sync. Cheap once bound.
         ApplyVisibility();
         if (!bound) TryBind();
     }
@@ -51,24 +51,34 @@ public class HealthBarUI : MonoBehaviour
         bound = true;
     }
 
-    /// True if a player exists (or will exist) for this bar's index.
     /// Co-op registry populated -> authoritative (index must be within the player count).
-    /// Registry empty (single player, no registry) -> only slot 0 is real.
+    /// Registry empty (single player) -> only slot 0 is real.
     private bool SlotExists()
     {
         if (PlayerRegistry.Count > 0) return playerIndex < PlayerRegistry.Count;
         return playerIndex == 0;
     }
 
-    private void ApplyVisibility()
-    {
-        var root = hideRootWhenAbsent != null
-            ? hideRootWhenAbsent
-            : (healthBarUI != null ? healthBarUI.gameObject : null);
-        if (root == null) return;
+    private void ApplyVisibility() => SetGroupVisible(SlotExists());
 
-        bool visible = SlotExists();
-        if (root.activeSelf != visible) root.SetActive(visible);
+    private void SetGroupVisible(bool visible)
+    {
+        if (_lastVisible == visible) return; // no per-frame churn
+        _lastVisible = visible;
+
+        var root = hideRootWhenAbsent != null ? hideRootWhenAbsent : gameObject;
+
+        if (_cg == null || _cg.gameObject != root)
+        {
+            _cg = root.GetComponent<CanvasGroup>();
+            if (_cg == null) _cg = root.AddComponent<CanvasGroup>();
+        }
+        _cg.alpha = visible ? 1f : 0f;          // hides all UI graphics in the group
+        _cg.interactable = visible;
+        _cg.blocksRaycasts = visible;
+
+        if (_renderers == null) _renderers = root.GetComponentsInChildren<Renderer>(true);
+        foreach (var r in _renderers) if (r != null) r.enabled = visible; // hides particles etc.
     }
 
     private PlayerStats ResolveStats()
@@ -80,7 +90,6 @@ public class HealthBarUI : MonoBehaviour
             var pref = PlayerRegistry.Instance.Get(playerIndex);
             return pref != null ? pref.Stats : null;
         }
-        // Single player: registry unused — old behaviour (slot 0 only).
         return FindAnyObjectByType<PlayerStats>();
     }
 
@@ -90,4 +99,3 @@ public class HealthBarUI : MonoBehaviour
             stats.OnHealthChanged -= healthBarUI.SetValue;
     }
 }
-

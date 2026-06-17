@@ -371,6 +371,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-5051054718417278305
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/DecoySetup
+  m_EditorClassIdentifier: 
+  Path: event:/DecoySetup
+  Guid:
+    Data1: -1757991689
+    Data2: 1173644622
+    Data3: -803095122
+    Data4: -2076142509
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-4767326506630127960
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -416,6 +443,33 @@ MonoBehaviour:
     Data2: 1218359914
     Data3: 1487889832
     Data4: -993017630
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-4276179233645731794
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BoomerangShot
+  m_EditorClassIdentifier: 
+  Path: event:/BoomerangShot
+  Guid:
+    Data1: -1095266160
+    Data2: 1109479939
+    Data3: -445071438
+    Data4: 2031244234
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
@@ -497,6 +551,33 @@ MonoBehaviour:
     Data2: 1234501350
     Data3: 305116045
     Data4: -1671416936
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-3073702065128237753
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BoomerangHit
+  m_EditorClassIdentifier: 
+  Path: event:/BoomerangHit
+  Guid:
+    Data1: 2034968058
+    Data2: 1163520304
+    Data3: 373319572
+    Data4: -193084559
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
@@ -611,6 +692,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-1932188671727040734
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/TrapSetup
+  m_EditorClassIdentifier: 
+  Path: event:/TrapSetup
+  Guid:
+    Data1: -1582951892
+    Data2: 1093714719
+    Data3: -1489615194
+    Data4: 1799154809
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-1837708856942917988
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -638,6 +746,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-386795316149977302
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/RangedShot
+  m_EditorClassIdentifier: 
+  Path: event:/RangedShot
+  Guid:
+    Data1: 531870760
+    Data2: 1135073395
+    Data3: -1596789367
+    Data4: -1708641231
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-89216244576792818
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -653,10 +788,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 639152390974982027
+  lastModified: 639173330650771745
   FileSizes:
   - Name: Desktop
-    Value: 2802
+    Value: 3044
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -715,13 +850,18 @@ MonoBehaviour:
   - {fileID: 466687119483286031}
   - {fileID: -7431918612028469694}
   - {fileID: 2543031125653396588}
+  - {fileID: -386795316149977302}
+  - {fileID: -1932188671727040734}
+  - {fileID: -4276179233645731794}
+  - {fileID: -5051054718417278305}
+  - {fileID: -3073702065128237753}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 639152390974982027
+  cacheTime: 639173330650771745
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -801,6 +941,16 @@ MonoBehaviour:
     index: 37
   - key: event:/ScarecrowScream
     index: 38
+  - key: event:/RangedShot
+    index: 39
+  - key: event:/TrapSetup
+    index: 40
+  - key: event:/BoomerangShot
+    index: 41
+  - key: event:/DecoySetup
+    index: 42
+  - key: event:/BoomerangHit
+    index: 43
 --- !u!114 &466687119483286031
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1101,10 +1251,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 639152390974962035
+  lastModified: 639173330650766654
   FileSizes:
   - Name: Desktop
-    Value: 1554464
+    Value: 1646656
   Exists: 1
 --- !u!114 &4699882167230820914
 MonoBehaviour:

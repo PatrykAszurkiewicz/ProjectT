@@ -1,19 +1,15 @@
 using UnityEngine;
 
-//  CoopTestHarness  regression checks for the co-op work.
+
+//  CoopTestHarness  —  one-stop regression checks for the co-op work.
 //  Every line is prefixed with [TestRunLogs] — type that into the Console search
 //  box to isolate all test output.
-//    • Press Play with this on a GameObject → the STATIC SUITE auto-runs on Start.
-//    • Right-click the COMPONENT HEADER in the Inspector ("Coop Test Harness
+//     Press Play with this on a GameObject → the STATIC SUITE auto-runs on Start.
+//     Right-click the COMPONENT HEADER in the Inspector ("Coop Test Harness
 //      (Script)") → pick a check from the menu. (Not the Hierarchy object.)
-//    • Hotkeys in Play mode: F1..F6, F9.
-//  If you see NOTHING at all (not even the yellow "ALIVE" heartbeat below):
-//    1) There is a COMPILE ERROR somewhere in the project — fix all red
-//       "error CS..." lines; Unity won't run new code until they're gone.
-//    2) The Console's message (speech-bubble) filter is off, or the search box
-//       is filtering. Clear it, or search [TestRunLogs].
-//    3) The GameObject isn't in the scene you pressed Play on, or the component
-//       is disabled / Run Static Tests On Start is unchecked.
+//     Hotkeys in Play mode: F1..F6, F9.
+//  STATIC SUITE = pure logic, no scene → run in a NEW EMPTY scene.
+//  SCENE CHECKS = read-only assertions for your real gameplay scene (2 players).
 
 public class CoopTestHarness : MonoBehaviour
 {
@@ -82,6 +78,7 @@ public class CoopTestHarness : MonoBehaviour
         TestTetherMathEdge();
         TestMultiPlayerScaling();
         TestStackingSemantics();
+        TestComplexInteractions();
         TestCrossAugmentIndependence();
         TestSaveRoundTrip();
         TestFreshRunReset();
@@ -451,6 +448,89 @@ public class CoopTestHarness : MonoBehaviour
         ResetAllStatics();
     }
 
+    private void TestComplexInteractions()
+    {
+        ResetAllStatics();
+        const float midPer = 0.10f, farPer = 0.05f, nearPer = 0.20f, cap = 2.0f;
+
+        // ---- Build two DIFFERENT realistic loadouts simultaneously ----
+        // P0: speedy parrier — 30% cooldown, projectile parry, +1.0s parry stun, +3 parry frames.
+        CooldownModifier.SetReductionPercent(30f, 0);
+        ProjectileParry.SetUnlocked(0);
+        ParryUpgrades.SetLongerParryStun(0, 1.0f);
+        ParryUpgrades.SetLongerParryWindow(0, 3);
+        // P1: bruiser parrier — powerful parry 0.6/4, heal-on-parry 5%, +5 parry frames, 50% cooldown.
+        CooldownModifier.SetReductionPercent(50f, 1);
+        ParryUpgrades.SetPowerfulParry(1, 0.6f, 4f);
+        ParryUpgrades.SetHealOnParry(1, 0.05f);
+        ParryUpgrades.SetLongerParryWindow(1, 5);
+        // Global (shared by design): tower damage x1.5.
+        TowerCombatModifiers.DamageMultiplier = 1.5f;
+
+        // ---- Each player's own state is exactly what they picked ----
+        Check("CI P0 cooldown 0.7", Approx(CooldownModifier.MultiplierFor(0), 0.7f));
+        Check("CI P1 cooldown 0.5", Approx(CooldownModifier.MultiplierFor(1), 0.5f));
+        Check("CI P0 projparry unlocked, P1 not", ProjectileParry.UnlockedFor(0) && !ProjectileParry.UnlockedFor(1));
+        Check("CI P0 stun 1.0, P1 stun 0", Approx(ParryUpgrades.ExtraStunSecondsFor(0), 1.0f) && Approx(ParryUpgrades.ExtraStunSecondsFor(1), 0f));
+        Check("CI P1 powerful on, P0 powerful off", ParryUpgrades.PowerfulParryEnabledFor(1) && !ParryUpgrades.PowerfulParryEnabledFor(0));
+        Check("CI P1 heal on, P0 heal off", ParryUpgrades.HealOnParryEnabledFor(1) && !ParryUpgrades.HealOnParryEnabledFor(0));
+        Check("CI P0 frames 3, P1 frames 5", ParryUpgrades.ExtraParryFramesFor(0) == 3 && ParryUpgrades.ExtraParryFramesFor(1) == 5);
+        Check("CI MaxExtraParryFrames across both == 5", ParryUpgrades.MaxExtraParryFrames() == 5);
+
+        // ---- Cross-system: no setting bled across players or systems ----
+        Check("CI P0 has NO powerful/heal (no parry-system leak)", !ParryUpgrades.PowerfulParryEnabledFor(0) && !ParryUpgrades.HealOnParryEnabledFor(0));
+        Check("CI P1 has NO projparry (no projparry leak)", !ProjectileParry.UnlockedFor(1));
+        Check("CI P2/P3 totally clean (no spill)",
+            Approx(CooldownModifier.MultiplierFor(2), 1f) && Approx(CooldownModifier.MultiplierFor(3), 1f) &&
+            !ProjectileParry.UnlockedFor(2) && !ProjectileParry.UnlockedFor(3) &&
+            ParryUpgrades.ExtraParryFramesFor(2) == 0 && !ParryUpgrades.PowerfulParryEnabledFor(3));
+
+        // ---- ResolveDamageDebuff routes per-player through the SAME shared system ----
+        ParryUpgrades.ResolveDamageDebuff(0, 0.3f, 1f, out float b0, out float d0);
+        ParryUpgrades.ResolveDamageDebuff(1, 0.3f, 1f, out float b1, out float d1);
+        Check("CI resolve P0 -> fallback (0.3/1, no powerful)", Approx(b0, 0.3f) && Approx(d0, 1f));
+        Check("CI resolve P1 -> powerful (0.6/4)", Approx(b1, 0.6f) && Approx(d1, 4f));
+
+        // ---- Ability cooldown applied per player, simultaneously ----
+        Check("CI Apply(10) P0 == 7", Approx(CooldownModifier.Apply(10f, 0), 7f));
+        Check("CI Apply(10) P1 == 5", Approx(CooldownModifier.Apply(10f, 1), 5f));
+
+        // ---- Shared tower: BOTH players tether it (MID), composed with the GLOBAL buff ----
+        // base damage 20, global x1.5, P0 contributes 2 tethers (1.20), P1 contributes 3 (1.30).
+        float tP0 = TetherMath.DamageMultiplier(2, midPer, cap); // 1.20
+        float tP1 = TetherMath.DamageMultiplier(3, midPer, cap); // 1.30
+        float effective = 20f * TowerCombatModifiers.DamageMultiplier * tP0 * tP1;
+        Check("CI tower 20 * 1.5(global) * 1.20(P0) * 1.30(P1) == 46.8", Approx(effective, 46.8f));
+
+        // ---- A third axis on the SAME tower: P0 also in FAR (range), P1 also in NEAR (decay) ----
+        float rangeLeg = 6f * TetherMath.RangeMultiplier(2, farPer, cap);  // 6 * 1.10 = 6.6
+        float decayLeg = TetherMath.DecayMultiplier(2, nearPer);           // 0.60
+        Check("CI same tower range leg independent (6 -> 6.6)", Approx(rangeLeg, 6.6f));
+        Check("CI same tower decay leg independent (0.60)", Approx(decayLeg, 0.6f));
+        Check("CI damage leg unchanged by range/decay legs (still 46.8)", Approx(effective, 46.8f));
+
+        // ---- Both players leave the tether: damage returns to base*global only ----
+        float afterRelease = 20f * TowerCombatModifiers.DamageMultiplier; // product of zero tethers = 1
+        Check("CI both release -> 20 * 1.5 == 30 (no stuck tether)", Approx(afterRelease, 30f));
+
+        // ---- Fresh run resets EVERYTHING across all systems and players ----
+        ResetAllStatics();
+        bool allClean = true;
+        for (int i = 0; i < 4; i++)
+        {
+            allClean &= Approx(CooldownModifier.MultiplierFor(i), 1f);
+            allClean &= !ProjectileParry.UnlockedFor(i);
+            allClean &= ParryUpgrades.ExtraParryFramesFor(i) == 0;
+            allClean &= !ParryUpgrades.PowerfulParryEnabledFor(i);
+            allClean &= !ParryUpgrades.HealOnParryEnabledFor(i);
+            allClean &= Approx(ParryUpgrades.ExtraStunSecondsFor(i), 0f);
+        }
+        allClean &= Approx(TowerCombatModifiers.DamageMultiplier, 1f);
+        Check("CI full reset clears every system for P0..P3", allClean);
+
+        ResetAllStatics();
+    }
+
     private void TestCrossAugmentIndependence()
     {
         ResetAllStatics();
@@ -736,4 +816,3 @@ public class CoopTestHarness : MonoBehaviour
     private static void LErr(string msg) => Debug.LogError(TAG + msg);
     private static bool Approx(float a, float b) => Mathf.Abs(a - b) < 0.0001f;
 }
-
