@@ -5,7 +5,7 @@
 			<value>TowerRepair</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -98,6 +98,7 @@
 	<object class="MixerBusEffectChain" id="{5248a54b-287b-4c08-919f-a73a986ff65c}">
 		<relationship name="effects">
 			<destination>{9c4f5677-ded4-4316-b7c9-554adfaa0074}</destination>
+			<destination>{4e2a9ec9-db0b-4a0a-9d7e-c83317ccdc32}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{ebd9ba47-51fb-40ec-8c2f-e49e46407c4c}" />
@@ -113,4 +114,15 @@
 	</object>
 	<object class="MixerBusFader" id="{ce6d005b-4008-4ed4-8702-eb4aa6991905}" />
 	<object class="MixerBusFader" id="{9c4f5677-ded4-4316-b7c9-554adfaa0074}" />
+	<object class="SpatialiserEffect" id="{4e2a9ec9-db0b-4a0a-9d7e-c83317ccdc32}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

@@ -5,7 +5,7 @@
 			<value>ResourceDropCollection</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{1a1d788e-4bd1-4faf-930f-7a994a32736f}">
 		<relationship name="effects">
 			<destination>{0c7d2d85-ed33-4c31-8ffb-b80970fa1f8a}</destination>
+			<destination>{e487f539-066d-4d2a-9f65-aaab65b682ea}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{ae16a0b7-f0bb-48f9-874c-393efb43788a}" />
@@ -114,6 +115,17 @@
 	</object>
 	<object class="MixerBusFader" id="{3929bae4-046a-4ebc-82ac-92c323c6ead9}" />
 	<object class="MixerBusFader" id="{0c7d2d85-ed33-4c31-8ffb-b80970fa1f8a}" />
+	<object class="SpatialiserEffect" id="{e487f539-066d-4d2a-9f65-aaab65b682ea}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 	<object class="SingleSound" id="{5d791406-fa00-4a3c-8c3a-9a76f226010c}">
 		<relationship name="audioFile">
 			<destination>{efe03011-f6dc-4653-888c-de10298284b0}</destination>

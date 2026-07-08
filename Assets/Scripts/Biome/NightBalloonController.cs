@@ -127,8 +127,8 @@ public class NightBalloonController : MonoBehaviour
         // Stagger the first spawn so the sky doesn't pop in full at once
         nextSpawnTime = Time.time + Random.Range(0.5f, 2f);
 
-        Debug.Log($"[NightBalloons] Controller activated — will spawn up to {maxBalloons} balloons " +
-                  $"starting in ~{nextSpawnTime - Time.time:F1}s. Night active: {NightOverlay.Instance != null}");
+        //Debug.Log($"[NightBalloons] Controller activated — will spawn up to {maxBalloons} balloons " +
+        //          $"starting in ~{nextSpawnTime - Time.time:F1}s. Night active: {NightOverlay.Instance != null}");
     }
 
     public void CleanupBalloons()
@@ -244,11 +244,11 @@ public class NightBalloonController : MonoBehaviour
 
         balloons.Add(instance);
 
-        Debug.Log($"[NightBalloons] Spawned at {entryPos} → {exitPos}, " +
-                  $"rootScale={scale:F2}, lightRadius={lightRadius}, lightIntensity={lightIntensity}, " +
-                  $"sweep={(enableLightSweep ? "ON" : "OFF")}, " +
-                  $"NightOverlay.Instance={(NightOverlay.Instance != null ? "present" : "NULL — no lighting!")}, " +
-                  $"total active: {balloons.Count}");
+        //Debug.Log($"[NightBalloons] Spawned at {entryPos} → {exitPos}, " +
+        //          $"rootScale={scale:F2}, lightRadius={lightRadius}, lightIntensity={lightIntensity}, " +
+        //          $"sweep={(enableLightSweep ? "ON" : "OFF")}, " +
+        //          $"NightOverlay.Instance={(NightOverlay.Instance != null ? "present" : "NULL — no lighting!")}, " +
+        //          $"total active: {balloons.Count}");
     }
 
     // Build the beam cone + ground spot sprites for one balloon.

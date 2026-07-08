@@ -41,6 +41,12 @@ public class PlayerCameraController : MonoBehaviour, ICoopCamera
         if (orthographicSize > 0f && _cam.orthographic)
             _cam.orthographicSize = orthographicSize;
         if (owner != null) owner.Camera = _cam;
+
+        // Co-op: each player camera needs its OWN shake so its half can shake
+        // independently. Auto-add if the prefab doesn't already carry one, so this
+        // works without hand-editing the PlayerCamera prefab.
+        if (GetComponent<CameraShake>() == null)
+            gameObject.AddComponent<CameraShake>();
     }
 
     /// <summary>Bind to a player and apply the split rect. Called by CoopManager.</summary>
@@ -102,5 +108,4 @@ public class PlayerCameraController : MonoBehaviour, ICoopCamera
         transform.position = Vector3.Lerp(transform.position, desired, t);
     }
 }
-
 

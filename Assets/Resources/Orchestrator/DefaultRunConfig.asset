@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: DefaultRunConfig
   m_EditorClassIdentifier: 
   stageCount: 2
-  wavesPerStage: 1
+  wavesPerStage: 2
   hasFinalBoss: 1
   availableBiomes: 05000000
   allowRepeatBiomes: 1
@@ -22,10 +22,11 @@ MonoBehaviour:
   - {fileID: 11400000, guid: d3d3d7b01fe1cee4d9d93365b1f99214, type: 2}
   enemyCountScalePerStage: 1.2
   spawnDelayScalePerStage: 0.85
+  wavePacingMode: 2
   timeBetweenWaves: 3
   timeBetweenStages: 3
-  enemyHealthScalePerStage: 1.03
-  enemyDamageScalePerStage: 1.03
+  enemyHealthScalePerStage: 1.15
+  enemyDamageScalePerStage: 1.15
   scaleBossesWithStage: 1
   nightModeChance: 0.244
   fogChance: 0.25

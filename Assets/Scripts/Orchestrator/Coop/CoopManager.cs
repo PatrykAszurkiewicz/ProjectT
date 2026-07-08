@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Users;
 
 // Central co-op coordinator for the gameplay scene (Phase 2).
 //  - LEGACY mode (no PlayerInputManager found) does nothing 
@@ -13,10 +14,6 @@ using UnityEngine.InputSystem;
 public class CoopManager : MonoBehaviour
 {
     public static CoopManager Instance { get; private set; }
-
-    [Header("Editor testing")]
-    [Tooltip("Editor-only: force co-op (2 players) when you press Play directly without a menu. No effect in builds.")]
-    [SerializeField] private bool forceCoopInEditor = false;
 
     [Tooltip("Editor/standalone convenience: auto-join local devices at Start (KB+M as P1, a gamepad as P2). Turn OFF if a lobby pre-binds devices.")]
     [SerializeField] private bool autoJoinDevicesOnStart = true;
@@ -41,18 +38,24 @@ public class CoopManager : MonoBehaviour
     private readonly List<ICoopCamera> _cameras = new List<ICoopCamera>();
     private readonly HashSet<ICoopCamera> _spawnedCameras = new HashSet<ICoopCamera>();
 
+    // Single-player: the one PlayerInput we bind to EVERY local device so the lone
+    // character can be driven by keyboard+mouse OR a gamepad (both live at once). Held
+    // so we can keep its binding mask widened and pair hot-plugged pads. Null in co-op.
+    private PlayerInput _solo;
+    private bool _reapplyingSoloMask;
+    private const string SoloBindingGroups = "Keyboard&Mouse;Gamepad";
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
 
         int target = 1;
-        if (SessionConfig.Instance != null)
+        if (RunResumeIntent.Pending && RunResumeIntent.PlayerCount > 0)
+            target = Mathf.Clamp(RunResumeIntent.PlayerCount, 1, 2);   // continue/lobby is authoritative
+        else if (SessionConfig.Instance != null)
             target = Mathf.Clamp(SessionConfig.Instance.TargetPlayerCount, 1, 2);
 
-#if UNITY_EDITOR
-        if (forceCoopInEditor) target = 2;
-#endif
         TargetPlayerCount = target;
     }
 
@@ -84,19 +87,20 @@ public class CoopManager : MonoBehaviour
 
         if (autoJoinDevicesOnStart)
             AutoJoinLocalDevices();
-
-        // Hot-plug: a pad connected after Start takes over the keyboard player.
-        InputSystem.onDeviceChange += OnDeviceChange;
     }
 
     private void OnDestroy()
     {
-        InputSystem.onDeviceChange -= OnDeviceChange;
         if (playerInputManager != null)
         {
             playerInputManager.onPlayerJoined -= HandlePlayerJoined;
             playerInputManager.onPlayerLeft -= HandlePlayerLeft;
         }
+
+        // Single-player binding teardown (no-ops if we never bound a solo player).
+        InputSystem.onDeviceChange -= OnSoloDeviceChange;
+        if (_solo != null) _solo.onControlsChanged -= OnSoloControlsChanged;
+
         if (Instance == this) Instance = null;
     }
 
@@ -126,6 +130,15 @@ public class CoopManager : MonoBehaviour
         // A camera carried by the player prefab? (simple-follow setups). Else
         // spawn the per-player render camera prefab (Cinemachine setups).
         ICoopCamera cam = pi.GetComponentInChildren<ICoopCamera>(true);
+
+        // Revive re-enables the player's PlayerInput, which re-fires onPlayerJoined.
+        // Because HandlePlayerLeft kept the downed player's camera alive (see there),
+        // this player already has one — REUSE it instead of spawning a second render
+        // camera. (For prefab-carried cameras the GetComponentInChildren above already
+        // found it; this covers the separately-spawned render-camera / Cinemachine case,
+        // where the camera is not a child of the player.)
+        if (cam == null && pref != null) cam = FindCameraForOwner(pref);
+
         if (cam == null && playerCameraPrefab != null)
         {
             var camGO = Instantiate(playerCameraPrefab);
@@ -173,6 +186,25 @@ public class CoopManager : MonoBehaviour
     {
         if (pi == null) return;
 
+        // Co-op is fully seated for the whole run. When a player is DOWNED, the death
+        // path disables its PlayerInput component to cut control — and disabling a
+        // PlayerInput raises PlayerInput.OnDisable, which fires this onPlayerLeft even
+        // though the player is still very much in the run, alive on-screen, and awaiting
+        // a teammate revive. Tearing its camera down here is exactly what made the
+        // survivor's view snap to full-screen.
+        //
+        // A downed player stays REGISTERED in PlayerRegistry by design (it's pinned at
+        // 0 HP so AllDead() can count it), so "still registered" is a reliable signal
+        // that this is a transient input toggle, not a genuine departure. In that case
+        // keep the camera and leave the split layout untouched.
+        if (IsStillSeated(pi))
+        {
+            if (debugLog)
+                Debug.Log($"[CoopManager] Ignoring transient LEFT for idx={pi.playerIndex} " +
+                          "(player still seated — downed/awaiting revive). Split layout preserved.");
+            return;
+        }
+
         ICoopCamera cam = pi.GetComponentInChildren<ICoopCamera>(true);
         if (cam != null) RemoveCamera(cam);
 
@@ -191,6 +223,40 @@ public class CoopManager : MonoBehaviour
         _cameras.Remove(cam);
         if (_spawnedCameras.Remove(cam) && cam is MonoBehaviour mb && mb != null)
             Destroy(mb.gameObject);
+    }
+
+    // True if this PlayerInput's player object is still part of the run — i.e. its
+    // PlayerRef is still registered in PlayerRegistry. A DOWNED player is kept
+    // registered on purpose (pinned at 0 HP so AllDead() counts it) and its GameObject
+    // stays active; only its control is cut. So a "left" event for a still-registered
+    // player is a transient PlayerInput disable (down), not a genuine departure, and
+    // its split-screen camera must be preserved.
+    private static bool IsStillSeated(PlayerInput pi)
+    {
+        if (pi == null) return false;
+
+        // includeInactive:true so this still resolves even if the death path went as
+        // far as deactivating the object rather than just disabling PlayerInput.
+        var pref = pi.GetComponentInChildren<PlayerRef>(true);
+        if (pref == null) return false;
+
+        var reg = PlayerRegistry.Instance;
+        if (reg == null) return false;
+
+        var all = reg.All;
+        for (int i = 0; i < all.Count; i++)
+            if (all[i] == pref) return true;
+        return false;
+    }
+
+    // Find an already-registered camera bound to this player, so a revive-driven
+    // rejoin reuses it instead of spawning a duplicate.
+    private ICoopCamera FindCameraForOwner(PlayerRef owner)
+    {
+        if (owner == null) return null;
+        for (int i = 0; i < _cameras.Count; i++)
+            if (_cameras[i] != null && _cameras[i].Owner == owner) return _cameras[i];
+        return null;
     }
 
     private void UpdateJoinGate()
@@ -230,10 +296,12 @@ public class CoopManager : MonoBehaviour
             return;
         }
 
-        // Single player: ONE PlayerInput that uses keyboard+mouse AND a gamepad,
-        // auto-switching to whichever the player last used (classic 1P feel).
-        // Joining on Keyboard&Mouse makes the keyboard work immediately, and
-        // leaving auto-switch enabled lets a gamepad button take over on use.
+        // Single player: ONE PlayerInput driven by keyboard+mouse AND any gamepad,
+        // both active at once. NOTE: we do NOT rely on PlayerInput's auto-switch — a
+        // PlayerInputManager is present, so the join gate (DisableJoining once seated)
+        // turns OFF the unpaired-device listening that auto-switch needs, and the pad
+        // would stay dead. Instead we pair every local device to this one player and
+        // widen its binding mask to span both groups (see BindSoloToAllDevices).
         if (TargetPlayerCount <= 1)
         {
             if (playerInputManager.playerCount < 1)
@@ -244,7 +312,7 @@ public class CoopManager : MonoBehaviour
                 else
                     solo = playerInputManager.JoinPlayer();   // pad-only machine
 
-                if (solo != null) solo.neverAutoSwitchControlSchemes = false;
+                if (solo != null) BindSoloToAllDevices(solo);
             }
             return;
         }
@@ -292,38 +360,94 @@ public class CoopManager : MonoBehaviour
                 pi.neverAutoSwitchControlSchemes = false;
     }
 
-    // ---- Hot-plug: a pad connected after Start takes over the KB+M player ---
+    //  Single-player: bind ONE player to keyboard+mouse AND every gamepad 
 
-    private void OnDeviceChange(InputDevice device, InputDeviceChange change)
+    // Pair every local device to the single player and widen its binding mask so the
+    // Keyboard&Mouse AND Gamepad binding groups are BOTH active. This replaces the old
+    // auto-switch approach, which never fired in managed mode (the manager disables the
+    // unpaired-device listening auto-switch depends on once the player is seated). Runs
+    // only for a 1-player run, so co-op seating is unaffected.
+    private void BindSoloToAllDevices(PlayerInput solo)
     {
-        if (!ManagedMode) return;
-        // Single player auto-switches between keyboard and gamepad on its own —
-        // don't re-pair or spawn anyone when a pad is plugged in.
-        if (TargetPlayerCount <= 1) return;
-        if (change != InputDeviceChange.Added && change != InputDeviceChange.Reconnected) return;
-        if (!(device is Gamepad pad)) return;
-        if (DeviceInUse(pad)) return;
+        if (solo == null) return;
+        _solo = solo;
 
-        // If a player slot is still empty (e.g. started with too few devices),
-        // fill it with the new pad. Otherwise do nothing: the flexible players
-        // auto-switch to an unpaired pad the moment it's used, so plugging a pad
-        // in and pressing it hands it to P2 without us re-pairing anything.
-        if (playerInputManager != null && playerInputManager.playerCount < TargetPlayerCount)
+        // We manage devices explicitly; don't let PlayerInput auto-switch schemes (that
+        // would re-narrow the mask back to a single group and kill one of the inputs).
+        solo.neverAutoSwitchControlSchemes = true;
+
+        PairAllLocalDevicesToSolo();
+        ApplySoloMask();
+
+        // Re-assert the widened mask if something later narrows it (e.g. an input
+        // component re-enable when pausing), and pair pads plugged in after start.
+        solo.onControlsChanged += OnSoloControlsChanged;
+        InputSystem.onDeviceChange += OnSoloDeviceChange;
+
+        if (debugLog)
         {
-            EnableJoiningTemporarilyAndJoin(pad);
-            if (debugLog)
-                Debug.Log($"[CoopManager] Joined a new player on '{pad.displayName}'.");
+            string devs = "";
+            foreach (var d in solo.devices) devs += d.displayName + " ";
+            Debug.Log($"[CoopManager] Single player bound to all local devices: [{devs.Trim()}] — keyboard+mouse and gamepad both active.");
         }
     }
 
-    private void EnableJoiningTemporarilyAndJoin(Gamepad pad)
+    private void OnSoloControlsChanged(PlayerInput pi)
     {
-        bool wasDisabled = !playerInputManager.joiningEnabled;
-        if (wasDisabled) playerInputManager.EnableJoining();
-        playerInputManager.JoinPlayer(-1, -1, "Gamepad", pad);
-        MakeNonFirstPlayersFlexible();
-        UpdateJoinGate(); // re-applies the disable if we're now at target
+        if (_reapplyingSoloMask) return;   // guard: our own re-apply must not loop
+        ApplySoloMask();
     }
+
+    private void OnSoloDeviceChange(InputDevice device, InputDeviceChange change)
+    {
+        if (_solo == null) return;
+        if ((change == InputDeviceChange.Added || change == InputDeviceChange.Reconnected)
+            && (device is Gamepad || device is Keyboard || device is Mouse))
+        {
+            PairAllLocalDevicesToSolo();
+            ApplySoloMask();
+        }
+    }
+
+    private void PairAllLocalDevicesToSolo()
+    {
+        if (_solo == null) return;
+        var user = _solo.user;
+        if (!user.valid) return;
+
+        PairIfNeeded(user, Keyboard.current);
+        PairIfNeeded(user, Mouse.current);
+        foreach (var pad in Gamepad.all) PairIfNeeded(user, pad);
+    }
+
+    private static void PairIfNeeded(InputUser user, InputDevice device)
+    {
+        if (device == null) return;
+        foreach (var d in user.pairedDevices)
+            if (d == device) return;   // already paired — don't unpair/re-pair (avoids a device-lost flicker)
+        InputUser.PerformPairingWithDevice(device, user);
+    }
+
+    // Widen the binding mask to BOTH groups so keyboard+mouse and gamepad bindings are
+    // simultaneously live. Only PAIRED devices can fire, so XR/Joystick/Touch bindings
+    // stay dormant even though they aren't listed here. Re-entrancy-guarded so
+    // re-asserting the mask can't loop with onControlsChanged.
+    private void ApplySoloMask()
+    {
+        if (_solo == null || _solo.actions == null) return;
+        var cur = _solo.actions.bindingMask;
+        if (cur.HasValue && cur.Value.groups == SoloBindingGroups) return;   // already correct
+
+        _reapplyingSoloMask = true;
+        _solo.actions.bindingMask = new InputBinding { groups = SoloBindingGroups };
+        _reapplyingSoloMask = false;
+    }
+
+    // NOTE: There is intentionally no runtime device-change join here. Co-op always
+    // starts fully seated — the start lobby (CoopStartLobby) and resume gate
+    // (ContinueRunMenu) both wait for the required controllers BEFORE GameScene loads.
+    // A controller lost mid-run is handled by ControllerDisconnectGuard (pause + re-pair),
+    // not by spawning a new player. This removes the old mid-run surprise-split entirely.
 
     private static Gamepad NextUnpairedGamepad(ref int cursor)
     {

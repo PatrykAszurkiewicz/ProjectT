@@ -55,7 +55,15 @@ public class RunConfig : ScriptableObject
              "Lower = harder (tighter waves).")]
     public float spawnDelayScalePerStage = 0.85f;
 
-    [Tooltip("Time between waves (seconds). Overrides WaveConfig.timeBetweenWaves during a run.")]
+    [Tooltip("GLOBAL wave pacing — how the gap BETWEEN waves works during a run:\n" +
+             "• Countdown — wait 'Time Between Waves' seconds (original behaviour).\n" +
+             "• Ready Up — wait until every player clicks the on-screen READY button\n" +
+             "   (both players in local co-op). 'Time Between Waves' is ignored.\n" +
+             "• Immediate — the next wave starts the instant the previous one is cleared.")]
+    public WavePacingMode wavePacingMode = WavePacingMode.Countdown;
+
+    [Tooltip("Time between waves (seconds). Used by the Countdown pacing mode. " +
+             "Overrides WaveConfig.timeBetweenWaves during a run.")]
     public float timeBetweenWaves = 3f;
 
     [Tooltip("Delay between stages (seconds). Player sees biome transition.")]
@@ -209,4 +217,3 @@ public class EnemyPoolEntry
     [Min(0)]
     public int minStageIndex = 0;
 }
-

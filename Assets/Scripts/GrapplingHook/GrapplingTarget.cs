@@ -11,6 +11,11 @@ public class GrapplingHookSystem
     private Rigidbody2D playerRigidbody;
     private PlayerMovement playerMovement;
 
+    // Co-op: THIS player's own aim + camera, so targeting never reads another
+    // player's cursor or the global Camera.main.
+    private PlayerAim playerAim;
+    private PlayerRef playerRef;
+
     // Targeting
     private List<IGrapplingTarget> potentialTargets = new List<IGrapplingTarget>();
     private IGrapplingTarget currentTarget;
@@ -48,6 +53,8 @@ public class GrapplingHookSystem
         playerTransform = weapon.GetComponentInParent<PlayerMovement>()?.transform ?? weapon.transform.parent;
         playerRigidbody = weapon.GetComponentInParent<Rigidbody2D>();
         playerMovement = weapon.GetComponentInParent<PlayerMovement>();
+        playerAim = weapon.GetComponentInParent<PlayerAim>();
+        playerRef = weapon.GetComponentInParent<PlayerRef>();
 
         SetupLineRenderer();
         LoadHookSprite();
@@ -526,15 +533,22 @@ public class GrapplingHookSystem
 
     private void UpdateCursor(IGrapplingTarget bestTarget)
     {
-        if (CursorManager.Instance != null &&
-            (TowerPlacementManager.Instance == null || !TowerPlacementManager.Instance.IsInPlacementMode()))
+        // Co-op: write to THIS player's cursor, not the global CursorManager.Instance
+        // (which is only ONE player's manager). Using Instance let one player's hook
+        // overwrite the other player's cursor every frame.
+        var cm = weapon != null ? weapon.Cursor : CursorManager.Instance;
+        if (cm == null) return;
+        if (TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode()) return;
+
+        if (bestTarget != null)
         {
-            // Use Hook (black) when no target, HookHighlight (green) when targeting
-            var cursorType = bestTarget != null ? CursorManager.CursorType.HookHightlight : CursorManager.CursorType.Hook;
-
-            //Debug.Log($"[GRAPPLING] UpdateCursor - BestTarget: {bestTarget != null}, CursorType: {cursorType}");
-
-            CursorManager.Instance.SetCursor(cursorType);
+            // Active target locked on -> highlighted (green) hook cursor.
+            cm.SetCursor(CursorManager.CursorType.HookHightlight);
+        }
+        else if (weapon != null)
+        {
+            // No target -> show the normal weapon cursor (not the plain hook).
+            weapon.RefreshWeaponCursor();
         }
     }
 
@@ -545,14 +559,20 @@ public class GrapplingHookSystem
             var targetTransform = target.GetTransform();
             if (targetTransform != null)
             {
-                // Only show indicator if target is visible on screen
-                Vector3 screenPos = Camera.main.WorldToScreenPoint(targetTransform.position);
-                const float margin = 100f;
-                bool isVisible = screenPos.z > 0 &&
-                               screenPos.x >= -margin &&
-                               screenPos.x <= Screen.width + margin &&
-                               screenPos.y >= -margin &&
-                               screenPos.y <= Screen.height + margin;
+                // Only show indicator if target is visible on THIS player's screen
+                // (co-op: split-screen cameras, not the global Camera.main).
+                var cam = (playerRef != null && playerRef.Camera != null) ? playerRef.Camera : Camera.main;
+                bool isVisible = true;
+                if (cam != null)
+                {
+                    Vector3 screenPos = cam.WorldToScreenPoint(targetTransform.position);
+                    const float margin = 100f;
+                    isVisible = screenPos.z > 0 &&
+                                screenPos.x >= -margin &&
+                                screenPos.x <= Screen.width + margin &&
+                                screenPos.y >= -margin &&
+                                screenPos.y <= Screen.height + margin;
+                }
 
                 if (isVisible)
                 {
@@ -582,13 +602,23 @@ public class GrapplingHookSystem
 
     private Vector3 GetCursorWorldPosition()
     {
+        // Co-op: aim with THIS player's own input, not a shared/global cursor.
+        // PlayerAim.Direction is correct for BOTH schemes — direction to the mouse
+        // cursor (KB+M) and the right-stick direction (gamepad) — and is per-player,
+        // so P1 and P2 never read each other's aim. Only the DIRECTION from the
+        // player matters to FindBestTarget, so a unit step along Direction is enough.
+        if (playerAim != null)
+            return playerTransform.position + (Vector3)playerAim.Direction;
+
+        // Fallbacks for a legacy single-player object that has no PlayerAim.
         var cursorPointer = Object.FindAnyObjectByType<CursorPointer>();
         if (cursorPointer != null)
             return cursorPointer.transform.position;
 
-        if (Mouse.current != null)
+        var cam = (playerRef != null && playerRef.Camera != null) ? playerRef.Camera : Camera.main;
+        if (Mouse.current != null && cam != null)
         {
-            Vector3 mousePos = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+            Vector3 mousePos = cam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
             mousePos.z = 0;
             return mousePos;
         }

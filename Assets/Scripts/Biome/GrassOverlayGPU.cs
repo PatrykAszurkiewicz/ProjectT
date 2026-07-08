@@ -105,11 +105,20 @@ public class GrassOverlayGPU : MonoBehaviour
     //  PUBLIC API
 
 
-    void Start() => GenerateGrass();
+    private bool _generated;
+
+    void Start()
+    {
+        // BiomeManager calls GenerateGrass() right after AddComponent; Unity then fires
+        // Start() a frame later. Without this guard we build a 4M-blade buffer + run the
+        // generate compute twice per biome.
+        if (!_generated) GenerateGrass();
+    }
 
     [ContextMenu("Regenerate Grass")]
     public void GenerateGrass()
     {
+        _generated = true;
         Cleanup();
 
         // 1. Shared blade mesh (7 verts — trivial)
@@ -142,6 +151,10 @@ public class GrassOverlayGPU : MonoBehaviour
 
         renderBounds = new Bounds(Vector3.zero, Vector3.one * spawnRadius * 3f);
         isInitialized = true;
+
+        Debug.Log($"[GrassGPU] spawnRadius={spawnRadius:F1} bladeCount={bladeCount} " +
+                  $"clumpCount={clumpCount} renderBounds={renderBounds.size} | the grass disc " +
+                  $"must reach the background's coverage radius or a bare border shows outside it.");
     }
 
     void Update()

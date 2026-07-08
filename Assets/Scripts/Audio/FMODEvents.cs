@@ -44,6 +44,31 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Turret SFX")]
     [field: SerializeField] public EventReference turretRotate { get; private set; }
     [field: SerializeField] public EventReference turretShot { get; private set; }
+    [field: SerializeField] public EventReference turretSetup { get; private set; }
+
+    [field: Header("Trap Tool SFX")]
+    [field: SerializeField] public EventReference trapSetup { get; private set; }
+    [field: SerializeField] public EventReference trapCapture { get; private set; }
+
+    [field: Header("Decoy Tool SFX")]
+    [field: SerializeField] public EventReference decoySetup { get; private set; }
+
+    [field: Header("Boomerang SFX")]
+    [field: SerializeField] public EventReference boomerangShot { get; private set; }
+    [field: SerializeField] public EventReference boomerangHit { get; private set; }
+
+    [field: Header("Ranged Weapon SFX")]
+    [field: SerializeField] public EventReference rangedShot { get; private set; }
+    [field: SerializeField] public EventReference rangedHit { get; private set; }
+
+    [field: Header("Clock Tool SFX")]
+    [field: SerializeField] public EventReference rewindActivate { get; private set; }
+
+    [field: Header("Hammer SFX")]
+    [field: SerializeField] public EventReference hammerHit { get; private set; }
+
+    [field: Header("Projectile Parry SFX")]
+    [field: SerializeField] public EventReference projectileParry { get; private set; }
 
     [field: Header("Tower Melee SFX")]
     [field: SerializeField] public EventReference towerMeleeHit { get; private set; }
@@ -87,15 +112,57 @@ public class FMODEvents : MonoBehaviour
     [field: Header("Augment SFX")]
     [field: SerializeField] public EventReference augmentReroll { get; private set; }
     [field: SerializeField] public EventReference click { get; private set; }
+    [field: SerializeField] public EventReference augmentScreen { get; private set; }
+
+    [field: Header("Menu SFX")]
+    [field: SerializeField] public EventReference menuClick { get; private set; }
+
+    [field: Header("Mortar SFX")]
+    [field: SerializeField] public EventReference mortarShot { get; private set; }
+    [field: SerializeField] public EventReference mortarExplosion { get; private set; }
+
+    [field: Header("Smoke Screen SFX")]
+    [field: SerializeField] public EventReference smokeShot { get; private set; }
+
+    [field: Header("Proximity Mine SFX")]
+    [field: SerializeField] public EventReference mineExplosion { get; private set; }
+
+    [field: Header("Enemy Attack SFX")]
+    [field: SerializeField] public EventReference pitcherAttack { get; private set; }
+    [field: SerializeField] public EventReference pitcherHit { get; private set; }
+    [field: SerializeField] public EventReference eyeAttack { get; private set; }
+    [field: SerializeField] public EventReference bomberExplosion { get; private set; }
+
+    [field: Header("Boss 2 SFX")]
+    [field: SerializeField] public EventReference boss2Explosion { get; private set; }
+
+    [field: Header("Tool Setup SFX")]
+    [field: SerializeField] public EventReference mineSetup { get; private set; }
+    [field: SerializeField] public EventReference torchSetup { get; private set; }
+    [field: SerializeField] public EventReference cloakActivate { get; private set; }
+
+    [field: Header("Lore Chest SFX")]
+    [field: SerializeField] public EventReference openChest { get; private set; }
 
     public static FMODEvents instance { get; private set; }
 
     private void Awake()
     {
+        // Single, persistent instance. A duplicate (e.g. a per-scene copy left in
+        // a scene while the bootstrap already spawned the persistent one) destroys
+        // itself so the persistent instance stays the single source of truth.
         if (instance != null)
         {
             Debug.LogError("Found more than one FMOD Events instance in the scene.");
+            Destroy(gameObject);
+            return;
         }
         instance = this;
+
+        // Survive scene loads so menu/SFX audio works in every scene. Only root
+        // objects can be marked; if this lives under an "AudioSystem" root, the
+        // bootstrap marks that root instead.
+        if (transform.parent == null) DontDestroyOnLoad(gameObject);
     }
 }
+

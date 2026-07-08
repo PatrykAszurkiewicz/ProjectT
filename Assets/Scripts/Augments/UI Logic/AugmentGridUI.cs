@@ -99,6 +99,10 @@ public class AugmentGridUI : MonoBehaviour
     public float tooltipWidth = 400f;
     [Tooltip("Offset from the cursor (x right, y up).")]
     public Vector2 tooltipOffset = new Vector2(18, 18);
+    [Tooltip("Font size of the tooltip title (augment name).")]
+    public float tooltipTitleFontSize = 28f;
+    [Tooltip("Font size of the tooltip body (the description). Raise for readability.")]
+    public float tooltipBodyFontSize = 26f;
 
     [Header("Refresh")]
     [Tooltip("How often the grid checks AugmentRegistry for changes (sec).")]
@@ -146,6 +150,20 @@ public class AugmentGridUI : MonoBehaviour
         // Force a refresh on every reopen.
         _lastAugmentCountSeen = -1;
         _refreshTimer = refreshInterval; // refresh next Update
+    }
+
+    // The tooltip is a Canvas-root singleton that outlives this panel. When the
+    // panel is deactivated (e.g. the pause menu closes) Unity does NOT fire
+    // OnPointerExit on the hovered cell, so the tooltip would stay on screen —
+    // and a *pinned* tooltip stays regardless. Hide + unpin it here so it can
+    // never linger after the grid disappears.
+    private void OnDisable()
+    {
+        if (_tooltip != null)
+        {
+            _tooltip.Unpin();
+            _tooltip.Hide();
+        }
     }
 
     private void Update()
@@ -618,6 +636,7 @@ public class AugmentCellHover : MonoBehaviour, IPointerEnterHandler, IPointerExi
         StartScale(owner.hoverScale);
         var tt = TooltipUI.GetOrCreate(transform.root as RectTransform);
         tt.SetFont(owner.fontAsset);
+        tt.SetFontSizes(owner.tooltipTitleFontSize, owner.tooltipBodyFontSize);
         tt.Show(cell.data, owner.tooltipWidth, AugmentRegistry.Instance?.GetRarityColors());
         tt.Follow(eventData.position, owner.tooltipOffset);
     }
@@ -652,6 +671,7 @@ public class AugmentCellHover : MonoBehaviour, IPointerEnterHandler, IPointerExi
         else
         {
             tt.SetFont(owner.fontAsset);
+            tt.SetFontSizes(owner.tooltipTitleFontSize, owner.tooltipBodyFontSize);
             tt.Show(cell.data, owner.tooltipWidth, AugmentRegistry.Instance?.GetRarityColors());
             tt.Follow(eventData.position, owner.tooltipOffset);
             tt.Pin(cell.data.ID);
@@ -791,6 +811,14 @@ public class TooltipUI : MonoBehaviour
         if (font == null) return;
         if (_titleTmp != null) _titleTmp.font = font;
         if (_bodyTmp != null) _bodyTmp.font = font;
+    }
+
+    // Per-Show font sizing so the grid owner can tune title/body size from the
+    // Inspector (raise the body size to make descriptions more readable).
+    public void SetFontSizes(float titleSize, float bodySize)
+    {
+        if (_titleTmp != null) _titleTmp.fontSize = titleSize;
+        if (_bodyTmp != null) _bodyTmp.fontSize = bodySize;
     }
 
     public void Show(AugmentData data, float width, Dictionary<string, Color> rarityColors)

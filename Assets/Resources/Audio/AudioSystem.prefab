@@ -1,0 +1,447 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2621942428097089263
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3174426813481749728}
+  - component: {fileID: 811921460109985333}
+  m_Layer: 0
+  m_Name: AudioSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3174426813481749728
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2621942428097089263}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 885.95496, y: 976.02496, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 956298379895694652}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &811921460109985333
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2621942428097089263}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a4ed2ee8a775074b9ea666bc3b9b7be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  masterVolume: 1
+  musicVolume: 1
+  ambienceVolume: 1
+  SFXVolume: 1
+  musicEnabled: 0
+  enableDebugLogs: 0
+--- !u!1 &7292112455597863150
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 956298379895694652}
+  - component: {fileID: 2592518054833694270}
+  m_Layer: 0
+  m_Name: FMODEvents
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &956298379895694652
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7292112455597863150}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3174426813481749728}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2592518054833694270
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7292112455597863150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87dffe49f1c323b4da4cd1b01752f573, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  <musicAmbient>k__BackingField:
+    Guid:
+      Data1: -495093861
+      Data2: 1282034939
+      Data3: -971311733
+      Data4: -695650098
+    Path: event:/Music/MusicAmbient
+  <musicElectronic>k__BackingField:
+    Guid:
+      Data1: -1145196637
+      Data2: 1292176083
+      Data3: -575498604
+      Data4: -293424600
+    Path: event:/Music/MusicElectronic
+  <musicPiano>k__BackingField:
+    Guid:
+      Data1: 1423163704
+      Data2: 1238510356
+      Data3: 311959207
+      Data4: 2053324099
+    Path: event:/Music/MusicPiano
+  <musicCalm>k__BackingField:
+    Guid:
+      Data1: -2125480614
+      Data2: 1318857584
+      Data3: -1986423419
+      Data4: -1820070629
+    Path: event:/Music/MusicCalm
+  <multiShotSound>k__BackingField:
+    Guid:
+      Data1: -179989327
+      Data2: 1131411702
+      Data3: -618425691
+      Data4: -230991054
+    Path: event:/MultiShot
+  <shotSound>k__BackingField:
+    Guid:
+      Data1: -68123187
+      Data2: 1314503669
+      Data3: -1327968887
+      Data4: -44403318
+    Path: event:/TowerShot
+  <meleeSwing>k__BackingField:
+    Guid:
+      Data1: -2108065072
+      Data2: 1162002805
+      Data3: 1834976641
+      Data4: 1112014357
+    Path: event:/MeleeSwing
+  <meleeHit>k__BackingField:
+    Guid:
+      Data1: 974621012
+      Data2: 1155956433
+      Data3: -213103474
+      Data4: 979060408
+    Path: event:/MeleeHit
+  <footstepsSound>k__BackingField:
+    Guid:
+      Data1: -1543252814
+      Data2: 1297323241
+      Data3: 1614850454
+      Data4: -550565948
+    Path: event:/Footsteps
+  <dashSound>k__BackingField:
+    Guid:
+      Data1: 1332249077
+      Data2: 1167090174
+      Data3: 1051869860
+      Data4: 780888163
+    Path: event:/Dash
+  <grapplingHookShoot>k__BackingField:
+    Guid:
+      Data1: -1767756259
+      Data2: 1129299038
+      Data3: 67473555
+      Data4: 1521336119
+    Path: event:/GrapplingHookShoot
+  <proximityMine>k__BackingField:
+    Guid:
+      Data1: 365683176
+      Data2: 1238229543
+      Data3: -1757051221
+      Data4: -1405524441
+    Path: event:/ProximityMine
+  <proximityMineExplode>k__BackingField:
+    Guid:
+      Data1: -1914836589
+      Data2: 1192791334
+      Data3: -1167087468
+      Data4: 272725278
+    Path: event:/ProximityMineExplode
+  <flamethrower>k__BackingField:
+    Guid:
+      Data1: 138710703
+      Data2: 1250609286
+      Data3: -369350210
+      Data4: 403549352
+    Path: event:/Flamethrower
+  <turretRotate>k__BackingField:
+    Guid:
+      Data1: -1882943189
+      Data2: 1116868140
+      Data3: -1823746633
+      Data4: 1206356001
+    Path: event:/TurretRotate
+  <turretShot>k__BackingField:
+    Guid:
+      Data1: -68123187
+      Data2: 1314503669
+      Data3: -1327968887
+      Data4: -44403318
+    Path: event:/TowerShot
+  <turretSetup>k__BackingField:
+    Guid:
+      Data1: -1162109094
+      Data2: 1226658091
+      Data3: -563515993
+      Data4: 1976168420
+    Path: event:/TurretSetup
+  <trapSetup>k__BackingField:
+    Guid:
+      Data1: -1582951892
+      Data2: 1093714719
+      Data3: -1489615194
+      Data4: 1799154809
+    Path: event:/TrapSetup
+  <trapCapture>k__BackingField:
+    Guid:
+      Data1: 1171580406
+      Data2: 1159070431
+      Data3: 872787369
+      Data4: 2006400210
+    Path: event:/TrapCapture
+  <decoySetup>k__BackingField:
+    Guid:
+      Data1: -1757991689
+      Data2: 1173644622
+      Data3: -803095122
+      Data4: -2076142509
+    Path: event:/DecoySetup
+  <boomerangShot>k__BackingField:
+    Guid:
+      Data1: -1095266160
+      Data2: 1109479939
+      Data3: -445071438
+      Data4: 2031244234
+    Path: event:/BoomerangShot
+  <boomerangHit>k__BackingField:
+    Guid:
+      Data1: 2034968058
+      Data2: 1163520304
+      Data3: 373319572
+      Data4: -193084559
+    Path: event:/BoomerangHit
+  <rangedShot>k__BackingField:
+    Guid:
+      Data1: 531870760
+      Data2: 1135073395
+      Data3: -1596789367
+      Data4: -1708641231
+    Path: event:/RangedShot
+  <rangedHit>k__BackingField:
+    Guid:
+      Data1: 1599754525
+      Data2: 1266765394
+      Data3: 1552183455
+      Data4: 1700272060
+    Path: event:/RangedHit
+  <rewindActivate>k__BackingField:
+    Guid:
+      Data1: 1689434821
+      Data2: 1094763705
+      Data3: -1388802388
+      Data4: 363744204
+    Path: event:/RewindActivate
+  <hammerHit>k__BackingField:
+    Guid:
+      Data1: -2005487203
+      Data2: 1183939582
+      Data3: 1566562221
+      Data4: 1158785723
+    Path: event:/HammerHit
+  <projectileParry>k__BackingField:
+    Guid:
+      Data1: 411301426
+      Data2: 1145831000
+      Data3: 439662722
+      Data4: -1059193881
+    Path: event:/ProjectileParry
+  <towerMeleeHit>k__BackingField:
+    Guid:
+      Data1: 408426898
+      Data2: 1144333112
+      Data3: -465909833
+      Data4: 783982419
+    Path: event:/TowerMeleeHit
+  <towerDamage>k__BackingField:
+    Guid:
+      Data1: -789180875
+      Data2: 1312010199
+      Data3: 515574411
+      Data4: 1177008866
+    Path: event:/TowerDamage
+  <towerRepair>k__BackingField:
+    Guid:
+      Data1: -421588614
+      Data2: 1162664735
+      Data3: 1915452055
+      Data4: 1023146114
+    Path: event:/TowerRepair
+  <towerCreation>k__BackingField:
+    Guid:
+      Data1: -1816564035
+      Data2: 1211921992
+      Data3: 1808483507
+      Data4: -1877119790
+    Path: event:/TowerCreation
+  <towerDeath>k__BackingField:
+    Guid:
+      Data1: 1811497561
+      Data2: 1121566150
+      Data3: 768344978
+      Data4: 1338637834
+    Path: event:/TowerDeath
+  <resourceDropCollection>k__BackingField:
+    Guid:
+      Data1: 1847399950
+      Data2: 1295397836
+      Data3: -738862183
+      Data4: -396342993
+    Path: event:/ResourceDropCollection
+  <centralCoreDeath>k__BackingField:
+    Guid:
+      Data1: 239168874
+      Data2: 1246713383
+      Data3: 738612373
+      Data4: 781697213
+    Path: event:/CentralCoreDeath
+  <gremlinAppearance>k__BackingField:
+    Guid:
+      Data1: -1483461998
+      Data2: 1309756251
+      Data3: -1860937344
+      Data4: -35436576
+    Path: event:/GremlinAppearance
+  <gremlinDeath>k__BackingField:
+    Guid:
+      Data1: -1150057822
+      Data2: 1228684988
+      Data3: -902479985
+      Data4: -835861714
+    Path: event:/GremlinDeath
+  <enemyAttack>k__BackingField:
+    Guid:
+      Data1: -1496161281
+      Data2: 1263613492
+      Data3: -973098315
+      Data4: -170769422
+    Path: event:/EnemyAttack
+  <scarecrowScream>k__BackingField:
+    Guid:
+      Data1: -922597727
+      Data2: 1228093541
+      Data3: 821004176
+      Data4: -524538866
+    Path: event:/ScarecrowScream
+  <shieldBlock>k__BackingField:
+    Guid:
+      Data1: 1737657210
+      Data2: 1320130191
+      Data3: -840643653
+      Data4: 433000393
+    Path: event:/ShieldBlock
+  <shieldParry>k__BackingField:
+    Guid:
+      Data1: -1941922542
+      Data2: 1299236291
+      Data3: -1525195588
+      Data4: 1182994532
+    Path: event:/ShieldParry
+  <bossLaserShot>k__BackingField:
+    Guid:
+      Data1: -206391553
+      Data2: 1245199791
+      Data3: -1440536920
+      Data4: 1141717623
+    Path: event:/BossLaserShot
+  <bossGroundHit>k__BackingField:
+    Guid:
+      Data1: -320858680
+      Data2: 1218359914
+      Data3: 1487889832
+      Data4: -993017630
+    Path: event:/Boss1GroundHit
+  <augmentReroll>k__BackingField:
+    Guid:
+      Data1: -1116858208
+      Data2: 1293702704
+      Data3: -1842931072
+      Data4: 1442451726
+    Path: event:/AugmentReroll
+  <click>k__BackingField:
+    Guid:
+      Data1: -817804514
+      Data2: 1136743607
+      Data3: -1759412330
+      Data4: 1754517006
+    Path: event:/Click
+  <augmentScreen>k__BackingField:
+    Guid:
+      Data1: 1845213940
+      Data2: 1149905752
+      Data3: -1750867802
+      Data4: -1433493285
+    Path: event:/AugmentScreen
+  <menuClick>k__BackingField:
+    Guid:
+      Data1: 1096742803
+      Data2: 1256585123
+      Data3: 715738044
+      Data4: -222419347
+    Path: event:/MenuClick
+  <mortarShot>k__BackingField:
+    Guid:
+      Data1: 531262487
+      Data2: 1230935123
+      Data3: 84537779
+      Data4: 1815833067
+    Path: event:/MortarShot
+  <mortarExplosion>k__BackingField:
+    Guid:
+      Data1: -1269154749
+      Data2: 1209957731
+      Data3: -1990360446
+      Data4: 1982720244
+    Path: event:/MortarExplosion
+  <smokeShot>k__BackingField:
+    Guid:
+      Data1: 958569884
+      Data2: 1266718532
+      Data3: 1784811681
+      Data4: -1821924106
+    Path: event:/SmokeShot
+  <mineExplosion>k__BackingField:
+    Guid:
+      Data1: -409960648
+      Data2: 1322018612
+      Data3: 1015303065
+      Data4: 1388267620
+    Path: event:/MineExplosion

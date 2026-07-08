@@ -321,7 +321,12 @@ public class WaveCheckpointService : MonoBehaviour
 
             if (slot != null && bySlot.TryGetValue(slot, out var ts))
             {
-                // Tower that existed at wave start (maybe now disabled by damage).
+                // Tower that existed at wave start (maybe now disabled by damage, or
+                // upgraded mid-wave). Roll its upgrade level back to the wave-start
+                // value first — SetUpgradeLevel re-derives the max-health bonus (and
+                // damage is derived live), so a mid-wave upgrade is undone here.
+                if (t.upgradeLevel != ts.upgradeLevel) t.SetUpgradeLevel(ts.upgradeLevel);
+
                 // Restoring its energy past zero auto-re-enables a disabled tower.
                 RestoreTowerEnergy(t, ts.currentEnergy);
                 matchedSlots.Add(slot);

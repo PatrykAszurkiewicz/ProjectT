@@ -119,6 +119,11 @@ public class MortarProjectile : MonoBehaviour
         this.lastPos = transform.position;
         initialized = true;
 
+        // Subtle tracer light on the shell while it arcs, so it reads in dark biomes.
+        ProjectileGlow.Attach(transform, new Color(1f, 0.5f, 0.2f), worldRadius: 0.8f,
+                              alpha: 0.5f, pulse: true, pulseSpeed: 6f, pulseAmount: 0.22f,
+                              sortingOrder: forcedSortingOrder != 0 ? forcedSortingOrder - 3 : ProjectileGlow.DefaultGlowSortingOrder);
+
         if (forcedSortingOrder != 0)
         {
             var sr = GetComponent<SpriteRenderer>();
@@ -184,6 +189,13 @@ public class MortarProjectile : MonoBehaviour
     {
         if (detonated) return;
         detonated = true;
+
+        // Detonation SFX (enemy Mort shell). Mirrors the player mortar's explosion.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.mortarExplosion.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.mortarExplosion, landingPos);
+        }
 
         SpawnExplosionVfx();
         if (parried) ApplyAreaDamageToEnemies();
@@ -543,6 +555,13 @@ public class MortarExplosionVFX : MonoBehaviour
 
     private IEnumerator Run()
     {
+        // Bright light "blink" the instant the shell lands — a sharp additive pop
+        // that makes the detonation flash read clearly in dark biomes. Covers both
+        // enemy and player mortars (the player shell reuses this same VFX).
+        Color flashColor = Color.Lerp(_fire, Color.white, 0.45f);
+        ProjectileGlow.Flash(transform.position, flashColor, _radius * 1.7f,
+                             duration: 0.22f, peakAlpha: 0.95f, sortingOrder: FlashOrder + 1);
+
         BuildScorch();
         BuildShockwave();
         BuildCoreFlash();

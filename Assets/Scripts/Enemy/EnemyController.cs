@@ -1,9 +1,17 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using FMODUnity;
 
 public class EnemyController : MonoBehaviour
 {
+    // Per-enemy melee attack sound. Assign this on the prefab (e.g. InsectAttack
+    // on the Insect, SlimeAttack on the Slime, WolfAttack on the Wolf). When left
+    // empty the enemy falls back to the shared FMODEvents.enemyAttack, so existing
+    // enemies are unaffected. Pitcher and other ranged enemies use an attack
+    // override and play their own sound instead (see PerformHit / PitcherController).
+    [Header("Attack SFX (optional per-enemy override)")]
+    [SerializeField] private EventReference attackSoundOverride;
     private EnemyStats stats;
     private Rigidbody2D rb;
 
@@ -22,6 +30,14 @@ public class EnemyController : MonoBehaviour
     [SerializeField] private float avoidDistance = 1f;
     [SerializeField] private LayerMask obstacleLayer;
 
+    [Tooltip("EXTRA layers (beyond Obstacle Layer) that the steering and stuck " +
+             "systems treat as solid things to arc around — e.g. the layer your " +
+             "towers sit on, so a DESTROYED tower's rubble is bypassed in a wide " +
+             "arc instead of trapping enemies against it. Leave as Nothing to " +
+             "change nothing. If your towers are already on the Obstacle Layer, " +
+             "you don't need this.")]
+    [SerializeField] private LayerMask blockerLayers;
+
     [Tooltip("If true, the enemy will not start an attack cycle when a layout " +
              "obstacle (wall/building) is between it and its target. Prevents " +
              "enemies stuck on the wrong side of a wide wall from playing the " +
@@ -33,6 +49,70 @@ public class EnemyController : MonoBehaviour
     [Tooltip("Progress toward target (in world units) required during stuckCheckTime to avoid being marked stuck. " +
              "Measures progress along the direction to the target, so sliding along a wall counts as no progress.")]
     [SerializeField] private float minMovementThreshold = 0.05f;
+
+    [Header("Smooth Steering & Avoidance")]
+    [Tooltip("Master switch for the smoothed, multi-obstacle steering. When OFF " +
+             "the enemy uses the original single-obstacle perpendicular avoidance " +
+             "(GetOptimalMovementDirectionLegacy), so you can A/B the old feel.")]
+    [SerializeField] private bool smoothSteeringEnabled = true;
+
+    [Tooltip("How far around itself the enemy senses obstacles for steering. " +
+             "Bigger = it starts curving away EARLIER and takes a WIDER berth, " +
+             "instead of scraping the wall. Usually a touch larger than " +
+             "avoidDistance.")]
+    [SerializeField] private float lookAheadDistance = 1.6f;
+
+    [Tooltip("How hard nearby obstacles push the heading away from them. Higher = " +
+             "wider detours around walls and out of tight gaps between two " +
+             "obstacles. Too high looks evasive; ~1.5-2.5 is natural.")]
+    [SerializeField] private float avoidanceStrength = 1.8f;
+
+    [Tooltip("How quickly the heading turns toward where it WANTS to go. This is " +
+             "the anti-jitter knob: LOWER = smoother, lazier, wider arcs; HIGHER " +
+             "= snappier turns. Heading is eased every physics step, so direction " +
+             "never snaps (which is what reads as shaking).")]
+    [SerializeField] private float steerResponsiveness = 6f;
+
+    [Tooltip("Strength of a slow, organic wander layered on top of movement so " +
+             "paths look natural and a pack doesn't walk a single line. Driven by " +
+             "smooth Perlin noise (continuous), NOT per-frame Random, so it never " +
+             "jitters. 0 = perfectly straight pathing.")]
+    [SerializeField] private float wanderStrength = 0.25f;
+
+    [Tooltip("How fast the wander direction drifts. LOW = long, lazy sways; HIGH " +
+             "= busier weaving. Keep low for the 'smooth, larger movement' feel.")]
+    [SerializeField] private float wanderFrequency = 0.4f;
+
+    [Tooltip("When genuinely stuck, how far the slide also pulls OFF the wall " +
+             "(away from its surface) for a wider berth, instead of grinding " +
+             "along the face. Bigger = the enemy swings out further to round the " +
+             "obstacle.")]
+    [SerializeField] private float stuckArcWidth = 0.6f;
+
+    // Persistent heading we ease toward the goal each FixedUpdate. Keeping this
+    // between frames (rather than recomputing velocity from scratch) is what
+    // makes turns smooth and wide instead of jittery. Zero = "needs reseeding".
+    private Vector2 smoothHeading = Vector2.zero;
+
+    // Per-enemy offset into the Perlin field so wanders aren't synchronized.
+    private float wanderSeed;
+
+    // Reused scratch + filter for the multi-obstacle avoidance scan (no GC).
+    private static readonly Collider2D[] _avoidScan = new Collider2D[16];
+    private ContactFilter2D _avoidFilter;
+    private bool _avoidFilterReady;
+
+    // Layer-independent blocker contact. Captured from real physics collisions so
+    // we can peel off any solid we touch — even one a designer forgot to put on
+    // the Obstacle/Blocker layers (the classic "stuck behind a tree" case). The
+    // normal points AWAY from the blocker; it's remembered briefly so the steer
+    // stays smooth across the frames between contacts.
+    private Vector2 _contactNormal;
+    private float _lastBlockerContactTime = -999f;
+    private const float BLOCKER_CONTACT_MEMORY = 0.2f;
+    private bool HasRecentBlockerContact =>
+        (Time.time - _lastBlockerContactTime) <= BLOCKER_CONTACT_MEMORY
+        && _contactNormal.sqrMagnitude > 0.0001f;
 
     [Header("Grappling")]
     private bool isBeingGrappled = false;
@@ -51,6 +131,13 @@ public class EnemyController : MonoBehaviour
     // so their scripted attack patterns aren't disrupted.
     private float smokeShufflePhase;
     private bool isBoss;
+
+    // Cached Boss1 reference. Boss1 is present from spawn on boss objects and is
+    // never added at runtime, so it's safe to cache once (unlike status effects
+    // such as ParryStunEffect, which come and go and must still be probed live).
+    // This removes a GetComponent<Boss1>() from FixedUpdate — a per-physics-frame,
+    // per-enemy cost that did nothing for the (overwhelmingly common) non-boss case.
+    private Boss1 boss1;
 
     [Header("Freeze System")]
     private bool isFrozen = false;
@@ -135,20 +222,30 @@ public class EnemyController : MonoBehaviour
         if (spriteRenderer != null)
             originalColor = spriteRenderer.color;
 
+        // Cache Boss1 once (see field comment). Also reused for the isBoss checks
+        // below so we don't GetComponent<Boss1> three separate times at startup.
+        boss1 = GetComponent<Boss1>();
+
         if (GetComponent<YSortEntity>() == null)
         {
             var ysort = gameObject.AddComponent<YSortEntity>();
             ysort.sortPrecision = 10f;
             ysort.sortOrderBase = 1000;
 
-            bool isBoss = GetComponent<Boss1>() != null || GetComponent<BaseBossStats>() != null;
+            bool isBoss = boss1 != null || GetComponent<BaseBossStats>() != null;
             ysort.sortYOffset = isBoss ? -1.0f : -0.2f;
         }
 
         // Cache boss status (smoke-blinding is skipped for bosses) and a random
         // phase so a group of smoke-blinded enemies doesn't shuffle in lock-step.
-        isBoss = GetComponent<Boss1>() != null || GetComponent<BaseBossStats>() != null;
+        isBoss = boss1 != null || GetComponent<BaseBossStats>() != null;
         smokeShufflePhase = Random.value * 6.2831853f;
+
+        // Per-enemy wander offset, and a cached contact filter for the
+        // multi-obstacle avoidance scan (built once; rebuilt lazily if the
+        // obstacle layer is assigned later).
+        wanderSeed = Random.value * 1000f;
+        BuildAvoidFilter();
 
         GameObject core = GameObject.FindGameObjectWithTag("Core");
         if (core != null)
@@ -244,7 +341,8 @@ public class EnemyController : MonoBehaviour
             return;
         }
 
-        var boss1 = GetComponent<Boss1>();
+        // Uses the cached Boss1 reference (assigned in Start, before the first
+        // FixedUpdate) instead of a per-physics-frame GetComponent<Boss1>().
         if (boss1 != null)
         {
             if (animController != null && animController.IsPlayingLaserAttack())
@@ -320,6 +418,7 @@ public class EnemyController : MonoBehaviour
             if (distance <= DECOY_STOP_DISTANCE)
             {
                 rb.linearVelocity = Vector2.zero;
+                smoothHeading = Vector2.zero; // re-seed heading when we move again
                 return;
             }
         }
@@ -331,13 +430,14 @@ public class EnemyController : MonoBehaviour
             if (isAttackingCycle || HasLineOfSightToTarget(currentTarget))
             {
                 rb.linearVelocity = Vector2.zero;
+                smoothHeading = Vector2.zero; // re-seed heading when we move again
                 return;
             }
         }
 
         HandleStuckDetection();
         Vector2 direction = (currentTarget.position - transform.position).normalized;
-        direction = GetOptimalMovementDirection(direction);
+        direction = ComputeSteeredDirection(direction);
 
         // Lured enemies move slightly slower (confused)
         float speedMultiplier = isLuredByDecoy ? 0.8f : 1f;
@@ -383,7 +483,7 @@ public class EnemyController : MonoBehaviour
                 // direction — we might have reached a corner where the
                 // previously blocked side is now clear.
                 bool stillBlocked = Physics2D.OverlapCircle(
-                    transform.position, avoidDistance, obstacleLayer) != null;
+                    transform.position, avoidDistance, CombinedBlockerMask) != null;
                 if (stillBlocked)
                 {
                     EnterStuckMode();
@@ -410,7 +510,7 @@ public class EnemyController : MonoBehaviour
         // to "direction to target", which is only correct when the wall and
         // target happen to be axis-aligned with each other.
         Collider2D wall = Physics2D.OverlapCircle(
-            transform.position, avoidDistance, obstacleLayer);
+            transform.position, avoidDistance, CombinedBlockerMask);
 
         Vector2 wallNormal;
         if (wall != null)
@@ -437,10 +537,20 @@ public class EnemyController : MonoBehaviour
         }
         else
         {
-            // No obstacle in range (rare — stuck without a nearby wall, e.g.
-            // jammed between enemies). Fall back to perpendicular-to-target.
-            Vector2 toT = (currentTarget.position - transform.position).normalized;
-            wallNormal = new Vector2(-toT.y, toT.x);
+            // No obstacle found on the configured layers. If we're physically
+            // touching something (e.g. an untagged tree), use that real contact
+            // normal so the slide is computed against the actual blocker. Only
+            // when we have neither do we fall back to perpendicular-to-target.
+            if (HasRecentBlockerContact)
+            {
+                wallNormal = _contactNormal;
+            }
+            else
+            {
+                // Stuck without a nearby wall (e.g. jammed between enemies).
+                Vector2 toT = (currentTarget.position - transform.position).normalized;
+                wallNormal = new Vector2(-toT.y, toT.x);
+            }
         }
 
         // Two ways to slide along the wall (perpendicular to its normal).
@@ -453,8 +563,8 @@ public class EnemyController : MonoBehaviour
         // boundaries so we can pick the genuinely-clear direction.
         float probeDist = avoidDistance * 3f;
         Vector2 selfPos2 = transform.position;
-        bool aClear = !Physics2D.OverlapCircle(selfPos2 + slideA * probeDist, 0.3f, obstacleLayer);
-        bool bClear = !Physics2D.OverlapCircle(selfPos2 + slideB * probeDist, 0.3f, obstacleLayer);
+        bool aClear = !Physics2D.OverlapCircle(selfPos2 + slideA * probeDist, 0.3f, CombinedBlockerMask);
+        bool bClear = !Physics2D.OverlapCircle(selfPos2 + slideB * probeDist, 0.3f, CombinedBlockerMask);
 
         if (aClear && !bClear) stuckAvoidanceDirection = slideA;
         else if (bClear && !aClear) stuckAvoidanceDirection = slideB;
@@ -471,7 +581,227 @@ public class EnemyController : MonoBehaviour
         }
     }
 
-    private Vector2 GetOptimalMovementDirection(Vector2 desiredDirection)
+    // Builds (or rebuilds) the contact filter used by the multi-obstacle
+    // avoidance scan. Safe to call repeatedly.
+    private void BuildAvoidFilter()
+    {
+        int mask = CombinedBlockerMask;
+        _avoidFilter = new ContactFilter2D
+        {
+            useTriggers = false,
+            useLayerMask = true
+        };
+        _avoidFilter.SetLayerMask(mask);
+        _avoidFilterReady = mask != 0;
+    }
+
+    // Obstacle Layer plus the optional extra Blocker Layers, as one mask. Used
+    // everywhere the enemy needs to know "what is solid and should be arced
+    // around" — steering AND stuck-mode — so dead-tower rubble is handled the
+    // same way by both.
+    private int CombinedBlockerMask => obstacleLayer.value | blockerLayers.value;
+
+    // Smooth, multi-obstacle steering. Produces a heading that:
+    //   • aims at the current target,
+    //   • is pushed away from ALL nearby obstacles at once (so a gap between two
+    //     colliders no longer traps the enemy — both walls repel it out),
+    //   • carries a slow Perlin wander so motion looks organic, not robotic,
+    //   • and is eased frame-to-frame so turns are wide and smooth, never a snap
+    //     (the snapping is what previously read as jitter / shaking).
+    // Falls back to the original behaviour when smoothSteeringEnabled is off.
+    private Vector2 ComputeSteeredDirection(Vector2 desired)
+    {
+        if (!smoothSteeringEnabled)
+            return GetOptimalMovementDirectionLegacy(desired);
+
+        if (desired.sqrMagnitude < 0.0001f) desired = smoothHeading;
+        Vector2 selfPos = transform.position;
+        Vector2 goal;
+
+        if (isInStuckMode)
+        {
+            // Wide arc: slide ALONG the wall but also bleed in the away-from-wall
+            // push so we swing OUT and round it, rather than scraping its face.
+            Vector2 offWall = ComputeAvoidanceVector(selfPos, out _);
+            goal = stuckAvoidanceDirection + offWall.normalized * stuckArcWidth;
+            if (goal.sqrMagnitude < 0.0001f) goal = stuckAvoidanceDirection;
+        }
+        else
+        {
+            Vector2 avoid = ComputeAvoidanceVector(selfPos, out bool blocked);
+            if (blocked)
+            {
+                goal = desired + avoid * avoidanceStrength;
+
+                // Obstacle dead ahead and the push cancelled our desire: commit
+                // to the tangent that best preserves progress toward the target,
+                // so we slip past the corner instead of stalling head-on.
+                if (goal.sqrMagnitude < 0.0001f)
+                {
+                    Vector2 n = avoid.sqrMagnitude > 0.0001f
+                        ? avoid.normalized
+                        : new Vector2(-desired.y, desired.x);
+                    Vector2 t1 = new Vector2(-n.y, n.x);
+                    Vector2 t2 = -t1;
+                    goal = (Vector2.Dot(t1, desired) >= Vector2.Dot(t2, desired)) ? t1 : t2;
+                }
+            }
+            else
+            {
+                goal = desired;
+            }
+        }
+
+        // Slow organic wander (continuous Perlin noise → no twitching).
+        if (wanderStrength > 0f)
+        {
+            float n = Mathf.PerlinNoise(wanderSeed, Time.time * wanderFrequency) - 0.5f;
+            goal = Rotate(goal, n * wanderStrength);
+        }
+
+        if (goal.sqrMagnitude < 0.0001f) goal = desired;
+        if (goal.sqrMagnitude < 0.0001f) goal = smoothHeading;
+        if (goal.sqrMagnitude > 0.0001f) goal.Normalize();
+
+        // Seed on first use / after a stop so we don't ease out of a stale zero.
+        if (smoothHeading.sqrMagnitude < 0.0001f) smoothHeading = goal;
+
+        // Frame-rate-independent ease toward the goal heading. Lower
+        // steerResponsiveness = wider, lazier, smoother arcs.
+        float k = 1f - Mathf.Exp(-steerResponsiveness * Time.fixedDeltaTime);
+        smoothHeading = Vector2.Lerp(smoothHeading, goal, k);
+
+        if (smoothHeading.sqrMagnitude < 0.0001f) smoothHeading = goal;
+        return smoothHeading.normalized;
+    }
+
+    // Sums a "push away" vector from every obstacle within lookAheadDistance,
+    // weighted by closeness (closer = stronger, smooth quadratic falloff). This
+    // is what lets the enemy thread—or back out of—a gap between two obstacles:
+    // both contribute, so the resultant points cleanly out of the pinch.
+    //
+    // Two sources are combined:
+    //   1) An overlap scan on the configured layers (Obstacle + Blocker).
+    //   2) A LAYER-INDEPENDENT push from whatever the body is physically touching
+    //      (captured in OnCollision*). This is the safety net for solids a
+    //      designer never tagged — e.g. trees: even with no layer set up, if the
+    //      enemy bumps a trunk we still know which way to peel off.
+    private Vector2 ComputeAvoidanceVector(Vector2 selfPos, out bool blocked)
+    {
+        blocked = false;
+        Vector2 sum = Vector2.zero;
+
+        if (CombinedBlockerMask != 0)
+        {
+            if (!_avoidFilterReady) BuildAvoidFilter();
+
+            int count = Physics2D.OverlapCircle(selfPos, lookAheadDistance, _avoidFilter, _avoidScan);
+            for (int i = 0; i < count; i++)
+            {
+                var col = _avoidScan[i];
+                if (col == null) continue;
+
+                // NOTE: we intentionally do NOT skip destroyed towers here. If the
+                // physics scan returned this collider, it is still enabled and solid,
+                // so it physically blocks the enemy's body — dead-tower rubble very
+                // much included. Skipping it (the old behaviour) is exactly what let
+                // an enemy wedge against a wrecked tower with no push to escape. A
+                // tower whose collider was actually removed on death simply isn't
+                // returned by the scan, so nothing to do there.
+
+                Vector2 closest = col.ClosestPoint(selfPos);
+                Vector2 away = selfPos - closest;
+                float d = away.magnitude;
+                if (d < 0.0001f)
+                {
+                    // Overlapping / inside the collider — push from its centre.
+                    away = selfPos - (Vector2)col.transform.position;
+                    d = Mathf.Max(away.magnitude, 0.0001f);
+                }
+
+                float w = Mathf.Clamp01(1f - d / lookAheadDistance);
+                w *= w; // soft ramp so distant obstacles barely nudge us
+                if (w <= 0f) continue;
+
+                sum += (away / d) * w;
+                blocked = true;
+            }
+        }
+
+        // Layer-independent contact push. We're literally touching a solid that
+        // isn't another creature — peel away from it no matter what layer it's on.
+        if (HasRecentBlockerContact)
+        {
+            sum += _contactNormal; // unit length; full weight since we're in contact
+            blocked = true;
+        }
+
+        return sum;
+    }
+
+    private static Vector2 Rotate(Vector2 v, float radians)
+    {
+        float c = Mathf.Cos(radians);
+        float s = Mathf.Sin(radians);
+        return new Vector2(v.x * c - v.y * s, v.x * s + v.y * c);
+    }
+
+    // Physics tells us, layer-agnostically, what we're physically pressed against.
+    // We record the direction AWAY from that surface so the steering can peel off
+    // it — this is what rescues enemies stuck on untagged solids like trees.
+    private void OnCollisionEnter2D(Collision2D collision) => AccumulateBlockerContact(collision);
+    private void OnCollisionStay2D(Collision2D collision) => AccumulateBlockerContact(collision);
+
+    private void AccumulateBlockerContact(Collision2D collision)
+    {
+        if (collision == null || collision.collider == null) return;
+
+        // Only static-ish world solids count as "walls" to arc around. Ignore
+        // other creatures (enemies / the player) so crowding isn't mistaken for a
+        // wall — their separation is handled by normal seek movement, and we must
+        // never treat the player we're chasing as an obstacle.
+        if (collision.collider.GetComponentInParent<CharacterStats>() != null) return;
+
+        // Average an away-from-surface direction from the contact points. Deriving
+        // it from (self - contactPoint) sidesteps any ambiguity in the contact
+        // normal's sign.
+        Vector2 self = transform.position;
+        Vector2 away = Vector2.zero;
+        int n = collision.contactCount;
+        for (int i = 0; i < n; i++)
+        {
+            Vector2 p = collision.GetContact(i).point;
+            Vector2 d = self - p;
+            if (d.sqrMagnitude > 0.0001f) away += d.normalized;
+        }
+
+        if (away.sqrMagnitude < 0.0001f) return;
+        _contactNormal = away.normalized;
+        _lastBlockerContactTime = Time.time;
+    }
+
+    // Re-acquire a target the instant the current one dies, so the enemy heads
+    // for the next thing (another tower, the player, or the core) instead of
+    // freezing where the kill happened. Crucially it routes through UpdateTarget,
+    // which honours GetPriorityTarget() — so special enemies keep their rules:
+    // an Insect re-picks the nearest structure, a Berserk re-picks the nearest
+    // enemy to eat, and a plain/ranged enemy re-picks nearest player/tower/core.
+    private void RetargetAfterKill()
+    {
+        currentTarget = null;      // force a clean re-pick (skips the dead target)
+        UpdateTarget();
+        if (currentTarget == null) // absolute fallback so we never idle
+            currentTarget = coreTarget;
+
+        // Reset the stuck baseline (we just teleported our "intent" to a new
+        // target) and drop the smoothed heading so we set off cleanly toward it.
+        timeSinceLastMovement = 0f;
+        lastKnownPosition = transform.position;
+        isInStuckMode = false;
+        smoothHeading = Vector2.zero;
+    }
+
+    private Vector2 GetOptimalMovementDirectionLegacy(Vector2 desiredDirection)
     {
         if (isInStuckMode) return stuckAvoidanceDirection;
 
@@ -555,20 +885,29 @@ public class EnemyController : MonoBehaviour
             }
         }
 
-        GameObject[] towers = GameObject.FindGameObjectsWithTag("Tower");
-        float closestDist = Mathf.Infinity;
+        // Nearest tower within detectRange. Was GameObject.FindGameObjectsWithTag(
+        // "Tower") — which allocated a fresh array and GetComponent<Tower>'d every
+        // result, per enemy, every 0.5s. Now we index the shared Tower.ActiveTowers
+        // list (no allocation, no per-entry GetComponent) and compare squared
+        // distances to avoid the sqrt in Vector2.Distance. Same filtering as before:
+        // null / inactive / IsDestroyed() towers are skipped.
+        var towers = Tower.ActiveTowers;
+        Vector2 selfPos = transform.position;
+        float detectRangeSq = detectRange * detectRange;
+        float closestSq = Mathf.Infinity;
         Transform closestTower = null;
 
-        foreach (var tower in towers)
+        for (int i = 0; i < towers.Count; i++)
         {
-            if (tower == null || !tower.activeInHierarchy) continue;
-            var towerComponent = tower.GetComponent<Tower>();
-            if (towerComponent != null && towerComponent.IsDestroyed()) continue;
+            Tower tower = towers[i];
+            if (tower == null || !tower.gameObject.activeInHierarchy) continue;
+            if (tower.IsDestroyed()) continue;
 
-            float dist = Vector2.Distance(transform.position, tower.transform.position);
-            if (dist < closestDist && dist < detectRange)
+            Vector2 towerPos = tower.transform.position;
+            float distSq = (towerPos - selfPos).sqrMagnitude;
+            if (distSq < closestSq && distSq < detectRangeSq)
             {
-                closestDist = dist;
+                closestSq = distSq;
                 closestTower = tower.transform;
             }
         }
@@ -825,8 +1164,7 @@ public class EnemyController : MonoBehaviour
 
         PlayAttackSound();
 
-        // Boss1 plays an additional ground-hit sound on melee connect
-        var boss1 = GetComponent<Boss1>();
+        // Boss1 plays an additional ground-hit sound on melee connect (cached ref)
         if (boss1 != null)
             boss1.PlayGroundHitSound();
 
@@ -874,7 +1212,7 @@ public class EnemyController : MonoBehaviour
 
             if (playerStats != null)
             {
-                CombatJuice.OnEnemyHitPlayer();
+                CombatJuice.OnEnemyHitPlayer(target.GetComponentInParent<PlayerRef>());
 
 
                 var reflectionEffect = playerStats.GetComponent<DamageReflectionEffect>();
@@ -887,7 +1225,7 @@ public class EnemyController : MonoBehaviour
             }
 
             if (stats.IsDead())
-                currentTarget = coreTarget;
+                RetargetAfterKill();
 
             return;
         }
@@ -900,18 +1238,28 @@ public class EnemyController : MonoBehaviour
 
             if (wasDestroyed)
             {
-                currentTarget = coreTarget;
-                if (rb != null && !isKnockedBack)
-                    rb.linearVelocity = Vector2.zero;
+                // Don't stop dead on the spot — immediately seek the next target
+                // (another tower, the player, or the core). This is the fix for
+                // ranged enemies (Mort/Pitcher) that previously lingered where a
+                // tower used to be: their projectile routes the kill through here,
+                // so they now move on to the core just like melee enemies.
+                RetargetAfterKill();
             }
         }
     }
 
     private void PlayAttackSound()
     {
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(
-                FMODEvents.instance.enemyAttack, transform.position);
+        if (AudioManager.instance == null || FMODEvents.instance == null) return;
+
+        // Per-enemy override if assigned (Insect / Slime / Wolf / …), otherwise the
+        // shared generic enemy attack sound.
+        EventReference ev = !attackSoundOverride.IsNull
+            ? attackSoundOverride
+            : FMODEvents.instance.enemyAttack;
+
+        if (!ev.IsNull)
+            AudioManager.instance.PlayOneShot(ev, transform.position);
     }
 
     public void ApplyFreeze(float duration)
@@ -1057,4 +1405,5 @@ public class EnemyController : MonoBehaviour
     }
 
 }
+
 

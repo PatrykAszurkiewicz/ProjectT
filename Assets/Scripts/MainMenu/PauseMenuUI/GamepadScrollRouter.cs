@@ -4,8 +4,8 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem;
 
 
-// While the game is paused, lets a gamepad's LEFT stick (and optionally the
-// dpad) scroll whichever <see cref="ScrollRect"/> the on-screen cursor is
+// Lets a gamepad's LEFT stick (and optionally the
+// dpad) scroll the scroll area the on-screen cursor is
 // hovering. Pairs with GamepadMenuCursor, which drives that cursor with the
 // RIGHT stick — so right stick moves/clicks, left stick scrolls.
 // One component for the whole pause screen. No per-panel or per-player wiring:
@@ -13,11 +13,7 @@ using UnityEngine.InputSystem;
 // single-player grid AND the co-op P1/P2 augment columns, because each player
 // drives the shared cursor over their own panel (same single-cursor model the
 // pause menu already uses).
-// Purely additive: it only does anything while paused AND a stick is pushed
-// AND the cursor is over an overflowing scroll rect. With no gamepad it no-ops,
-// so mouse-wheel behaviour and single player are unchanged.
-// Put this on the same GameObject as GamepadMenuCursor (or any object that is
-// active while the pause screen is shown).
+
 
 public class GamepadScrollRouter : MonoBehaviour
 {

@@ -90,10 +90,9 @@ public class BombLauncherSystem
 
         // Plant SFX
         if (AudioManager.instance != null && FMODEvents.instance != null
-            && !FMODEvents.instance.proximityMine.IsNull)
+            && !FMODEvents.instance.mineSetup.IsNull)
         {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.proximityMine, spawnPos);
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.mineSetup, spawnPos);
         }
     }
 }
-

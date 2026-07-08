@@ -152,7 +152,7 @@ public class StatsPanelUI : MonoBehaviour
     //  One-time binding: locate sections, rows, buttons, detail container
     [Header("Diagnostics")]
     [Tooltip("Logs a one-time report of what was found. Turn off once it works.")]
-    public bool verboseDiagnostics = true;
+    public bool verboseDiagnostics = false;
 
     private void Bind()
     {

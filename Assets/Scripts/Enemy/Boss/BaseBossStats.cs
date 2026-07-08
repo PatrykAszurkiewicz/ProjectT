@@ -11,15 +11,19 @@ public abstract class BaseBossStats : EnemyStats
     public bool IsArmorDestroyed => armorDestroyed;
     public float CurrentArmor => bossArmor;
 
-    // Per-stage scaling for a boss special-attack damage (laser, explosion, etc.)
+    // Damage multiplier for a boss special-attack (laser, explosion, etc.), stacking:
+    //   • Difficulty (Normal/Nightmare) — ALWAYS applies to bosses.
+    //   • Per-stage scaling — only when scaleBossesWithStage is on (original opt-in).
+    // Normal + boss-stage-scaling off → 1f, identical to before (no regression).
     protected float BossStageDamageMultiplier
     {
         get
         {
             var mgr = EnemyStatModifierManager.Instance;
-            if (mgr != null && mgr.StageScalingAffectsBosses)
-                return mgr.GetStageDamageMultiplier();
-            return 1f;
+            float stagePart = (mgr != null && mgr.StageScalingAffectsBosses)
+                ? mgr.GetStageDamageMultiplier()
+                : 1f;
+            return EnemyStatModifierManager.DifficultyDamageMultiplier * stagePart;
         }
     }
 
@@ -28,6 +32,19 @@ public abstract class BaseBossStats : EnemyStats
     protected override void Awake()
     {
         base.Awake();
+
+        // NIGHTMARE HEALTH for bosses. Applied here (ungated by scaleBossesWithStage)
+        // so a boss's health AND armour pools both scale with the run difficulty, on
+        // top of whatever base.Awake() already set. Normal → ×1 (no change). Regular
+        // enemies get their difficulty HP in EnemyStats.Awake, so it's never doubled.
+        float diffHp = EnemyStatModifierManager.DifficultyHealthMultiplier;
+        if (diffHp != 1f)
+        {
+            maxHealth *= diffHp;
+            currentHealth *= diffHp;
+            maxArmor *= diffHp;
+        }
+
         bossArmor = maxArmor;
     }
 
@@ -107,4 +124,3 @@ public abstract class BaseBossStats : EnemyStats
         BossBlueprintDropper.RollAndSpawn(deathPos, stageIdx);
     }
 }
-

@@ -322,17 +322,35 @@ public class GrassCartoonOverlay : MonoBehaviour
             ApplyOversizedCullingToAllCameras();
     }
 
+    // Reused across frames so the per-frame culling update below allocates nothing.
+    // Camera.allCameras (used previously) allocated a fresh array every LateUpdate.
+    private Camera[] _camBuffer;
+
     // Co-op: every active orthographic camera (both split-screen halves) needs
     // the oversized culling matrix, otherwise the big combined grass meshes get
     // frustum-culled in the camera that isn't Camera.main. Single player: this
     // is just the one camera, same as before.
+    //
+    // NOTE: the cullingMatrix is still recomputed and reapplied every frame on
+    // purpose — it is built from worldToCameraMatrix, which changes whenever the
+    // camera moves (it follows the player). Caching/skipping it would leave the
+    // oversized frustum behind the camera and cull grass as you pan. The only thing
+    // optimised here is the array allocation, via a reusable buffer + GetAllCameras.
     private void ApplyOversizedCullingToAllCameras()
     {
         const float oversizeFactor = 10f;
-        var cams = Camera.allCameras; // active+enabled cameras only
-        for (int i = 0; i < cams.Length; i++)
+
+        int count = Camera.allCamerasCount;
+        if (count == 0) return;
+
+        // Grow (never shrink) the buffer; GetAllCameras requires length >= count.
+        if (_camBuffer == null || _camBuffer.Length < count)
+            _camBuffer = new Camera[count];
+
+        int filled = Camera.GetAllCameras(_camBuffer); // fills buffer, no allocation
+        for (int i = 0; i < filled; i++)
         {
-            var cam = cams[i];
+            var cam = _camBuffer[i];
             if (cam == null || !cam.orthographic) continue;
             float h = cam.orthographicSize * oversizeFactor;
             float w = h * cam.aspect;

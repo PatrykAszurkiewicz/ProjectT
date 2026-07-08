@@ -26,8 +26,28 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public bool showGenerationEffects = true; // Visual effects for generation
     public Color generationEffectColor = new Color(0.3f, 0.7f, 1f, 0.5f); // Light blue with transparency
     private float lastGenerationTime;
+    private float generationCarry;   // fractional energy carried between generation ticks
     private GameObject auraObject;
     private SpriteRenderer auraRenderer;
+
+    [Header("Heal Tower Settings")]
+    [Tooltip("Set TRUE for Healing towers (auto-set when TowerType == Heal). A heal " +
+             "tower restores nearby players' HEALTH instead of attacking enemies.")]
+    public bool isHealTower = false;
+    [Tooltip("Radius (world units) within which players are healed.")]
+    public float healRange = 4f;
+    [Tooltip("Health restored per second to EACH player inside healRange.")]
+    public float healPerSecond = 5f;
+    [Tooltip("How often (seconds) the heal pulse fires. Smaller = smoother.")]
+    public float healInterval = 0.25f;
+    [Tooltip("Fraction of the health actually restored that the tower pays from its " +
+             "OWN energy (like the generator's self-consumption). 0 = free healing.")]
+    public float healSelfConsumption = 0.1f;
+    [Tooltip("Show the pulsing heal aura ring.")]
+    public bool showHealEffects = true;
+    [Tooltip("Colour of the heal aura.")]
+    public Color healEffectColor = new Color(0.3f, 1f, 0.4f, 0.5f);
+    private float lastHealTime;
 
     // Augments
     [Header("Special Effects")]
@@ -77,7 +97,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         public AnimationCurve swipeCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
     }
 
-    public enum TowerType { Basic, Artillery, Laser, Ice, Poison, Generator, Hammer }
+    // NOTE: new values MUST be appended at the END. Unity serializes enums by their
+    // integer index, so inserting in the middle would silently re-map every tower
+    // already saved in a prefab/scene. 'Heal' is the Healing Tower type.
+    public enum TowerType { Basic, Artillery, Laser, Ice, Poison, Generator, Hammer, Heal }
 
 
     [Header("Hammer Tower (AOE) Settings")]
@@ -148,6 +171,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public int animationFrameCount = 43;
     public float animationSpeed = 0.25f;
 
+    [Tooltip("Set TRUE for prefabs that bring their OWN visuals — an Animator-driven\n" +
+             "prefab, or a child SpriteRenderer with its own animation. When true the\n" +
+             "Tower script will NOT load a sprite from spriteResourcePath, will NOT run\n" +
+             "the built-in sprite-sheet animation, will NOT override the prefab's\n" +
+             "transform scale, and will NOT play the placement decay animation —\n" +
+             "leaving all rendering to the prefab. Use this for the animated Generator\n" +
+             "and Healing tower prefabs.")]
+    public bool usePrefabVisuals = false;
+
     [Header("Combat Settings")]
     public LayerMask targetLayer = -1;
     public GameObject projectilePrefab;
@@ -159,6 +191,23 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public Tower upgradeTowerPrefab;
     public int upgradeLevel = 1;
     public int maxUpgradeLevel = 3;
+
+    [Tooltip("In-place stat upgrade: PRIMARY-OUTPUT increase PER upgrade level " +
+             "(0.20 = +20% each upgrade). Applies to whatever this tower's main job is — " +
+             "attack damage for combat towers, healing rate for Heal towers, energy " +
+             "generation rate for Generators. Derived live from upgradeLevel, so it " +
+             "persists through saves/rewind for free and never clobbers augment values.")]
+    public float upgradeDamageBonusPerLevel = 0.20f;
+
+    [Tooltip("In-place stat upgrade: max-health (energy) increase PER upgrade level " +
+             "(0.20 = +20% each upgrade). Re-derived from upgradeLevel on SetUpgradeLevel " +
+             "so restoring the saved level reproduces the boosted health automatically.")]
+    public float upgradeHealthBonusPerLevel = 0.20f;
+
+    // Relative max-health multiplier currently folded into maxEnergy by the in-place
+    // upgrade. Tracked so RefreshUpgradeHealthScaling() is idempotent and stacks
+    // cleanly with augment-driven maxEnergy changes.
+    [System.NonSerialized] private float _appliedHealthMult = 1f;
 
     [Header("Tentacle & Melee")]
     public bool useTentacleTurret = true;
@@ -265,10 +314,42 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     }
 
+    // Live towers on the map. Folded in here (instead of a separate registry
+    // script) because towers are few and persistent — this only exists to save
+    // enemies from calling FindGameObjectsWithTag("Tower") + GetComponent every
+    // 0.5s. Consumers (EnemyController.UpdateTarget) still skip null /
+    // !activeInHierarchy / IsDestroyed() towers exactly as the old tag scan did.
+    // Note: this keys on the Tower COMPONENT, so a hypothetical object tagged
+    // "Tower" with no Tower component (none should exist) would no longer be
+    // targeted — the only behavioural difference from the old scan.
+    public static readonly List<Tower> ActiveTowers = new List<Tower>();
+
+    // Clear the static between Play sessions when domain reload is disabled.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetActiveTowers() => ActiveTowers.Clear();
+
+    // Register when active, unregister when disabled or destroyed.
+    void OnEnable()
+    {
+        if (!ActiveTowers.Contains(this)) ActiveTowers.Add(this);
+    }
+
+    void OnDisable()
+    {
+        ActiveTowers.Remove(this);
+    }
+
     void Start()
     {
         SetupTower();
         EnergyManager.Instance?.RegisterEnergyConsumer(this);
+
+        // Registration above resets maxEnergy/currentEnergy to the global tower base,
+        // so re-derive any in-place UPGRADE health bonus from this tower's upgrade
+        // level (which may have just been set by a rewind / save-resume restore).
+        // Damage is derived live in GetEffectiveDamage(), so it needs nothing here.
+        _appliedHealthMult = 1f;
+        RefreshUpgradeHealthScaling();
 
         // Apply any augments that were applied before this tower was created
         ApplyGlobalAugments();
@@ -370,6 +451,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             if (isEnergyGenerator || towerType == TowerType.Generator)
             {
                 UpdateEnergyGeneration();
+            }
+            else if (isHealTower || towerType == TowerType.Heal)
+            {
+                UpdateHealTower();
             }
             else if (isHammerTower)
             {
@@ -875,8 +960,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 laserImpactParticles.Play();
         }
 
-        // Apply damage
-        float damageThisFrame = damage * Time.deltaTime * TowerCombatModifiers.DamageMultiplier;
+        // Apply damage. Laser deals continuous damage; the in-place upgrade boosts it
+        // (+20% per level) via UpgradePowerMultiplier, matching projectile/melee towers.
+        float damageThisFrame = damage * Time.deltaTime * TowerCombatModifiers.DamageMultiplier * UpgradePowerMultiplier;
         var targetStats = currentTarget.GetComponent<EnemyStats>();
         if (targetStats != null)
         {
@@ -936,8 +1022,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             return;
         }
 
-        // Calculate energy to generate based on rate and interval
-        float energyToGenerate = energyGenerationRate * generationInterval;
+        // Calculate energy to generate based on rate and interval. The in-place
+        // upgrade boosts generation rate (+20% per level), derived live so it persists.
+        float energyToGenerate = energyGenerationRate * generationInterval * UpgradePowerMultiplier;
 
         // Validate the calculated energy
         if (float.IsNaN(energyToGenerate) || float.IsInfinity(energyToGenerate))
@@ -947,10 +1034,16 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
 
         //int energyAmount = Mathf.RoundToInt(energyToGenerate);
-        int energyAmount = Mathf.RoundToInt(energyToGenerate * EnergyManager.Instance.globalResourceMultiplier);
+        // Accumulate fractional energy across ticks so small rates aren't silently
+        // lost to per-tick integer rounding (e.g. rate 1 × interval 0.25 = 0.25,
+        // which RoundToInt would floor to 0 every tick → no energy ever).
+        generationCarry += energyToGenerate * EnergyManager.Instance.globalResourceMultiplier;
+        int energyAmount = Mathf.FloorToInt(generationCarry);
+        generationCarry -= energyAmount;
 
         // Give energy to the player
-        EnergyManager.Instance.GivePlayerEnergy(energyAmount);
+        if (energyAmount > 0)
+            EnergyManager.Instance.GivePlayerEnergy(energyAmount);
 
         // Augment 345 — Overload Aura: deal AoE damage (= energy generated) and
         // pulse the stasis visual. No-op unless the augment is active.
@@ -1090,6 +1183,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     System.Collections.IEnumerator GenerationPulseEffect()
     {
+        // Prefabs that animate themselves own their renderer — tinting it here
+        // fights the Animator and produces a frantic flicker.
+        if (usePrefabVisuals) yield break;
         if (spriteRenderer == null) yield break;
 
         Color originalColor = spriteRenderer.color;
@@ -1115,6 +1211,114 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
 
         spriteRenderer.color = originalColor;
+    }
+    #endregion
+
+
+
+    #region Heal Tower System
+    void UpdateHealTower()
+    {
+        // Validate tunables (mirrors the generator's defensive checks).
+        if (float.IsNaN(healPerSecond) || float.IsInfinity(healPerSecond) || healPerSecond < 0f)
+            healPerSecond = 0f;
+        if (float.IsNaN(healInterval) || float.IsInfinity(healInterval) || healInterval <= 0f)
+            healInterval = 0.25f;
+
+        if (Time.time >= lastHealTime + healInterval)
+        {
+            // In-place upgrade boosts healing rate (+20% per level), derived live.
+            HealNearbyPlayers(healPerSecond * healInterval * UpgradePowerMultiplier);
+            lastHealTime = Time.time;
+        }
+
+        if (showHealEffects) UpdateHealEffects();
+    }
+
+    // Heal every player within healRange by up to healAmount HP. Co-op aware:
+    // iterates the PlayerRegistry, falling back to the lone tagged player in
+    // single player. Pays self-consumption proportional to HP actually restored.
+    void HealNearbyPlayers(float healAmount)
+    {
+        if (healAmount <= 0f) return;
+        if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
+
+        float rangeSqr = healRange * healRange;
+        float totalHealed = 0f;
+
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0)
+        {
+            var all = reg.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var pr = all[i];
+                if (pr == null || pr.Stats == null) continue;
+                if (((Vector2)(pr.transform.position - transform.position)).sqrMagnitude > rangeSqr) continue;
+                totalHealed += HealOnePlayer(pr.Stats, healAmount);
+            }
+        }
+        else
+        {
+            var p = FindFirstObjectByType<PlayerStats>();
+            if (p != null &&
+                ((Vector2)(p.transform.position - transform.position)).sqrMagnitude <= rangeSqr)
+                totalHealed += HealOnePlayer(p, healAmount);
+        }
+
+        if (totalHealed > 0f && healSelfConsumption > 0f)
+            ConsumeEnergy(totalHealed * healSelfConsumption);
+    }
+
+    // Heals a single player up to their max. Returns the amount actually restored
+    // (so the caller can charge self-consumption only for real healing). Leaves
+    // fully-healed and downed (0 HP) players alone — reviving is a separate system.
+    float HealOnePlayer(PlayerStats stats, float healAmount)
+    {
+        if (stats == null) return 0f;
+        float missing = stats.maxHealth - stats.currentHealth;
+        if (missing <= 0.01f) return 0f;          // already full
+        if (stats.currentHealth <= 0f) return 0f; // downed — let the revive system handle it
+        float applied = Mathf.Min(missing, healAmount);
+        stats.Heal(applied);
+        return applied;
+    }
+
+    void InitializeHealEffects()
+    {
+        // Reuse the shared aura object/renderer (a tower is never both a generator
+        // and a heal tower), tinted with the heal colour.
+        auraObject = new GameObject("HealAura");
+        auraObject.transform.SetParent(transform);
+        auraObject.transform.localPosition = new Vector3(0.1f, 0.1f, 0f);
+
+        auraRenderer = auraObject.AddComponent<SpriteRenderer>();
+        auraRenderer.sprite = CreateCircleSprite();
+        auraRenderer.color = healEffectColor;
+        if (spriteRenderer != null)
+            auraRenderer.sortingOrder = spriteRenderer.sortingOrder + 1; // in front of the tower
+
+        float auraScale = spriteScale * 4f;
+        if (float.IsNaN(auraScale) || float.IsInfinity(auraScale) || auraScale <= 0f)
+            auraScale = 2f;
+        auraObject.transform.localScale = Vector3.one * auraScale;
+    }
+
+    void UpdateHealEffects()
+    {
+        if (auraRenderer == null) return;
+        if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed)
+        {
+            auraRenderer.color = Color.clear;
+            return;
+        }
+
+        float pulse = Mathf.Sin(Time.time * 0.5f) * 0.5f + 0.5f;
+        if (float.IsNaN(pulse) || float.IsInfinity(pulse)) pulse = 0.5f;
+
+        Color c = healEffectColor;
+        c.a = healEffectColor.a * (0.3f + pulse * 0.7f);
+        auraRenderer.color = c;
     }
     #endregion
 
@@ -1180,8 +1384,21 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             useTentacleTurret = false; // Generators don't need combat tentacles
         }
 
-        // Ensure SpriteRenderer exists and is properly initialized
+        // Auto-detect Heal tower based on tower type
+        if (towerType == TowerType.Heal)
+        {
+            isHealTower = true;
+            useTentacleTurret = false; // Heal towers don't attack
+        }
+
+        // Ensure SpriteRenderer exists and is properly initialized. Prefabs that
+        // bring their own visuals may keep the renderer on a CHILD (e.g. under an
+        // Animator), so look there too and never add a stray empty one to the root.
         spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null && usePrefabVisuals)
+        {
+            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        }
         if (spriteRenderer == null)
         {
             spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
@@ -1211,7 +1428,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             spriteScale = 0.5f;
         }
 
-        transform.localScale = Vector3.one * spriteScale;
+        // Prefabs with their own visuals keep their authored scale.
+        if (!usePrefabVisuals)
+            transform.localScale = Vector3.one * spriteScale;
 
         // Setup collider
         rangeCollider = GetComponent<CircleCollider2D>();
@@ -1231,6 +1450,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (isEnergyGenerator && showGenerationEffects)
         {
             InitializeGenerationEffects();
+        }
+
+        // Initialize the heal aura for heal towers
+        if (isHealTower && showHealEffects)
+        {
+            InitializeHealEffects();
         }
     }
 
@@ -1345,6 +1570,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             ProjectileRange = generationRange;
             rangeCollider.radius = generationRange;
         }
+        else if (isHealTower)
+        {
+            // Heal towers use their heal radius
+            ProjectileRange = healRange;
+            rangeCollider.radius = healRange;
+        }
         else if (isHammerTower)
         {
             // Hammer towers use AOE radius for detection
@@ -1405,6 +1636,17 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void SetupSpriteCollision()
     {
+        // When the visible sprite lives on a CHILD (e.g. usePrefabVisuals prefabs
+        // whose SpriteRenderer isn't on the root, like the Heal tower), the shared
+        // SpriteCollisionManager can't size a collider — it reads the root's
+        // SpriteRenderer, which is absent. Build a body collider on the root from the
+        // child renderer's bounds so the player can't walk through the tower.
+        if (spriteRenderer != null && spriteRenderer.gameObject != gameObject)
+        {
+            SetupBodyColliderFromChildRenderer();
+            return;
+        }
+
         if (spriteRenderer?.sprite != null)
         {
             spriteCollider = SpriteCollisionManager.SetupCollision(gameObject, collisionConfig);
@@ -1416,8 +1658,43 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
     }
 
+    // Adds/sizes a BoxCollider2D on the tower ROOT from the (child) sprite renderer's
+    // world bounds. Used for prefabs whose renderer sits on a child object.
+    void SetupBodyColliderFromChildRenderer()
+    {
+        if (collisionConfig == null || !collisionConfig.enableCollision) return;
+        if (spriteRenderer == null) return;
+
+        var box = gameObject.GetComponent<BoxCollider2D>();
+        if (box == null) box = gameObject.AddComponent<BoxCollider2D>();
+        box.isTrigger = collisionConfig.isTrigger;
+
+        Bounds b = spriteRenderer.bounds;                 // world-space AABB of the child sprite
+        Vector3 ls = transform.lossyScale;
+        float sx = Mathf.Abs(ls.x) < 0.0001f ? 1f : Mathf.Abs(ls.x);
+        float sy = Mathf.Abs(ls.y) < 0.0001f ? 1f : Mathf.Abs(ls.y);
+
+        float keep = 1f - Mathf.Clamp01(collisionConfig.paddingPercent);
+        float w = (b.size.x / sx) * keep;
+        float h = (b.size.y / sy) * keep;
+
+        // Fallback if the sprite bounds aren't ready (e.g. Animator hasn't applied a frame yet).
+        if (w < 0.05f || h < 0.05f || float.IsNaN(w) || float.IsNaN(h)) { w = 1f; h = 1f; }
+
+        box.size = new Vector2(w, h);
+        Vector3 localCenter = transform.InverseTransformPoint(b.center);
+        box.offset = new Vector2(localCenter.x, localCenter.y);
+
+        spriteCollider = box;
+    }
+
     void LoadSprite()
     {
+        // Prefabs that animate themselves (Animator or a child sprite animation)
+        // own their rendering — don't overwrite their sprite or start the built-in
+        // sprite-sheet animation coroutine on top of them.
+        if (usePrefabVisuals) return;
+
         var sprites = Resources.LoadAll<Sprite>(spriteResourcePath);
         if (sprites?.Length > spriteIndex)
         {
@@ -1445,9 +1722,23 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // Per-prefab override takes precedence; otherwise fall back to a per-TowerType default.
         // Tune individual values in GetDefaultEnergyBarOffset() below, or just set
         // energyBarOffsetOverride on a specific prefab in the inspector.
-        energyBar.energyBarOffset = energyBarOffsetOverride > 0f
-            ? energyBarOffsetOverride
-            : GetDefaultEnergyBarOffset(towerType);
+        // Per-prefab override always wins.
+        // Prefab-visual towers aren't scaled down by spriteScale, so the hardcoded
+        // per-type offsets (tuned for the ~0.25-scaled sprite towers) float the bar
+        // far too high. For those, derive the offset from the real sprite bounds so
+        // it sits just above the visible sprite at any scale or hierarchy.
+        if (energyBarOffsetOverride > 0f)
+        {
+            energyBar.energyBarOffset = energyBarOffsetOverride;
+        }
+        else if (usePrefabVisuals && spriteRenderer != null && spriteRenderer.sprite != null)
+        {
+            energyBar.energyBarOffset = ComputeEnergyBarOffsetFromBounds();
+        }
+        else
+        {
+            energyBar.energyBarOffset = GetDefaultEnergyBarOffset(towerType);
+        }
         energyBar.showEnergyText = true;
 
         if (EnergyManager.Instance != null)
@@ -1475,8 +1766,26 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             case TowerType.Poison: return 4.4f;
             case TowerType.Generator: return 4.6f;
             case TowerType.Hammer: return 4.6f;
+            case TowerType.Heal: return 4.6f;
             default: return 4.4f;
         }
+    }
+
+    // Computes a bar offset (in the root's LOCAL Y units — the same space the
+    // GetDefaultEnergyBarOffset values use) that sits just above the visible sprite.
+    // Works whether the SpriteRenderer is on the root or a child, and at any scale,
+    // because it measures the renderer's real world bounds and divides out the root
+    // scale that EnergyBar will re-apply.
+    float ComputeEnergyBarOffsetFromBounds()
+    {
+        float scaleY = Mathf.Abs(transform.lossyScale.y);
+        if (scaleY < 0.0001f) scaleY = 1f;
+
+        // World height from the tower origin to the top of the sprite, plus a margin.
+        float worldTop = spriteRenderer.bounds.max.y - transform.position.y + 0.25f;
+        if (float.IsNaN(worldTop) || worldTop < 0.1f) worldTop = scaleY; // sane fallback
+
+        return worldTop / scaleY;
     }
     #endregion
 
@@ -1485,7 +1794,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     #region Targeting & Combat
     void UpdateTargeting()
     {
-        enemiesInRange.RemoveAll(e => e == null || !IsValidTarget(e));
+        // Manual reverse loop instead of RemoveAll(lambda): the lambda captured
+        // `this`, allocating a delegate every frame per tower. Same elements removed,
+        // zero per-frame allocation.
+        for (int i = enemiesInRange.Count - 1; i >= 0; i--)
+        {
+            var e = enemiesInRange[i];
+            if (e == null || !IsValidTarget(e))
+                enemiesInRange.RemoveAt(i);
+        }
 
         if (currentTarget == null || !IsValidTarget(currentTarget))
         {
@@ -1559,10 +1876,26 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         return dist <= ProjectileRange && ((1 << target.layer) & targetLayer) != 0;
     }
 
+    // Cached once. NameToLayer is a string lookup; calling it per target per frame
+    // inside the targeting loop was pure waste.
+    private static int _enemyLayer = -1;
+
     bool IsEnemy(GameObject target)
     {
+        if (target == null) return false;
+
+        if (_enemyLayer < 0) _enemyLayer = LayerMask.NameToLayer("Enemy");
+
+        // Fast positive path: anything on the Enemy layer is an enemy. Players and
+        // towers live on their own layers (never the Enemy layer), so this cannot
+        // misclassify them — and it skips the GetComponent/CompareTag probes below
+        // for the overwhelmingly common case (the reason this method was hot).
+        if (_enemyLayer >= 0 && target.layer == _enemyLayer) return true;
+
+        // Fallback for enemies NOT on the Enemy layer (tag-only / component-only).
+        // Identical to the original logic, so nothing that used to be excluded
+        // (players, towers) can slip through here.
         if (target.GetComponent<PlayerMovement>() || target.CompareTag("Player") || target.GetComponent<Tower>()) return false;
-        if (target.layer == LayerMask.NameToLayer("Enemy")) return true;
         try { if (target.CompareTag("Enemy")) return true; } catch { }
         return target.GetComponent<EnemyStats>() != null;
     }
@@ -1591,6 +1924,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         // Augments 338 / 346 — global tower damage multiplier (1.0 when unused).
         baseDamage *= TowerCombatModifiers.DamageMultiplier;
+
+        // In-place upgrade bonus (+X% per upgrade level). Derived live from
+        // upgradeLevel so it survives saves/rewind via the saved level alone, and
+        // never overwrites augment-set damage (it multiplies on top, like synergy).
+        baseDamage *= UpgradeDamageMultiplier;
 
         return baseDamage;
     }
@@ -1668,7 +2006,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                     angle = 0f;
                 }
 
-                var proj = Instantiate(projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
+                // Pooled spawn (was Instantiate). PrefabPool.Get recycles a retired
+                // projectile of this prefab, or makes one on first use. Projectile
+                // fully resets its own per-shot state in Initialize(), so a recycled
+                // instance is indistinguishable from a fresh one.
+                var proj = PrefabPool.Get(projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
                 var projectileComponent = proj.GetComponent<Projectile>();
                 if (projectileComponent != null)
                 {
@@ -2228,7 +2570,76 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         armorReduction = Mathf.Clamp01(newArmor);
     }
-    public void SetUpgradeLevel(int level) => upgradeLevel = level;
+    // In-place stat upgrade API 
+
+    // Default per-level bonuses, used when the serialized field is 0/unset. Prefabs
+    // saved BEFORE these fields were added deserialize them as 0 (Unity uses the type
+    // default, not the C# initializer, for newly-added fields), which would make the
+    // upgrade multiplier 1.0 → no effect. Falling back to 0.20 keeps upgrades working
+    // on existing prefabs while still honouring any explicit non-zero value.
+    private const float DefaultUpgradeBonusPerLevel = 0.20f;
+    private float EffectiveDamageBonusPerLevel =>
+        upgradeDamageBonusPerLevel > 0.0001f ? upgradeDamageBonusPerLevel : DefaultUpgradeBonusPerLevel;
+    private float EffectiveHealthBonusPerLevel =>
+        upgradeHealthBonusPerLevel > 0.0001f ? upgradeHealthBonusPerLevel : DefaultUpgradeBonusPerLevel;
+
+    /// Live attack multiplier from the in-place upgrade (1.0 at level 1).
+    public float UpgradeDamageMultiplier =>
+        Mathf.Pow(1f + EffectiveDamageBonusPerLevel, Mathf.Max(0, upgradeLevel - 1));
+
+    /// Same multiplier, named for non-combat towers (heal rate, generation rate, etc.).
+    public float UpgradePowerMultiplier => UpgradeDamageMultiplier;
+
+    public int GetUpgradeLevel() => upgradeLevel;
+    public int GetMaxUpgradeLevel() => maxUpgradeLevel;
+    public bool IsAtMaxUpgrade => upgradeLevel >= maxUpgradeLevel;
+
+    /// True when this tower can still take an in-place stat upgrade.
+    public bool CanStatUpgrade => canUpgrade && upgradeLevel < maxUpgradeLevel && !isDestroyed;
+
+    /// Set the upgrade level and re-derive the max-health bonus from it. Called on
+    /// fresh upgrades AND on restore (rewind / save-resume), so a saved upgradeLevel
+    /// reproduces the boosted health automatically. Damage is derived live in
+    /// GetEffectiveDamage(), so it needs no extra work here.
+    public void SetUpgradeLevel(int level)
+    {
+        upgradeLevel = Mathf.Max(1, level);
+        RefreshUpgradeHealthScaling();
+    }
+
+    /// Apply ONE in-place upgrade: +X% attack (live, via UpgradeDamageMultiplier) and
+    /// +Y% max health. No-op at max level or once destroyed. Returns true if upgraded.
+    public bool ApplyUpgrade()
+    {
+        if (isDestroyed || upgradeLevel >= maxUpgradeLevel) return false;
+        upgradeLevel++;
+        RefreshUpgradeHealthScaling();
+
+        // Console confirmation that the upgrade took effect (output multiplier + the
+        // resulting generation/heal rate where relevant). Helps verify non-combat towers.
+        string extra =
+            IsGenerator() ? $", generation {energyGenerationRate * UpgradePowerMultiplier:F2}/s (base {energyGenerationRate:F2})"
+          : (isHealTower || towerType == TowerType.Heal) ? $", heal {healPerSecond * UpgradePowerMultiplier:F2}/s (base {healPerSecond:F2})"
+          : $", damage x{UpgradePowerMultiplier:F2}";
+        Debug.Log($"[Upgrade] '{towerName}' -> level {upgradeLevel}: output x{UpgradePowerMultiplier:F2}, maxHP {maxEnergy:F0}{extra}");
+        return true;
+    }
+
+    // Re-derive the max-health (maxEnergy) upgrade bonus from upgradeLevel, idempotently.
+    // Applied as a RELATIVE multiplier on top of whatever maxEnergy currently is, so it
+    // stacks cleanly with augment-driven maxEnergy changes and reproduces exactly when a
+    // saved upgradeLevel is restored. The maxEnergy setter preserves the current health
+    // percentage, so a full tower stays full and a damaged one keeps its ratio.
+    private void RefreshUpgradeHealthScaling()
+    {
+        float want = Mathf.Pow(1f + EffectiveHealthBonusPerLevel, Mathf.Max(0, upgradeLevel - 1));
+        if (_appliedHealthMult <= 0f) _appliedHealthMult = 1f;
+        if (Mathf.Approximately(want, _appliedHealthMult)) return;
+
+        float factor = want / _appliedHealthMult;
+        maxEnergy = maxEnergy * factor;   // setter scales currentEnergy proportionally + updates visuals
+        _appliedHealthMult = want;
+    }
     public float GetDamage()
     {
         return damage;
@@ -2252,6 +2663,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // Mark as destroyed to prevent further operations
         isDestroyed = true;
 
+        // Idempotent with OnDisable's removal; covers an object destroyed while
+        // already inactive (where OnDisable won't fire again).
+        ActiveTowers.Remove(this);
+
         EnergyManager.Instance?.UnregisterEnergyConsumer(this);
         if (tentacleContainer != null) DestroyImmediate(tentacleContainer);
         if (auraObject != null) DestroyImmediate(auraObject);
@@ -2269,7 +2684,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             UnityEditor.Handles.color = generationEffectColor;
             UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, generationRange);
             UnityEditor.Handles.Label(transform.position + Vector3.up * 2f,
-                $"Generator: {energyGenerationRate}/sec");
+                $"Generator: {energyGenerationRate * UpgradePowerMultiplier:F2}/sec (base {energyGenerationRate:F1}, L{upgradeLevel})");
             UnityEditor.Handles.Label(transform.position + Vector3.up * 1.7f,
                 $"Energy: {currentEnergy:F1}/{maxEnergy:F1}");
         }

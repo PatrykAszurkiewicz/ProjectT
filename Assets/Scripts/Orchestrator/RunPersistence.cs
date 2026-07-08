@@ -29,16 +29,65 @@ public class RunPersistence : MonoBehaviour
 
     //  Running ledger (the replay inputs) 
     private int runSeed;
+    private int runDifficulty;   // 0 = Normal, 1 = Nightmare — written into every autosave
     private bool seedSet;
     private readonly List<AugmentSaveEntry> augmentLedger = new List<AugmentSaveEntry>();
+    private readonly List<BlueprintUnlockSaveEntry> blueprintUnlockLedger = new List<BlueprintUnlockSaveEntry>();
     private string runConfigName;
 
-    private string FilePath => Path.Combine(Application.persistentDataPath, fileName);
+    //  STATIC, INSTANCE-FREE SAVE ACCESS 
+    // The save is just a file in persistentDataPath. RunPersistence is a GameScene
+    // object (no DontDestroyOnLoad), so in the MAIN MENU there is NO instance — yet
+    // the continue screen must still see whether a save exists. These statics read the
+    // file directly so save inspection works from ANY scene, instance or not.
+    public const string DefaultFileName = "run_save.json";
+    private static string s_fileName = DefaultFileName;
+
+    public static string SaveFilePath => Path.Combine(Application.persistentDataPath, s_fileName);
+    public static bool SaveExists => File.Exists(SaveFilePath);
+
+    /// <summary>Read the save from disk without needing a live RunPersistence instance.</summary>
+    public static bool TryReadSave(out RunSaveData data)
+    {
+        data = null;
+        try
+        {
+            if (!File.Exists(SaveFilePath)) return false;
+            data = JsonUtility.FromJson<RunSaveData>(File.ReadAllText(SaveFilePath));
+            return data != null;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[Persistence] Failed to read save (static): {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>How many players the saved run needs, or 0 if there is no usable save. Instance-free.</summary>
+    public static int RequiredPlayersInSaveStatic()
+    {
+        if (!TryReadSave(out var d) || d == null) return 0;
+        int n = d.runPlayerCount;
+        if (n <= 0) n = (d.players != null && d.players.Count > 0) ? d.players.Count : 1;
+        return Mathf.Max(1, n);
+    }
+
+    /// <summary>Delete the save from disk without needing a live instance.</summary>
+    public static void DeleteSaveFile()
+    {
+        try { if (File.Exists(SaveFilePath)) File.Delete(SaveFilePath); }
+        catch (System.Exception e) { Debug.LogWarning($"[Persistence] Could not delete save (static): {e.Message}"); }
+    }
+
+    private string FilePath => SaveFilePath;
 
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(this); return; }
         Instance = this;
+        // Mirror the configured filename into the static path so menu-scene reads
+        // (where there is no instance) use the same file this instance writes.
+        s_fileName = string.IsNullOrEmpty(fileName) ? DefaultFileName : fileName;
     }
 
     void OnDestroy() { if (Instance == this) Instance = null; }
@@ -46,14 +95,20 @@ public class RunPersistence : MonoBehaviour
     //  LEDGER  (called by GameOrchestrator / the augment menu)
 
     /// Begin a fresh run: remember the seed, clear the augment log, delete any old save.
+    // Back-compat overload — defaults to Normal for any caller not passing a difficulty.
     public void BeginRun(int seed, string configName)
+        => BeginRun(seed, configName, (int)EnemyStatModifierManager.DifficultyMode.Normal);
+
+    public void BeginRun(int seed, string configName, int difficulty)
     {
         runSeed = seed;
+        runDifficulty = difficulty;
         seedSet = true;
         runConfigName = configName;
         augmentLedger.Clear();
+        blueprintUnlockLedger.Clear();
         DeleteSave();
-        if (debugLog) Debug.Log($"[Persistence] New run started (seed={seed}).");
+        if (debugLog) Debug.Log($"[Persistence] New run started (seed={seed}, difficulty={difficulty}).");
     }
 
     /// Record an augment the moment it is applied, WITH its rolled rarity and the
@@ -63,12 +118,38 @@ public class RunPersistence : MonoBehaviour
         augmentLedger.Add(new AugmentSaveEntry(augmentId, rarity, playerIndex));
     }
 
-    /// Back-compat: single-player path records for player 0.
+    // Back-compat: single-player path records for player 0.
     public void RecordAugment(int augmentId, string rarity) => RecordAugment(augmentId, rarity, 0);
+
+    /// Record an in-run weapon/tool unlock that came from collecting a boss BLUEPRINT
+    /// DROP (not from an augment). Re-applied on resume so the picked-up weapon stays in
+    /// the player's hotbar — the augment replay can't rebuild it because there was no
+    /// augment. Deduped so repeated wave-start saves don't bloat the ledger.
+    public void RecordBlueprintUnlock(int slot, int playerIndex)
+    {
+        if (slot < 0) return;
+        foreach (var e in blueprintUnlockLedger)
+            if (e.slot == slot && e.playerIndex == playerIndex) return; // already recorded
+        blueprintUnlockLedger.Add(new BlueprintUnlockSaveEntry(slot, playerIndex));
+        if (debugLog) Debug.Log($"[Persistence] Recorded blueprint-drop unlock: slot {slot} (P{playerIndex}).");
+    }
+
+
+    // Non-destructive peek (TryLoad does NOT consume — only OnSaveConsumed deletes).
+    public bool TryPeekSave(out RunSaveData data) => TryLoad(out data);
+
+    /// How many players the saved run needs, or 0 if there is no usable save.
+    public int RequiredPlayersInSave()
+    {
+        if (!HasSave || !TryLoad(out var d) || d == null) return 0;
+        int n = d.runPlayerCount;
+        if (n <= 0) n = (d.players != null && d.players.Count > 0) ? d.players.Count : 1;
+        return Mathf.Max(1, n);
+    }
 
     //  AUTOSAVE  (called by GameOrchestrator at wave start)
 
-    public void AutoSaveWaveStart(int stageIndex, int waveIndex)
+    public void AutoSaveWaveStart(int stageIndex, int waveIndex, bool atFinalBoss = false)
     {
         if (!seedSet)
         {
@@ -81,13 +162,19 @@ public class RunPersistence : MonoBehaviour
             timestampUnix = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             runConfigName = runConfigName,
             runSeed = runSeed,
+            // Current active difficulty (re-locked per stage), so resume restores the
+            // difficulty that was in force at the resumed stage — not the run-start one.
+            difficulty = (int)EnemyStatModifierManager.ActiveMode,
             stageIndex = stageIndex,
             waveIndex = waveIndex,
+            atFinalBoss = atFinalBoss,
             augments = new List<AugmentSaveEntry>(augmentLedger),
+            blueprintUnlocks = new List<BlueprintUnlockSaveEntry>(blueprintUnlockLedger),
         };
 
         // Players (per-player; single player = one entry at index 0).
         data.players = CapturePlayers();
+        data.runPlayerCount = Mathf.Max(1, data.players.Count);
 
         var core = FindFirstObjectByType<CentralCore>();
         if (core != null)
@@ -178,10 +265,18 @@ public class RunPersistence : MonoBehaviour
     public void AdoptLoadedRun(RunSaveData data)
     {
         runSeed = data.runSeed;
+        runDifficulty = data.difficulty;
         seedSet = true;
         runConfigName = data.runConfigName;
+
+        // Restore the run's difficulty so later autosaves keep it and live scaling
+        // matches. (GameOrchestrator also sets this before stages run; doing it here
+        // keeps AdoptLoadedRun self-contained.)
+        EnemyStatModifierManager.SetActiveMode(data.difficulty);
         augmentLedger.Clear();
-        augmentLedger.AddRange(data.augments);
+        if (data.augments != null) augmentLedger.AddRange(data.augments);
+        blueprintUnlockLedger.Clear();
+        if (data.blueprintUnlocks != null) blueprintUnlockLedger.AddRange(data.blueprintUnlocks);
     }
 
     /// Apply the absolute player/core/economy values. Call this LAST (after augment
@@ -321,5 +416,21 @@ public class RunPersistence : MonoBehaviour
         if (debugLog)
             Debug.Log($"[Persistence] Tower restore: {restored} rebuilt, {skipped} skipped (of {data.towers.Count} saved).");
     }
+}
+
+// One-shot handoff from ContinueRunMenu → CoopManager (seating) + GameOrchestrator
+// (resume vs fresh). Avoids coupling the menu to SessionConfig's API.
+public static class RunResumeIntent
+{
+    public static bool Pending { get; private set; }
+    public static bool Resume { get; private set; }
+    public static int PlayerCount { get; private set; }
+
+    public static void Set(bool resume, int count)
+    { Pending = true; Resume = resume; PlayerCount = Mathf.Max(1, count); }
+    public static void Clear() { Pending = false; Resume = false; PlayerCount = 0; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => Clear();
 }
 

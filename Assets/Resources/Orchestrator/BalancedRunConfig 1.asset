@@ -1,0 +1,89 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a65dffe645fdc3d41b15765340dfeb64, type: 3}
+  m_Name: BalancedRunConfig 1
+  m_EditorClassIdentifier: 
+  stageCount: 8
+  wavesPerStage: 6
+  hasFinalBoss: 1
+  availableBiomes: 050000000100000002000000
+  allowRepeatBiomes: 1
+  mapLayoutLibrary: {fileID: 11400000, guid: 938991bd3fb9cfd4bba2cfc169709e4d, type: 2}
+  waveConfigPool: []
+  enemyCountScalePerStage: 1.2
+  spawnDelayScalePerStage: 0.85
+  wavePacingMode: 2
+  timeBetweenWaves: 9
+  timeBetweenStages: 9
+  enemyHealthScalePerStage: 1.15
+  enemyDamageScalePerStage: 1.15
+  scaleBossesWithStage: 1
+  nightModeChance: 0.244
+  fogChance: 0.25
+  rainChance: 0.2
+  snowChance: 0.1
+  nightBalloonChance: 0.824
+  stageBossPrefabs:
+  - {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
+  - {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+  stageBossPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+  finalBossPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
+  baseEnemyDropValue: 10
+  enemyDropScalePerStage: 0.2
+  baseBossDropValue: 80
+  bossDropScalePerStage: 0.25
+  bossDropCount: 5
+  postStageRewardScalePerStage: 0.15
+  randomizeWaves: 0
+  randomizeBosses: 1
+  useProceduralWaves: 1
+  enemyPool:
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+    weight: 5
+    minStageIndex: 0
+  - enemyPrefab: {fileID: 3554655901426140020, guid: df8333252348a3b4ba98f15f72d87222, type: 3}
+    weight: 5
+    minStageIndex: 0
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+    weight: 3
+    minStageIndex: 1
+  - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+    weight: 2
+    minStageIndex: 1
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+    weight: 3
+    minStageIndex: 2
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+    weight: 2
+    minStageIndex: 2
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 12144c95b0a19a44e97c2797908b93b7, type: 3}
+    weight: 1
+    minStageIndex: 3
+  - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+    weight: 1
+    minStageIndex: 3
+  - enemyPrefab: {fileID: 3554655901426140020, guid: e82a99147de618847a75df2260891ee0, type: 3}
+    weight: 1
+    minStageIndex: 3
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+    weight: 2
+    minStageIndex: 4
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+    weight: 1
+    minStageIndex: 4
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
+    weight: 1
+    minStageIndex: 4
+  baseEnemiesPerWave: 5
+  proceduralMinSpawnDelay: 0.5
+  proceduralMaxSpawnDelay: 1.5
+  augmentEveryNWaves: 3

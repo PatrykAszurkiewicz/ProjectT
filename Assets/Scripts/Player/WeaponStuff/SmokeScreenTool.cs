@@ -127,6 +127,13 @@ public class SmokeScreenProjectile : MonoBehaviour
         this.lastPos = transform.position;
         initialized = true;
 
+        // Launch SFX (Smoke Screen tool).
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.smokeShot.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.smokeShot, spawnPos);
+        }
+
         SpawnTelegraph();
     }
 

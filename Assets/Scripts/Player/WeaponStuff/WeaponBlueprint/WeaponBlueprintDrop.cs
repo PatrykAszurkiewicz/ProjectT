@@ -403,7 +403,13 @@ public class WeaponBlueprintDrop : MonoBehaviour
         // picking the now-eligible augment from their own reward menu.
         if (autoEquipOnCollect && slotIndex >= 0 && WeaponUnlockRegistry.Instance != null)
         {
-            WeaponUnlockRegistry.Instance.ForceUnlock(slotIndex, ResolveCollectorIndex(collector));
+            int collectorIndex = ResolveCollectorIndex(collector);
+            WeaponUnlockRegistry.Instance.ForceUnlock(slotIndex, collectorIndex);
+
+            // Persist this in-run hotbar unlock so a crash/exit resume keeps the weapon
+            // in the hotbar. The augment replay can't rebuild it (there is no augment);
+            // the permanent cross-run blueprint is stored separately in PlayerPrefs.
+            RunPersistence.Instance?.RecordBlueprintUnlock(slotIndex, collectorIndex);
         }
 
         // NOTE: We intentionally do NOT call AugmentRegistry.ApplyAugment here.
@@ -490,5 +496,4 @@ public class WeaponBlueprintDrop : MonoBehaviour
         Destroy(gameObject);
     }
 }
-
 

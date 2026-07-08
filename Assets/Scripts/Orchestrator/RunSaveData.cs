@@ -28,13 +28,29 @@ public class RunSaveData
     // Reproduces the run plan deterministically.
     public int runSeed;
 
+    // Difficulty this run started on (0 = Normal, 1 = Nightmare). Restored on resume so
+    // a continued run keeps the same Nightmare/Normal scaling regardless of the current
+    // menu toggle. Missing in older saves → 0 (Normal), so no save-version bump needed.
+    public int difficulty = 0;
+
     // Where in the run we were when this checkpoint was written.
     public int stageIndex;
     public int waveIndex;
 
+    // True if this checkpoint was written at the START OF THE FINAL BOSS (after all
+    // stages, their bosses, and post-stage rewards were already completed). When set,
+    // resume rebuilds the last stage's arena/towers but SKIPS its boss + reward and
+    // goes straight to the final boss, instead of rewinding to the last wave.
+    // (stageIndex/waveIndex are still stored clamped-in-range for the continue UI.)
+    public bool atFinalBoss = false;
+
     // Players (absolutes), one entry per registered player, keyed by playerIndex.
     // Single player = a one-element list at index 0.
     public List<PlayerSaveEntry> players = new List<PlayerSaveEntry>();
+
+    // How many players were seated when this run started. The continue gate refuses
+    // to load until this many controllers are connected. Defaults to players.Count.
+    public int runPlayerCount = 1;
 
     // Core (absolutes).
     public bool hasCore;
@@ -46,6 +62,14 @@ public class RunSaveData
 
     // Replay log — rebuilt on load via AugmentRegistry.ApplyAugment(id, rarity).
     public List<AugmentSaveEntry> augments = new List<AugmentSaveEntry>();
+
+    // In-run weapon/tool slots unlocked by collecting a BOSS BLUEPRINT DROP (not via
+    // an augment). Augment-driven unlocks are rebuilt by replaying `augments`; a
+    // blueprint-drop unlock has no augment behind it, so it's stored here and
+    // re-applied on resume via WeaponUnlockRegistry.ForceUnlock(slot, playerIndex).
+    // The PERMANENT cross-run blueprint itself lives separately in PlayerPrefs
+    // (WeaponBlueprintRegistry); this list only restores the CURRENT run's hotbar.
+    public List<BlueprintUnlockSaveEntry> blueprintUnlocks = new List<BlueprintUnlockSaveEntry>();
 
     // Lore fragments discovered as of this checkpoint. Snapshot of LoreCodex, so a
     // resumed run agrees with the codex about which chests have already been read.
@@ -70,6 +94,23 @@ public class PlayerSaveEntry
     public float playerMana, playerMaxMana;
     public float playerStamina, playerMaxStamina;
     public int playerDashesLeft;
+}
+
+// One in-run hotbar unlock that came from collecting a boss blueprint drop, keyed
+// by the slot index (matches WeaponRollController.allWeaponSlots) and the player
+// who collected it. Re-applied verbatim on resume.
+[System.Serializable]
+public class BlueprintUnlockSaveEntry
+{
+    public int slot = -1;
+    public int playerIndex = 0;
+
+    public BlueprintUnlockSaveEntry() { }
+    public BlueprintUnlockSaveEntry(int slot, int playerIndex)
+    {
+        this.slot = slot;
+        this.playerIndex = playerIndex;
+    }
 }
 
 [System.Serializable]
@@ -103,4 +144,3 @@ public class TowerSaveEntry
     public float currentEnergy;
     public float maxEnergy;
 }
-

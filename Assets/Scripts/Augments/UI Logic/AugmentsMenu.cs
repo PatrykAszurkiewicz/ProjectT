@@ -28,6 +28,37 @@ public class AugmentsMenu : MonoBehaviour
     [Header("Settings")]
     public int maxRerolls = 2;
 
+    public enum AugmentNavMode
+    {
+        CursorHover,       // the panel under the cursor enlarges
+        DirectionalSwitch  // dpad / arrow keys move which panel is enlarged
+    }
+
+    [Header("Navigation")]
+    [Tooltip("CursorHover: the augment panel under the cursor enlarges. Drive the cursor " +
+             "with the mouse or the gamepad right stick (GamepadMenuCursor); the real " +
+             "Select/Reroll buttons handle clicks. DirectionalSwitch: use the dpad or " +
+             "arrow keys (A/D, Left/Right) to move which panel is enlarged, confirm with " +
+             "South/A or Enter, reroll with West/X or R.")]
+    public AugmentNavMode navMode = AugmentNavMode.CursorHover;
+
+    [Tooltip("Scale applied to the highlighted/hovered panel. 1 = no enlargement.")]
+    public float highlightScale = 1.12f;
+
+    [Tooltip("Optional: panel roots to enlarge, one per slot in the same order as the " +
+             "augment slots. Leave EMPTY to enlarge the Select buttons — which in this " +
+             "prefab ARE the Augment1/2/3 panels, so the fallback already grows the panel.")]
+    [SerializeField] private RectTransform[] panelRoots;
+
+    [Tooltip("DirectionalSwitch only: the RIGHT TRIGGER confirms the highlighted augment " +
+             "(matches the cursor-mode click). On by default.")]
+    public bool directionalConfirmRightTrigger = true;
+
+    [Tooltip("DirectionalSwitch only: also let the South face button (A / Cross) confirm. " +
+             "OFF by default so A doesn't 'close' the menu unexpectedly — turn it on if you " +
+             "want the A-to-confirm console convention.")]
+    public bool directionalConfirmSouthButton = false;
+
     [Header("Co-op (Phase 6)")]
     [Tooltip("Which player this menu belongs to: 0 = Player 1, 1 = Player 2. " +
              "Leave at -1 for a single-player / shared menu (mouse-driven, applies " +
@@ -46,6 +77,13 @@ public class AugmentsMenu : MonoBehaviour
     // viewport menus can be driven independently without a MultiplayerEventSystem.
     private PlayerInput _boundInput;
     private int _navSlot;
+
+    // DirectionalSwitch right-trigger confirm: press-edge detection plus a carry-over
+    // guard so a trigger still held as the menu opens (the player was firing to clear
+    // the wave) can't auto-confirm the first augment.
+    private bool _dirTriggerWasDown;
+    private bool _dirSwallowTrigger;
+    private bool _navJustActivated;
 
     // In co-op the GameOrchestrator owns Time.timeScale / cursor / suppression
     // (otherwise two menus saving & restoring it fight each other). In single
@@ -564,6 +602,17 @@ public class AugmentsMenu : MonoBehaviour
         if (!isMenuActive)
         {
             augmentsMenu.SetActive(true);
+
+            // Reward-screen appear SFX. Gate on boundPlayerIndex <= 0 so co-op's
+            // two per-player menus (P0 and P1) don't both chime — only the first
+            // (or the single-player menu, index -1) plays it.
+            if (boundPlayerIndex <= 0
+                && AudioManager.instance != null && FMODEvents.instance != null
+                && !FMODEvents.instance.augmentScreen.IsNull)
+            {
+                AudioManager.instance.PlayOneShot(FMODEvents.instance.augmentScreen, Vector3.zero);
+            }
+
             if (!CoopManaged)
             {
                 prevCursorVisible = Cursor.visible;
@@ -577,7 +626,25 @@ public class AugmentsMenu : MonoBehaviour
 
             // Force regeneration of augments each time menu opens
             GenerateInitialAugments();
-            SetupNavHighlight();
+
+            // Highlight init depends on the mode. DirectionalSwitch pre-selects the
+            // first panel so there's something to move from. CursorHover starts with
+            // NOTHING enlarged — this is the fix for the left panel being stuck at
+            // 1.12x: it only grows once the cursor is actually over it.
+            if (navMode == AugmentNavMode.DirectionalSwitch)
+            {
+                SetupNavHighlight();
+                _navJustActivated = true;
+                // The right trigger now CONFIRMS the highlighted panel, so stop
+                // GamepadMenuCursor from also emulating a mouse click with it.
+                GamepadMenuCursor.ClicksSuppressed = true;
+            }
+            else
+            {
+                _navSlot = -1;
+                ClearNavHighlight();
+                GamepadMenuCursor.ClicksSuppressed = false; // cursor click drives selection
+            }
 
             if (debugMode) Debug.Log("AugmentsMenu: Menu activated");
         }
@@ -712,39 +779,103 @@ public class AugmentsMenu : MonoBehaviour
     // (single-player) menu keeps its mouse-only behaviour untouched.
     private void Update()
     {
-        if (!isMenuActive || boundPlayerIndex < 0) return;
+        if (!isMenuActive) return;
 
-        if (_boundInput == null)
+        if (navMode == AugmentNavMode.CursorHover) UpdateCursorHover();
+        else UpdateDirectional();
+    }
+
+    // CursorHover: enlarge whichever panel the on-screen cursor is over. The cursor
+    // is moved by the mouse or by GamepadMenuCursor (right stick); actual selection
+    // happens through the real Select/Reroll buttons, so here we only do the visual
+    // highlight. Works the same in single player and co-op.
+    private void UpdateCursorHover()
+    {
+        var mouse = Mouse.current;
+        if (mouse == null) return;
+
+        int hovered = SlotUnderScreenPoint(mouse.position.ReadValue());
+        if (hovered != _navSlot)
         {
-            var bound = BoundRef();
-            if (bound != null)
-                _boundInput = bound.GetComponent<PlayerInput>()
-                              ?? bound.GetComponentInChildren<PlayerInput>();
+            _navSlot = hovered;          // -1 when the cursor is over no panel
+            ApplyNavHighlight();
+        }
+    }
+
+    // DirectionalSwitch: dpad / arrow keys move the enlarged panel; South/A or Enter
+    // confirms, West/X or R rerolls. Uses the bound player's devices in co-op, or the
+    // current gamepad/keyboard in single player.
+    private void UpdateDirectional()
+    {
+        Gamepad pad;
+        Keyboard kb;
+        if (boundPlayerIndex >= 0)
+        {
+            if (_boundInput == null)
+            {
+                var bound = BoundRef();
+                if (bound != null)
+                    _boundInput = bound.GetComponent<PlayerInput>()
+                                  ?? bound.GetComponentInChildren<PlayerInput>();
+            }
+            pad = BoundPad();
+            kb = BoundKeyboard();
+        }
+        else
+        {
+            pad = Gamepad.current;
+            kb = Keyboard.current;
         }
 
-        var pad = BoundPad();
-        var kb = BoundKeyboard();
+        // Right-trigger confirm: edge-detected, with a carry-over guard for a trigger
+        // still held from clearing the wave at the moment the menu opened.
+        float trig = pad != null ? pad.rightTrigger.ReadValue() : 0f;
+        bool trigDown = trig > 0.5f;
+        if (_navJustActivated)
+        {
+            _navJustActivated = false;
+            _dirSwallowTrigger = trigDown;   // already held on open -> ignore until released
+            _dirTriggerWasDown = trigDown;
+        }
+        if (_dirSwallowTrigger && !trigDown) _dirSwallowTrigger = false;
+        bool trigPressed = trigDown && !_dirTriggerWasDown && !_dirSwallowTrigger;
+        _dirTriggerWasDown = trigDown;
 
-        int dir = 0;
-        if (pad != null)
+        int dir = ReadHorizontalStep(pad, kb);
+
+        // Nothing highlighted yet (e.g. opened in a mode with no pre-select): the
+        // first directional press lands on the first panel rather than stepping past.
+        if (_navSlot < 0)
         {
-            if (pad.dpad.right.wasPressedThisFrame) dir = +1;
-            else if (pad.dpad.left.wasPressedThisFrame) dir = -1;
+            if (dir != 0) SetupNavHighlight();
+            return;
         }
-        if (dir == 0 && kb != null)
-        {
-            if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame) dir = +1;
-            else if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame) dir = -1;
-        }
+
         if (dir != 0) MoveNav(dir);
 
-        bool confirm = (pad != null && pad.buttonSouth.wasPressedThisFrame)
+        bool confirm = (directionalConfirmRightTrigger && trigPressed)
+                    || (directionalConfirmSouthButton && pad != null && pad.buttonSouth.wasPressedThisFrame)
                     || (kb != null && kb.enterKey.wasPressedThisFrame);
-        if (confirm) ChooseAugment(_navSlot);
+        if (confirm) { MenuClickSFX.Play(); ChooseAugment(_navSlot); }
 
         bool reroll = (pad != null && pad.buttonWest.wasPressedThisFrame)
                    || (kb != null && kb.rKey.wasPressedThisFrame);
-        if (reroll) Reroll(_navSlot);
+        if (reroll) { MenuClickSFX.Play(); Reroll(_navSlot); }
+    }
+
+    private int ReadHorizontalStep(Gamepad pad, Keyboard kb)
+    {
+        if (pad != null)
+        {
+            if (pad.dpad.right.wasPressedThisFrame) return +1;
+            if (pad.dpad.left.wasPressedThisFrame) return -1;
+        }
+        if (kb != null)
+        {
+            if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame) return +1;
+            if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame) return -1;
+        }
+        return 0;
     }
 
     private Gamepad BoundPad()
@@ -789,20 +920,57 @@ public class AugmentsMenu : MonoBehaviour
 
     private void ApplyNavHighlight()
     {
-        if (selectButtons == null) return;
-        for (int i = 0; i < selectButtons.Length; i++)
+        for (int i = 0; i < SlotCount; i++)
         {
-            if (selectButtons[i] == null) continue;
-            selectButtons[i].transform.localScale =
-                (i == _navSlot) ? Vector3.one * 1.12f : Vector3.one;
+            var target = HighlightTarget(i);
+            if (target == null) continue;
+            target.localScale = (i == _navSlot) ? Vector3.one * highlightScale : Vector3.one;
         }
     }
 
     private void ClearNavHighlight()
     {
-        if (selectButtons == null) return;
-        for (int i = 0; i < selectButtons.Length; i++)
-            if (selectButtons[i] != null) selectButtons[i].transform.localScale = Vector3.one;
+        for (int i = 0; i < SlotCount; i++)
+        {
+            var target = HighlightTarget(i);
+            if (target != null) target.localScale = Vector3.one;
+        }
+    }
+
+    // One slot per Select button (one per panel).
+    private int SlotCount => selectButtons != null ? selectButtons.Length : 0;
+
+    // What actually gets scaled for slot i: an explicit panelRoots entry if the
+    // inspector provides one, else the Select button's transform. In this prefab the
+    // Select buttons ARE the Augment1/2/3 panels, so the fallback grows the panel.
+    private Transform HighlightTarget(int i)
+    {
+        if (panelRoots != null && i < panelRoots.Length && panelRoots[i] != null)
+            return panelRoots[i];
+        if (selectButtons != null && i < selectButtons.Length && selectButtons[i] != null)
+            return selectButtons[i].transform;
+        return null;
+    }
+
+    // Which slot's panel the screen-space cursor is over, or -1 for none.
+    private int SlotUnderScreenPoint(Vector2 screenPos)
+    {
+        for (int i = 0; i < SlotCount; i++)
+        {
+            var rt = HighlightTarget(i) as RectTransform;
+            if (rt == null || !rt.gameObject.activeInHierarchy) continue;
+            Camera cam = HighlightCamera(rt);
+            if (RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam))
+                return i;
+        }
+        return -1;
+    }
+
+    private Camera HighlightCamera(Component c)
+    {
+        var canvas = c.GetComponentInParent<Canvas>();
+        if (canvas == null) return null;
+        return canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
     }
 
     private void CloseMenu()
@@ -818,6 +986,7 @@ public class AugmentsMenu : MonoBehaviour
         }
         isMenuActive = false;
         ClearNavHighlight();
+        GamepadMenuCursor.ClicksSuppressed = false;
 
         if (debugMode) Debug.Log("AugmentsMenu: Menu closed");
     }
@@ -1119,5 +1288,4 @@ public class AugmentsMenu : MonoBehaviour
         }
     }
 }
-
 

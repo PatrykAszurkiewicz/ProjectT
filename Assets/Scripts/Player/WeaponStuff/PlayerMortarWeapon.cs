@@ -50,7 +50,19 @@ public class PlayerMortarProjectile : MonoBehaviour
         this.lastPos = transform.position;
         initialized = true;
 
+        // Subtle warm tracer light on the shell while it arcs.
+        ProjectileGlow.Attach(transform, new Color(1f, 0.6f, 0.2f), worldRadius: 0.8f,
+                              alpha: 0.5f, pulse: true, pulseSpeed: 6f, pulseAmount: 0.22f);
+
         SpawnTelegraph();
+
+        // Launch SFX (player mortar). The enemy Mort plays its own MortarShot from
+        // its projectile's Initialize.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.mortarShot.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.mortarShot, spawnPos);
+        }
     }
 
     private void Update()
@@ -93,6 +105,14 @@ public class PlayerMortarProjectile : MonoBehaviour
     {
         if (detonated) return;
         detonated = true;
+
+        // Detonation SFX (player mortar). The enemy Mort plays its own from its
+        // projectile's explode path.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.mortarExplosion.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.mortarExplosion, landingPos);
+        }
 
         SpawnExplosionVfx();
         ApplyAreaDamageToEnemies();
@@ -201,6 +221,7 @@ public class MortarAimReticle : MonoBehaviour
     private const int FillOrder = 2950;
     private const int RingOrder = 2951;
     private const int DotOrder = 2952;
+    private const int GlowRingOrder = 2949;   // just under the crisp ring
 
     // Ring alpha range — kept low so the border is faint rather than harsh.
     private const float RingAlphaMin = 0.22f;
@@ -226,7 +247,9 @@ public class MortarAimReticle : MonoBehaviour
 
     private SpriteRenderer _fill;
     private SpriteRenderer _ring;
+    private SpriteRenderer _glowRing;   // additive halo so the outline reads in dark biomes
     private SpriteRenderer[] _dots;
+    private NightLight _nightLight;      // punches through the NightOverlay so the outline is visible at night
     private float _radius = 1.5f;
     private Color _color = new Color(1f, 0.42f, 0.38f, 1f);
 
@@ -265,6 +288,17 @@ public class MortarAimReticle : MonoBehaviour
         _ring.sortingLayerName = SortLayer;
         _ring.sortingOrder = RingOrder;
 
+        // Soft additive halo tracing the same ring, so the reticle outline stays
+        // visible against a darkened biome. Tinted to the reticle colour, so the
+        // Smoke Screen's blue reticle glows blue automatically.
+        var glowGo = new GameObject("ReticleGlowRing");
+        glowGo.transform.SetParent(transform, false);
+        _glowRing = glowGo.AddComponent<SpriteRenderer>();
+        _glowRing.sprite = Boss2WarningSprites.GetRing(thicknessFraction: 0.16f);
+        _glowRing.sharedMaterial = ProjectileGlow.SharedAdditiveMaterial;
+        _glowRing.sortingLayerName = SortLayer;
+        _glowRing.sortingOrder = GlowRingOrder;
+
         // Dotted trajectory preview — a row of small discs laid along the arc.
         _dots = new SpriteRenderer[DotCount];
         for (int i = 0; i < DotCount; i++)
@@ -279,6 +313,23 @@ public class MortarAimReticle : MonoBehaviour
             Color c = _dotColor; c.a = 0.5f; sr.color = c;
             _dots[i] = sr;
         }
+
+        // Punch a faint hole in the NightOverlay at the cursor so the aiming
+        // outline (mortar AND smoke screen) is readable in dark/corruption biomes.
+        // The additive glow ring above is drawn UNDER the overlay and would be
+        // crushed by it; this NightLight is what actually reveals the circle.
+        // Added unconditionally (cheap, single instance) so it auto-registers if
+        // night toggles on while the weapon is already equipped — NightLight
+        // no-ops while no NightOverlay is active. Honors the global perf switch.
+        if (ProjectileGlow.EnableNightLights)
+        {
+            _nightLight = gameObject.AddComponent<NightLight>();
+            _nightLight.radius = _radius * CircleScale * 1.25f;
+            _nightLight.intensity = 0.4f;          // subtle — just enough to lift the outline
+            _nightLight.lightColor = _color;
+            _nightLight.warmTintStrength = 0.25f;
+            _nightLight.fadeInDuration = 0f;
+        }
     }
 
     public void SetRadius(float radius)
@@ -287,6 +338,8 @@ public class MortarAimReticle : MonoBehaviour
         float diameter = _radius * 2f * CircleScale;
         if (_fill != null) _fill.transform.localScale = Vector3.one * diameter;
         if (_ring != null) _ring.transform.localScale = Vector3.one * diameter;
+        if (_glowRing != null) _glowRing.transform.localScale = Vector3.one * (diameter * 1.04f);
+        if (_nightLight != null) _nightLight.radius = _radius * CircleScale * 1.25f;
     }
 
     // Lays the dotted arc from `origin` (the launch point, above the player) up
@@ -322,6 +375,8 @@ public class MortarAimReticle : MonoBehaviour
     {
         if (_fill != null) _fill.enabled = visible;
         if (_ring != null) _ring.enabled = visible;
+        if (_glowRing != null) _glowRing.enabled = visible;
+        if (_nightLight != null) _nightLight.enabled = visible;  // OnEnable/OnDisable (un)registers the light
         if (_dots != null)
             for (int i = 0; i < _dots.Length; i++)
                 if (_dots[i] != null) _dots[i].enabled = visible;
@@ -345,6 +400,13 @@ public class MortarAimReticle : MonoBehaviour
             Color c = _color;
             c.a = FillAlpha;
             _fill.color = c;
+        }
+        if (_glowRing != null)
+        {
+            // Faint additive halo that breathes with the same pulse.
+            Color c = _color;
+            c.a = Mathf.Lerp(0.18f, 0.40f, pulse);
+            _glowRing.color = c;
         }
     }
 }

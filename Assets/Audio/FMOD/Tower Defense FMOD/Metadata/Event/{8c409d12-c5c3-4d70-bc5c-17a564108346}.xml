@@ -5,7 +5,7 @@
 			<value>ShieldParry</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{cbebfb92-7ca7-4f67-9972-73a6a5b2e9a0}">
 		<relationship name="effects">
 			<destination>{afd85d12-118f-4fff-8844-2341ed2860af}</destination>
+			<destination>{ca762198-2158-44c8-8127-43e58cd32526}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{4605101c-9b75-4799-8177-4761d2115e85}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{49b18538-dab1-497b-bbc5-fc11981eda7c}" />
 	<object class="MixerBusFader" id="{afd85d12-118f-4fff-8844-2341ed2860af}" />
+	<object class="SpatialiserEffect" id="{ca762198-2158-44c8-8127-43e58cd32526}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

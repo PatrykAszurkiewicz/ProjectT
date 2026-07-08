@@ -5,7 +5,7 @@
 			<value>TurretShot</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{d39ffc0a-49fc-48d4-928d-bf5ff2aa6559}">
 		<property name="volume">
-			<value>-7</value>
+			<value>-8.5</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{dc20fe6f-b5b3-4591-8ff1-a8670daa7334}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{dc20fe6f-b5b3-4591-8ff1-a8670daa7334}">
 		<relationship name="effects">
 			<destination>{3e55331d-6c55-4ea5-b68d-afa3e288c384}</destination>
+			<destination>{6a95397e-ae30-43e2-9a72-971435e5b2da}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{b20f2dca-e593-4d79-9281-4b40f67e757b}" />
@@ -111,6 +112,17 @@
 	</object>
 	<object class="MixerBusFader" id="{0aa3388d-e48a-4d83-b56c-f5975cae81e6}" />
 	<object class="MixerBusFader" id="{3e55331d-6c55-4ea5-b68d-afa3e288c384}" />
+	<object class="SpatialiserEffect" id="{6a95397e-ae30-43e2-9a72-971435e5b2da}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 	<object class="SingleSound" id="{5eb9f78b-cc42-47d6-b2fb-0b2404171639}">
 		<relationship name="audioFile">
 			<destination>{5ed5e948-732c-4bd0-b5a7-9302addb4c43}</destination>

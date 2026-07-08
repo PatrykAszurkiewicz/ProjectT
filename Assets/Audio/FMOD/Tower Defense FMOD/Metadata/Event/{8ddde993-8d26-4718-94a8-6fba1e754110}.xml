@@ -5,7 +5,7 @@
 			<value>ProximityMineExplode</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -100,6 +100,7 @@
 		<relationship name="effects">
 			<destination>{30b62ec1-64c0-4d6c-9405-67c46fe271fb}</destination>
 			<destination>{d846a67f-95d3-499e-8a1a-65ae1f86d7cc}</destination>
+			<destination>{e45a51eb-2e09-4194-a23f-f058989a5996}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{a8844f29-227d-4a8d-9c55-b073c5615287}" />
@@ -119,6 +120,17 @@
 	<object class="DistortionEffect" id="{d846a67f-95d3-499e-8a1a-65ae1f86d7cc}">
 		<property name="level">
 			<value>0.844999969</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{e45a51eb-2e09-4194-a23f-f058989a5996}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 </objects>

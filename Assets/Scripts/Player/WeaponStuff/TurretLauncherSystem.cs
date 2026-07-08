@@ -66,8 +66,13 @@ public class TurretLauncherSystem
         );
 
         activeTurret = turret;
+
+        // Deploy SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.turretSetup.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.turretSetup, spawnPos);
+        }
     }
 }
-
-
 

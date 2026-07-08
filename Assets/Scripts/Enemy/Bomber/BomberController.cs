@@ -421,8 +421,9 @@ public class BomberController : MonoBehaviour
         var fx = vfxRoot.AddComponent<Boss2MeteorVFX>();
         fx.Play(explosionRadius);
 
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.bossGroundHit, pos);
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.bomberExplosion.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.bomberExplosion, pos);
 
         if (CameraShake.Instance != null)
             CameraShake.Instance.Shake(0.3f, 0.15f);
@@ -719,4 +720,3 @@ public class BomberController : MonoBehaviour
         }
     }
 }
-

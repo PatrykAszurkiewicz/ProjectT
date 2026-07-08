@@ -170,8 +170,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
-  currentHealth: 100
+  maxHealth: 40
+  currentHealth: 40
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -197,16 +197,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 77516181
+      Data2: 1192377636
+      Data3: -188219219
+      Data4: -1001216446
+    Path: event:/InsectAttack
   detectRange: 3
   attackRange: 2.3
-  attackCooldown: 0
+  attackCooldown: 0.3
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8192
+  blockerLayers:
+    serializedVersion: 2
+    m_Bits: 0
   requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.2
+  smoothSteeringEnabled: 1
+  lookAheadDistance: 1.6
+  avoidanceStrength: 1.8
+  steerResponsiveness: 6
+  wanderStrength: 0.25
+  wanderFrequency: 0.4
+  stuckArcWidth: 0.6
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0

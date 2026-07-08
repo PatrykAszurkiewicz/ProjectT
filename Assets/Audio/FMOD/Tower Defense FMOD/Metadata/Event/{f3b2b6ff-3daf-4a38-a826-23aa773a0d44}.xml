@@ -5,7 +5,7 @@
 			<value>BossLaserShot</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{6bdbdeb0-ec54-4985-b986-ee2a0ae1dbe2}">
 		<relationship name="effects">
 			<destination>{f3007387-5174-49cd-b955-8d816a38950c}</destination>
+			<destination>{f1a2009c-53d5-4587-944c-21e53599a555}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{148eeb5a-97c1-4da8-b33e-14386a22ce04}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{13740c31-7e7b-4047-ac83-42969f0d5ee9}" />
 	<object class="MixerBusFader" id="{f3007387-5174-49cd-b955-8d816a38950c}" />
+	<object class="SpatialiserEffect" id="{f1a2009c-53d5-4587-944c-21e53599a555}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

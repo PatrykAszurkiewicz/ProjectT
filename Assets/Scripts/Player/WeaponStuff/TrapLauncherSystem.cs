@@ -86,6 +86,13 @@ public class TrapLauncherSystem
         );
 
         activeTraps.AddLast(trap);
+
+        // Plant SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.trapSetup.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.trapSetup, spawnPos);
+        }
     }
 }
 

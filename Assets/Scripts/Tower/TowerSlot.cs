@@ -242,12 +242,19 @@ public class TowerSlot : MonoBehaviour
         return towerComponent;
     }
 
-    public bool RemoveTower()
+    public bool RemoveTower() => RemoveTower(true);
+
+    // Remove the tower in this slot. When refundSellValue is true
+    // the normal sell refund (EnergyManager.GetTowerSellValue) is returned to the
+    // shared wallet — this is the behaviour for selling/enemy-destruction. The
+    // disassembly menu passes FALSE and grants its own fixed refund instead, so the
+    // player gets exactly the advertised amount and not that plus the sell value.
+    public bool RemoveTower(bool refundSellValue)
     {
         if (!isOccupied) return false;
 
         // Give energy back to player when tower is removed
-        if (EnergyManager.Instance != null)
+        if (refundSellValue && EnergyManager.Instance != null)
         {
             int sellValue = EnergyManager.Instance.GetTowerSellValue();
             EnergyManager.Instance.GivePlayerEnergy(sellValue);

@@ -5,7 +5,7 @@
 			<value>TurretRotate</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{484362b7-749b-4872-81f5-a78957ebaa34}">
 		<relationship name="effects">
 			<destination>{eeb1cfaf-9404-4170-84c0-af7f62ce6de8}</destination>
+			<destination>{955d509f-0149-47d3-b4fa-95d67d16e902}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{36fd7e3c-77c6-49f8-baa3-311d66c78ac9}" />
@@ -115,4 +116,15 @@
 	</object>
 	<object class="MixerBusFader" id="{50d5acf4-3223-45eb-b9ef-0cd28079bdca}" />
 	<object class="MixerBusFader" id="{eeb1cfaf-9404-4170-84c0-af7f62ce6de8}" />
+	<object class="SpatialiserEffect" id="{955d509f-0149-47d3-b4fa-95d67d16e902}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

@@ -5,7 +5,7 @@
 			<value>BoomerangHit</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{64cf8176-fd32-418a-8956-fa6adcc77c78}">
 		<property name="volume">
-			<value>-14</value>
+			<value>-20.5</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{95a36a0b-edd0-4bb8-8b26-23ae13e67fd6}</destination>
@@ -100,6 +100,7 @@
 		<relationship name="effects">
 			<destination>{a097956c-9cfc-4017-b481-5b5d683706ed}</destination>
 			<destination>{edf80eed-67b9-4efd-b443-509ce25c78f5}</destination>
+			<destination>{acc2c4c5-2791-4f85-a6ea-e77f42368877}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{20b39606-97f3-4029-a61b-d981f5d17b7f}" />
@@ -113,6 +114,17 @@
 	<object class="FlangerEffect" id="{edf80eed-67b9-4efd-b443-509ce25c78f5}">
 		<property name="rate">
 			<value>0.0399999991</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{acc2c4c5-2791-4f85-a6ea-e77f42368877}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 </objects>

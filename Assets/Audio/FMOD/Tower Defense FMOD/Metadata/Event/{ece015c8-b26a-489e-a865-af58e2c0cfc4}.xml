@@ -5,7 +5,7 @@
 			<value>Boss1GroundHit</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{e82734f1-9b96-4324-972a-6880055a0f1f}">
 		<relationship name="effects">
 			<destination>{7ed03a6b-6445-453c-b754-c5c4978b5c33}</destination>
+			<destination>{95feee26-2fbf-424c-bafa-349b01475d22}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{2f7c222d-2df0-48bc-b556-baa24ad00e32}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{1e2989a8-655b-4552-8d6d-4b55223da5ba}" />
 	<object class="MixerBusFader" id="{7ed03a6b-6445-453c-b754-c5c4978b5c33}" />
+	<object class="SpatialiserEffect" id="{95feee26-2fbf-424c-bafa-349b01475d22}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

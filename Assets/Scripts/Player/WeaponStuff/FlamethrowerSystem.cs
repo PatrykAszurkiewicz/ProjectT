@@ -13,6 +13,11 @@ public class FlamethrowerSystem
     private readonly WeaponData data;
     private readonly Transform playerTransform;
 
+    // Co-op: this flamethrower's OWNING player's aim, resolved from the weapon's
+    // parent hierarchy so the flame follows THIS player's cursor/stick rather than
+    // whichever player last won the global PlayerAim.Instance.
+    private PlayerAim ownerAim;
+
     //  State 
     private bool isFiring;
     private float currentFuel;
@@ -67,6 +72,7 @@ public class FlamethrowerSystem
             && !FMODEvents.instance.flamethrower.IsNull)
         {
             flamethrowerSfx = AudioManager.instance.CreateInstance(FMODEvents.instance.flamethrower);
+            flamethrowerSfx.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(playerTransform));
             flamethrowerSfxValid = true;
         }
     }
@@ -93,6 +99,13 @@ public class FlamethrowerSystem
         if (mainCam == null) mainCam = Camera.main;
         UpdateAimDirection();
         UpdateEmitterTransform();
+
+        // Keep the looping SFX positioned so the (now 3D) event isn't muted by FMOD.
+        // playerTransform is the flame's owner and is always valid. Runs every frame
+        // the weapon is equipped, so the instance has a position before it even starts.
+        if (flamethrowerSfxValid && flamethrowerSfx.isValid())
+            flamethrowerSfx.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(playerTransform));
+
 
         if (isFiring)
         {
@@ -162,12 +175,26 @@ public class FlamethrowerSystem
 
     // AIM
 
+    // This flamethrower's OWN player's aim (resolved from the weapon hierarchy,
+    // then cached). Retries until found so a transient early-null can't stick.
+    private PlayerAim ResolveOwnerAim()
+    {
+        if (ownerAim == null && weapon != null)
+            ownerAim = weapon.GetComponentInParent<PlayerAim>();
+        return ownerAim;
+    }
+
     private void UpdateAimDirection()
     {
-        // Gamepad / unified aim takes priority when present.
-        if (PlayerAim.Instance != null)
+        // Use THIS flamethrower's own player's unified aim (mouse OR gamepad).
+        // Reading the global PlayerAim.Instance pointed the flame along whichever
+        // player spawned last, so in co-op a gamepad player's fire ignored their
+        // own turn and streamed off in the other player's aim direction.
+        PlayerAim a = ResolveOwnerAim();
+        if (a == null) a = PlayerAim.Instance;   // legacy single-player fallback
+        if (a != null)
         {
-            aimDirection = PlayerAim.Instance.Direction;
+            aimDirection = a.Direction;
             return;
         }
 
@@ -615,3 +642,4 @@ public class FlamethrowerSystem
         }
     }
 }
+

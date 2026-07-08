@@ -73,7 +73,11 @@ public class GrassOverlay : MonoBehaviour
 
     [Header("Sorting")]
     public string sortingLayerName = "Default";
-    public int sortingOrder = -1;
+    // Base order for the ground decals. Must be > the background's order (-1) or the
+    // meshes tie with the background and the camera's Y-axis transparency sort shows
+    // them only in a central square. 0 sits just above background, below tower slots
+    // (1)/paths (500)/units (500+). Sub-layers add their offsets on top of this.
+    public int sortingOrder = 0;
 
     // Internal
     private List<Mesh> grassMeshes = new List<Mesh>();
@@ -88,11 +92,20 @@ public class GrassOverlay : MonoBehaviour
     private const int VERTS_PER_BLADE_TALL = 9;
     private const int TRIS_PER_BLADE_TALL = 7;
 
-    void Start() => GenerateGrass();
+    private bool _generated;
+
+    void Start()
+    {
+        // BiomeManager calls GenerateGrass() right after AddComponent; Unity then fires
+        // Start() a frame later. Without this guard we build and immediately discard
+        // the entire mesh set twice per biome.
+        if (!_generated) GenerateGrass();
+    }
 
     [ContextMenu("Regenerate Grass")]
     public void GenerateGrass()
     {
+        _generated = true;
         foreach (var go in grassObjects)
             if (go != null) DestroyImmediate(go);
         grassObjects.Clear();
@@ -496,3 +509,4 @@ public class GrassOverlay : MonoBehaviour
         if (grassMaterial != null) DestroyImmediate(grassMaterial);
     }
 }
+

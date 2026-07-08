@@ -29,6 +29,8 @@ public class BackgroundTiler : MonoBehaviour
             Debug.LogError("[BackgroundTiler] No SpriteRenderer or Sprite found on this GameObject.");
             return;
         }
+
+        sourceSR.sortingOrder = -100;
         //Patryk
         float tileWorldWidth = sourceSR.sprite.bounds.size.x * transform.lossyScale.x;
         TileWorldSize = tileWorldWidth;
@@ -105,7 +107,8 @@ public class BackgroundTiler : MonoBehaviour
                 tileSR.sprite = sourceSR.sprite;
                 tileSR.color = sourceSR.color;
                 tileSR.sortingLayerName = sourceSR.sortingLayerName;
-                tileSR.sortingOrder = sourceSR.sortingOrder;
+                //tileSR.sortingOrder = sourceSR.sortingOrder;
+                tileSR.sortingOrder = -100;
                 tileSR.drawMode = sourceSR.drawMode;
                 tileSR.sharedMaterial = sourceSR.sharedMaterial;
 

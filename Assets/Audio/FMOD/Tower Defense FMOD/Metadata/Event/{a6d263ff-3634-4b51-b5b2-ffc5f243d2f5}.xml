@@ -5,7 +5,7 @@
 			<value>EnemyAttack</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{d5280d6c-58cc-46ee-b9c4-6a5d3d6e4b7c}">
 		<relationship name="effects">
 			<destination>{0c23ff2b-56b4-4721-b017-e8df334029b3}</destination>
+			<destination>{cb19ac20-d01c-4d7a-ad72-3f1b3d0e455b}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{f2f1bd47-40c8-43a5-839f-9d35eb43baed}" />
@@ -113,6 +114,17 @@
 	</object>
 	<object class="MixerBusFader" id="{e17c04be-c707-4601-b640-d340c1b8a172}" />
 	<object class="MixerBusFader" id="{0c23ff2b-56b4-4721-b017-e8df334029b3}" />
+	<object class="SpatialiserEffect" id="{cb19ac20-d01c-4d7a-ad72-3f1b3d0e455b}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 	<object class="SingleSound" id="{d04f8415-adf1-4373-af43-55ece5634692}">
 		<relationship name="audioFile">
 			<destination>{4fbff1b6-ed95-49a2-983b-d0ddcf06a869}</destination>

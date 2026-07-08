@@ -5,7 +5,7 @@
 			<value>RangedShot</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{3249b328-76bd-4af7-86f1-358c70bff9c6}">
 		<property name="volume">
-			<value>-14</value>
+			<value>-16.5</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{85c21452-4b47-4aae-b64e-3e9f35c1dbd9}</destination>
@@ -100,6 +100,7 @@
 		<relationship name="effects">
 			<destination>{4b84ce1c-a28a-4bba-8cbb-4de04aa6289d}</destination>
 			<destination>{3b8c6bd8-6567-49cc-8f8e-2bf3ec9c6701}</destination>
+			<destination>{0a4b5551-cde0-48a7-8f95-3a06cf864d70}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{9111003d-068e-4024-8f8a-ae962aed98ed}" />
@@ -119,6 +120,17 @@
 		</property>
 		<property name="mix">
 			<value>56</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{0a4b5551-cde0-48a7-8f95-3a06cf864d70}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 </objects>

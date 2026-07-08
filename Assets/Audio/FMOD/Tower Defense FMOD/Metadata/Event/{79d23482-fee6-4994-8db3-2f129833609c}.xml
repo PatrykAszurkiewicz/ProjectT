@@ -5,7 +5,7 @@
 			<value>MeleeSwingHit</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -100,6 +100,7 @@
 		<relationship name="effects">
 			<destination>{1c57c8cd-e8d5-4362-bd25-b3888c7de929}</destination>
 			<destination>{083825b9-b275-418c-bf31-f8c49c6b5dbf}</destination>
+			<destination>{dfb87677-c078-4e06-98dc-7442595590b7}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{49e6962c-9864-4825-b421-998c0f0251c6}" />
@@ -119,6 +120,17 @@
 	<object class="ThreeEQEffect" id="{083825b9-b275-418c-bf31-f8c49c6b5dbf}">
 		<property name="lowGain">
 			<value>10</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{dfb87677-c078-4e06-98dc-7442595590b7}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 </objects>

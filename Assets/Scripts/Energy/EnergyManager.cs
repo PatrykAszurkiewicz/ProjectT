@@ -26,14 +26,16 @@ public class EnergyManager : MonoBehaviour
             if (isApplicationQuitting) return null;
 
             if (instance == null)
-            {
                 instance = FindFirstObjectByType<EnergyManager>();
-                if (instance == null)
-                {
-                    var go = new GameObject("EnergyManager");
-                    instance = go.AddComponent<EnergyManager>();
-                }
-            }
+
+            // Deliberately does NOT lazily spawn a new EnergyManager. The manager
+            // always lives in the gameplay scene. Auto-creating one here meant a
+            // consumer touching EnergyManager.Instance from its OnDestroy DURING a
+            // scene reload would spawn a doomed "EnergyManager" GameObject into the
+            // closing scene ("Some objects were not cleaned up… EnergyManager"),
+            // which then fought the real instance on the next scene and
+            // black-screened the run. Returning null here is safe: every call site
+            // already null-checks via EnergyManager.Instance?.
             return instance;
         }
     }
@@ -240,7 +242,40 @@ public class EnergyManager : MonoBehaviour
     void UpdateManager()
     {
         HandleSupplyInput();
-        supplyBeam?.Update(isSupplying, currentSupplyTarget, player);
+
+        // Legacy single-supplier energy transfer. The per-player supply path
+        // (PlayerTowerPlacer) does NOT use this — it drives SupplyTickForPlayer with
+        // its own accumulator and its own beam. This block only runs for the legacy
+        // singleton supply, reachable when onlyAllowRepairInPlacementMode == false
+        // (free-supply mode). With the default (true) plus per-player supply,
+        // isSupplying stays false here, so this is a no-op and there is no double
+        // supply. (Previously this transfer was a side-effect inside the beam's
+        // Update; it now lives here so the beam can be a pure, reusable visual.)
+        if (isSupplying && currentSupplyTarget != null)
+        {
+            bool inPlacement = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+            if (inPlacement) SupplyEnergyToTarget(currentSupplyTarget, 0f);
+            else SupplyEnergyToTarget(currentSupplyTarget, supplyRate * Time.deltaTime);
+        }
+
+        // Co-op: the singleton beam must originate from whoever is ACTUALLY supplying,
+        // not the globally-tagged player. Resolve to the alive player nearest the
+        // target. Single player resolves back to the tagged player (unchanged).
+        GameObject supplier = isSupplying ? ResolveSupplyingPlayer(currentSupplyTarget) : player;
+        supplyBeam?.Update(isSupplying, currentSupplyTarget, supplier);
+    }
+
+    // The player that should own the supply beam for `target`: the nearest alive
+    // player to the target. Mirrors the PlayerRegistry.NearestAlive convention used
+    // by TowerSlot. Falls back to the tagged player in single player / empty registry.
+    private GameObject ResolveSupplyingPlayer(IEnergyConsumer target)
+    {
+        if (target != null && PlayerRegistry.Count > 0 && PlayerRegistry.Instance != null)
+        {
+            var near = PlayerRegistry.Instance.NearestAlive(target.GetPosition(), Mathf.Infinity, true);
+            if (near != null) return near.gameObject;
+        }
+        return player;
     }
     void HandleSupplyInput()
     {
@@ -248,19 +283,23 @@ public class EnergyManager : MonoBehaviour
 
         // Check if we're in placement mode
         bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+
+        // Placement-mode supply is owned ENTIRELY by the per-player path
+        // (PlayerTowerPlacer): each player supplies via their own Build action, aim
+        // and beam. The legacy singleton must never engage in placement mode, so it
+        // can't double-supply or draw a second beam. This holds regardless of
+        // onlyAllowRepairInPlacementMode.
+        if (inPlacementMode)
+        {
+            StopSupplying();
+            return;
+        }
+
         if (onlyAllowRepairInPlacementMode)
         {
-            if (inPlacementMode)
-            {
-                // TowerPlacementManager handles all input during placement mode. EnergyManager should not interfere
-                return;
-            }
-            else
-            {
-                // NOT in placement mode AND onlyAllowRepairInPlacementMode is true -> NO supply should happen
-                StopSupplying();
-                return;
-            }
+            // NOT in placement mode AND onlyAllowRepairInPlacementMode is true -> NO supply should happen
+            StopSupplying();
+            return;
         }
 
         // Check for input
@@ -865,6 +904,81 @@ public class EnergyManager : MonoBehaviour
         }
     }
 
+    // ----- Per-player supply API (co-op) ------------------------------------------
+    // These let each player run its OWN supply session concurrently without the
+    // single-supplier state (currentSupplyTarget / accumulatedPlayerEnergyCost) that
+    // the legacy mouse path relies on. The wallet stays shared.
+
+    /// <summary>Nearest suppliable consumer to an aim point (within maxSupplyDistance),
+    /// skipping a destroyed core. Public wrapper over the internal targeting.</summary>
+    public IEnergyConsumer FindSupplyTarget(Vector3 aimPosition) => GetSupplyTarget(aimPosition);
+
+    /// <summary>Is <paramref name="target"/> within supplyRange of an arbitrary world
+    /// position (a specific player), rather than the single tagged player?</summary>
+    public bool IsWithinSupplyRange(Vector3 fromPosition, IEnergyConsumer target)
+    {
+        if (target == null) return false;
+        return Vector3.Distance(fromPosition, target.GetPosition()) <= supplyRange;
+    }
+
+    /// <summary>
+    /// One frame of supply from a single player to a single target, using a
+    /// PER-PLAYER cost accumulator (passed by ref) so two players supplying at once
+    /// don't share state. Spends from the shared wallet; matches the rate/cost of the
+    /// legacy ProcessContinuousSupply (continuousSupplyRate / continuousSupplyCost).
+    /// </summary>
+    public void SupplyTickForPlayer(IEnergyConsumer target, ref float accumulatedCost)
+    {
+        if (target == null) return;
+        if (target is CentralCore core && core.IsDestroyed()) return;
+
+        // Full towers don't accept more (the core always does).
+        if (target.GetEnergyPercentage() >= 1f && !(target is CentralCore)) return;
+
+        float dt = Mathf.Min(Time.deltaTime, minSupplyInterval * 2f);
+        if (dt <= 0f) return;
+
+        float energyToGive = continuousSupplyRate * dt;
+        accumulatedCost += continuousSupplyCost * dt;
+        int toSpend = Mathf.FloorToInt(accumulatedCost);
+
+        // Don't overshoot the target's max (and don't charge for energy that wouldn't land).
+        energyToGive = Mathf.Min(energyToGive, target.GetMaxEnergy() - target.GetEnergy());
+        if (energyToGive <= 0f) return;
+
+        if (toSpend > 0)
+        {
+            if (currentPlayerEnergy < toSpend) { OnInsufficientPlayerEnergy?.Invoke(); return; }
+            if (TrySpendPlayerEnergy(toSpend))
+            {
+                accumulatedCost -= toSpend;
+                target.SupplyEnergy(energyToGive);
+            }
+        }
+        else
+        {
+            // Sub-integer cost still accruing — transfer the smooth amount for free this frame.
+            target.SupplyEnergy(energyToGive);
+        }
+    }
+
+    /// <summary>Create a per-player supply beam owned by the caller (visual only).</summary>
+    public SupplyBeamController CreateSupplyBeam()
+    {
+        EnsureSupplyBeamInitialized();
+        return new SupplyBeamController(this);
+    }
+
+    // "Is ANY player currently supplying?" — drives the shared repair sound now that
+    // supply is per-player. Suppliers register/unregister themselves here.
+    private readonly HashSet<object> _activeSuppliers = new HashSet<object>();
+    public bool AnyoneSupplying => _activeSuppliers.Count > 0;
+    public void SetSupplierActive(object supplier, bool active)
+    {
+        if (supplier == null) return;
+        if (active) _activeSuppliers.Add(supplier);
+        else _activeSuppliers.Remove(supplier);
+    }
 
     #endregion
 
@@ -1164,28 +1278,42 @@ public class EnergyManager : MonoBehaviour
 public class SupplyBeamController
 {
     private readonly EnergyManager energyManager;
-    private LineRenderer supplyBeam;
-    private LineRenderer glowBeam; // Additional glow effect
-    private GameObject supplyBeamContainer;
 
-    // Visual feedback fields
-    private float beamIntensity = 1f;
-    private float glowIntensity = 0.5f;
-    private bool isContinuousMode = false;
-    private float flowAnimationTime = 0f;
-    private float pulseAnimationTime = 0f;
+    // Two-layer ribbon: a soft core line + a wide, faint additive halo behind it.
+    private LineRenderer beam;
+    private LineRenderer glow;
+    private GameObject container;
 
-    private bool isInitialized = false;
-    private bool isDestroyed = false;
+    // --- Subtlety tuning (kept private so the look can't be cranked back into the
+    //     old strobing beam from the inspector) -------------------------------------
+    private const int Segments = 20;     // points along the ribbon (smooth curve)
+    private const float WobbleAmplitude = 0.06f;  // gentle lateral sway, world units
+    private const float WobbleWaves = 2.2f;   // sine waves along the length
+    private const float Sag = 0.10f;  // small downward droop at mid-span
+    private const float BreatheAmount = 0.10f;  // +/-10% width breathing
+    private const float FlowSoftness = 0.20f;  // half-width of the travelling pulse band
+    private const float CoreWidthScale = 0.6f;   // core thinner than the configured width
+    private const float GlowWidthScale = 2.2f;   // halo wider than the core
+    private const float StartYOffset = 0.10f;  // lift the beam slightly off the player
+    private const float EndYOffset = 0.20f;  // meet the structure a touch above centre
+    private const float MaxCoreAlpha = 0.55f;  // never let the core go fully opaque
+    private const float BaselineAlpha = 0.45f;  // dim level between flowing pulses
+
+    private float flowT;   // 0..1 travelling-pulse position (player -> target)
+    private float pulseT;  // width-breathing phase
+
+    private bool isInitialized;
+    private bool isDestroyed;
+
+    private readonly Vector3[] points = new Vector3[Segments];
 
     public SupplyBeamController(EnergyManager manager)
     {
         energyManager = manager;
         try
         {
-            SetupSupplyBeam();
+            Setup();
             isInitialized = true;
-            //Debug.Log("[SupplyBeamController] Successfully initialized");
         }
         catch (System.Exception e)
         {
@@ -1197,88 +1325,50 @@ public class SupplyBeamController
     public bool IsValid()
     {
         if (isDestroyed || !isInitialized) return false;
-
-        try
-        {
-            // Check if core components are still valid
-            return supplyBeamContainer != null &&
-                   supplyBeam != null &&
-                   energyManager != null;
-        }
-        catch (System.Exception)
-        {
-            return false;
-        }
+        try { return container != null && beam != null && energyManager != null; }
+        catch (System.Exception) { return false; }
     }
 
-    void SetupSupplyBeam()
+    void Setup()
     {
-        if (energyManager == null)
-        {
-            throw new System.Exception("EnergyManager is null");
-        }
+        if (energyManager == null) throw new System.Exception("EnergyManager is null");
 
-        supplyBeamContainer = new GameObject("SupplyBeamContainer");
-        supplyBeamContainer.transform.SetParent(energyManager.transform);
+        container = new GameObject("SupplyBeamContainer");
+        container.transform.SetParent(energyManager.transform);
 
-        // Main beam
-        supplyBeam = supplyBeamContainer.AddComponent<LineRenderer>();
-        ConfigureMainBeam();
+        float w = Mathf.Max(0.01f, energyManager.supplyBeamWidth);
 
-        // Glow effect beam (if enabled)
+        beam = MakeLine("SupplyBeam", w * CoreWidthScale, 105, additive: false);
+
         if (energyManager.enableBeamGlow)
-        {
-            SetupGlowBeam();
-        }
-
-        //Debug.Log("[SupplyBeamController] SetupSupplyBeam completed successfully");
+            glow = MakeLine("BeamGlow", w * GlowWidthScale, 100, additive: true);
     }
 
-    void ConfigureMainBeam()
+    LineRenderer MakeLine(string childName, float width, int order, bool additive)
     {
-        if (supplyBeam == null)
-        {
-            throw new System.Exception("Supply beam LineRenderer is null");
-        }
+        var go = new GameObject(childName);
+        go.transform.SetParent(container.transform, false);
 
-        supplyBeam.material = CreateBeamMaterial();
-        supplyBeam.startWidth = energyManager.supplyBeamWidth;
-        supplyBeam.endWidth = energyManager.supplyBeamWidth * 0.6f; // Slight taper
-        supplyBeam.positionCount = 2;
-        supplyBeam.useWorldSpace = true;
-        supplyBeam.sortingOrder = 105;
-        supplyBeam.enabled = false;
-
-        supplyBeam.numCapVertices = 10;
-        supplyBeam.numCornerVertices = 10;
-        supplyBeam.useWorldSpace = true;
-
-        SetupEnhancedGradient();
-    }
-
-    void SetupGlowBeam()
-    {
-        GameObject glowObject = new GameObject("BeamGlow");
-        glowObject.transform.SetParent(supplyBeamContainer.transform);
-
-        glowBeam = glowObject.AddComponent<LineRenderer>();
-        glowBeam.material = CreateGlowMaterial();
-        glowBeam.startWidth = energyManager.supplyBeamWidth * 3f;
-        glowBeam.endWidth = energyManager.supplyBeamWidth * 2.5f;
-        glowBeam.positionCount = 2;
-        glowBeam.useWorldSpace = true;
-        glowBeam.sortingOrder = 100; // Behind main beam
-        glowBeam.enabled = false;
-        glowBeam.numCapVertices = 15;
-        glowBeam.numCornerVertices = 15;
-
-        SetupGlowGradient();
+        var lr = go.AddComponent<LineRenderer>();
+        lr.material = additive ? CreateGlowMaterial() : CreateBeamMaterial();
+        lr.positionCount = Segments;
+        lr.useWorldSpace = true;
+        lr.numCapVertices = 6;
+        lr.numCornerVertices = 4;
+        lr.alignment = LineAlignment.View;
+        lr.textureMode = LineTextureMode.Stretch;
+        lr.startWidth = width;
+        lr.endWidth = width;
+        lr.sortingOrder = order;
+        lr.receiveShadows = false;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lr.enabled = false;
+        return lr;
     }
 
     Material CreateBeamMaterial()
     {
         Material mat = new Material(Shader.Find("Sprites/Default"));
-        // Enable blending for transparency
         mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
         mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         mat.SetInt("_ZWrite", 0);
@@ -1286,98 +1376,63 @@ public class SupplyBeamController
         mat.DisableKeyword("_ALPHABLEND_ON");
         mat.EnableKeyword("_ALPHAPREMULTIPLY_ON");
         mat.renderQueue = 3000;
-
         return mat;
     }
 
     Material CreateGlowMaterial()
     {
         Material mat = new Material(Shader.Find("Sprites/Default"));
-        // Additive blending for glow effect
+        // Additive so the halo reads as light, not paint.
         mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
         mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
         mat.SetInt("_ZWrite", 0);
         mat.renderQueue = 3000;
-
         return mat;
-    }
-
-    void SetupEnhancedGradient()
-    {
-        if (supplyBeam == null) return;
-
-        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
-        Color baseColor = inPlacementMode ? energyManager.repairBeamColor : energyManager.supplyBeamColor;
-        var gradient = new Gradient();
-        GradientColorKey[] colorKeys = new GradientColorKey[4];
-        colorKeys[0] = new GradientColorKey(baseColor, 0f);
-        colorKeys[1] = new GradientColorKey(Color.Lerp(baseColor, Color.white, 0.3f), 0.3f);
-        colorKeys[2] = new GradientColorKey(Color.Lerp(baseColor, Color.white, 0.5f), 0.7f);
-        colorKeys[3] = new GradientColorKey(baseColor, 1f);
-
-        GradientAlphaKey[] alphaKeys = new GradientAlphaKey[4];
-        alphaKeys[0] = new GradientAlphaKey(baseColor.a * 0.8f, 0f);
-        alphaKeys[1] = new GradientAlphaKey(baseColor.a, 0.2f);
-        alphaKeys[2] = new GradientAlphaKey(baseColor.a, 0.8f);
-        alphaKeys[3] = new GradientAlphaKey(baseColor.a * 0.6f, 1f);
-
-        gradient.SetKeys(colorKeys, alphaKeys);
-        supplyBeam.colorGradient = gradient;
-    }
-
-    void SetupGlowGradient()
-    {
-        if (glowBeam == null) return;
-
-        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
-        Color glowColor = inPlacementMode ?
-            Color.Lerp(energyManager.repairBeamColor, energyManager.beamGlowColor, 0.5f) :
-            energyManager.beamGlowColor;
-
-        var gradient = new Gradient();
-        gradient.SetKeys(
-            new GradientColorKey[] {
-                new GradientColorKey(glowColor, 0f),
-                new GradientColorKey(glowColor, 1f)
-            },
-            new GradientAlphaKey[] {
-                new GradientAlphaKey(0f, 0f),
-                new GradientAlphaKey(glowColor.a * glowIntensity, 0.5f),
-                new GradientAlphaKey(0f, 1f)
-            }
-        );
-        glowBeam.colorGradient = gradient;
     }
 
     public void Update(bool isSupplying, IEnergyConsumer target, GameObject player)
     {
-        if (!IsValid())
-        {
-            Debug.LogWarning("[SupplyBeamController] Update called on invalid controller");
-            return;
-        }
+        if (!IsValid()) return;
 
         try
         {
             if (!isSupplying || target == null || player == null)
             {
                 SetEnabled(false);
-                isContinuousMode = false;
                 return;
             }
 
-            UpdateBeamPositions(player, target);
-            SupplyEnergy(target);
+            if (!beam.enabled) SetEnabled(true);
 
-            // Update animation timers
-            flowAnimationTime += Time.deltaTime * energyManager.beamFlowSpeed;
-            pulseAnimationTime += Time.deltaTime * energyManager.beamPulseSpeed;
+            // Pure visual now — energy transfer is driven by the caller
+            // (UpdateManager for the legacy singleton, PlayerTowerPlacer for each
+            // per-player beam). This lets one controller instance be owned per player
+            // with no shared-state conflicts.
+            bool repair = TowerPlacementManager.Instance != null &&
+                          TowerPlacementManager.Instance.IsInPlacementMode();
 
-            // Detect continuous mode
-            bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
-            isContinuousMode = inPlacementMode && energyManager.isContinuouslySupplying;
+            // Anchor points. `player` is the supplier this beam belongs to, so the
+            // beam always starts at the RIGHT player (co-op safe).
+            Vector3 a = player.transform.position + Vector3.up * StartYOffset;
+            Vector3 b = target.GetPosition() + Vector3.up * EndYOffset;
 
-            UpdateEnhancedVisualEffects();
+            // Advance animation phases (scaled down for a calm, subtle feel).
+            flowT = (flowT + Time.deltaTime * Mathf.Max(0.1f, energyManager.beamFlowSpeed) * 0.12f) % 1f;
+            pulseT += Time.deltaTime * Mathf.Max(0.1f, energyManager.beamPulseSpeed);
+            float breathe = 0.5f * (Mathf.Sin(pulseT) + 1f); // 0..1
+
+            BuildCurve(a, b);
+            beam.SetPositions(points);
+            if (glow != null) glow.SetPositions(points);
+
+            // Subtle width breathing around the configured width.
+            float baseW = Mathf.Max(0.01f, energyManager.supplyBeamWidth);
+            float wMul = 1f + (breathe - 0.5f) * 2f * BreatheAmount;
+            beam.startWidth = beam.endWidth = baseW * CoreWidthScale * wMul;
+            if (glow != null) glow.startWidth = glow.endWidth = baseW * GlowWidthScale * wMul;
+
+            ApplyColors(repair, breathe);
+            ApplySort(a, b);
         }
         catch (System.Exception e)
         {
@@ -1385,199 +1440,122 @@ public class SupplyBeamController
         }
     }
 
-    void UpdateBeamPositions(GameObject player, IEnergyConsumer target)
+    // Fills `points` with a softly-curved ribbon: a low-amplitude travelling sine
+    // sway plus a small mid-span droop, both tapered to zero at the endpoints so the
+    // ends stay pinned exactly to the player and the structure.
+    void BuildCurve(Vector3 a, Vector3 b)
     {
-        if (supplyBeam == null) return;
+        Vector3 dir = b - a;
+        float len = dir.magnitude;
 
-        try
+        if (len < 1e-4f)
         {
-            Vector3 startPos = player.transform.position;
-            Vector3 endPos = target.GetPosition();
-
-            supplyBeam.SetPosition(0, startPos);
-            supplyBeam.SetPosition(1, endPos);
-
-            if (glowBeam != null)
-            {
-                glowBeam.SetPosition(0, startPos);
-                glowBeam.SetPosition(1, endPos);
-            }
-
-            // Y-sort the beam so it draws above cartoon grass / fog.
-            // Same formula as PlayerMovement / YSortEntity / GrassCartoonOverlay:
-            //     order = sortOrderBase + round(-(y + offset) * sortPrecision)
-            // Use the LOWER of the two endpoints (foreground anchor — the one in front),
-            // then add a small bias so the beam draws on top of the foreground sprite.
-            float startSortY = startPos.y + energyManager.beamSortYOffset;
-            float endSortY = endPos.y + energyManager.beamSortYOffset;
-            int startOrder = energyManager.beamSortOrderBase + Mathf.RoundToInt(-startSortY * energyManager.beamSortPrecision);
-            int endOrder = energyManager.beamSortOrderBase + Mathf.RoundToInt(-endSortY * energyManager.beamSortPrecision);
-            int foregroundOrder = Mathf.Max(startOrder, endOrder); // lower world-Y = larger order = foreground
-            supplyBeam.sortingOrder = foregroundOrder + energyManager.beamSortBias;
-            if (glowBeam != null)
-                glowBeam.sortingOrder = foregroundOrder + energyManager.beamSortBias - 1; // glow one step behind main beam
+            for (int i = 0; i < Segments; i++) points[i] = a;
+            return;
         }
-        catch (System.Exception e)
+
+        Vector3 fwd = dir / len;
+        Vector3 perp = new Vector3(-fwd.y, fwd.x, 0f);
+        float t = flowT * Mathf.PI * 2f;
+
+        for (int i = 0; i < Segments; i++)
         {
-            Debug.LogWarning($"[SupplyBeamController] Failed to update beam positions: {e.Message}");
+            float u = (Segments == 1) ? 0f : (float)i / (Segments - 1);
+            float taper = Mathf.Sin(u * Mathf.PI);                 // 0 at ends, 1 mid
+            float wob = Mathf.Sin(u * Mathf.PI * WobbleWaves * 2f - t) * WobbleAmplitude * taper;
+
+            Vector3 p = Vector3.Lerp(a, b, u) + perp * wob;
+            p.y -= Sag * taper;                                    // gentle droop
+            p.z = 0f;
+            points[i] = p;
         }
     }
 
-    void SupplyEnergy(IEnergyConsumer target)
+    // Soft, low-alpha gradient with a single bright band that travels from the player
+    // end to the structure end — reads as energy gently flowing IN (healing), not a
+    // strobing laser. The glow stays a steady faint halo.
+    void ApplyColors(bool repair, float breathe)
     {
-        bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
+        Color baseColor = repair ? energyManager.repairBeamColor : energyManager.supplyBeamColor;
+        float a = baseColor.a;
 
-        if (inPlacementMode)
+        float dim = BaselineAlpha * a;
+        float peak = Mathf.Min(MaxCoreAlpha, a * (0.85f + 0.15f * breathe));
+
+        var colorKeys = new GradientColorKey[]
         {
-            energyManager.SupplyEnergyToTarget(target, 0);
-        }
-        else
+            new GradientColorKey(baseColor, 0f),
+            new GradientColorKey(Color.Lerp(baseColor, Color.white, 0.35f), 0.5f),
+            new GradientColorKey(baseColor, 1f),
+        };
+
+        // Travelling alpha pulse centred on flowT, tapering to the dim baseline.
+        var ak = new System.Collections.Generic.List<GradientAlphaKey>(6)
         {
-            float energyToSupply = energyManager.supplyRate * Time.deltaTime;
-            energyManager.SupplyEnergyToTarget(target, energyToSupply);
-        }
-    }
+            new GradientAlphaKey(dim, 0f),
+        };
+        float c = Mathf.Clamp01(flowT);
+        float l = c - FlowSoftness;
+        float r = c + FlowSoftness;
+        if (l > 0f && l < 1f) ak.Add(new GradientAlphaKey(dim, l));
+        ak.Add(new GradientAlphaKey(peak, c));
+        if (r > 0f && r < 1f) ak.Add(new GradientAlphaKey(dim, r));
+        ak.Add(new GradientAlphaKey(dim, 1f));
+        ak.Sort((x, y) => x.time.CompareTo(y.time));
+        while (ak.Count > 8) ak.RemoveAt(ak.Count - 1);
 
-    void UpdateEnhancedVisualEffects()
-    {
-        if (!IsValid()) return;
+        var g = new Gradient();
+        g.SetKeys(colorKeys, ak.ToArray());
+        beam.colorGradient = g;
 
-        try
+        if (glow != null)
         {
-            bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
-            Color baseColor = inPlacementMode ? energyManager.repairBeamColor : energyManager.supplyBeamColor;
+            Color glowColor = repair
+                ? Color.Lerp(energyManager.repairBeamColor, energyManager.beamGlowColor, 0.5f)
+                : energyManager.beamGlowColor;
+            float ga = glowColor.a * (0.35f + 0.15f * breathe);
 
-            float rawPulse = Mathf.Sin(pulseAnimationTime);
-            float pulseValue = (rawPulse + 1f) * 0.5f; // 0 to 1
-
-            if (isContinuousMode)
-            {
-                beamIntensity = Mathf.Lerp(0.1f, 2.5f, pulseValue);
-                glowIntensity = Mathf.Lerp(0.1f, 2.0f, pulseValue);
-
-                float widthMultiplier = Mathf.Lerp(0.5f, 3.0f, pulseValue);
-                supplyBeam.startWidth = energyManager.supplyBeamWidth * widthMultiplier;
-                supplyBeam.endWidth = energyManager.supplyBeamWidth * widthMultiplier * 0.8f;
-            }
-            else
-            {
-                beamIntensity = Mathf.Lerp(0.05f, 3.0f, pulseValue);
-                glowIntensity = Mathf.Lerp(0.05f, 2.5f, pulseValue);
-
-                float widthMultiplier = Mathf.Lerp(0.3f, 4.0f, pulseValue);
-                supplyBeam.startWidth = energyManager.supplyBeamWidth * widthMultiplier;
-                supplyBeam.endWidth = energyManager.supplyBeamWidth * widthMultiplier * 0.7f;
-            }
-
-            UpdateDramaticFlowGradient(baseColor);
-
-            // Update glow effect
-            if (glowBeam != null)
-            {
-                UpdateDramaticGlowEffect();
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning($"[SupplyBeamController] Visual effects update error: {e.Message}");
-        }
-    }
-
-    void UpdateDramaticGlowEffect()
-    {
-        if (glowBeam == null) return;
-
-        try
-        {
-            bool inPlacementMode = TowerPlacementManager.Instance != null && TowerPlacementManager.Instance.IsInPlacementMode();
-            Color glowColor = inPlacementMode ?
-                Color.Lerp(energyManager.repairBeamColor, energyManager.beamGlowColor, 0.5f) :
-                energyManager.beamGlowColor;
-
-            var gradient = new Gradient();
-            float currentGlowAlpha = glowColor.a * glowIntensity;
-
-            gradient.SetKeys(
-                new GradientColorKey[] {
-                new GradientColorKey(glowColor, 0f),
-                new GradientColorKey(glowColor, 1f)
+            var gg = new Gradient();
+            gg.SetKeys(
+                new GradientColorKey[]
+                {
+                    new GradientColorKey(glowColor, 0f),
+                    new GradientColorKey(glowColor, 1f),
                 },
-                new GradientAlphaKey[] {
-                new GradientAlphaKey(0f, 0f),
-                new GradientAlphaKey(currentGlowAlpha * 0.2f, 0.2f),
-                new GradientAlphaKey(currentGlowAlpha * 2.0f, 0.5f),
-                new GradientAlphaKey(currentGlowAlpha * 0.2f, 0.8f),
-                new GradientAlphaKey(0f, 1f)
-                }
-            );
-            glowBeam.colorGradient = gradient;
-
-            float rawPulse = Mathf.Sin(pulseAnimationTime * 1.5f);
-            float glowPulse = (rawPulse + 1f) * 0.5f; // 0 to 1
-            float glowWidthMultiplier = Mathf.Lerp(0.2f, 5.0f, glowPulse);
-
-            glowBeam.startWidth = energyManager.supplyBeamWidth * 3f * glowWidthMultiplier;
-            glowBeam.endWidth = energyManager.supplyBeamWidth * 2.5f * glowWidthMultiplier;
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning($"[SupplyBeamController] Glow effect update error: {e.Message}");
+                new GradientAlphaKey[]
+                {
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey(ga, 0.5f),
+                    new GradientAlphaKey(0f, 1f),
+                });
+            glow.colorGradient = gg;
         }
     }
 
-    void UpdateDramaticFlowGradient(Color baseColor)
+    void ApplySort(Vector3 a, Vector3 b)
     {
-        if (supplyBeam == null) return;
-
-        try
-        {
-            var gradient = new Gradient();
-            float baseAlpha = baseColor.a * beamIntensity;
-
-            gradient.SetKeys(
-                new GradientColorKey[] {
-                new GradientColorKey(baseColor, 0f),
-                new GradientColorKey(Color.Lerp(baseColor, Color.white, 0.8f), 0.5f),
-                new GradientColorKey(baseColor, 1f)
-                },
-                new GradientAlphaKey[] {
-                new GradientAlphaKey(baseAlpha * 0.1f, 0f),
-                new GradientAlphaKey(baseAlpha * 1.5f, 0.5f),
-                new GradientAlphaKey(baseAlpha * 0.1f, 1f)
-                }
-            );
-
-            supplyBeam.colorGradient = gradient;
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning($"[SupplyBeamController] Flow gradient update error: {e.Message}");
-        }
+        // Same y-sort convention as PlayerMovement / GrassCartoonOverlay. Anchor to the
+        // foreground (lower-Y) endpoint, then nudge in front by beamSortBias.
+        float startSortY = a.y + energyManager.beamSortYOffset;
+        float endSortY = b.y + energyManager.beamSortYOffset;
+        int startOrder = energyManager.beamSortOrderBase + Mathf.RoundToInt(-startSortY * energyManager.beamSortPrecision);
+        int endOrder = energyManager.beamSortOrderBase + Mathf.RoundToInt(-endSortY * energyManager.beamSortPrecision);
+        int foreground = Mathf.Max(startOrder, endOrder);
+        beam.sortingOrder = foreground + energyManager.beamSortBias;
+        if (glow != null) glow.sortingOrder = foreground + energyManager.beamSortBias - 1;
     }
 
     public void SetEnabled(bool enabled)
     {
         if (!IsValid()) return;
-
         try
         {
-            if (supplyBeam != null)
-            {
-                supplyBeam.enabled = enabled;
-            }
-
-            if (glowBeam != null)
-            {
-                glowBeam.enabled = enabled;
-            }
-
+            if (beam != null) beam.enabled = enabled;
+            if (glow != null) glow.enabled = enabled;
             if (!enabled)
             {
-                isContinuousMode = false;
-                beamIntensity = 1f;
-                glowIntensity = 0.5f;
-                flowAnimationTime = 0f;
-                pulseAnimationTime = 0f;
+                flowT = 0f;
+                pulseT = 0f;
             }
         }
         catch (System.Exception e)
@@ -1591,17 +1569,13 @@ public class SupplyBeamController
         try
         {
             isDestroyed = true;
-
-            if (supplyBeamContainer != null)
+            if (container != null)
             {
-                Object.DestroyImmediate(supplyBeamContainer);
-                supplyBeamContainer = null;
+                Object.DestroyImmediate(container);
+                container = null;
             }
-
-            supplyBeam = null;
-            glowBeam = null;
-
-            //Debug.Log("[SupplyBeamController] Cleanup completed successfully");
+            beam = null;
+            glow = null;
         }
         catch (System.Exception e)
         {

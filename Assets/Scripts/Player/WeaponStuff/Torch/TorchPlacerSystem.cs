@@ -76,6 +76,13 @@ public class TorchPlacerSystem
             flickerSpeed: data.torchFlickerSpeed,
             flickerAmount: data.torchFlickerAmount,
             maxActive: maxPlaced);
+
+        // Placement SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.torchSetup.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.torchSetup, spawnPos);
+        }
     }
 
     private void TryRegisterPlayerLight()

@@ -87,6 +87,13 @@ public class MortController : MonoBehaviour
         GameObject shellObj = Instantiate(
             mortarPrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
 
+        // Launch SFX (enemy Mort). Mirrors the player mortar's shot sound.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.mortarShot.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.mortarShot, spawn);
+        }
+
         var shell = shellObj.GetComponent<MortarProjectile>();
         if (shell != null)
         {

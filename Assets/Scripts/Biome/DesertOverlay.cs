@@ -152,7 +152,11 @@ public class DesertOverlay : MonoBehaviour
 
     [Header("Sorting")]
     public string sortingLayerName = "Default";
-    public int sortingOrder = -1;
+    // Base order for the desert ground decals. Must be > the background's order (-1)
+    // or the meshes tie with the background and the camera's Y-axis transparency sort
+    // shows them only in a central square. 0 sits just above the background and below
+    // tower slots (1)/paths (500)/units (500+). Sub-layers add +1/+2/+3 on top of this.
+    public int sortingOrder = 0;
 
 
 
@@ -254,11 +258,20 @@ public class DesertOverlay : MonoBehaviour
     private Vector2 windDir, windPerp;
 
 
-    void Start() => GenerateDesert();
+    private bool _generated;
+
+    void Start()
+    {
+        // BiomeManager calls GenerateDesert() right after AddComponent; Unity then
+        // fires Start() a frame later. Without this guard we build and immediately
+        // discard the entire desert mesh set twice per biome.
+        if (!_generated) GenerateDesert();
+    }
 
     [ContextMenu("Regenerate Desert")]
     public void GenerateDesert()
     {
+        _generated = true;
         Cleanup();
 
         float rad = windAngle * Mathf.Deg2Rad;
@@ -1621,3 +1634,4 @@ public class DesertOverlay : MonoBehaviour
         T[] r = new T[len]; System.Array.Copy(src, r, len); return r;
     }
 }
+

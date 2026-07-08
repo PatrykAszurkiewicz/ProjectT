@@ -122,6 +122,13 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isHammer")] public float hammerShakeJolt = 0.42f;
     [ConditionalField("isHammer")] public float hammerShakeRumble = 0.16f;
     [ConditionalField("isHammer")] public float hammerShakeRumbleDuration = 0.55f;
+    // Starts the HammerHit SFX this many seconds BEFORE the visual ground
+    // contact, so an event with baked-in lead-in (leading silence / slow attack
+    // before the impact transient) still lands its hit on-beat. 0 = fire exactly
+    // at impact. If the sound feels late, set this to roughly the event's
+    // pre-transient time (a good starting point is ~0.25–0.35). Clamped to the
+    // swing so it can never fire before the swing begins.
+    [ConditionalField("isHammer")] public float hammerHitSfxLead = 0f;
 
     [Header("Battle Hammer — Visuals")]
     // Dusty warm impact tint and dark earth tone for cracks/debris.

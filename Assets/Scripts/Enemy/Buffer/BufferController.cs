@@ -256,8 +256,9 @@ public class BufferController : MonoBehaviour
         fog.Configure(
             radius: fogRadius,
             duration: fogDuration,
-            damageBuff: fogDamageBuff,
-            playerDamagePerSecond: fogPlayerDamagePerSecond,
+            damageBuff: fogDamageBuff,   // multiplier on allies' already-scaled damage — not scaled here
+                                         // Nightmare's +30% reaches the fog's direct player damage too, matching melee.
+            playerDamagePerSecond: fogPlayerDamagePerSecond * EnemyStatModifierManager.DifficultyDamageMultiplier,
             attacker: this.gameObject);
 
         visual.Configure(
@@ -279,4 +280,3 @@ public class BufferController : MonoBehaviour
     }
 #endif
 }
-

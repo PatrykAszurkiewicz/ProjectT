@@ -5,7 +5,7 @@
 			<value>TowerMeleeHit</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{c055ff68-2013-4889-b3c8-ce9569472e62}">
 		<relationship name="effects">
 			<destination>{507025c9-e02d-4e17-9252-64406e34be21}</destination>
+			<destination>{352a07c2-f181-4107-ab2a-2c031031b0e9}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{128ee7b6-1ccc-49e4-b1cb-e80c47f507c6}" />
@@ -115,6 +116,17 @@
 	</object>
 	<object class="MixerBusFader" id="{351ecec2-78e5-45f4-b698-c70e70fe6fff}" />
 	<object class="MixerBusFader" id="{507025c9-e02d-4e17-9252-64406e34be21}" />
+	<object class="SpatialiserEffect" id="{352a07c2-f181-4107-ab2a-2c031031b0e9}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 	<object class="SingleSound" id="{d1c1225c-bb22-4e1e-b506-a01a17adebbc}">
 		<relationship name="audioFile">
 			<destination>{ec913174-f7e1-4578-9990-6b7c2ac3cf6f}</destination>

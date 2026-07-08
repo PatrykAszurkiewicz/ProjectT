@@ -1051,9 +1051,10 @@ public class Scarecrow : MonoBehaviour
         aura.Configure(
             owner: this,
             radius: auraRadius,
-            damageBuff: damageBuff,
+            damageBuff: damageBuff,   // a multiplier on allies' already-scaled damage — not scaled here
             healPerSecond: healPerSecond,
-            playerDamagePerSecond: playerDamagePerSecond
+            // Nightmare's +30% reaches the aura's direct player damage too, matching melee.
+            playerDamagePerSecond: playerDamagePerSecond * EnemyStatModifierManager.DifficultyDamageMultiplier
         );
 
         // Visual layer
@@ -1087,5 +1088,3 @@ public class Scarecrow : MonoBehaviour
         }
     }
 }
-
-

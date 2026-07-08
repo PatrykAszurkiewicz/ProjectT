@@ -27,10 +27,17 @@ public class BoomerangProjectile : MonoBehaviour
     //  VFX handles 
     private SpriteRenderer sr;
     private TrailRenderer trail;
+    private ProjectileGlow glow;
 
     private const float ROTATION_SPEED = 720f;   // deg/sec
     private const float MAX_LIFETIME = 6f;
     private const float CATCH_RADIUS = 0.7f;
+
+    // Hit SFX throttle: once the boomerang hits something we don't replay the
+    // hit sound for this many seconds, even if it clips several enemies in a
+    // cluster. It replays only if a further target is hit after the window.
+    private const float HIT_SFX_COOLDOWN = 1.6f;
+    private float lastHitSoundTime = -999f;
 
     //  PUBLIC API 
 
@@ -51,6 +58,13 @@ public class BoomerangProjectile : MonoBehaviour
 
         BuildVisuals();
         initialized = true;
+
+        // Throw SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.boomerangShot.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.boomerangShot, transform.position);
+        }
 
         //Debug.Log($"[Boomerang] Initialized — dir={launchDir} spd={speed} range={maxRange} dmg={damage}");
     }
@@ -91,6 +105,7 @@ public class BoomerangProjectile : MonoBehaviour
                 isReturning = true;
                 // colour shift on return trip
                 if (sr != null) sr.color = new Color(0.55f, 0.85f, 1f);
+                if (glow != null) glow.SetColor(new Color(0.55f, 0.85f, 1f));
                 if (trail != null)
                 {
                     trail.startColor = new Color(0.5f, 0.85f, 1f, 0.7f);
@@ -140,6 +155,7 @@ public class BoomerangProjectile : MonoBehaviour
         {
             stats.TakeDamage(damage);
             CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: false);
+            PlayHitSfx();
 
             EnemyController ec = other.GetComponent<EnemyController>();
             if (ec != null)
@@ -155,8 +171,24 @@ public class BoomerangProjectile : MonoBehaviour
         {
             dmg.TakeDamage(damage, gameObject);
             CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: false);
+            PlayHitSfx();
         }
         // boomerang passes through — never destroyed on hit
+    }
+
+    // Plays the boomerang hit sound, throttled so a single sweep through a
+    // cluster of enemies doesn't spam it. Fires once, then stays quiet for
+    // HIT_SFX_COOLDOWN seconds before it can play again on a later target.
+    private void PlayHitSfx()
+    {
+        if (Time.time - lastHitSoundTime < HIT_SFX_COOLDOWN) return;
+        lastHitSoundTime = Time.time;
+
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.boomerangHit.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.boomerangHit, transform.position);
+        }
     }
 
     //  PROGRAMMATIC VISUALS
@@ -185,6 +217,10 @@ public class BoomerangProjectile : MonoBehaviour
 
         //  particles 
         BuildParticles();
+
+        //  glow / tracer light (warm gold on the way out) 
+        glow = ProjectileGlow.Attach(transform, new Color(1f, 0.85f, 0.4f), worldRadius: 0.7f,
+                                     alpha: 0.5f, pulse: true, pulseSpeed: 7f, pulseAmount: 0.2f);
     }
 
     private void BuildParticles()
@@ -275,3 +311,4 @@ public class BoomerangProjectile : MonoBehaviour
         }
     }
 }
+

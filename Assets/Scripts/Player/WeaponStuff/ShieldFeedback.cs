@@ -71,8 +71,42 @@ public static class ShieldFeedback
     }
 
 
-    // Call when the shield successfully PARRIES an attack (perfect timing).
+    // Call when the shield successfully PARRIES a normal (melee / enemy-attack)
+    // attack. Plays the shared parry visuals + the standard shield parry sound.
     public static void OnParry(Transform playerTransform, Vector3 attackerPosition)
+    {
+        if (playerTransform == null) return;
+
+        OnParryVisuals(playerTransform);
+
+        //  Audio — melee / enemy-attack parry 
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.shieldParry.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.shieldParry, playerTransform.position);
+        }
+    }
+
+    // Call when the shield successfully deflects an in-flight PROJECTILE back
+    // (Augment 325). Same feel as a melee parry, but its own distinct sound so a
+    // deflected shot doesn't share the melee-parry clang.
+    public static void OnProjectileParry(Transform playerTransform, Vector3 attackerPosition)
+    {
+        if (playerTransform == null) return;
+
+        OnParryVisuals(playerTransform);
+
+        //  Audio — projectile deflection 
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.projectileParry.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.projectileParry, playerTransform.position);
+        }
+    }
+
+    // Shared parry visuals (camera shake, hitstop, white flash). Audio is chosen
+    // by the caller so melee vs projectile parry can sound different.
+    private static void OnParryVisuals(Transform playerTransform)
     {
         if (playerTransform == null) return;
 
@@ -92,13 +126,6 @@ public static class ShieldFeedback
             if (host == null)
                 host = playerTransform.gameObject.AddComponent<ShieldFeedbackHost>();
             host.FlashSprite(playerSR, PARRY_FLASH_DURATION);
-        }
-
-        //  Audio 
-        if (AudioManager.instance != null && FMODEvents.instance != null
-            && !FMODEvents.instance.shieldParry.IsNull)
-        {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.shieldParry, playerTransform.position);
         }
     }
 

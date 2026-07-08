@@ -5,7 +5,7 @@
 			<value>GremlinDeath</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{b6b8d04e-a86a-481f-ad69-e1305781e237}">
 		<relationship name="effects">
 			<destination>{2b34141a-2140-4712-b121-840b863f8374}</destination>
+			<destination>{b611f180-5067-4d57-98fd-0e9a73947787}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{0e6d8040-7767-4ce1-b5d8-c3fab472ed71}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{66e27305-0036-4e47-bef3-9ebcb6a39039}" />
 	<object class="MixerBusFader" id="{2b34141a-2140-4712-b121-840b863f8374}" />
+	<object class="SpatialiserEffect" id="{b611f180-5067-4d57-98fd-0e9a73947787}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

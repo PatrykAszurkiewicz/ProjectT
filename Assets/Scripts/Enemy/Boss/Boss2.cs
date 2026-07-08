@@ -591,8 +591,9 @@ public class Boss2 : BaseBossStats
         var fx = root.AddComponent<Boss2MeteorVFX>();
         fx.Play(radius);
 
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.bossGroundHit, pos);
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.boss2Explosion.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.boss2Explosion, pos);
 
         // A bit of camera shake on impact so the player feels the hit even at the edge of frame.
         if (CameraShake.Instance != null)
@@ -2008,5 +2009,3 @@ public static class Boss2SummonFlashSprites
         return _thinRing;
     }
 }
-
-

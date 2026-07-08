@@ -356,18 +356,21 @@ public class PlayerMovement : MonoBehaviour
         move = context.ReadValue<Vector2>();
     }
 
+    // Sprint = HOLD to run. Bound to leftShift / leftShoulder / leftStickPress (L3).
+    // Dashing is now a SEPARATE action (see Dash below) so the left-stick press can
+    // run WITHOUT also dashing.
     public void Sprint(InputAction.CallbackContext context)
     {
-        if (context.started)
-        {
-            // ButtonControl covers BOTH keyboard keys and gamepad buttons
-            // (KeyControl derives from ButtonControl), so dash fires on a pad too.
-            if (context.control is ButtonControl btn && btn.wasPressedThisFrame)
-            {
-                TryDash();
-            }
-        }
         isSprinting = context.ReadValueAsButton();
+    }
+
+    // Dash = PRESS to dash. Bound to leftShift (keyboard) + buttonEast 'B' (gamepad).
+    // Wire this to the "Dash" action in the PlayerInput Events list (it is already
+    // wired in Player.prefab). ButtonControl covers both keys and pad buttons.
+    public void Dash(InputAction.CallbackContext context)
+    {
+        if (context.started && context.control is ButtonControl btn && btn.wasPressedThisFrame)
+            TryDash();
     }
 
     private void TryDash()
@@ -413,7 +416,9 @@ public class PlayerMovement : MonoBehaviour
     {
         if (move.magnitude > 0.01f)
         {
-            // Fetch the playback state
+            // Keep the (now 3D) footsteps event positioned on this player, or FMOD mutes it.
+            footsteps.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(transform));
+
             PLAYBACK_STATE playbackState;
             footsteps.getPlaybackState(out playbackState);
             if (playbackState.Equals(PLAYBACK_STATE.STOPPED))
@@ -427,3 +432,4 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 }
+

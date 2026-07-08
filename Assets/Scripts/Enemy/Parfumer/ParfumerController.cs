@@ -216,7 +216,8 @@ public class ParfumerController : MonoBehaviour
             radius: cloudRadius,
             duration: cloudDuration,
             poisonDuration: poisonDuration,
-            poisonDamagePerSecond: poisonDamagePerSecond,
+            // Nightmare's +30% reaches the poison's direct player damage too, matching melee.
+            poisonDamagePerSecond: poisonDamagePerSecond * EnemyStatModifierManager.DifficultyDamageMultiplier,
             attacker: this.gameObject);
 
         // Reuse the Buffer's procedural fog visual, recolored green. Lightning
@@ -243,5 +244,4 @@ public class ParfumerController : MonoBehaviour
     }
 #endif
 }
-
 

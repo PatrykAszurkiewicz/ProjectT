@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using FMODUnity;
 
 // Eye enemy. Reuses:
 //   - EnemyController (movement, targeting, attack cycle, parry window)
@@ -107,6 +108,12 @@ public class Eye : MonoBehaviour
     private bool useTimerFallback = false;
     private bool wasAttackingLastFrame = false;
 
+    // Continuous attack loop (EyeAttack). Started while the Eye is attacking and
+    // stopped when it stops attacking or dies. The FMOD event should be authored
+    // as a looping event; this just controls when it plays.
+    private FMOD.Studio.EventInstance attackLoop;
+    private bool attackLoopActive = false;
+
     private void Start()
     {
         stats = GetComponent<EnemyStats>();
@@ -168,10 +175,59 @@ public class Eye : MonoBehaviour
     {
         if (animController != null)
             animController.OnAttackFrame -= HandleAttackFrame;
+
+        StopAttackLoop();
+    }
+
+    private void OnDisable()
+    {
+        // Dying/pooling disables the object — never leave the loop droning on.
+        StopAttackLoop();
+    }
+
+    // Starts the loop on the rising edge of IsAttacking and stops it on the
+    // falling edge. Also keeps the 3D position on the Eye while it plays.
+    private void UpdateAttackLoop()
+    {
+        bool attackingNow = controller != null && controller.IsAttacking;
+
+        if (attackingNow && !attackLoopActive) StartAttackLoop();
+        else if (!attackingNow && attackLoopActive) StopAttackLoop();
+
+        if (attackLoopActive && attackLoop.isValid())
+            attackLoop.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(transform.position));
+    }
+
+    private void StartAttackLoop()
+    {
+        if (AudioManager.instance == null || FMODEvents.instance == null) return;
+        if (FMODEvents.instance.eyeAttack.IsNull) return;
+
+        attackLoop = FMODUnity.RuntimeManager.CreateInstance(FMODEvents.instance.eyeAttack);
+        attackLoop.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(transform.position));
+        attackLoop.start();
+        attackLoopActive = true;
+    }
+
+    private void StopAttackLoop()
+    {
+        if (!attackLoopActive) return;
+        attackLoopActive = false;
+
+        if (attackLoop.isValid())
+        {
+            attackLoop.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            attackLoop.release();
+        }
     }
 
     private void Update()
     {
+        // Continuous attack sound: play while the Eye is attacking, stop the moment
+        // it stops (or dies — OnDisable/OnDestroy also stop it). Runs on both the
+        // frame-event and timer-fallback paths since it keys off IsAttacking.
+        UpdateAttackLoop();
+
         // Linger flash after the hit, then return to invisible.
         if (ringFlashRemaining > 0f)
         {
@@ -393,25 +449,36 @@ public class Eye : MonoBehaviour
         GameObject root = new GameObject("EyeAttackDust");
         root.transform.position = transform.position; // root is at pivot; child offsets handle layer Y shifts
 
+        // Host the dust animation ON the root itself, not on the Eye. Coroutines
+        // started on the Eye are killed the instant the Eye's GameObject is
+        // destroyed — so if the Eye died mid-attack, the puff coroutines froze
+        // and DestroyAfter never ran, orphaning this root as a permanent smear
+        // of dust on the ground. Running everything on the root makes the effect
+        // finish and clean itself up regardless of the Eye's lifetime.
+        var host = root.AddComponent<EyeAttackDustRunner>();
+
         // PRIMARY DUST LAYER 
-        SpawnDustLayer(root.transform, puffSprite, sortLayerName, sortOrder,
+        SpawnDustLayer(host, root.transform, puffSprite, sortLayerName, sortOrder,
                        dustPuffCount, dustMaxRadius, dustColor, dustYOffset,
                        baseSortOffset: 24);
 
         // EARTH DUST LAYER
         if (emitEarthDust)
         {
-            SpawnDustLayer(root.transform, puffSprite, sortLayerName, sortOrder,
+            SpawnDustLayer(host, root.transform, puffSprite, sortLayerName, sortOrder,
                            earthDustPuffCount, earthDustMaxRadius, earthDustColor, earthDustYOffset,
                            baseSortOffset: 22);
         }
 
-        // Tear the root down after the longest-lived puff has finished.
-        StartCoroutine(DestroyAfter(root, 1.2f));
+        // Tear the root down after the longest-lived puff has finished. This is
+        // an engine-scheduled destroy (not a coroutine on the Eye), so it fires
+        // even if the Eye is destroyed the same frame the dust spawns.
+        Object.Destroy(root, 1.2f);
     }
 
     // Spawns one dust layer 
     private void SpawnDustLayer(
+        MonoBehaviour host,
         Transform parent, Sprite puffSprite, string sortLayerName, int sortOrderBase,
         int puffCount, float maxRadius, Color color, float yOffset, int baseSortOffset)
     {
@@ -421,15 +488,16 @@ public class Eye : MonoBehaviour
         layer.transform.SetParent(parent, false);
         layer.transform.localPosition = new Vector3(0f, yOffset, 0f);
 
-        // Soft ground-hugging disc.
-        StartCoroutine(EyeDustDisc(layer.transform, puffSprite, sortLayerName,
+        // Soft ground-hugging disc. Driven by `host` (the dust root) so it keeps
+        // animating after the Eye is gone.
+        host.StartCoroutine(EyeDustDisc(layer.transform, puffSprite, sortLayerName,
                                    sortOrderBase + baseSortOffset, maxRadius, color));
 
         int puffs = Mathf.Max(1, puffCount);
         for (int i = 0; i < puffs; i++)
         {
             float ang = (i / (float)puffs) * Mathf.PI * 2f + Random.Range(-0.12f, 0.12f);
-            StartCoroutine(EyeDustPuff(layer.transform, puffSprite, sortLayerName,
+            host.StartCoroutine(EyeDustPuff(layer.transform, puffSprite, sortLayerName,
                                        sortOrderBase + baseSortOffset + 1, i, ang,
                                        maxRadius, color));
         }
@@ -511,12 +579,6 @@ public class Eye : MonoBehaviour
         if (go != null) Destroy(go);
     }
 
-    private static System.Collections.IEnumerator DestroyAfter(GameObject go, float seconds)
-    {
-        yield return new WaitForSeconds(seconds);
-        if (go != null) Destroy(go);
-    }
-
     // Procedural soft circle for dust puffs
     private static Sprite _softDiscSprite;
     private static Sprite GetSoftDiscSprite()
@@ -554,4 +616,10 @@ public class Eye : MonoBehaviour
         Gizmos.DrawWireSphere(transform.position, aoeRadius);
     }
 }
+
+// Lightweight coroutine host that lives on the world-space attack-dust root.
+// The dust animation and cleanup run here — independent of the Eye — so killing
+// the Eye mid-attack can no longer freeze puffs or leave dust stuck on the
+// ground. Added at runtime via AddComponent; it needs no state of its own.
+public sealed class EyeAttackDustRunner : MonoBehaviour { }
 

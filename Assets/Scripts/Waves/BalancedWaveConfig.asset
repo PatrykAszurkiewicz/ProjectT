@@ -1,0 +1,842 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 164b3b99d3cf2264e86118581a85ebea, type: 3}
+  m_Name: BalancedWaveConfig
+  m_EditorClassIdentifier: 
+  timeBetweenWaves: 5
+  waves:
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 02000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 1.4
+    maxSpawnDelay: 2.2
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+  - waveNumber: 1
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 02000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 1.3
+    maxSpawnDelay: 2
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 6
+  - waveNumber: 2
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.9
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 7
+  - waveNumber: 3
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 3
+  - waveNumber: 4
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 3
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 8
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
+      count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 3
+  - waveNumber: 5
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 3
+    spawnDirections: 02000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 1.3
+    maxSpawnDelay: 2
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 5
+  - waveNumber: 6
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.9
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 6
+  - waveNumber: 7
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 3
+  - waveNumber: 8
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 3
+  - waveNumber: 9
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 4
+    spawnDirections: 02000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 1.5
+    maxSpawnDelay: 2
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+      count: 1
+  - waveNumber: 10
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.9
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 3
+  - waveNumber: 11
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 4
+  - waveNumber: 12
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.9
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 2
+  - waveNumber: 13
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 2
+  - waveNumber: 14
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 3
+    spawnDirections: 000000000100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.6
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 3
+  - waveNumber: 15
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.9
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 12144c95b0a19a44e97c2797908b93b7, type: 3}
+      count: 2
+  - waveNumber: 16
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+      count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 2
+  - waveNumber: 17
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 12144c95b0a19a44e97c2797908b93b7, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e82a99147de618847a75df2260891ee0, type: 3}
+      count: 1
+  - waveNumber: 18
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.6
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+      count: 2
+  - waveNumber: 19
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 4
+    spawnDirections: 02000000
+    oneDirectionForAllEnemies: 1
+    minSpawnDelay: 1.4
+    maxSpawnDelay: 1.9
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+      count: 1
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+      count: 1
+  - waveNumber: 20
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.2
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 3
+  - waveNumber: 21
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
+      count: 1
+  - waveNumber: 22
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+      count: 1
+  - waveNumber: 23
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.6
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 3
+  - waveNumber: 24
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 3
+    spawnDirections: 000000000100000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.9
+    maxSpawnDelay: 1.5
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
+      count: 2
+  - waveNumber: 25
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 4
+  - waveNumber: 26
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.1
+    maxSpawnDelay: 1.7
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 12144c95b0a19a44e97c2797908b93b7, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 4
+  - waveNumber: 27
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.6
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+      count: 1
+  - waveNumber: 28
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.5
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e82a99147de618847a75df2260891ee0, type: 3}
+      count: 1
+  - waveNumber: 29
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 4
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.3
+    maxSpawnDelay: 1.8
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+      count: 1
+  - waveNumber: 30
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.6
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 8
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 4
+  - waveNumber: 31
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.5
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 3
+  - waveNumber: 32
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.9
+    maxSpawnDelay: 1.5
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 12144c95b0a19a44e97c2797908b93b7, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+      count: 2
+  - waveNumber: 33
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 00000000010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.9
+    maxSpawnDelay: 1.4
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 8
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 5
+  - waveNumber: 34
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 3
+    spawnDirections: 00000000010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.8
+    maxSpawnDelay: 1.4
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
+      count: 2
+  - waveNumber: 35
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 000000000100000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1
+    maxSpawnDelay: 1.5
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
+      count: 8
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 5
+  - waveNumber: 36
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.9
+    maxSpawnDelay: 1.5
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: a3a39be9d7313df4caff6d8188cc15d3, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 12144c95b0a19a44e97c2797908b93b7, type: 3}
+      count: 3
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
+      count: 6
+  - waveNumber: 37
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 00000000010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.9
+    maxSpawnDelay: 1.4
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
+      count: 2
+    - enemyPrefab: {fileID: 3554655901426140020, guid: e82a99147de618847a75df2260891ee0, type: 3}
+      count: 1
+  - waveNumber: 38
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 2
+    spawnDirections: 00000000010000000200000003000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.8
+    maxSpawnDelay: 1.3
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 8e6a8287d27652348858a6d1c5b4ed44, type: 3}
+      count: 5
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 70604273aad65f845bb1d676653df4da, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 300b1b70da7c29d4c815b338bd50dc08, type: 3}
+      count: 6
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
+      count: 3
+  - waveNumber: 39
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 0
+    spawnDirections: 
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 0.5
+    maxSpawnDelay: 1.5
+    enemies: []
+  - waveNumber: 0
+    extraDelayBeforeStart: 5
+    spawnDirections: 0000000002000000
+    oneDirectionForAllEnemies: 0
+    minSpawnDelay: 1.5
+    maxSpawnDelay: 2.2
+    enemies:
+    - enemyPrefab: {fileID: 3554655901426140020, guid: df8333252348a3b4ba98f15f72d87222, type: 3}
+      count: 4
+    - enemyPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
+      count: 1

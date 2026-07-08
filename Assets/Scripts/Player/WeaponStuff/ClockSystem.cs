@@ -68,6 +68,14 @@ public class ClockSystem
             s.clockCooldownTimer = cd;
         }
         RewindVFX.Play(); // screen disturbance + spinning clock icon
+
+        // Rewind SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.rewindActivate.IsNull)
+        {
+            Vector3 pos = weapon != null ? weapon.transform.position : Vector3.zero;
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.rewindActivate, pos);
+        }
         //Debug.Log($"[CLOCK] Rewind succeeded — cooldown armed ({cooldownDuration:F0}s).");
     }
 
@@ -75,4 +83,3 @@ public class ClockSystem
     public void Update() { }
     public void Cleanup() { }
 }
-

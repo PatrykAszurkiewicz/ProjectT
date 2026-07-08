@@ -5,7 +5,7 @@
 			<value>TrapSetup</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{c1c624ab-8e0f-4a13-934b-b030219e80eb}">
 		<property name="volume">
-			<value>-5</value>
+			<value>-16.5</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{4b2a4c12-9e9b-4907-aa7c-408136f96741}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{4b2a4c12-9e9b-4907-aa7c-408136f96741}">
 		<relationship name="effects">
 			<destination>{36fa1cd0-8db0-4a4f-b2e0-324da335bd7f}</destination>
+			<destination>{8cbd81e2-8976-4312-8c7a-e6bca11623a1}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{959070ac-5c8e-41c8-a3a5-29e4387fbad7}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{c5c995ea-4500-4d72-9511-b2c19afec1b8}" />
 	<object class="MixerBusFader" id="{36fa1cd0-8db0-4a4f-b2e0-324da335bd7f}" />
+	<object class="SpatialiserEffect" id="{8cbd81e2-8976-4312-8c7a-e6bca11623a1}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

@@ -23,41 +23,37 @@ public static class CombatJuice
 
 
     // Call whenever the player deals damage to an enemy.
-    public static void OnPlayerHitEnemy(GameObject enemy, bool isMelee)
+    // CO-OP: pass the attacking player's PlayerRef so only THAT player's screen
+    // half shakes. Left null (e.g. an un-routed call site or single player) shakes
+    // every camera, so a shake is never silently dropped.
+    public static void OnPlayerHitEnemy(GameObject enemy, bool isMelee, PlayerRef attacker = null)
     {
-        //Debug.Log($"[CombatJuice] OnPlayerHitEnemy called. CameraShake.Instance = {CameraShake.Instance}");
-
         if (enemy == null) return;
 
-        // 1. Hit flash on the enemy sprite
+        // 1. Hit flash on the enemy sprite (lives on the enemy — inherently correct)
         var flash = enemy.GetComponent<HitFlash>();
         if (flash != null)
-            //flash.Flash();
             flash.Flash(isMelee);
 
-        // 2. Hitstop (movement freeze, not timeScale)
+        // 2. Hitstop (movement freeze, not timeScale). Global by design.
         if (HitStop.Instance != null)
         {
             float dur = isMelee ? MELEE_HITSTOP : RANGED_HITSTOP;
             HitStop.Instance.Freeze(dur);
         }
 
-        // 3. Camera shake
-        if (CameraShake.Instance != null)
-        {
-            float intensity = isMelee ? MELEE_SHAKE : RANGED_SHAKE;
-            float duration = isMelee ? MELEE_SHAKE_DURATION : RANGED_SHAKE_DURATION;
-            CameraShake.Instance.Shake(intensity, duration);
-        }
+        // 3. Camera shake — routed to the attacking player's half.
+        float intensity = isMelee ? MELEE_SHAKE : RANGED_SHAKE;
+        float duration = isMelee ? MELEE_SHAKE_DURATION : RANGED_SHAKE_DURATION;
+        CameraShake.ShakeFor(attacker, intensity, duration);
     }
 
 
-    // Lighter version for enemy-on-player hits
-
-    public static void OnEnemyHitPlayer()
+    // Lighter version for enemy-on-player hits.
+    // CO-OP: pass the victim's PlayerRef so only the player who got hit feels it.
+    public static void OnEnemyHitPlayer(PlayerRef victim = null)
     {
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.Shake(0.06f, 0.08f);
+        CameraShake.ShakeFor(victim, 0.06f, 0.08f);
     }
 
 
@@ -75,8 +71,8 @@ public static class CombatJuice
         if (HitStop.Instance != null)
             HitStop.Instance.Freeze(0.12f);
 
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.Shake(0.15f, 0.2f);
+        // No attacker context here — shake every player's half.
+        CameraShake.ShakeAll(0.15f, 0.2f);
     }
 
 
@@ -98,9 +94,9 @@ public static class CombatJuice
             HitStop.Instance.Freeze(dur, ignoreCooldown: true);
         }
 
-        // Bigger shake for the kill
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.Shake(BOSS_DEATH_SHAKE, BOSS_DEATH_SHAKE_DURATION);
+        // Bigger shake for the kill — a boss dying is a shared moment, so shake
+        // every player's half.
+        CameraShake.ShakeAll(BOSS_DEATH_SHAKE, BOSS_DEATH_SHAKE_DURATION);
     }
 
     // Immediately cancels any active camera shake from BOTH shake systems
@@ -108,8 +104,7 @@ public static class CombatJuice
     // Call this when pausing, opening the augment menu, or starting a stage transition.
     public static void StopAllShake()
     {
-        if (CameraShake.Instance != null)
-            CameraShake.Instance.StopShake();
+        CameraShake.StopAllShakes();
 
         //if (CombatFeelManager.Instance != null)
         //    CombatFeelManager.Instance.StopShake();

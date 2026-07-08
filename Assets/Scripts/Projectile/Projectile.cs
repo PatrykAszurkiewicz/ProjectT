@@ -19,6 +19,20 @@ public class Projectile : MonoBehaviour
 
     private float freezeChance = 0f;
 
+    // Cached so a POOLED projectile can wipe its trail on respawn. A TrailRenderer
+    // draws a ribbon from the object's movement history; when the pool teleports a
+    // recycled projectile to a new spawn point, an uncleared trail streaks a line
+    // across the whole map. Clearing it on spawn removes that artifact. Null (and
+    // therefore skipped) if the prefab has no trail — costs nothing in that case.
+    private TrailRenderer trail;
+
+    // Pooling: lifetime is now tracked with a timer that counts down in Update and
+    // returns the projectile to the pool, instead of Destroy(gameObject, lifeTime).
+    // Destroy-based lifetime can't work with pooling because a recycled object's
+    // Start() never runs again. Seeded in ResetForSpawn (and in Awake, so an object
+    // that is somehow used without Initialize still self-retires).
+    private float lifeTimer;
+
     public void SetFreezeChance(float chance)
     {
         freezeChance = Mathf.Clamp01(chance);
@@ -50,17 +64,53 @@ public class Projectile : MonoBehaviour
         // Ensure projectile renders above grass Y-sort range (400-1600)
         SpriteRenderer sr = GetComponent<SpriteRenderer>();
         if (sr != null) sr.sortingOrder = 2500;
+
+        // Cache the trail (if any) for pool-respawn clearing. Include inactive so a
+        // trail on a disabled child is still found.
+        trail = GetComponentInChildren<TrailRenderer>(true);
+
+        // Defensive default so a projectile that is spawned without going through
+        // Initialize() still self-retires after `lifeTime` rather than living forever.
+        lifeTimer = lifeTime;
+    }
+
+    // Resets every piece of per-shot mutable state so a RECYCLED projectile behaves
+    // exactly like a freshly-Instantiated one. Called from both Initialize overloads
+    // (the spawn entry points used by the tower). Without this, a pooled projectile
+    // would inherit the previous shot's hasHit / freezeChance / velocity — e.g. a
+    // shot fired by a non-freeze tower could still freeze because the last user of
+    // this instance was a freeze tower. Resetting here closes that gap.
+    private void ResetForSpawn()
+    {
+        hasHit = false;
+        freezeChance = 0f;                 // tower re-applies via SetFreezeChance only when > 0
+        startPosition = transform.position;
+        lifeTimer = lifeTime;
+        if (rb != null) rb.linearVelocity = Vector2.zero;
+        // Wipe any leftover trail ribbon from the previous use. Safe here because
+        // PrefabPool.Get has already repositioned us before Initialize() runs, so
+        // the trail restarts cleanly at the new spawn point.
+        if (trail != null) trail.Clear();
     }
 
     void Start()
     {
-        // Destroy projectile after lifetime
-        Destroy(gameObject, lifeTime);
+        // Lifetime is handled by lifeTimer in Update now (pool-safe); nothing to do
+        // here. Kept so existing prefab wiring / execution-order expectations are
+        // undisturbed.
     }
 
     void Update()
     {
         if (hasHit) return;
+
+        // Lifetime (pool-safe replacement for Destroy(gameObject, lifeTime)).
+        lifeTimer -= Time.deltaTime;
+        if (lifeTimer <= 0f)
+        {
+            DestroyProjectile();
+            return;
+        }
 
         // Check if projectile has traveled too far
         float distanceTraveled = Vector3.Distance(startPosition, transform.position);
@@ -165,11 +215,15 @@ public class Projectile : MonoBehaviour
 
     void DestroyProjectile()
     {
-        Destroy(gameObject);
+        // Return to the pool instead of destroying. PrefabPool.Release is safe on
+        // non-pooled instances too (it just Destroys them), so a projectile placed
+        // in the scene by hand still behaves correctly.
+        PrefabPool.Release(gameObject);
     }
 
     public void Initialize(GameObject targetEnemy, float projectileDamage, float projectileRange)
     {
+        ResetForSpawn();           // clear recycled state before applying this shot's values
         target = targetEnemy;
         damage = projectileDamage;
         maxRange = projectileRange;
@@ -178,6 +232,7 @@ public class Projectile : MonoBehaviour
 
     public void Initialize(Vector3 direction, float projectileDamage, float projectileRange)
     {
+        ResetForSpawn();           // clear recycled state before applying this shot's values
         target = null;
         damage = projectileDamage;
         maxRange = projectileRange;

@@ -287,9 +287,9 @@ public class BombMine : MonoBehaviour
             ApplyFriendlyFire(pos);
 
         if (AudioManager.instance != null && FMODEvents.instance != null
-            && !FMODEvents.instance.proximityMineExplode.IsNull)
+            && !FMODEvents.instance.mineExplosion.IsNull)
         {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.proximityMineExplode, transform.position);
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.mineExplosion, transform.position);
         }
 
         Destroy(gameObject, 0.05f);
@@ -632,3 +632,4 @@ public class DisintegrateMine : MonoBehaviour
         public float lifetime, maxLifetime, startSize;
     }
 }
+

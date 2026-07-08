@@ -10,9 +10,10 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     [SerializeField] private float damageMultiplier = 1f;
     [SerializeField] private float healthMultiplier = 1f;
 
-    // Per-stage difficulty scaling 
+    // Per-stage difficulty scaling
     // A SEPARATE dimension from the augment multipliers above. GameOrchestrator
-    // sets these once at the start of each stage.
+    // sets these once at the start of each stage via SetStageScaling(), sourced from
+    // RunConfig.enemyHealthScalePerStage / enemyDamageScalePerStage / scaleBossesWithStage.
     [Header("Per-Stage Scaling (orchestrator-driven, read-only)")]
     [SerializeField] private float stageHealthMultiplier = 1f;
     [SerializeField] private float stageDamageMultiplier = 1f;
@@ -128,7 +129,9 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     public bool StageScalingAffectsBosses => stageScalingAffectsBosses;
 
     /// Set the per-stage enemy HP/damage scaling. Called by GameOrchestrator at the
-    /// start of every stage, before that stage's enemies spawn.
+    /// start of every stage, before that stage's enemies spawn. The values come from
+    /// RunConfig (enemyHealthScalePerStage / enemyDamageScalePerStage compounded per
+    /// stage in GenerateRunPlan, and scaleBossesWithStage for the boss flag).
     public static void SetStageScaling(float healthMultiplier, float damageMultiplier, bool affectBosses)
     {
         if (Instance == null)
@@ -141,6 +144,67 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
         Instance.stageDamageMultiplier = Mathf.Max(0f, damageMultiplier);
         Instance.stageScalingAffectsBosses = affectBosses;
     }
+    #endregion
+
+    #region Difficulty (Normal / Nightmare)
+    // A run-wide, CONSTANT HP/damage factor that stacks MULTIPLICATIVELY on top of the
+    // per-stage scaling above. Nightmare = +30% to EVERY enemy AND boss; Normal = ×1
+    // (identical to the original behaviour → no regression). Kept here as a small static
+    // block so it needs no extra script: enemies/bosses read the two multipliers where
+    // they already read their other scaling, the Options menu calls SelectNormal/
+    // SelectNightmare, and GameOrchestrator/RunPersistence drive the run lifecycle.
+    //
+    //   SelectedMode — the menu choice; DEFAULT for the NEXT run; persisted in PlayerPrefs.
+    //   ActiveMode   — what the LIVE run locked in; saved into RunSaveData and restored on
+    //                  resume, so changing the menu mid-run never alters a run in progress.
+    public enum DifficultyMode { Normal = 0, Nightmare = 1 }
+
+    public const float NightmareHealthMultiplier = 1.40f;
+    public const float NightmareDamageMultiplier = 1.40f;
+    private const string DifficultyPrefKey = "game.difficultyMode";
+
+    // Loaded lazily on first ACCESS (from Awake/Start/menu — all legal) rather than in
+    // a static field initializer: Unity forbids PlayerPrefs calls during type init on a
+    // MonoBehaviour, which would throw TypeInitializationException and break every access.
+    private static DifficultyMode? _selectedMode;
+    public static DifficultyMode SelectedMode
+    {
+        get
+        {
+            if (_selectedMode == null)
+                _selectedMode = PlayerPrefs.GetInt(DifficultyPrefKey, 0) == (int)DifficultyMode.Nightmare
+                    ? DifficultyMode.Nightmare : DifficultyMode.Normal;
+            return _selectedMode.Value;
+        }
+        private set => _selectedMode = value;
+    }
+
+    public static DifficultyMode ActiveMode { get; private set; } = DifficultyMode.Normal;
+
+    // Multipliers the ACTIVE run scales by. Read by EnemyStats (regular enemies) and
+    // BaseBossStats (bosses). Static, so no live EnemyStatModifierManager.Instance needed.
+    public static float DifficultyHealthMultiplier =>
+        ActiveMode == DifficultyMode.Nightmare ? NightmareHealthMultiplier : 1f;
+    public static float DifficultyDamageMultiplier =>
+        ActiveMode == DifficultyMode.Nightmare ? NightmareDamageMultiplier : 1f;
+
+    // ── Options-menu hooks (wire your Normal / Nightmare buttons to these) ──
+    public static void SelectNormal() => SelectDifficulty(DifficultyMode.Normal);
+    public static void SelectNightmare() => SelectDifficulty(DifficultyMode.Nightmare);
+    public static void SelectDifficulty(DifficultyMode mode)
+    {
+        SelectedMode = mode;
+        PlayerPrefs.SetInt(DifficultyPrefKey, (int)mode);
+        PlayerPrefs.Save();
+    }
+
+    // ── Run lifecycle (GameOrchestrator on start / resume, RunPersistence on adopt) ──
+    // Lock the ACTIVE difficulty in from the current menu selection. Called at run start
+    // AND at the start of every FRESH stage, so a menu change takes effect from the next
+    // stage — never mid-stage. Stage starts are enemy-free, so nothing needs rescaling.
+    public static DifficultyMode LockActiveFromSelected() => ActiveMode = SelectedMode;
+    public static void SetActiveMode(int mode) =>
+        ActiveMode = mode == (int)DifficultyMode.Nightmare ? DifficultyMode.Nightmare : DifficultyMode.Normal;
     #endregion
 
     public void ResetModifiers()
@@ -173,4 +237,3 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     }
 #endif
 }
-

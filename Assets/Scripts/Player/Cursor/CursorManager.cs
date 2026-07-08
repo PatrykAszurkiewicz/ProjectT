@@ -14,6 +14,27 @@ public class CursorManager : MonoBehaviour
     // the right one. In single player there's exactly one and it's Instance.
     private static readonly List<CursorManager> _all = new List<CursorManager>();
 
+    // Co-op cursor sizing: every player's cursor is forced to this same on-screen
+    // world size so they're always equal. It tracks PLAYER 1's "natural" size (the
+    // lowest PlayerIndex cursor), so the shared size matches how player 1 looks and
+    // co-op never inflates it. Cached only — recomputed live in
+    // GetSharedCursorWorldSize. -1 = not computed yet.
+    private static float _sharedCursorWorldSize = -1f;
+
+    // Global size multiplier applied to every player's cursor equally. 1.0 = the
+    // natural (player 1) size; 0.8 = 20% smaller. Kept as one knob so both players
+    // always stay in lockstep.
+    private const float CURSOR_SIZE_MULTIPLIER = 0.8f;
+
+    // Reset the shared size between Play sessions (domain reload off), mirroring
+    // PlayerAttack.ResetStatics so a stale value can't leak across sessions.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        _sharedCursorWorldSize = -1f;
+        _all.Clear();
+    }
+
     [Header("Cursor Sprites")]
     public SpriteRenderer cursorSpriteRenderer;
 
@@ -261,20 +282,109 @@ public class CursorManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Adjusts the SpriteRenderer's localScale so every cursor sprite renders
-    /// at the same world-space size regardless of pixel dimensions or PPU.
-    /// </summary>
+    /// Sizes the cursor so EVERY player's cursor renders at the same on-screen
+    /// size — specifically the size player 1 produced before the co-op fixes.
+    /// The rendered size of a sprite is spriteWorldSize * localScale * parentLossyScale.
+    /// In co-op the two players' cursor visuals had different base scales AND sat
+    /// under parents with different world scales, so the same target produced two
+    /// different sizes. Rather than force an absolute size (which changed how
+    /// player 1 looked), we measure the largest per-player "natural" size once and
+    /// drive every cursor to exactly that, compensating for each cursor's own
+    /// sprite size and parent scale. Player 1 is unchanged; player 2 matches it.
     private void NormalizeCursorScale(Sprite sprite)
+    {
+        ApplySharedCursorScale(sprite);
+    }
+
+    // Max abs world scale of a transform's PARENT (the part we don't control).
+    private static float ParentLossyScale(Transform t)
+    {
+        if (t == null || t.parent == null) return 1f;
+        Vector3 pls = t.parent.lossyScale;
+        float v = Mathf.Max(Mathf.Abs(pls.x), Mathf.Abs(pls.y));
+        return v < 1e-6f ? 1f : v;
+    }
+
+    // The on-screen size a manager would render at under the ORIGINAL formula
+    // (baseScale * target), with its parent scale folded in. This is exactly how
+    // each player looked before the co-op size fixes.
+    private float NaturalCursorWorldSize()
+    {
+        if (cursorSpriteRenderer == null) return -1f;
+        CaptureBaseScale();
+        float bsMag = Mathf.Max(Mathf.Abs(baseScale.x), Mathf.Abs(baseScale.y));
+        if (bsMag < 1e-6f) bsMag = 1f;
+        return targetCursorWorldSize * bsMag * ParentLossyScale(cursorSpriteRenderer.transform);
+    }
+
+    // Shared reference size = the natural size of PLAYER 1's cursor (lowest
+    // PlayerIndex, or the single shared cursor in single player). Every cursor is
+    // driven to THIS size, so co-op cursors match player 1 exactly.
+    private static float GetSharedCursorWorldSize()
+    {
+        CursorManager reference = null;
+        int bestIndex = int.MaxValue;
+        for (int i = 0; i < _all.Count; i++)
+        {
+            var m = _all[i];
+            if (m == null || m.cursorSpriteRenderer == null) continue;
+            int idx = (m.owner != null) ? m.owner.PlayerIndex : 0;
+            if (idx < bestIndex)
+            {
+                bestIndex = idx;
+                reference = m;
+            }
+        }
+
+        float size = reference != null ? reference.NaturalCursorWorldSize() : -1f;
+        if (size > 0f) _sharedCursorWorldSize = size;   // cache; NOT forced to only grow
+        return size > 0f ? size : _sharedCursorWorldSize;
+    }
+
+    private void ApplySharedCursorScale(Sprite sprite)
     {
         if (sprite == null || cursorSpriteRenderer == null) return;
 
-        // sprite.bounds.size is the unscaled world size (pixels / pixelsPerUnit)
         float spriteWorldSize = Mathf.Max(sprite.bounds.size.x, sprite.bounds.size.y);
         if (spriteWorldSize < 0.001f) return;
 
-        float scaleFactor = targetCursorWorldSize / spriteWorldSize;
-        cursorSpriteRenderer.transform.localScale = baseScale * scaleFactor;
+        Transform t = cursorSpriteRenderer.transform;
+
+        float refSize = GetSharedCursorWorldSize();
+
+        float scaleFactor;
+        if (refSize > 0f)
+        {
+            // Drive this cursor to the shared world size, compensating for its own
+            // sprite size and parent scale so the final on-screen size is identical
+            // for every player regardless of hierarchy.
+            scaleFactor = refSize / (spriteWorldSize * ParentLossyScale(t));
+        }
+        else
+        {
+            // Reference not ready (shouldn't normally happen) — original formula.
+            scaleFactor = targetCursorWorldSize / spriteWorldSize;
+        }
+
+        // Preserve any sprite-flip sign baked into the prefab; use computed magnitude.
+        // CURSOR_SIZE_MULTIPLIER shrinks/grows every player's cursor by the same factor.
+        float mag = scaleFactor * CURSOR_SIZE_MULTIPLIER;
+        float sx = baseScale.x < 0f ? -mag : mag;
+        float sy = baseScale.y < 0f ? -mag : mag;
+        Vector3 desired = new Vector3(sx, sy, 1f);
+
+        // Avoid redundant transform writes (skip if effectively unchanged).
+        if ((t.localScale - desired).sqrMagnitude > 1e-8f)
+            t.localScale = desired;
+    }
+
+    // Keep this cursor matched to the shared size every frame. This self-heals
+    // any spawn-order edge case (e.g. player 1 spawning after player 2) without
+    // needing the cursor to be re-set, and is a no-op once sizes are stable.
+    void Update()
+    {
+        if (cursorSpriteRenderer == null || cursorSpriteRenderer.sprite == null) return;
+        ApplySharedCursorScale(cursorSpriteRenderer.sprite);
     }
 
     public void ReturnToPreviousCursor()
@@ -297,4 +407,3 @@ public class CursorManager : MonoBehaviour
         return currentCursorType;
     }
 }
-

@@ -8,9 +8,6 @@ using System.Collections.Generic;
 //    335  aug_energy_per_kill         : flat energy per tower kill (default 2)
 //    341  aug_tower_kill_chance_bonus : +drop chance on tower kills (default 0.30)
 //    342  aug_tower_kill_value_bonus  : +drop value  on tower kills (default 0.30)
-
-
-
 // Records the last time each enemy took tower damage. An enemy counts as
 // "tower-killed" if it died within AttributionWindow of such a hit.
 public static class TowerKillAttribution
@@ -70,6 +67,18 @@ public static class EnemyDropAugments
     public static float TowerKillChanceBonus = 0f; // 341 (additive fraction)
     public static float TowerKillValueBonus = 0f; // 342 (additive fraction)
 
+    // Per-stage drop growth, matching StageEnergyScaling.EnemyDropValue:
+    //   value × (1 + enemyDropScalePerStage) ^ stageIndex
+    // Applied to the per-enemy override path too, so a per-enemy base value
+    // (e.g. Eye = 40, or WaveSpawner's stamped 10) still scales by stage instead
+    // of paying a flat amount forever.
+    private static float StageDropMultiplier(int stageIndex)
+    {
+        var cfg = GameOrchestrator.Instance != null ? GameOrchestrator.Instance.runConfig : null;
+        if (cfg == null || stageIndex <= 0) return 1f;
+        return Mathf.Pow(1f + cfg.enemyDropScalePerStage, stageIndex);
+    }
+
     // HOOK: EnemyStats.PerformDeath calls this INSTEAD of its inline drop block.
     public static void SpawnEnemyDrop(Vector3 position, int stageIndex,
                                       GameObject enemy,
@@ -82,7 +91,11 @@ public static class EnemyDropAugments
         if (overrideValue > 0 && overrideChance >= 0f)
         {
             float chance = overrideChance;
-            int value = overrideValue;
+
+            // Scale the per-enemy base value by the run's per-stage drop growth,
+            // so overridden enemies scale exactly like the default path does.
+            int value = Mathf.Max(1, Mathf.RoundToInt(overrideValue * StageDropMultiplier(stageIndex)));
+
             if (towerKill && haveBonus)
             {
                 chance = Mathf.Clamp01(chance * (1f + TowerKillChanceBonus));
@@ -101,8 +114,8 @@ public static class EnemyDropAugments
             return;
         }
 
-        var cfg = GameOrchestrator.Instance != null ? GameOrchestrator.Instance.runConfig : null;
-        int baseValue = StageEnergyScaling.EnemyDropValue(cfg, stageIndex);
+        var runCfg = GameOrchestrator.Instance != null ? GameOrchestrator.Instance.runConfig : null;
+        int baseValue = StageEnergyScaling.EnemyDropValue(runCfg, stageIndex);
         float baseChance = EnergyDropManager.Instance != null
             ? EnergyDropManager.Instance.globalDropChance
             : 0.5f;
@@ -114,4 +127,3 @@ public static class EnemyDropAugments
         EnergyDropManager.TrySpawnEnergyDrop(position, finalChance, finalValue);
     }
 }
-

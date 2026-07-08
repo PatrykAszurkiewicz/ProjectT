@@ -6,6 +6,12 @@ public class TowerDefenseMap : MonoBehaviour
     [Header("Map Configuration")]
     public float mapRadius = 10f;
     public GameObject backgroundGameObject; // Manual background GameObject reference
+
+    [Tooltip("World-radius the VISIBLE ground texture must cover. Decoupled from mapRadius " +
+             "(which is the small playable/collider radius). Keep this >= BiomeManager's " +
+             "groundCoverageRadius so the ground fills the whole view instead of a small " +
+             "central square. Auto-raised to match BiomeManager at runtime.")]
+    public float backgroundCoverageRadius = 80f;
     //public string backgroundImagePath = "Backgrounds/Background3"; // Fallback for generated terrain
     public string backgroundImagePath = "Backgrounds/Background8"; // Fallback for generated terrain    
     public bool useBackgroundImage = true;
@@ -257,8 +263,32 @@ public class TowerDefenseMap : MonoBehaviour
         }
     }
 
+    // The radius the ground texture should actually fill. The playable mapRadius is
+    // tiny (~10); the visible ground must reach the view edges, so we use the larger
+    // of our backgroundCoverageRadius and BiomeManager.groundCoverageRadius. This is
+    // what stops the ground from being a small central square.
+    float EffectiveBackgroundCoverage()
+    {
+        float cover = Mathf.Max(mapRadius + 5f, backgroundCoverageRadius);
+        var bm = FindFirstObjectByType<BiomeManager>();
+        if (bm != null) cover = Mathf.Max(cover, bm.groundCoverageRadius);
+        return cover;
+    }
+
     void CreateTerrain()
     {
+        // If no background was assigned, REUSE the shared scene background (the one
+        // BiomeManager tiles to groundCoverageRadius) instead of spawning our own
+        // "Terrain" tiled only to mapRadius+5 (~15). That duplicate overlapped the
+        // biome background and left a small textured square in the center of the map
+        // — re-created every stage by ApplyLayout, which is why it was so persistent.
+        if (backgroundGameObject == null)
+        {
+            var shared = GameObject.Find("Background");
+            if (shared != null && shared.GetComponent<SpriteRenderer>() != null)
+                backgroundGameObject = shared;
+        }
+
         if (backgroundGameObject != null)
         {
             // Use manually assigned background GameObject
@@ -312,7 +342,7 @@ public class TowerDefenseMap : MonoBehaviour
                     if (tiler == null)
                         tiler = terrainObject.AddComponent<BackgroundTiler>();
                     tiler.autoCalculateGrid = true;
-                    tiler.coverageRadius = mapRadius + 5f;
+                    tiler.coverageRadius = EffectiveBackgroundCoverage(); // cover the whole view, not just mapRadius+5
                     tiler.GenerateTiles();
                 }
                 else
@@ -1932,11 +1962,17 @@ public class TowerDefenseMap : MonoBehaviour
             // Keep native size — use tiling for coverage
             backgroundGameObject.transform.localScale = Vector3.one;
 
+
+
+            // PUSH THE BACKGROUND BACK IN THE Z-AXIS
+            Vector3 pos = backgroundGameObject.transform.position;
+            backgroundGameObject.transform.position = new Vector3(pos.x, pos.y, 2f);
+
             BackgroundTiler tiler = backgroundGameObject.GetComponent<BackgroundTiler>();
             if (tiler == null)
                 tiler = backgroundGameObject.AddComponent<BackgroundTiler>();
             tiler.autoCalculateGrid = true;
-            tiler.coverageRadius = mapRadius + 5f;
+            tiler.coverageRadius = EffectiveBackgroundCoverage(); // cover the whole view, not just mapRadius+5
             tiler.GenerateTiles();
 
             Debug.Log($"Tiled background at native size to cover map radius {mapRadius}");
@@ -1968,5 +2004,4 @@ public class TowerDefenseMap : MonoBehaviour
         }
     }
 }
-
 

@@ -14,7 +14,6 @@ using UnityEngine.EventSystems;
 // CO-OP: one HALF-SIZE instance per player, placed inside that player's split-screen camera
 // viewport. Each player picks independently; the menu waits until BOTH have chosen, then returns
 // one Choice per player so the orchestrator can apply each reward to the right player.
-
 public class StageClearScreenMenu : MonoBehaviour
 {
     // Reuse the existing enum so orchestrator code/logging is unchanged.
@@ -31,6 +30,14 @@ public class StageClearScreenMenu : MonoBehaviour
     [Tooltip("Child GameObject name of the AUGMENT / empower button in the prefab.")]
     public string empowerButtonName = "EmpowerButton";
 
+    [Tooltip("Name of the reward ICON shown for the restore/heal choice. The hover/press highlight " +
+             "is fitted to THIS graphic's shape rather than the (rectangular) button hotspot.")]
+    public string restoreGraphicName = "Regen";
+
+    [Tooltip("Name of the reward ICON shown for the empower/augment choice. The hover/press " +
+             "highlight is fitted to THIS graphic's shape.")]
+    public string empowerGraphicName = "Power";
+
     [Header("Layout")]
     [Tooltip("Sorting order for the reward canvas (above gameplay HUD, below hard overlays).")]
     public int sortingOrder = 9997;
@@ -39,7 +46,7 @@ public class StageClearScreenMenu : MonoBehaviour
              "half. 1.0 = fills the half edge-to-edge (largest without overlapping the other " +
              "player); lower leaves a margin. Raise above 1.0 only if your prefab content is " +
              "smaller than full-screen.")]
-    public float coopScaleMultiplier = 1.0f;
+    public float coopScaleMultiplier = 1.15f;
 
     [Header("Animation")]
     [Tooltip("Entrance fade duration (seconds, unscaled).")]
@@ -82,10 +89,9 @@ public class StageClearScreenMenu : MonoBehaviour
     }
 
 
-    /// Shows the reward screen and waits until every player has chosen. The callback receives one
-    /// Choice per player (length 1 in single player). Owns the pause/input-suppress/entrance, then
-    /// restores them before invoking onChosen.
-
+    // Shows the reward screen and waits until every player has chosen. The callback receives one
+    // Choice per player (length 1 in single player). Owns the pause/input-suppress/entrance, then
+    // restores them before invoking onChosen.
     public IEnumerator ShowChoices(int healEnergyBonus, int augmentEnergyBonus, Action<Choice[]> onChosen)
     {
         ResolvePrefab();
@@ -153,8 +159,8 @@ public class StageClearScreenMenu : MonoBehaviour
             groups[i] = cg;
 
             // Wire the two buttons for THIS instance.
-            WireButton(inst, restoreButtonName, () => Pick(picks, playerIndex, Choice.Heal));
-            WireButton(inst, empowerButtonName, () => Pick(picks, playerIndex, Choice.Augment));
+            WireButton(inst, restoreButtonName, restoreGraphicName, () => Pick(picks, playerIndex, Choice.Heal));
+            WireButton(inst, empowerButtonName, empowerGraphicName, () => Pick(picks, playerIndex, Choice.Augment));
 
             // Optional reward-value text.
             TrySetChildText(inst, restoreValueChildName, restoreValueFormat, healEnergyBonus);
@@ -209,6 +215,12 @@ public class StageClearScreenMenu : MonoBehaviour
 
         // Let the last panel's fade-out finish before tearing down.
         yield return new WaitForSecondsRealtime(exitDuration);
+
+        // A gamepad player confirms with the right trigger — the same control as the
+        // in-game weapon. Wait until it is released before resuming gameplay attacks,
+        // otherwise a still-held trigger leaves the weapon action unable to fire until
+        // the player lets go (see MenuInputGuard). Still paused here, so no gameplay runs.
+        yield return MenuInputGuard.WaitForGamepadTriggersReleased();
 
         // Restore gameplay state.
         Time.timeScale = prevTimeScale;
@@ -279,7 +291,7 @@ public class StageClearScreenMenu : MonoBehaviour
         return null;
     }
 
-    private void WireButton(GameObject instance, string childName, Action onClick)
+    private void WireButton(GameObject instance, string childName, string choiceGraphicName, Action onClick)
     {
         Transform tr = FindDeep(instance.transform, childName);
         if (tr == null)
@@ -296,93 +308,99 @@ public class StageClearScreenMenu : MonoBehaviour
         }
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() => onClick?.Invoke());
-        ConfigureButtonFeedback(btn);
+
+        // The choice ICON whose shape the highlight is fitted to (e.g. "Regen"/"Power").
+        Graphic choiceGraphic = null;
+        Transform gtr = FindDeep(instance.transform, choiceGraphicName);
+        if (gtr != null) choiceGraphic = gtr.GetComponent<Graphic>();
+
+        ConfigureButtonFeedback(btn, choiceGraphic);
     }
 
-    // Adds hover/select/press feedback to a button, fully in code:
-    //  - cursor hover  -> subtle brighten (ColorTint highlightedColor)
-    //  - gamepad focus -> subtle brighten (ColorTint selectedColor)
-    //  - click / submit -> clearly darker + a small scale "pop" so the press is visible
-    // ColorTint animates with ignoreTimeScale internally, so it still works while this menu
-    // pauses the game (Time.timeScale = 0). The scale pop uses unscaled time for the same reason.
-    private void ConfigureButtonFeedback(Button btn)
+    // Hover / press / gamepad-focus feedback using the Button's OWN built-in ColorTint transition.
+    // This is the exact mechanism every Unity button uses, so it always fires when the button gets
+    // events (which it does — clicks work). We point the transition's targetGraphic at the visible
+    // reward ICON (Regen/Power), so the icon itself tints — shape-aligned and guaranteed visible,
+    // with no custom component, no overlay, and no AddComponent.
+    private void ConfigureButtonFeedback(Button btn, Graphic choiceGraphic)
     {
-        RectTransform brt = btn.GetComponent<RectTransform>();
+        // Combine the two effects that were each confirmed visible:
+        //   (1) the choice ICON inflates (scales up) on hover, dips on press, and
+        //   (2) a soft warm GLOW fades in behind/around the icon — a nicer, rounded, design-aligned
+        //       version of the old full-rectangle highlight.
+        // Plus the Button's built-in ColorTint as a subtle, can't-fail safety layer.
+        Graphic target = choiceGraphic;
+        if (target == null) target = btn.targetGraphic;
+        if (target == null) target = btn.GetComponentInChildren<Graphic>(true);
 
-        // The prefab's buttons are invisible click hotspots sitting OVER painted art that lives in
-        // the shared MainImage — so tinting/scaling the button's own (transparent) graphic shows
-        // nothing. Instead add a visible highlight overlay as the LAST child of the button; it
-        // draws on top of the painted button beneath it, so hover/press read clearly regardless of
-        // what the art looks like.
-        var overlayGO = new GameObject("HoverHighlight");
-        var ort = overlayGO.AddComponent<RectTransform>();
-        overlayGO.transform.SetParent(btn.transform, false);
-        ort.anchorMin = Vector2.zero;
-        ort.anchorMax = Vector2.one;
-        ort.offsetMin = Vector2.zero;
-        ort.offsetMax = Vector2.zero;
-        ort.SetAsLastSibling();
-
-        var overlay = overlayGO.AddComponent<Image>();
-        overlay.sprite = GetSoftRectSprite();   // soft-feathered so the highlight reads as a glow
-        overlay.type = Image.Type.Simple;
-        overlay.color = new Color(1f, 1f, 1f, 0f); // start invisible
-        overlay.raycastTarget = false;             // must never block the button beneath
-
-        // Keep ColorTint as a bonus (harmless if the button graphic is invisible; adds shading if
-        // it happens to be visible).
-        if (btn.targetGraphic == null)
-        {
-            Graphic g = btn.GetComponent<Graphic>();
-            if (g == null) g = btn.GetComponentInChildren<Graphic>(true);
-            btn.targetGraphic = g;
-        }
+        // (Safety) built-in ColorTint on the icon — very subtle warm so it just complements the halo.
+        btn.targetGraphic = target;
         btn.transition = Selectable.Transition.ColorTint;
         ColorBlock cb = btn.colors;
         cb.normalColor = Color.white;
-        cb.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
-        cb.selectedColor = new Color(1.06f, 1.06f, 1.06f, 1f);
-        cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
-        cb.fadeDuration = 0.10f;
+        cb.highlightedColor = new Color(1f, 0.97f, 0.90f, 1f);
+        cb.selectedColor = new Color(1f, 0.97f, 0.90f, 1f);
+        cb.pressedColor = new Color(0.88f, 0.84f, 0.78f, 1f);
+        cb.colorMultiplier = 1f;
+        cb.fadeDuration = 0.08f;
         btn.colors = cb;
 
-        // Drive the overlay (and a small scale pop) on hover/select/press for mouse AND gamepad.
-        ButtonFeedbackFx fx = btn.GetComponent<ButtonFeedbackFx>();
-        if (fx == null) fx = btn.gameObject.AddComponent<ButtonFeedbackFx>();
-        fx.Init(brt, overlay);
+        // The icon we (very gently) inflate, and where the glow sits.
+        RectTransform inflateRT = target != null ? target.rectTransform : btn.GetComponent<RectTransform>();
+
+        // Soft CIRCULAR glow, child of the icon so it's centred automatically, drawn ON TOP (this is
+        // the layer that was actually visible), very transparent and pulsing so it reads as a gentle
+        // "this is selectable" highlight rather than a hard box.
+        Image glow = null;
+        if (inflateRT != null)
+        {
+            var glowGO = new GameObject("ChoiceGlow");
+            var grt = glowGO.AddComponent<RectTransform>();
+            glowGO.transform.SetParent(inflateRT, false);
+            // Fill ~125% of the icon, centred (anchors handle centring regardless of icon pivot).
+            grt.anchorMin = new Vector2(-0.2f, -0.2f);
+            grt.anchorMax = new Vector2(1.2f, 1.2f);
+            grt.offsetMin = Vector2.zero;
+            grt.offsetMax = Vector2.zero;
+            grt.SetAsLastSibling(); // ON TOP of the icon
+
+            glow = glowGO.AddComponent<Image>();
+            glow.sprite = GetSoftCircleSprite();
+            glow.type = Image.Type.Simple;
+            glow.raycastTarget = false;
+            glow.color = new Color(1f, 0.92f, 0.7f, 0f); // soft warm, starts invisible
+        }
+
+        StageClearButtonFeedbackFx fx = btn.GetComponent<StageClearButtonFeedbackFx>();
+        if (fx == null) fx = btn.gameObject.AddComponent<StageClearButtonFeedbackFx>();
+        fx.Init(inflateRT, glow);
     }
 
-    // Soft-feathered rounded-rect sprite used for the hover/press highlight (cached).
-    private static Sprite _softRect;
-    private static Sprite GetSoftRectSprite()
+    // Soft radial circle sprite (alpha 1 at centre, fading to 0 at the edge) used for the glow.
+    private static Sprite _softCircle;
+    private static Sprite GetSoftCircleSprite()
     {
-        if (_softRect != null) return _softRect;
-        const int S = 64;
+        if (_softCircle != null) return _softCircle;
+        const int S = 128;
         var tex = new Texture2D(S, S, TextureFormat.ARGB32, false)
         { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
         var px = new Color[S * S];
-        float feather = 10f;   // edge softness in px
-        float radius = 14f;    // corner radius in px
+        Vector2 c = Vector2.one * (S * 0.5f);
+        float maxR = S * 0.5f;
         for (int y = 0; y < S; y++)
         {
             for (int x = 0; x < S; x++)
             {
-                // Distance from the rounded-rect edge (positive = inside).
-                float dx = Mathf.Max(radius - x, x - (S - 1 - radius), 0f);
-                float dy = Mathf.Max(radius - y, y - (S - 1 - radius), 0f);
-                float corner = Mathf.Sqrt(dx * dx + dy * dy);
-                float edge = Mathf.Min(
-                    Mathf.Min(x, S - 1 - x),
-                    Mathf.Min(y, S - 1 - y));
-                float inset = Mathf.Min(edge + radius, radius + (radius - corner));
-                float a = Mathf.Clamp01(inset / feather);
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), c) / maxR;
+                float a = Mathf.Clamp01(1f - d);
+                a = a * a; // soft edge but a strong, visible core
                 px[y * S + x] = new Color(1f, 1f, 1f, a);
             }
         }
         tex.SetPixels(px);
         tex.Apply();
-        _softRect = Sprite.Create(tex, new Rect(0, 0, S, S), Vector2.one * 0.5f, S);
-        return _softRect;
+        _softCircle = Sprite.Create(tex, new Rect(0, 0, S, S), Vector2.one * 0.5f, S);
+        return _softCircle;
     }
 
     private void TrySetChildText(GameObject instance, string childName, string format, int value)
@@ -418,91 +436,96 @@ public class StageClearScreenMenu : MonoBehaviour
         if (EventSystem.current != null) return;
         var es = new GameObject("EventSystem");
         es.AddComponent<EventSystem>();
+#if ENABLE_INPUT_SYSTEM
+        // With the New Input System active, the legacy StandaloneInputModule does NOT deliver
+        // pointer events — use the Input System UI module so hover/click work.
+        es.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+#else
         es.AddComponent<StandaloneInputModule>();
+#endif
+    }
+}
+
+// Hover/select/press feedback for a StageClearScreen choice. Brightens + scales the actual reward
+// icon graphics (inherently shape-aligned and guaranteed visible). Works for mouse
+// (enter/exit/down/up) and gamepad (select/deselect/submit), in unscaled time so it animates while
+// the menu pauses the game (Time.timeScale = 0).
+// IMPORTANT: this is a TOP-LEVEL class on purpose — Unity's AddComponent<T>() cannot attach a
+// nested MonoBehaviour, so a nested version silently fails to attach (no feedback at all).
+public class StageClearButtonFeedbackFx : MonoBehaviour,
+    IPointerEnterHandler, IPointerExitHandler,
+    IPointerDownHandler, IPointerUpHandler,
+    ISelectHandler, IDeselectHandler, ISubmitHandler
+{
+    private RectTransform _rt;        // the icon (gentle inflate)
+    private Vector3 _baseScale;
+    private Image _glow;              // soft circular glow
+    private bool _hovered, _pressed, _selected;
+    private float _curAlpha;
+    private float _blink;             // remaining blink time
+
+    private static readonly Color GlowColor = new Color(1f, 0.93f, 0.72f, 1f);
+    private const float HoverAlpha = 0.45f;   // steady glow strength on hover (clearly visible)
+    private const float BlinkPeak = 0.90f;   // bright flash on click
+    private const float BlinkDur = 0.45f;   // length of the two-flash blink
+    private const float PulseSpeed = 2.5f;    // gentle breathing while hovered
+    private const float PulseFloor = 0.78f;   // glow only dips to 78% of peak (subtle pulse)
+    private const float FadeRate = 12f;
+    private const float HoverScale = 1.04f, PressScale = 0.97f;
+
+    public void Init(RectTransform inflateTarget, Image glow)
+    {
+        _rt = inflateTarget;
+        _baseScale = _rt != null ? _rt.localScale : Vector3.one;
+        _glow = glow;
+        _curAlpha = 0f; _blink = 0f;
+        if (_glow != null) { var c = GlowColor; c.a = 0f; _glow.color = c; }
     }
 
-    // Hover/select/press feedback for an invisible-hotspot button. Drives a visible overlay Image
-    // (color/alpha) plus a small scale pop on the button rect. Works for mouse (enter/exit/down/up)
-    // and gamepad (select/deselect/submit), and uses unscaled time so it animates while the menu
-    // pauses the game (Time.timeScale = 0).
-    private class ButtonFeedbackFx : MonoBehaviour,
-        IPointerEnterHandler, IPointerExitHandler,
-        IPointerDownHandler, IPointerUpHandler,
-        ISelectHandler, IDeselectHandler, ISubmitHandler
+    private void OnDisable()
     {
-        private RectTransform _rt;
-        private Image _overlay;
-        private Vector3 _baseScale;
-        private bool _hovered, _pressed, _selected;
-        private Coroutine _co;
+        _hovered = _pressed = _selected = false;
+        _curAlpha = 0f; _blink = 0f;
+        if (_glow != null) { var c = GlowColor; c.a = 0f; _glow.color = c; }
+        if (_rt != null) _rt.localScale = _baseScale;
+    }
 
-        private static readonly Color ColNone = new Color(1f, 0.95f, 0.80f, 0f);
-        private static readonly Color ColHover = new Color(1f, 0.95f, 0.80f, 0.22f); // subtle warm glow
-        private static readonly Color ColPress = new Color(1f, 0.85f, 0.55f, 0.45f); // clearly visible
-        private const float HoverScale = 1.03f, PressScale = 0.95f, AnimDur = 0.10f;
+    public void OnPointerEnter(PointerEventData e) { _hovered = true; }
+    public void OnPointerExit(PointerEventData e) { _hovered = false; }
+    public void OnPointerDown(PointerEventData e) { _pressed = true; _blink = BlinkDur; }   // blink on click
+    public void OnPointerUp(PointerEventData e) { _pressed = false; }
+    public void OnSelect(BaseEventData e) { _selected = true; }
+    public void OnDeselect(BaseEventData e) { _selected = false; }
+    public void OnSubmit(BaseEventData e) { _blink = BlinkDur; }                            // blink on gamepad submit
 
-        public void Init(RectTransform target, Image overlay)
+    private void Update()
+    {
+        float dt = Time.unscaledDeltaTime;
+        bool hoverOn = _hovered || _selected;
+
+        // Steady, gently-pulsing glow while hovered/selected (eased in and out).
+        float hoverTarget = 0f;
+        if (hoverOn)
         {
-            _rt = target;
-            _overlay = overlay;
-            _baseScale = _rt != null ? _rt.localScale : Vector3.one;
-            if (_overlay != null) _overlay.color = ColNone;
+            float pulse = PulseFloor + (1f - PulseFloor) * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * PulseSpeed));
+            hoverTarget = HoverAlpha * pulse;
         }
+        _curAlpha = Mathf.Lerp(_curAlpha, hoverTarget, 1f - Mathf.Exp(-FadeRate * dt));
 
-        private void OnDisable()
+        // Crisp double-blink flash layered on top when clicked.
+        float shown = _curAlpha;
+        if (_blink > 0f)
         {
-            _hovered = _pressed = _selected = false;
-            if (_co != null) { StopCoroutine(_co); _co = null; }
-            if (_overlay != null) _overlay.color = ColNone;
-            if (_rt != null) _rt.localScale = _baseScale;
+            _blink -= dt;
+            float t = 1f - Mathf.Clamp01(_blink / BlinkDur);          // 0 -> 1 over the blink
+            float env = Mathf.Max(0f, Mathf.Cos(t * Mathf.PI * 4f)) * (1f - t); // two flashes, fading
+            shown = Mathf.Max(shown, BlinkPeak * env);
         }
+        if (_glow != null) { var c = GlowColor; c.a = shown; _glow.color = c; }
 
-        public void OnPointerEnter(PointerEventData e) { _hovered = true; Apply(); }
-        public void OnPointerExit(PointerEventData e) { _hovered = false; Apply(); }
-        public void OnPointerDown(PointerEventData e) { _pressed = true; Apply(); }
-        public void OnPointerUp(PointerEventData e) { _pressed = false; Apply(); }
-        public void OnSelect(BaseEventData e) { _selected = true; Apply(); }
-        public void OnDeselect(BaseEventData e) { _selected = false; Apply(); }
-        public void OnSubmit(BaseEventData e) { if (isActiveAndEnabled) StartCoroutine(SubmitFlash()); }
-
-        private IEnumerator SubmitFlash()
-        {
-            _pressed = true; Apply();
-            yield return new WaitForSecondsRealtime(0.12f);
-            _pressed = false; Apply();
-        }
-
-        private void Apply()
-        {
-            Color targetColor;
-            float scaleMul;
-            if (_pressed) { targetColor = ColPress; scaleMul = PressScale; }
-            else if (_hovered || _selected) { targetColor = ColHover; scaleMul = HoverScale; }
-            else { targetColor = ColNone; scaleMul = 1f; }
-
-            Vector3 targetScale = _baseScale * scaleMul;
-            if (_co != null) StopCoroutine(_co);
-            if (isActiveAndEnabled) _co = StartCoroutine(AnimateTo(targetColor, targetScale));
-            else { if (_overlay != null) _overlay.color = targetColor; if (_rt != null) _rt.localScale = targetScale; }
-        }
-
-        private IEnumerator AnimateTo(Color targetColor, Vector3 targetScale)
-        {
-            Color c0 = _overlay != null ? _overlay.color : targetColor;
-            Vector3 s0 = _rt != null ? _rt.localScale : targetScale;
-            float t = 0f;
-            while (t < AnimDur)
-            {
-                t += Time.unscaledDeltaTime;
-                float u = Mathf.Clamp01(t / AnimDur);
-                float e = 1f - Mathf.Pow(1f - u, 3f);
-                if (_overlay != null) _overlay.color = Color.Lerp(c0, targetColor, e);
-                if (_rt != null) _rt.localScale = Vector3.Lerp(s0, targetScale, e);
-                yield return null;
-            }
-            if (_overlay != null) _overlay.color = targetColor;
-            if (_rt != null) _rt.localScale = targetScale;
-            _co = null;
-        }
+        // Very gentle inflate.
+        float s = _pressed ? PressScale : (hoverOn ? HoverScale : 1f);
+        if (_rt != null)
+            _rt.localScale = Vector3.Lerp(_rt.localScale, _baseScale * s, 1f - Mathf.Exp(-FadeRate * dt));
     }
 }

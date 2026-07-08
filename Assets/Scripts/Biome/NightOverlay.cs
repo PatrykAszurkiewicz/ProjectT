@@ -117,13 +117,23 @@ public class NightOverlay : MonoBehaviour
     private Transform playerTransform;
     private NightPreset lastAppliedPreset = (NightPreset)(-1);
 
+    // Co-op: the shader lights up to this many player torches/glows at once.
+    // Keep in sync with the _PlayerPositions[N] / _PlayerFacings[N] array size
+    // in NightOverlayShaderSource.ShaderCode.
+    public const int MAX_NIGHT_PLAYERS = 4;
+
+    // Reused each frame to avoid per-frame GC.
+    private readonly Vector4[] playerPosArray = new Vector4[MAX_NIGHT_PLAYERS];
+    private readonly Vector4[] playerFacingArray = new Vector4[MAX_NIGHT_PLAYERS];
+
     // Last-known facing direction — used in directional mode when the torch is
     // off or the cursor hasn't moved yet. Defaults to "right".
     private Vector2 lastFacing = Vector2.right;
 
     // Cached shader property IDs
-    private static readonly int _PlayerPos = Shader.PropertyToID("_PlayerPos");
-    private static readonly int _TorchDir = Shader.PropertyToID("_TorchDir");
+    private static readonly int _PlayerCount = Shader.PropertyToID("_PlayerCount");
+    private static readonly int _PlayerPositions = Shader.PropertyToID("_PlayerPositions");
+    private static readonly int _PlayerFacings = Shader.PropertyToID("_PlayerFacings");
     private static readonly int _TorchEnabled = Shader.PropertyToID("_TorchEnabled");
     private static readonly int _Darkness = Shader.PropertyToID("_Darkness");
     private static readonly int _AmbientLight = Shader.PropertyToID("_AmbientLight");
@@ -142,7 +152,6 @@ public class NightOverlay : MonoBehaviour
 
     // Directional darkness property IDs
     private static readonly int _DirectionalMode = Shader.PropertyToID("_DirectionalMode");
-    private static readonly int _PlayerFacing = Shader.PropertyToID("_PlayerFacing");
     private static readonly int _FrontConeHalfAngle = Shader.PropertyToID("_FrontConeHalfAngle");
     private static readonly int _FrontConeRange = Shader.PropertyToID("_FrontConeRange");
     private static readonly int _FrontConeDimming = Shader.PropertyToID("_FrontConeDimming");
@@ -427,50 +436,69 @@ public class NightOverlay : MonoBehaviour
         }
         lastAppliedPreset = preset;
 
-        // Find player lazily
-        if (playerTransform == null)
+        // === Per-player positions + facings (co-op aware) ===
+        // Build one entry per live player from PlayerAim.All. Each player's
+        // torch cone and glow are anchored at that player's own position and
+        // aimed by that player's own aim — so two players each get their own
+        // correctly-aimed torch, instead of one shared cone driven by whichever
+        // player last won PlayerAim.Instance.
+        int count = 0;
+        var aims = PlayerAim.All;
+        if (aims != null && aims.Count > 0)
         {
-            FindPlayer();
-            if (playerTransform == null) return;
-        }
-
-        // Player position
-        Vector3 playerPos = playerTransform.position;
-        overlayMat.SetVector(_PlayerPos, new Vector4(playerPos.x, playerPos.y, 0, 0));
-
-        // Torch direction — follows cursor. In directional mode, this is also
-        // the player's facing for the front cone (the player aims their gaze
-        // with the cursor whether the torch is on or off).
-        Vector2 facingThisFrame = lastFacing;
-        if (PlayerAim.Instance != null)
-        {
-            // Unified aim source (mouse OR right stick) — same direction the
-            // directional cursor uses, so the torch tracks the gamepad too.
-            facingThisFrame = PlayerAim.Instance.Direction;
-            lastFacing = facingThisFrame;
-        }
-        else if (Mouse.current != null && Camera.main != null)
-        {
-            Vector2 mouseScreen = Mouse.current.position.ReadValue();
-            Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mouseScreen);
-            mouseWorld.z = 0;
-            Vector2 toCursor = (Vector2)(mouseWorld - playerPos);
-            if (toCursor.sqrMagnitude > 0.0001f)
+            for (int idx = 0; idx < aims.Count && count < MAX_NIGHT_PLAYERS; idx++)
             {
-                facingThisFrame = toCursor.normalized;
-                lastFacing = facingThisFrame;
+                var a = aims[idx];
+                if (a == null) continue;
+
+                Vector3 pp = a.transform.position;
+                Vector2 facing = a.Direction;                 // never zero by contract
+                if (facing.sqrMagnitude < 0.0001f) facing = lastFacing;
+                lastFacing = facing;
+
+                playerPosArray[count] = new Vector4(pp.x, pp.y, 0, 0);
+                playerFacingArray[count] = new Vector4(facing.x, facing.y, 0, 0);
+                count++;
             }
         }
 
-        if (torchEnabled)
+        // Legacy single-player fallback: no PlayerAim in the scene. Resolve the
+        // player by tag / PlayerMovement and aim with the mouse, exactly as
+        // before the co-op change.
+        if (count == 0)
         {
-            overlayMat.SetVector(_TorchDir, new Vector4(facingThisFrame.x, facingThisFrame.y, 0, 0));
+            if (playerTransform == null) FindPlayer();
+            if (playerTransform == null) return;
+
+            Vector3 pp = playerTransform.position;
+            Vector2 facing = lastFacing;
+            if (Mouse.current != null && Camera.main != null)
+            {
+                Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+                mouseWorld.z = 0;
+                Vector2 toCursor = (Vector2)(mouseWorld - pp);
+                if (toCursor.sqrMagnitude > 0.0001f)
+                {
+                    facing = toCursor.normalized;
+                    lastFacing = facing;
+                }
+            }
+
+            playerPosArray[0] = new Vector4(pp.x, pp.y, 0, 0);
+            playerFacingArray[0] = new Vector4(facing.x, facing.y, 0, 0);
+            count = 1;
         }
 
-        // Front-cone facing is independent of torch state — even with the
-        // torch off, the player can still "see" peripherally in front of
-        // themselves.
-        overlayMat.SetVector(_PlayerFacing, new Vector4(facingThisFrame.x, facingThisFrame.y, 0, 0));
+        // Zero unused slots (the shader honors _PlayerCount, but keep them clean).
+        for (int z = count; z < MAX_NIGHT_PLAYERS; z++)
+        {
+            playerPosArray[z] = Vector4.zero;
+            playerFacingArray[z] = Vector4.zero;
+        }
+
+        overlayMat.SetFloat(_PlayerCount, count);
+        overlayMat.SetVectorArray(_PlayerPositions, playerPosArray);
+        overlayMat.SetVectorArray(_PlayerFacings, playerFacingArray);
 
         // Flicker
         float flicker = 0f;
@@ -593,3 +621,4 @@ public class NightOverlay : MonoBehaviour
         Cleanup();
     }
 }
+

@@ -217,6 +217,11 @@ public class HammerSlamRunner : MonoBehaviour
     private Weapon _weapon;
     private WeaponData _data;
 
+    // Co-op: this hammer's OWNING player's aim, resolved from the weapon's parent
+    // hierarchy. Used so the slam follows THIS player's cursor/stick instead of
+    // whichever player last won the global PlayerAim.Instance.
+    private PlayerAim _ownerAim;
+
     private bool _running;        // a slam (windup→impact→recoil) is playing
     private bool _charging;       // currently holding the charge
     private bool _releaseQueued;  // release requested while still charging
@@ -395,15 +400,22 @@ public class HammerSlamRunner : MonoBehaviour
         // big swing sounds deeper / heavier).
         PlaySwingWhoosh();
 
+        // Held-breath (charged only) is computed up front so we know exactly how
+        // long until the visual ground contact, and can start the impact SFX
+        // early enough that its transient lands ON the hit — see hammerHitSfxLead.
+        float holdBreath = (_chargeFactor > 0.15f) ? Mathf.Lerp(0f, 0.05f, _chargeFactor) : 0f;
+        float timeToImpact = dropTime + holdBreath;
+        float sfxLead = Mathf.Clamp(_data.hammerHitSfxLead, 0f, timeToImpact);
+        StartCoroutine(PlayHammerHitSfxAfter(timeToImpact - sfxLead));
+
         // DROP: whip it down through the arc, accelerating into the ground.
         yield return AnimateSwing(dropTime, -0.14f, 1f, 1.22f, EaseInQuart);
 
         // HEAVINESS — a tiny "held breath" right before a charged hit lands:
         // a micro freeze-frame at the bottom of the swing. Scales with charge,
         // skipped entirely on a quick tap.
-        if (_chargeFactor > 0.15f)
+        if (holdBreath > 0f)
         {
-            float holdBreath = Mathf.Lerp(0f, 0.05f, _chargeFactor);
             float held = 0f;
             while (held < holdBreath) { held += Time.unscaledDeltaTime; yield return null; }
         }
@@ -427,6 +439,25 @@ public class HammerSlamRunner : MonoBehaviour
         DestroyGhost();
         _running = false;
         Destroy(gameObject);
+    }
+
+    // Plays the ground-slam SFX. Kicked off before the DROP so a non-zero
+    // hammerHitSfxLead starts the event early and its impact transient lands on
+    // the visual ground contact (compensates for lead-in / attack baked into the
+    // FMOD event). With lead = 0 the wait equals time-to-impact, so it fires
+    // exactly at contact. Counts scaled time to stay locked to the swing (which
+    // also uses scaled time); timescale is 1 pre-impact, so this matches the
+    // held-breath's unscaled wait too.
+    private IEnumerator PlayHammerHitSfxAfter(float delay)
+    {
+        float t = 0f;
+        while (t < delay) { t += Time.deltaTime; yield return null; }
+
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.hammerHit.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.hammerHit, ResolveImpactPoint());
+        }
     }
 
     //  GHOST HAMMER (directional reach rig) 
@@ -651,14 +682,28 @@ public class HammerSlamRunner : MonoBehaviour
         return p;
     }
 
-    // The aim direction = from the player toward the mouse cursor in world
-    // space (the same vector CursorPointer uses). Falls back to +X.
+    // This hammer's OWN player's aim (resolved from the weapon hierarchy, then
+    // cached). Retries until found so a transient early-null can't stick.
+    private PlayerAim ResolveOwnerAim()
+    {
+        if (_ownerAim == null && _weapon != null)
+            _ownerAim = _weapon.GetComponentInParent<PlayerAim>();
+        return _ownerAim;
+    }
+
+    // The aim direction = the same unified aim (mouse OR gamepad) this player's
+    // cursor uses. Resolved from THIS hammer's owner, not the global
+    // PlayerAim.Instance — in co-op the global is whichever player spawned last,
+    // which made a gamepad player's slam fly off in the other player's direction
+    // while the mouse player (who happened to be the Instance) looked fine.
     private Vector2 ResolveAimDirection()
     {
-        // Gamepad / unified aim takes priority when present.
-        if (PlayerAim.Instance != null)
-            return PlayerAim.Instance.Direction;
+        PlayerAim a = ResolveOwnerAim();
+        if (a == null) a = PlayerAim.Instance;   // legacy single-player fallback
+        if (a != null)
+            return a.Direction;
 
+        // Last-resort mouse fallback (no PlayerAim anywhere in the scene).
         var cam = Camera.main;
         var mouse = UnityEngine.InputSystem.Mouse.current;
         if (cam == null || mouse == null) return Vector2.right;
@@ -888,10 +933,11 @@ public class HammerTelegraphRing : MonoBehaviour
         lr.loop = true;
         lr.positionCount = 56;
         lr.material = new Material(Shader.Find("Sprites/Default"));
-        // BELOW the player so the telegraph reads as being on the ground.
+        // On the ground (above both backgrounds) but below the player, so the
+        // telegraph reads as a faint mark on the floor.
         lr.sortingLayerName = "Default";
-        lr.sortingOrder = -90;
-        lr.startWidth = lr.endWidth = 0.07f;
+        lr.sortingOrder = 60;
+        lr.startWidth = lr.endWidth = 0.03f;   // thin, understated hairline
 
         for (int i = 0; i < lr.positionCount; i++)
         {
@@ -905,8 +951,8 @@ public class HammerTelegraphRing : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / lifetime);
             // Fade in, then a quick pulse near the end as the slam lands.
-            float alpha = Mathf.Lerp(0f, 0.5f, t);
-            float pulse = 1f + 0.12f * Mathf.Sin(t * 28f);
+            float alpha = Mathf.Lerp(0f, 0.14f, t);
+            float pulse = 1f + 0.06f * Mathf.Sin(t * 28f);
             Color c = color; c.a = alpha;
             lr.startColor = lr.endColor = c;
             transform.localScale = Vector3.one * pulse;
@@ -920,7 +966,7 @@ public class HammerTelegraphRing : MonoBehaviour
 public class HammerChargeVFX : MonoBehaviour
 {
     private const string SortLayer = "Default";
-    private const int RingOrder = -80;     // on the ground, below the player
+    private const int RingOrder = 70;      // on the ground (above both backgrounds), below the player
     private const int MoteOrder = 5250;    // motes float above the player
 
     private WeaponData _data;
@@ -943,7 +989,7 @@ public class HammerChargeVFX : MonoBehaviour
         _ring.material = new Material(Shader.Find("Sprites/Default"));
         _ring.sortingLayerName = SortLayer;
         _ring.sortingOrder = RingOrder;
-        _ring.startWidth = _ring.endWidth = 0.06f;
+        _ring.startWidth = _ring.endWidth = 0.03f;
 
         StartCoroutine(SpawnMotes());
     }
@@ -986,12 +1032,13 @@ public class HammerChargeVFX : MonoBehaviour
         transform.localScale = new Vector3(ringPulse, ringPulse, 1f);
 
         // Brighten + thicken with charge, with the thump driving the alpha.
-        float alphaPulse = 1f + thump * Mathf.Lerp(0.15f, 0.55f, _charge);
+        // Kept understated so the ring hints at the charge rather than glaring.
+        float alphaPulse = 1f + thump * Mathf.Lerp(0.1f, 0.3f, _charge);
         Color c = Color.Lerp(_data.hammerShockwaveColor, Color.white, _charge * 0.5f);
-        c.a = Mathf.Clamp01(Mathf.Lerp(0.12f, 0.62f, _charge) * alphaPulse);
+        c.a = Mathf.Clamp01(Mathf.Lerp(0.04f, 0.18f, _charge) * alphaPulse);
         _ring.startColor = _ring.endColor = c;
         _ring.startWidth = _ring.endWidth =
-            Mathf.Lerp(0.05f, 0.17f, _charge) * (1f + thump * 0.25f);
+            Mathf.Lerp(0.03f, 0.06f, _charge) * (1f + thump * 0.2f);
     }
 
     // Motes that spiral inward toward the centre, faster as the charge fills.
@@ -1090,8 +1137,13 @@ public class HammerSlamVFX : MonoBehaviour
     //   Dust    : ABOVE the player       → billows in front, reads as volume.
     //   Debris  : ABOVE the player       → chunks fly toward camera.
     private const string SortLayer = "Default";
-    private const int CrackOrder = -100;   // behind player & most world objects
-    private const int ScorchOrder = -110;   // darkened ground patch, lowest
+    // NOTE: ground marks must sit ABOVE *both* backgrounds — the tiled
+    // "Background" object (sortingOrder -100) AND the legacy non-tiled center
+    // rectangle from TowerDefenseMap (map.backgroundGameObject, ~ -1/0). They
+    // still stay well below the player / cartoon grass (~1000) so they read as
+    // painted on the ground.
+    private const int CrackOrder = 50;    // painted on the ground, above both backgrounds
+    private const int ScorchOrder = 40;   // darkened ground patch, just under the cracks
     private const int DustOrder = 5200;   // in front of player
     private const int DebrisOrder = 5400;   // in front of dust
     private const int FlashOrder = 5600;   // topmost burst
@@ -1143,9 +1195,9 @@ public class HammerSlamVFX : MonoBehaviour
         sr.sprite = HammerSlamSystem.GetSoftDiscSprite();
         sr.sortingLayerName = SortLayer;
         sr.sortingOrder = ScorchOrder;
-        Color c = _crack; c.a = 0.55f;
+        Color c = _crack; c.a = 0.16f;   // very faint — barely-there ground stain
         sr.color = c;
-        go.transform.localScale = Vector3.one * (_radius * 1.7f);
+        go.transform.localScale = Vector3.one * (_radius * 1.2f);
         StartCoroutine(FadeSprite(sr, 1.6f, 0.4f));
     }
 

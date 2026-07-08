@@ -218,8 +218,10 @@ public class TrapMine : MonoBehaviour
         var rb = enemy.GetComponent<Rigidbody2D>(); if (rb) rb.linearVelocity = Vector2.zero;
         var ec = enemy.GetComponent<EnemyController>(); if (ec) ec.ApplyFreeze(CAPTURE_DURATION + 0.1f);
         if (CameraShake.Instance) CameraShake.Instance.Shake(0.06f, 0.08f);
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.enemyAttack, transform.position);
+        // Capture SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.trapCapture.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.trapCapture, transform.position);
     }
 
     void Finalize(GameObject enemy)

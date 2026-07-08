@@ -5,7 +5,7 @@
 			<value>MeleeSwing</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{6009be21-02e3-4861-b282-c200d8a34763}">
 		<relationship name="effects">
 			<destination>{5d39f91c-cb4b-47f6-8a25-e937b7e81ce6}</destination>
+			<destination>{225677f5-960b-46a4-9b80-46d23a4f76aa}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{9b8d0cee-6538-4581-bb5b-634489b43d97}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{b6fd310e-727a-495b-ba8d-dc0fe482c06d}" />
 	<object class="MixerBusFader" id="{5d39f91c-cb4b-47f6-8a25-e937b7e81ce6}" />
+	<object class="SpatialiserEffect" id="{225677f5-960b-46a4-9b80-46d23a4f76aa}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

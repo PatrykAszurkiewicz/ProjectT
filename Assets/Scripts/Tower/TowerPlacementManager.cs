@@ -15,6 +15,19 @@ public class TowerPlacementManager : MonoBehaviour
     public GameObject towerPrefab4;
     public GameObject towerPrefab5;
     public GameObject towerPrefab6;
+    public GameObject towerPrefab7;
+    public GameObject towerPrefab8;
+
+    [Header("Auto-loaded Tower Prefabs (from Resources)")]
+    [Tooltip("Prefab paths under a Resources/ folder (NO file extension) to append to " +
+             "the buildable tower list at runtime, in addition to the slots above. Lets " +
+             "you wire towers that live in Resources/ without dragging them into a slot. " +
+             "Prefabs already assigned to a slot above are skipped (deduped by reference).")]
+    public List<string> autoLoadTowerResourcePaths = new List<string>
+    {
+        "Sprites/Buildings/Towers/GeneratorTower/GeneratorTower",
+        "Sprites/Buildings/Towers/HealTower",
+    };
 
     [System.NonSerialized]
     private List<GameObject> towerPrefabs = new List<GameObject>();
@@ -168,26 +181,19 @@ public class TowerPlacementManager : MonoBehaviour
     {
         if (!isRepairSoundInitialized) return;
 
-        // Check if target is still valid (not a destroyed core)
-        bool shouldPlaySound = isCurrentlySupplying && currentSupplyTarget != null;
-
-        if (shouldPlaySound && currentSupplyTarget is CentralCore core)
-        {
-            if (core.IsDestroyed())
-            {
-                shouldPlaySound = false;
-            }
-        }
+        bool shouldPlaySound = EnergyManager.Instance != null && EnergyManager.Instance.AnyoneSupplying;
 
         if (shouldPlaySound)
         {
+            // Position the loop near the supplier so the 3D event isn't muted.
+            // (playerTransform is player 1; see the co-op caveat below.)
+            if (playerTransform != null)
+                repairSound.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(playerTransform));
+
             PLAYBACK_STATE playbackState;
             repairSound.getPlaybackState(out playbackState);
-
             if (playbackState.Equals(PLAYBACK_STATE.STOPPED))
-            {
                 repairSound.start();
-            }
         }
         else
         {
@@ -205,6 +211,32 @@ public class TowerPlacementManager : MonoBehaviour
         if (towerPrefab4 != null) towerPrefabs.Add(towerPrefab4);
         if (towerPrefab5 != null) towerPrefabs.Add(towerPrefab5);
         if (towerPrefab6 != null) towerPrefabs.Add(towerPrefab6);
+        if (towerPrefab7 != null) towerPrefabs.Add(towerPrefab7);
+        if (towerPrefab8 != null) towerPrefabs.Add(towerPrefab8);
+
+        // Append any Resources-loaded towers (e.g. the animated Generator / Heal
+        // prefabs) that aren't already wired into a slot above.
+        if (autoLoadTowerResourcePaths != null)
+        {
+            foreach (var path in autoLoadTowerResourcePaths)
+            {
+                if (string.IsNullOrWhiteSpace(path)) continue;
+
+                var prefab = Resources.Load<GameObject>(path);
+                if (prefab == null)
+                {
+                    Debug.LogWarning($"[TowerPlacement] Could not load tower prefab at Resources/{path}");
+                    continue;
+                }
+                if (prefab.GetComponent<Tower>() == null)
+                {
+                    Debug.LogWarning($"[TowerPlacement] Prefab at Resources/{path} has no Tower component; skipping.");
+                    continue;
+                }
+                if (!towerPrefabs.Contains(prefab))
+                    towerPrefabs.Add(prefab);
+            }
+        }
     }
 
     void CreateSelectionWheel()
@@ -220,9 +252,12 @@ public class TowerPlacementManager : MonoBehaviour
 
     void Update()
     {
-        // Per-player placement (toggle / aim / build) is owned by PlayerTowerPlacer.
-        // The hub keeps the shared services: economy, slot registry, supply, repair.
-        HandleMouseClicks();   // consumer energy-supply for the mouse player only
+        // Per-player placement, build AND supply are owned by PlayerTowerPlacer now,
+        // so each player (mouse OR gamepad) supplies through their own Build action,
+        // aim and beam. The hub keeps the shared services: economy, slot registry,
+        // and the shared repair sound. The old global-mouse supply (HandleMouseClicks)
+        // is intentionally no longer called — it only worked for the mouse player and
+        // anchored a single shared beam.
         UpdateRepairSound();
 
         if (isPlacementMode && requirePlayerProximity && Time.frameCount % 5 == 0)
@@ -312,12 +347,21 @@ public class TowerPlacementManager : MonoBehaviour
 
     void SetConsumerHighlight(IEnergyConsumer consumer, bool highlight)
     {
+        if (consumer == null) return;
+
         if (consumer is CentralCore core)
         {
+            if (core == null) return;        // Unity-null check: destroyed
             core.SetHighlight(highlight);
         }
         else if (consumer is MonoBehaviour mb)
         {
+            // IMPORTANT: `consumer` is an interface reference, so a plain null-check
+            // can't see a destroyed Unity object. Cast to MonoBehaviour and use Unity's
+            // overloaded == so a disassembled/destroyed tower (which may still be cached
+            // in currentHighlightedConsumer) is skipped instead of throwing on GetComponent.
+            if (mb == null) return;
+
             var spriteRenderer = mb.GetComponent<SpriteRenderer>();
             if (spriteRenderer != null)
             {
@@ -676,8 +720,23 @@ public class TowerPlacementManager : MonoBehaviour
     public bool CanBuildAt(TowerSlot slot, Transform byPlayer)
     {
         if (slot == null || !slot.IsAvailable) return false;
-        if (requirePlayerProximity && byPlayer != null &&
-            Vector2.Distance(byPlayer.position, slot.transform.position) > buildRange) return false;
+
+        if (requirePlayerProximity && byPlayer != null)
+        {
+            // Use the LARGER of the hub's buildRange and the requesting player's own
+            // PlayerTowerPlacer.buildRange. The placer uses its buildRange to highlight
+            // slots and open the wheel, so if it can reach a slot to START a build, the
+            // build must be allowed to COMPLETE — otherwise raising the placer's range
+            // (e.g. for the tower upgrade menu) lets you open the wheel on a slot the
+            // hub then silently rejects.
+            float range = buildRange;
+            var placer = byPlayer.GetComponent<PlayerTowerPlacer>()
+                      ?? byPlayer.GetComponentInParent<PlayerTowerPlacer>()
+                      ?? byPlayer.GetComponentInChildren<PlayerTowerPlacer>();
+            if (placer != null) range = Mathf.Max(range, placer.buildRange);
+
+            if (Vector2.Distance(byPlayer.position, slot.transform.position) > range) return false;
+        }
         return true;
     }
 
@@ -861,6 +920,11 @@ public class TowerPlacementManager : MonoBehaviour
 
     IEnumerator PlayTowerCreationAnimation(GameObject tower)
     {
+        // Towers that animate themselves own their renderer — swapping in the decay
+        // spritesheet would fight their animation and leave a wrong frame behind.
+        var towerComp = tower != null ? tower.GetComponent<Tower>() : null;
+        if (towerComp != null && towerComp.usePrefabVisuals) yield break;
+
         Sprite[] creationSprites = Resources.LoadAll<Sprite>(towerCreationSpritePath);
         if (creationSprites == null || creationSprites.Length == 0) yield break;
 
@@ -971,4 +1035,3 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 }
-

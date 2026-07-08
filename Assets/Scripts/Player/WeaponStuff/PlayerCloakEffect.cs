@@ -355,9 +355,12 @@ public class PlayerCloakEffect : MonoBehaviour
 
     private void PlayCloakSound()
     {
-        // Reuse an existing soft "whoosh"-style event if available. We guard
-        // every access so a missing FMODEvents field never throws.
-        TryPlayOneShot();
+        // Cloak activation SFX.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.cloakActivate.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.cloakActivate, transform.position);
+        }
     }
 
     private void PlayUncloakSound()
@@ -374,4 +377,3 @@ public class PlayerCloakEffect : MonoBehaviour
             AudioManager.instance.PlayOneShot(ev, transform.position);
     }
 }
-

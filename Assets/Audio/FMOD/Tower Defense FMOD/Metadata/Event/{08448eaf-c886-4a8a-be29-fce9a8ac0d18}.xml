@@ -5,7 +5,7 @@
 			<value>Flamethrower</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -146,6 +146,7 @@
 			<destination>{da1290a3-033b-4c25-9b6e-c4f27bf79296}</destination>
 			<destination>{0eb922a7-0ef6-443d-a35c-29109e5931f7}</destination>
 			<destination>{4de3189d-55db-4944-93e6-439cc8a33e2c}</destination>
+			<destination>{75493322-b1e3-4102-a023-8849269b0377}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{161d992b-6279-4469-b850-f89ef62ed0fe}" />
@@ -182,6 +183,17 @@
 		</property>
 		<property name="gain">
 			<value>4</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{75493322-b1e3-4102-a023-8849269b0377}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 	<object class="AutomationPoint" id="{52ffad85-f0cb-4112-bab1-81f44abc9454}">

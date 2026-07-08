@@ -136,6 +136,27 @@ public class PlayerTowerTether : MonoBehaviour
     private float bulkCostAccumulator;
     private bool isBulkSupplying = false;
 
+    // Per-player supply input (co-op). Bulk supply used to poll the global mouse, so
+    // gamepad players couldn't bulk-supply. Now it reads THIS player's Build action
+    // (left-click for mouse, left trigger for gamepad) and yields to this player's own
+    // single-target supply via the sibling PlayerTowerPlacer.
+    private UnityEngine.InputSystem.InputAction _buildAction;
+    private PlayerTowerPlacer _placer;
+    private bool _supplyInputResolved;
+
+    private void ResolveSupplyInput()
+    {
+        if (_supplyInputResolved) return;
+        _supplyInputResolved = true;
+
+        var pi = GetComponent<UnityEngine.InputSystem.PlayerInput>()
+                 ?? GetComponentInParent<UnityEngine.InputSystem.PlayerInput>();
+        if (pi != null && pi.actions != null)
+            _buildAction = pi.actions.FindAction("Build", false);
+
+        _placer = GetComponent<PlayerTowerPlacer>() ?? GetComponentInParent<PlayerTowerPlacer>();
+    }
+
     // Core decay aggregate state
     private int nearTetherCount = 0;
     private bool coreDecayHooked = false;
@@ -312,11 +333,21 @@ public class PlayerTowerTether : MonoBehaviour
         var pm = TowerPlacementManager.Instance;
         if (pm == null || !pm.IsInPlacementMode()) return;
 
-        // Yield to the existing single-target continuous supply path.
-        if (em.isContinuouslySupplying) return;
+        ResolveSupplyInput();
 
-        // LMB must be held.
-        if (Mouse.current == null || !Mouse.current.leftButton.isPressed) return;
+        // Yield to THIS player's single-target supply (aiming directly at a tower/core).
+        // Falls back to the legacy global flag if there's no sibling placer.
+        if (_placer != null) { if (_placer.IsSingleSupplying) return; }
+        else if (em.isContinuouslySupplying) return;
+
+        // THIS player's Build action must be held (left-click for mouse, left trigger
+        // for gamepad). Replaces the old global-mouse check so gamepad players — and
+        // both players in gamepad+gamepad co-op — can bulk-supply. Falls back to the
+        // global mouse only for a legacy object with no Build action.
+        bool held = _buildAction != null
+            ? _buildAction.IsPressed()
+            : (Mouse.current != null && Mouse.current.leftButton.isPressed);
+        if (!held) return;
 
         // We are now actively in bulk-supply state (drives the electric-blue visual).
         isBulkSupplying = true;
@@ -1025,3 +1056,4 @@ public static class TetherMath
     public static float DecayMultiplier(int count, float reductionPerTether)
         => Mathf.Clamp01(1f - reductionPerTether * Mathf.Max(0, count));
 }
+

@@ -173,8 +173,9 @@ public class LoreChest : MonoBehaviour
 
     private void PlayOpenSound()
     {
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerCreation, transform.position);
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.openChest.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.openChest, transform.position);
     }
 
     private IEnumerator OpenAndDespawn()
@@ -265,4 +266,3 @@ public class LoreChest : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, 100f);
     }
 }
-

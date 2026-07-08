@@ -199,14 +199,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   detectRange: 7
   attackRange: 2.3
-  attackCooldown: 0
+  attackCooldown: 1
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8192
+  blockerLayers:
+    serializedVersion: 2
+    m_Bits: 0
   requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.2
+  smoothSteeringEnabled: 1
+  lookAheadDistance: 1.6
+  avoidanceStrength: 1.8
+  steerResponsiveness: 6
+  wanderStrength: 0.25
+  wanderFrequency: 0.4
+  stuckArcWidth: 0.6
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0

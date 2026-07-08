@@ -5,7 +5,7 @@
 			<value>ProximityMine</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{a4463f30-dd13-4974-ba1e-12a36471b280}">
 		<relationship name="effects">
 			<destination>{676f2102-b873-45ca-b0ed-77dd432904b4}</destination>
+			<destination>{7719e4d5-9011-4409-95d3-2530df6a49d4}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{71d92dc3-8f27-4788-bed4-edd088612b01}" />
@@ -115,4 +116,15 @@
 	</object>
 	<object class="MixerBusFader" id="{e7f34b7d-fdd4-490f-9c42-490aee207313}" />
 	<object class="MixerBusFader" id="{676f2102-b873-45ca-b0ed-77dd432904b4}" />
+	<object class="SpatialiserEffect" id="{7719e4d5-9011-4409-95d3-2530df6a49d4}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

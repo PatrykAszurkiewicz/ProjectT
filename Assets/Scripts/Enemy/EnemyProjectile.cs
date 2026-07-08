@@ -84,6 +84,11 @@ public class EnemyProjectile : MonoBehaviour
             var sr = GetComponent<SpriteRenderer>();
             if (sr != null) sr.sortingOrder = forcedSortingOrder;
         }
+
+        // Subtle menacing tracer light so enemy shots read in dark biomes.
+        ProjectileGlow.Attach(transform, new Color(1f, 0.35f, 0.30f), worldRadius: 0.55f,
+                              alpha: 0.5f, pulse: true, pulseSpeed: 9f, pulseAmount: 0.2f,
+                              sortingOrder: forcedSortingOrder != 0 ? forcedSortingOrder - 3 : ProjectileGlow.DefaultGlowSortingOrder);
     }
 
     private void Update()
@@ -270,6 +275,14 @@ public class EnemyProjectile : MonoBehaviour
         }
 
         if (target == null) return;
+
+        // Impact SFX — the shot connected with its target (player / tower / core).
+        // Skipped for the parried bounce above, which has its own parry feedback.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.pitcherHit.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.pitcherHit, transform.position);
+        }
 
         // Preferred path: reuse the firing controller's damage routing so the
         // projectile behaves exactly like that enemy's melee hit would — except

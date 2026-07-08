@@ -80,7 +80,11 @@ public class StonesOverlay : MonoBehaviour
 
     [Header("Sorting")]
     public string sortingLayerName = "Default";
-    public int sortingOrder = -1;
+    // Base order for the ground decals. Must be > the background's order (-1) or the
+    // meshes tie with the background and the camera's Y-axis transparency sort shows
+    // them only in a central square. 0 sits just above background, below tower slots
+    // (1)/paths (500)/units (500+). Sub-layers add their offsets on top of this.
+    public int sortingOrder = 0;
 
 
     private const int MAX_VERTS_PER_MESH = 60000;
@@ -126,11 +130,20 @@ public class StonesOverlay : MonoBehaviour
     private Vector2 windDir, windPerp;
 
 
-    void Start() => GenerateStones();
+    private bool _generated;
+
+    void Start()
+    {
+        // BiomeManager calls GenerateStones() right after AddComponent; Unity then fires
+        // Start() a frame later. Without this guard we build and immediately discard
+        // the entire mesh set twice per biome.
+        if (!_generated) GenerateStones();
+    }
 
     [ContextMenu("Regenerate Stones")]
     public void GenerateStones()
     {
+        _generated = true;
         Cleanup();
 
         float rad = windAngle * Mathf.Deg2Rad;
@@ -746,3 +759,4 @@ public class StonesOverlay : MonoBehaviour
         T[] r = new T[len]; System.Array.Copy(src, r, len); return r;
     }
 }
+

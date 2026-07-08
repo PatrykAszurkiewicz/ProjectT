@@ -416,6 +416,11 @@ public class Weapon : MonoBehaviour
 
     private CursorManager CM => CursorManager.For(_playerRef);
 
+    /// <summary>This weapon owner's per-player cursor (co-op safe). Subsystems such
+    /// as the grappling hook MUST use this rather than CursorManager.Instance, or
+    /// they will write to another player's cursor in split-screen co-op.</summary>
+    public CursorManager Cursor => CM;
+
     private Vector2 AimDirection()
     {
         if (_aim != null) return _aim.Direction;
@@ -1014,6 +1019,14 @@ public class Weapon : MonoBehaviour
             if (decoyLauncherSystem != null)
             {
                 decoyLauncherSystem.PlaceDecoy();
+
+                // Decoy deploy SFX
+                if (AudioManager.instance != null && FMODEvents.instance != null
+                    && !FMODEvents.instance.decoySetup.IsNull)
+                {
+                    AudioManager.instance.PlayOneShot(FMODEvents.instance.decoySetup, transform.position);
+                }
+
                 StartCoroutine(ToolCooldownRoutine());
             }
         }
@@ -1117,11 +1130,18 @@ public class Weapon : MonoBehaviour
             CM.SetCursor(CursorManager.CursorType.Melee);
     }
 
+    /// <summary>Re-apply this player's weapon cursor. Public so the grappling hook
+    /// system can fall back to the normal weapon cursor when it has no target.</summary>
+    public void RefreshWeaponCursor() => UpdateWeaponCursor();
+
     private void UpdateToolCursor()
     {
         if (CM == null || toolData == null) return;
 
-        if (toolData.isGrapplingHook) CM.SetCursor(CursorManager.CursorType.Hook);
+        // Grappling hook drives its own cursor every frame in GrapplingHookSystem
+        // (normal weapon cursor when there is no target, highlighted hook when a
+        // target is locked on), so don't force the plain Hook cursor on tool-press.
+        if (toolData.isGrapplingHook) { /* handled per-frame by the grappling system */ }
         else if (toolData.isObstacleDrawer) CM.SetCursor(CursorManager.CursorType.ObstacleDrawer);
         else if (toolData.isBombLauncher) CM.SetCursor(CursorManager.CursorType.BombLauncher);
         else if (toolData.isTrap) CM.SetCursor(CursorManager.CursorType.Trap);
@@ -1159,6 +1179,13 @@ public class Weapon : MonoBehaviour
         GameObject projectile = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
         var weaponProjectile = projectile.GetComponent<WeaponProjectile>();
         weaponProjectile?.Initialize(direction, weaponData.damage, weaponData.projectileSpeed, weaponData.knockBackForce);
+
+        // Ranged fire SFX
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.rangedShot.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.rangedShot, transform.position);
+        }
     }
 
     //  BOOMERANG — creates the GO entirely from code, no prefab needed
@@ -1255,13 +1282,32 @@ public class Weapon : MonoBehaviour
         Vector3 landing = new Vector3(world.x, world.y, 0f);
         Vector3 spawn = transform.position;
 
-        // Build the shell. If the asset supplies a projectilePrefab we use it
-        // for the visuals; otherwise we build a small procedural shell so the
-        // weapon needs no extra art.
+        // Build the shell's visual. Priority:
+        //   1) an explicit projectilePrefab on the asset (if assigned),
+        //   2) the Orb prefab loaded from Resources (Sprites/Bullets/Orb),
+        //   3) a small procedural soft disc so the weapon always has *some* art.
+        // Whatever we use, the flight + explosion are driven entirely by
+        // PlayerMortarProjectile (added below), so the prefab is purely the look.
+        GameObject sourcePrefab = weaponData.projectilePrefab != null
+            ? weaponData.projectilePrefab
+            : GetMortarOrbPrefab();
+
         GameObject shellObj;
-        if (weaponData.projectilePrefab != null)
+        if (sourcePrefab != null)
         {
-            shellObj = Instantiate(weaponData.projectilePrefab, spawn, Quaternion.identity);
+            shellObj = Instantiate(sourcePrefab, spawn, Quaternion.identity);
+
+            // The Orb is normally a straight-line bullet, so it carries a
+            // WeaponProjectile mover, a Rigidbody2D and trigger colliders.
+            // Those fight the mortar's scripted arc (and would let the orb
+            // hit/destroy things mid-flight), so strip them — the mortar deals
+            // its damage as an AoE on landing, not on contact.
+            StripStraightLineProjectileParts(shellObj);
+
+            // Keep the shell above the grass Y-sort range like the procedural
+            // fallback did, so it isn't hidden behind foliage in flight.
+            var sr = shellObj.GetComponentInChildren<SpriteRenderer>();
+            if (sr != null) sr.sortingOrder = 2500;
         }
         else
         {
@@ -1289,6 +1335,50 @@ public class Weapon : MonoBehaviour
             weaponData.mortarTelegraphColor,
             weaponData.mortarShowTelegraph
         );
+    }
+
+    // Resources path (relative to a Resources/ folder, no extension) of the orb
+    // prefab used as the mortar shell's visual. The asset lives at
+    // Assets/Resources/Sprites/Bullets/Orb.prefab.
+    private const string MortarOrbResourcePath = "Sprites/Bullets/Orb";
+
+    // Cached so we only hit Resources.Load once per play session.
+    private static GameObject _mortarOrbPrefab;
+    private static bool _mortarOrbLoadAttempted;
+
+    private static GameObject GetMortarOrbPrefab()
+    {
+        if (!_mortarOrbLoadAttempted)
+        {
+            _mortarOrbLoadAttempted = true;
+            _mortarOrbPrefab = Resources.Load<GameObject>(MortarOrbResourcePath);
+            if (_mortarOrbPrefab == null)
+                Debug.LogWarning($"[Weapon] Mortar orb prefab not found at " +
+                                 $"Resources/{MortarOrbResourcePath}. " +
+                                 $"Falling back to the procedural shell.");
+        }
+        return _mortarOrbPrefab;
+    }
+
+    // Removes the components an ordinary straight-line bullet carries that would
+    // interfere with a lobbed mortar shell: the WeaponProjectile mover (runs its
+    // own translate + hit + despawn logic), any Rigidbody2D (applies physics
+    // motion), and any Collider2D (would damage/destroy things mid-arc). We
+    // destroy them in the same frame as Instantiate, before their Start/Update
+    // ever run, so the shell only keeps its visuals. The mortar's flight and
+    // on-landing AoE are owned by PlayerMortarProjectile.
+    private static void StripStraightLineProjectileParts(GameObject go)
+    {
+        if (go == null) return;
+
+        foreach (var wp in go.GetComponentsInChildren<WeaponProjectile>(true))
+            Destroy(wp);
+
+        foreach (var rb in go.GetComponentsInChildren<Rigidbody2D>(true))
+            Destroy(rb);
+
+        foreach (var col in go.GetComponentsInChildren<Collider2D>(true))
+            Destroy(col);
     }
 
     //  SMOKE SCREEN — arcing canister aimed with the on-ground BLUE reticle.
@@ -1437,7 +1527,7 @@ public class Weapon : MonoBehaviour
             }
 
             // ── Combat Feel ──
-            CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: true);
+            CombatJuice.OnPlayerHitEnemy(other.gameObject, isMelee: true, _playerRef);
         }
 
         if (weaponData.knockBack)
@@ -1472,3 +1562,4 @@ public class Weapon : MonoBehaviour
         CleanupToolSubsystems();
     }
 }
+

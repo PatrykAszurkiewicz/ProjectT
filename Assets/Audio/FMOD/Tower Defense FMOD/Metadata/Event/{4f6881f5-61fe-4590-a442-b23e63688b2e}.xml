@@ -5,7 +5,7 @@
 			<value>Dash</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -100,6 +100,7 @@
 		<relationship name="effects">
 			<destination>{07d5ed44-7e2a-4071-ab82-0440068bbc0f}</destination>
 			<destination>{fc501149-8ea2-4ebb-91c9-218de4ea4b90}</destination>
+			<destination>{20bf11f6-1d9e-4829-a3f3-1a0c5bd18df7}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{823fa229-0ea1-457a-87f9-9db91b18b365}" />
@@ -143,6 +144,17 @@
 		</property>
 		<property name="dryLevel">
 			<value>-8</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{20bf11f6-1d9e-4829-a3f3-1a0c5bd18df7}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 </objects>

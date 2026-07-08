@@ -104,7 +104,7 @@ MonoBehaviour:
   bookAuraRadius: 5
   bookAuraDuration: 8
   bookArmDelay: 0.3
-  bookMaxShadows: 6
+  bookMaxShadows: 4
   bookShadowLifetime: 12
   bookShadowDamage: 12
   bookShadowAttackRange: 1.2
@@ -115,3 +115,30 @@ MonoBehaviour:
   cloakDuration: 30
   cloakCooldown: 10
   cloakPlayerAlpha: 0.28
+  isTorch: 0
+  torchPlayerLightRadius: 4
+  torchPlayerLightIntensity: 0.9
+  torchPlacedLightRadius: 5
+  torchPlacedLightIntensity: 1
+  torchMaxPlaced: 3
+  torchLightColor: {r: 1, g: 0.6, b: 0.25, a: 1}
+  torchFlickerSpeed: 6
+  torchFlickerAmount: 0.12
+  isClock: 0
+  isMortar: 0
+  mortarFlightTime: 1.1
+  mortarArcHeight: 2.5
+  mortarExplosionRadius: 1.5
+  mortarShowTelegraph: 1
+  mortarExplosionColor: {r: 1, g: 0.55, b: 0.1, a: 1}
+  mortarTelegraphColor: {r: 0.65, g: 0.08, b: 0.06, a: 1}
+  mortarReticleColor: {r: 1, g: 0.42, b: 0.38, a: 1}
+  isSmoke: 0
+  smokeFlightTime: 0.9
+  smokeArcHeight: 2.2
+  smokeCloudRadius: 3
+  smokeCloudDuration: 6
+  smokeShowTelegraph: 1
+  smokeCloudColor: {r: 0.62, g: 0.64, b: 0.66, a: 0.42}
+  smokeReticleColor: {r: 0.42, g: 0.66, b: 1, a: 1}
+  smokeTelegraphColor: {r: 0.13, g: 0.22, b: 0.58, a: 1}

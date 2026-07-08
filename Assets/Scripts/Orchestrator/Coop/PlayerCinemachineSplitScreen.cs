@@ -39,6 +39,12 @@ public class PlayerCinemachineSplitScreen : MonoBehaviour, ICoopCamera
         if (al != null) al.enabled = false;
 
         if (owner != null) owner.Camera = _cam;
+
+        // Co-op: each player camera needs its own shake so its half shakes
+        // independently. CameraShake runs at execution order 1000, i.e. AFTER the
+        // CinemachineBrain's LateUpdate, so its offset lands on top of the Brain.
+        if (GetComponent<CameraShake>() == null)
+            gameObject.AddComponent<CameraShake>();
     }
 
     public void Configure(PlayerRef player, int index, int totalPlayers)
@@ -72,3 +78,4 @@ public class PlayerCinemachineSplitScreen : MonoBehaviour, ICoopCamera
         _ => OutputChannels.Channel01,
     };
 }
+

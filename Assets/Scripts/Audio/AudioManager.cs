@@ -22,7 +22,7 @@ public class AudioManager : MonoBehaviour
     private bool previousMusicEnabled = true;
 
     [Header("Debug")]
-    public bool enableDebugLogs = true;
+    public bool enableDebugLogs = false;
 
     private Bus masterBus;
     private Bus musicBus;
@@ -48,6 +48,12 @@ public class AudioManager : MonoBehaviour
             return;
         }
         instance = this;
+        // Persist across scene loads so audio works in every scene. AudioManager sits
+        // under "Managers", so detach to a root first (DontDestroyOnLoad only works on
+        // roots). The FMODEvents child comes along automatically.
+        //transform.SetParent(null);
+        //DontDestroyOnLoad(gameObject);
+        if (transform.parent == null) DontDestroyOnLoad(gameObject);
 
         eventInstances = new List<EventInstance>();
         eventEmitters = new List<StudioEventEmitter>();
@@ -74,7 +80,7 @@ public class AudioManager : MonoBehaviour
                     fmodInitialized = true;
 
                     // Tell FMOD to split spatial audio tracking for 2 players
-                    FMODUnity.RuntimeManager.StudioSystem.setNumListeners(2);
+                    //FMODUnity.RuntimeManager.StudioSystem.setNumListeners(2);
 
                     if (enableDebugLogs) Debug.Log("FMOD buses initialized successfully");
                     break;

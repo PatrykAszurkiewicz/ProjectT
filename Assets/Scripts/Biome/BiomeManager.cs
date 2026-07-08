@@ -1862,7 +1862,10 @@ public class BiomeManager : MonoBehaviour
         GrassOverlayGPU g = gameObject.AddComponent<GrassOverlayGPU>();
 
         g.bladeCount = grassBladeCount;
-        g.spawnRadius = grassSpawnRadius;
+        // Grass must reach the same radius the background is tiled to (groundCoverageRadius)
+        // or it leaves a bare border outside the grass disc. Expand to cover background + margin.
+        //g.spawnRadius = Mathf.Max(grassSpawnRadius, groundCoverageRadius * 1.2f);
+        g.spawnRadius = groundCoverageRadius * 1.2f;
         g.coreExclusionRadius = grassCoreExclusion;
 
         g.bladeHeight = grassBladeHeight;
@@ -1904,7 +1907,8 @@ public class BiomeManager : MonoBehaviour
         g.patchScale = grassPatchScale;
         g.patchStrength = grassPatchStrength;
 
-        g.sortingOrder = -1;
+        //g.sortingOrder = -1; // GPU instanced grass renders via DrawMeshInstancedIndirect (on top)
+        g.sortingOrder = 5;
         g.GenerateGrass();
 
         //Debug.LogWarning($"[BiomeManager] GPU grass active — {grassBladeCount:N0} blades, {grassClumpCount:N0} clumps");
@@ -1920,7 +1924,9 @@ public class BiomeManager : MonoBehaviour
 
         // Use reduced counts for CPU mode
         g.bladeCount = cpuGrassBladeCount;
-        g.spawnRadius = grassSpawnRadius;
+        // Grass must reach the same radius the background is tiled to (groundCoverageRadius)
+        // or it leaves a bare border outside the grass disc. Expand to cover background + margin.
+        g.spawnRadius = Mathf.Max(grassSpawnRadius, groundCoverageRadius * 1.2f);
         g.coreExclusionRadius = grassCoreExclusion;
 
         g.bladeHeight = grassBladeHeight;
@@ -1964,7 +1970,8 @@ public class BiomeManager : MonoBehaviour
         g.windColorShift = grassWindColorShift;
         g.patchScale = grassPatchScale;
         g.patchStrength = grassPatchStrength;
-        g.sortingOrder = -1;
+        //g.sortingOrder = 0;   // above background (-1)
+        g.sortingOrder = 5;
         g.GenerateGrass();
         //Debug.LogWarning($"[BiomeManager] CPU grass active — {cpuGrassBladeCount:N0} blades, {cpuGrassClumpCount:N0} clumps (low-end preview)");
     }
@@ -2038,6 +2045,13 @@ public class BiomeManager : MonoBehaviour
         s.swirl = snowSwirl;
 
         s.sortingOrder = -1;
+
+        // Drive full-map coverage from the KNOWN map radius, not the camera.
+        // SetupSnowOverlay runs during biome load when gameplay cameras may not be
+        // live yet, so SnowOverlay's camera auto-detect would collapse back to 60 and
+        // leave the central square. groundCoverageRadius is the same radius we tile the
+        // background to, so the snow now fills exactly what the background fills.
+        s.mapCoverageRadius = groundCoverageRadius * 1.2f;
         s.GenerateSnow();
     }
 
@@ -2133,7 +2147,8 @@ public class BiomeManager : MonoBehaviour
         d.dustWindMult = desertDustWindMult;
         d.dustSwirl = desertDustSwirl;
 
-        d.sortingOrder = -1;
+        //d.sortingOrder = 0;   // above background (-1); sub-layers add +1/+2/+3 on top
+        d.sortingOrder = 5;
         d.GenerateDesert();
     }
 
@@ -2190,7 +2205,8 @@ public class BiomeManager : MonoBehaviour
         w.windStrength = wastelandWindStrength;
         w.windAngle = wastelandWindAngle;
 
-        w.sortingOrder = -1;
+        //w.sortingOrder = 0;   // above background (-1); sub-layers add offsets on top
+        w.sortingOrder = 5;
         w.GenerateWasteland();
     }
 
@@ -2207,7 +2223,8 @@ public class BiomeManager : MonoBehaviour
         st.dustMoteSpawnRadius = stonesDustMoteSpawnRadius;
         st.windStrength = stonesWindStrength;
         st.windAngle = stonesWindAngle;
-        st.sortingOrder = -1;
+        //st.sortingOrder = 0;   // above background (-1); sub-layers add offsets on top
+        st.sortingOrder = 5;
         st.GenerateStones();
         //Debug.LogWarning($"[BiomeManager] Stones biome active — {stonesGroundCount:N0} ground elements, {stonesDustMoteCount:N0} dust motes");
     }
@@ -2361,7 +2378,9 @@ public class BiomeManager : MonoBehaviour
 
         // Same distribution as Grass biome
         g.bladeCount = grassBladeCount;
-        g.spawnRadius = grassSpawnRadius;
+        // Grass must reach the same radius the background is tiled to (groundCoverageRadius)
+        // or it leaves a bare border outside the grass disc. Expand to cover background + margin.
+        g.spawnRadius = Mathf.Max(grassSpawnRadius, groundCoverageRadius * 1.2f);
         g.coreExclusionRadius = grassCoreExclusion;
 
         g.bladeHeight = grassBladeHeight;
@@ -2413,7 +2432,9 @@ public class BiomeManager : MonoBehaviour
         GrassOverlay g = gameObject.AddComponent<GrassOverlay>();
 
         g.bladeCount = cpuGrassBladeCount;
-        g.spawnRadius = grassSpawnRadius;
+        // Grass must reach the same radius the background is tiled to (groundCoverageRadius)
+        // or it leaves a bare border outside the grass disc. Expand to cover background + margin.
+        g.spawnRadius = Mathf.Max(grassSpawnRadius, groundCoverageRadius * 1.2f);
         g.coreExclusionRadius = grassCoreExclusion;
 
         g.bladeHeight = grassBladeHeight;
@@ -2458,7 +2479,7 @@ public class BiomeManager : MonoBehaviour
         g.patchScale = grassPatchScale;
         g.patchStrength = grassPatchStrength;
 
-        g.sortingOrder = -1;
+        g.sortingOrder = 0;   // above background (-1)
         g.GenerateGrass();
     }
 

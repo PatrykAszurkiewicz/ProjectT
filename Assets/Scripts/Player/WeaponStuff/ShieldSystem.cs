@@ -78,6 +78,11 @@ public class ShieldSystem
     private Transform playerTransform;
     private PlayerStats playerStats;
 
+    // Co-op: this shield's OWNING player's aim. Resolved from the weapon's
+    // parent hierarchy so the arc points where THIS player aims — not where
+    // whichever player last won the global PlayerAim.Instance is aiming.
+    private PlayerAim ownerAim;
+
     // Phase 8: which player owns this shield (for per-player parry upgrades).
     private int ownerIndex = 0;
 
@@ -109,6 +114,11 @@ public class ShieldSystem
                 playerStats = player.GetComponent<PlayerStats>();
             }
         }
+
+        // Resolve THIS player's aim once. Used by the arc visual and the
+        // block/parry direction test. Falls back to the global Instance only if
+        // the weapon isn't parented under a PlayerAim (legacy single-player).
+        ownerAim = weapon != null ? weapon.GetComponentInParent<PlayerAim>() : null;
 
         CreateArcVisual();
         SetArcVisible(false);
@@ -376,7 +386,7 @@ public class ShieldSystem
     {
         if (playerTransform == null) return;
         SpawnParryVFX();
-        ShieldFeedback.OnParry(playerTransform, contactPoint);
+        ShieldFeedback.OnProjectileParry(playerTransform, contactPoint);
 
         // 333 Heal on Parry — projectile parry counts as a successful parry.
         HealOnParry();
@@ -427,7 +437,8 @@ public class ShieldSystem
     // Half-arc used by the block/parry angle test. Widened on gamepad.
     private float BlockHalfAngle()
     {
-        bool pad = PlayerAim.Instance != null && PlayerAim.Instance.UsingGamepad;
+        PlayerAim a = ownerAim != null ? ownerAim : PlayerAim.Instance;
+        bool pad = a != null && a.UsingGamepad;
         return (pad ? BLOCK_ARC_DEGREES_GAMEPAD : BLOCK_ARC_DEGREES) * 0.5f;
     }
 
@@ -435,8 +446,10 @@ public class ShieldSystem
     {
         if (playerTransform == null) return Vector2.right;
 
-        if (PlayerAim.Instance != null)
-            return PlayerAim.Instance.Direction;
+        // Per-player aim first (co-op), then the single-player global fallback.
+        PlayerAim a = ownerAim != null ? ownerAim : PlayerAim.Instance;
+        if (a != null)
+            return a.Direction;
 
         Vector2 mouseScreen = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
         Vector3 mouseWorld = Camera.main.ScreenToWorldPoint(mouseScreen);
@@ -978,4 +991,5 @@ public class ParryVFXHost : MonoBehaviour
         return _shardSprite;
     }
 }
+
 

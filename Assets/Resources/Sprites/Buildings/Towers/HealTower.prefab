@@ -9,7 +9,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 5169088179685977015}
-  m_Layer: 0
+  - component: {fileID: 5169088179685977100}
+  m_Layer: 9
   m_Name: HealTower
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -33,6 +34,126 @@ Transform:
   - {fileID: 6079285975575430449}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5169088179685977100
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5122853499195625693}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f29c0ba85860ca4c8c8fc1f70afd795, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  generatorSelfConsumption: 0.1
+  isEnergyGenerator: 0
+  energyGenerationRate: 1
+  generationRange: 4
+  generationInterval: 0.25
+  showGenerationEffects: 0
+  generationEffectColor: {r: 0.3, g: 0.7, b: 1, a: 0.5}
+  isHealTower: 1
+  healRange: 4
+  healPerSecond: 5
+  healInterval: 0.25
+  healSelfConsumption: 0.1
+  showHealEffects: 0
+  healEffectColor: {r: 0.3, g: 1, b: 0.4, a: 0.5}
+  freezeChance: 0
+  healthRegenRate: 0
+  energyCostMultiplier: 1
+  collisionConfig:
+    enableCollision: 1
+    isTrigger: 0
+    colliderType: 0
+    paddingPercent: 0.05
+  isHammerTower: 0
+  hammerAOERadius: 2
+  hammerAttackInterval: 1.5
+  hammerImpactEffectPrefab: {fileID: 0}
+  enableDustParticles: 1
+  dustColor: {r: 0.6, g: 0.5, b: 0.4, a: 0.8}
+  dustParticleCount: 50
+  dustLifetime: 1.5
+  dustSpeed: 3
+  dustSize: 0.15
+  isLaserTower: 0
+  laserWidth: 0.5
+  laserMaxLength: 12
+  laserDamagePerSecond: 15
+  laserColor: {r: 1, g: 0, b: 0, a: 1}
+  towerName: Healing Tower
+  damage: 0
+  fireRate: 1
+  cost: 100
+  towerType: 7
+  spriteResourcePath: 
+  spriteIndex: 0
+  spriteScale: 1
+  enableAnimation: 0
+  animationFrameCount: 43
+  animationSpeed: 0.25
+  usePrefabVisuals: 1
+  targetLayer:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  projectilePrefab: {fileID: 0}
+  canUpgrade: 1
+  upgradeTowerPrefab: {fileID: 0}
+  upgradeLevel: 1
+  maxUpgradeLevel: 3
+  upgradeDamageBonusPerLevel: 0.2
+  upgradeHealthBonusPerLevel: 0.2
+  useTentacleTurret: 0
+  tentacleConfig:
+    length: 1.2
+    width: 0.3
+    segments: 8
+    swayAmount: 0.1
+    swaySpeed: 2
+    color: {r: 0.337, g: 0.176, b: 0.259, a: 0.8}
+    tipColor: {r: 0.8, g: 0.3, b: 0.3, a: 1}
+    attachmentOffset: {x: 0, y: -0.3}
+  meleeConfig:
+    damageMultiplier: 1.5
+    attackDuration: 0.3
+    swipeArcDegrees: 60
+    swipeSpeed: 8
+    swipeCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+  rotationSpeed: 180
+  smoothRotation: 1
+  currentEnergy: 100
+  requiresEnergyToFunction: 1
+  showEnergyBar: 1
+  energyBarOffsetOverride: 2.2
+  armorReduction: 0
+  immuneToEnemyDamage: 0
+  damageFlashDuration: 0.15
+  damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
 --- !u!1 &5789007687339687458
 GameObject:
   m_ObjectHideFlags: 0
@@ -59,7 +180,7 @@ Transform:
   m_GameObject: {fileID: 5789007687339687458}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.29841995, y: 0.13047028, z: 0}
+  m_LocalPosition: {x: 0, y: 0.13047028, z: 0}
   m_LocalScale: {x: 0.3543, y: 0.3543, z: 0.3543}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -147,8 +268,8 @@ Transform:
   m_GameObject: {fileID: 9044859800332026244}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -0.23842049, y: 0.58, z: 0}
-  m_LocalScale: {x: 0.2, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0.58, z: 0}
+  m_LocalScale: {x: 0.2, y: 0.2, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5169088179685977015}

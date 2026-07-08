@@ -5,7 +5,7 @@
 			<value>ShieldBlock</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -101,6 +101,7 @@
 			<destination>{66494b34-0fd0-4823-a8f6-b2e0515fe784}</destination>
 			<destination>{f875e800-1680-4636-ab1e-a399cb19db35}</destination>
 			<destination>{0a9acd60-b0f1-4831-bedb-80da329cab22}</destination>
+			<destination>{c67e81e6-a377-4767-970f-cfd037084a8a}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{3d75d77a-a201-480e-89c8-c6f4969d462e}" />
@@ -137,6 +138,17 @@
 		</property>
 		<property name="mix">
 			<value>100</value>
+		</property>
+	</object>
+	<object class="SpatialiserEffect" id="{c67e81e6-a377-4767-970f-cfd037084a8a}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
 		</property>
 	</object>
 </objects>

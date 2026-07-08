@@ -68,6 +68,13 @@ public class PitcherController : MonoBehaviour
         float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
         if (float.IsNaN(angle) || float.IsInfinity(angle)) angle = 0f;
 
+        // Throw SFX.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.pitcherAttack.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.pitcherAttack, spawn);
+        }
+
         GameObject projObj = Instantiate(
             projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
 
@@ -90,4 +97,3 @@ public class PitcherController : MonoBehaviour
         }
     }
 }
-

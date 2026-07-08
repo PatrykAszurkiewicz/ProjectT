@@ -5,7 +5,7 @@
 			<value>ScarecrowScream</value>
 		</property>
 		<property name="outputFormat">
-			<value>1</value>
+			<value>2</value>
 		</property>
 		<relationship name="folder">
 			<destination>{9cf18552-91b6-4ed0-8f06-b8500ce51413}</destination>
@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{14d53ae1-05d8-44bd-85a1-1d987ea202aa}">
 		<property name="volume">
-			<value>-5</value>
+			<value>-6</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{f026e2dd-f289-412d-acff-0315f172e3eb}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{f026e2dd-f289-412d-acff-0315f172e3eb}">
 		<relationship name="effects">
 			<destination>{6aba926c-bae8-4c9e-b14f-171390139ba7}</destination>
+			<destination>{71801c85-aee2-4c92-988c-5070c9defdc7}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{2d51ad97-02fc-4ebf-8d27-c62d74f3ed8e}" />
@@ -109,4 +110,15 @@
 	</object>
 	<object class="MixerBusFader" id="{5b212530-347c-4f66-9971-32f52020b2f3}" />
 	<object class="MixerBusFader" id="{6aba926c-bae8-4c9e-b14f-171390139ba7}" />
+	<object class="SpatialiserEffect" id="{71801c85-aee2-4c92-988c-5070c9defdc7}">
+		<property name="minimumDistance">
+			<value>4</value>
+		</property>
+		<property name="maximumDistance">
+			<value>30</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+	</object>
 </objects>

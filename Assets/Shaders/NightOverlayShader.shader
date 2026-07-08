@@ -6,8 +6,6 @@ Shader "Hidden/NightOverlay"
         _Darkness ("Darkness", Range(0,1)) = 0.88
         _AmbientLight ("Ambient Light", Range(0,0.3)) = 0.08
         _NightColor ("Night Color", Color) = (0.02, 0.02, 0.06, 1)
-        _PlayerPos ("Player Position", Vector) = (0,0,0,0)
-        _TorchDir ("Torch Direction", Vector) = (1,0,0,0)
         _TorchEnabled ("Torch Enabled", Float) = 1
         _TorchRange ("Torch Range", Float) = 8
         _TorchHalfAngle ("Torch Half Angle Rad", Float) = 0.384
@@ -26,7 +24,6 @@ Shader "Hidden/NightOverlay"
         //     player is facing)
         // Behind the player there is no glow at all — pure darkness.
         _DirectionalMode ("Directional Mode", Float) = 0
-        _PlayerFacing ("Player Facing", Vector) = (1,0,0,0)
         _FrontConeHalfAngle ("Front Cone Half Angle Rad", Float) = 1.4
         _FrontConeRange ("Front Cone Range", Float) = 5.0
         _FrontConeDimming ("Front Cone Dimming", Range(0,1)) = 0.25
@@ -52,8 +49,13 @@ Shader "Hidden/NightOverlay"
             float _Darkness;
             float _AmbientLight;
             float4 _NightColor;
-            float4 _PlayerPos;
-            float4 _TorchDir;
+            // Per-player data (co-op). _PlayerCount entries are valid.
+            //   _PlayerPositions[p].xy = player world position
+            //   _PlayerFacings[p].xy   = player aim/facing dir (also torch dir)
+            // Set from script like _ExtraLightData (not via the Properties block).
+            float _PlayerCount;
+            float4 _PlayerPositions[4];
+            float4 _PlayerFacings[4];
             float _TorchEnabled;
             float _TorchRange;
             float _TorchHalfAngle;
@@ -66,7 +68,6 @@ Shader "Hidden/NightOverlay"
 
             // Directional darkness uniforms
             float _DirectionalMode;
-            float4 _PlayerFacing;
             float _FrontConeHalfAngle;
             float _FrontConeRange;
             float _FrontConeDimming;
@@ -102,86 +103,97 @@ Shader "Hidden/NightOverlay"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                float2 toFrag = i.worldPos - _PlayerPos.xy;
-                float dist = length(toFrag);
-                float2 dirNorm = (dist > 0.001) ? (toFrag / dist) : float2(0, 1);
-
-                // === Player glow ===
-                // Two modes — selected by _DirectionalMode uniform.
-                // Default (0) = original radial glow, used by Night biome
-                //               and universal night mode. Unchanged from v2.2.
-                // Directional (1) = tiny feet bubble + wide front cone.
-                //                   Used by the Corruption biome.
+                // === Per-player glow + torch (co-op) ===
+                // Each player contributes their OWN radial/directional glow and
+                // their own torch cone, anchored at that player's position and
+                // aimed by that player's facing. We take the MAX contribution
+                // across players so overlapping lights don't double-brighten and
+                // every player is lit by their own torch — not by whichever
+                // player happened to win a global singleton. In single player
+                // the loop runs exactly once, so this is identical to v2.3.
                 float glowLight = 0.0;
-
-                if (_DirectionalMode < 0.5)
-                {
-                    // --- Radial player glow (unchanged) ---
-                    float glowFalloff = saturate(dist / max(0.01, _PlayerGlowRadius));
-                    glowFalloff = glowFalloff * glowFalloff;
-                    glowLight = (1.0 - glowFalloff) * _PlayerGlowStrength;
-                }
-                else
-                {
-                    // --- Directional player glow ---
-                    // 1) Tiny feet bubble — keeps the immediate area around the
-                    //    player faintly visible so they're never standing in pure
-                    //    black. Uses the same quadratic falloff as radial mode.
-                    float feetFalloff = saturate(dist / max(0.01, _FeetGlowRadius));
-                    feetFalloff = feetFalloff * feetFalloff;
-                    float feetLight = (1.0 - feetFalloff) * _FeetGlowStrength;
-
-                    // 2) Wide, dim front cone — peripheral awareness in front of
-                    //    the player. Same cone math as the torch, but wider, dimmer,
-                    //    and tied to _PlayerFacing rather than _TorchDir.
-                    float frontCos = dot(dirNorm, _PlayerFacing.xy);
-                    frontCos = clamp(frontCos, -1.0, 1.0);
-                    float frontFragAngle = acos(frontCos);
-
-                    // Soft falloff at the edge of the front cone so it doesn't
-                    // look like a flashlight ring.
-                    float frontInner = _FrontConeHalfAngle * 0.55;
-                    float frontOuter = _FrontConeHalfAngle;
-                    float frontAngleFactor = 1.0 - saturate(
-                        (frontFragAngle - frontInner) /
-                        max(0.001, frontOuter - frontInner));
-
-                    float frontDistNorm = dist / max(0.001, _FrontConeRange);
-                    float frontDistFactor = saturate(1.0 - frontDistNorm);
-                    frontDistFactor = frontDistFactor * frontDistFactor;
-
-                    float frontLight = frontAngleFactor * frontDistFactor * _FrontConeDimming;
-
-                    // Combine — take the max so the feet bubble doesn't get
-                    // clobbered by the dim front cone right at the player.
-                    glowLight = max(feetLight, frontLight);
-                }
-
-                // === Torch cone ===
                 float coneLight = 0.0;
                 float warmAmount = 0.0;
 
-                if (_TorchEnabled > 0.5)
+                int playerCount = (int)_PlayerCount;
+                for (int pi = 0; pi < playerCount && pi < 4; pi++)
                 {
-                    float effectiveRange = _TorchRange * (1.0 + _FlickerOffset);
+                    float2 ppos = _PlayerPositions[pi].xy;
+                    float2 pfacing = _PlayerFacings[pi].xy;
 
-                    float cosAngle = dot(dirNorm, _TorchDir.xy);
-                    cosAngle = clamp(cosAngle, -1.0, 1.0);
-                    float fragAngle = acos(cosAngle);
+                    float2 toFrag = i.worldPos - ppos;
+                    float dist = length(toFrag);
+                    float2 dirNorm = (dist > 0.001) ? (toFrag / dist) : float2(0, 1);
 
-                    float innerAngle = _TorchHalfAngle * (1.0 - _TorchEdgeSoftness);
-                    float outerAngle = _TorchHalfAngle * (1.0 + _TorchEdgeSoftness * 0.5);
-                    float angleFactor = 1.0 - saturate((fragAngle - innerAngle) / max(0.001, outerAngle - innerAngle));
+                    // --- Player glow ---
+                    // Two modes — selected by _DirectionalMode uniform.
+                    // Default (0) = radial glow (Night biome / universal night).
+                    // Directional (1) = tiny feet bubble + wide front cone
+                    //                   (Corruption biome).
+                    float g = 0.0;
+                    if (_DirectionalMode < 0.5)
+                    {
+                        // --- Radial player glow ---
+                        float glowFalloff = saturate(dist / max(0.01, _PlayerGlowRadius));
+                        glowFalloff = glowFalloff * glowFalloff;
+                        g = (1.0 - glowFalloff) * _PlayerGlowStrength;
+                    }
+                    else
+                    {
+                        // --- Directional player glow ---
+                        // 1) Tiny feet bubble — keeps the immediate area faintly
+                        //    visible so the player isn't standing in pure black.
+                        float feetFalloff = saturate(dist / max(0.01, _FeetGlowRadius));
+                        feetFalloff = feetFalloff * feetFalloff;
+                        float feetLight = (1.0 - feetFalloff) * _FeetGlowStrength;
 
-                    float distNorm = dist / max(0.001, effectiveRange);
-                    float distFactor = saturate(1.0 - distNorm);
-                    distFactor = distFactor * distFactor;
+                        // 2) Wide, dim front cone — peripheral awareness in front
+                        //    of the player, tied to this player's facing.
+                        float frontCos = dot(dirNorm, pfacing);
+                        frontCos = clamp(frontCos, -1.0, 1.0);
+                        float frontFragAngle = acos(frontCos);
 
-                    float nearBoost = saturate(1.0 - dist / max(0.01, _PlayerGlowRadius * 2.0));
-                    angleFactor = saturate(angleFactor + nearBoost * 0.3 * _PlayerGlowStrength);
+                        float frontInner = _FrontConeHalfAngle * 0.55;
+                        float frontOuter = _FrontConeHalfAngle;
+                        float frontAngleFactor = 1.0 - saturate(
+                            (frontFragAngle - frontInner) /
+                            max(0.001, frontOuter - frontInner));
 
-                    coneLight = angleFactor * distFactor * _TorchBrightness;
-                    warmAmount = coneLight * _TorchWarmTint.a;
+                        float frontDistNorm = dist / max(0.001, _FrontConeRange);
+                        float frontDistFactor = saturate(1.0 - frontDistNorm);
+                        frontDistFactor = frontDistFactor * frontDistFactor;
+
+                        float frontLight = frontAngleFactor * frontDistFactor * _FrontConeDimming;
+
+                        // Max so the feet bubble isn't clobbered by the dim cone.
+                        g = max(feetLight, frontLight);
+                    }
+                    glowLight = max(glowLight, g);
+
+                    // --- Torch cone ---
+                    if (_TorchEnabled > 0.5)
+                    {
+                        float effectiveRange = _TorchRange * (1.0 + _FlickerOffset);
+
+                        float cosAngle = dot(dirNorm, pfacing);
+                        cosAngle = clamp(cosAngle, -1.0, 1.0);
+                        float fragAngle = acos(cosAngle);
+
+                        float innerAngle = _TorchHalfAngle * (1.0 - _TorchEdgeSoftness);
+                        float outerAngle = _TorchHalfAngle * (1.0 + _TorchEdgeSoftness * 0.5);
+                        float angleFactor = 1.0 - saturate((fragAngle - innerAngle) / max(0.001, outerAngle - innerAngle));
+
+                        float distNorm = dist / max(0.001, effectiveRange);
+                        float distFactor = saturate(1.0 - distNorm);
+                        distFactor = distFactor * distFactor;
+
+                        float nearBoost = saturate(1.0 - dist / max(0.01, _PlayerGlowRadius * 2.0));
+                        angleFactor = saturate(angleFactor + nearBoost * 0.3 * _PlayerGlowStrength);
+
+                        float c = angleFactor * distFactor * _TorchBrightness;
+                        coneLight = max(coneLight, c);
+                        warmAmount = max(warmAmount, c * _TorchWarmTint.a);
+                    }
                 }
 
                 // === Extra point lights ===

@@ -29,7 +29,7 @@ public struct BiomeWeatherDefaults
                 return new BiomeWeatherDefaults { rainEnabled = false, snowEnabled = false };
 
             case BiomeType.GrassCartoon:
-                return new BiomeWeatherDefaults { rainEnabled = false, snowEnabled = false };
+                return new BiomeWeatherDefaults { rainEnabled = true, snowEnabled = false };
 
             case BiomeType.Marsh:
                 return new BiomeWeatherDefaults { rainEnabled = true, snowEnabled = false };

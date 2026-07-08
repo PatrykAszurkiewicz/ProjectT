@@ -152,7 +152,11 @@ public class WastelandOverlay : MonoBehaviour
 
     [Header("Sorting")]
     public string sortingLayerName = "Default";
-    public int sortingOrder = -1;
+    // Base order for the ground decals. Must be > the background's order (-1) or the
+    // meshes tie with the background and the camera's Y-axis transparency sort shows
+    // them only in a central square. 0 sits just above background, below tower slots
+    // (1)/paths (500)/units (500+). Sub-layers add their offsets on top of this.
+    public int sortingOrder = 0;
 
 
     //  INTERNALS
@@ -211,11 +215,20 @@ public class WastelandOverlay : MonoBehaviour
 
     private Vector2 windDir, windPerp;
 
-    void Start() => GenerateWasteland();
+    private bool _generated;
+
+    void Start()
+    {
+        // BiomeManager calls GenerateWasteland() right after AddComponent; Unity then fires
+        // Start() a frame later. Without this guard we build and immediately discard
+        // the entire mesh set twice per biome.
+        if (!_generated) GenerateWasteland();
+    }
 
     [ContextMenu("Regenerate Wasteland")]
     public void GenerateWasteland()
     {
+        _generated = true;
         Cleanup();
         float rad = windAngle * Mathf.Deg2Rad;
         windDir = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad)).normalized;
@@ -1037,3 +1050,4 @@ public class WastelandOverlay : MonoBehaviour
     T[] Trim<T>(T[] src, int len)
     { if (src.Length == len) return src; T[] r = new T[len]; System.Array.Copy(src, r, len); return r; }
 }
+

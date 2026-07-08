@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections.Generic;
 
 // Single source of truth for "where is the player aiming". Mouse and gamepad both feed into this via the PlayerInput component.
 // Two outputs, used by different weapon types:
@@ -15,6 +16,12 @@ using UnityEngine.InputSystem;
 public class PlayerAim : MonoBehaviour
 {
     public static PlayerAim Instance { get; private set; }
+
+    // Co-op: every live PlayerAim registers itself here so per-player consumers
+    // (e.g. the NightOverlay torch cones) can iterate all players instead of
+    // reading the single global Instance, which only ever reflects one player.
+    // In single player this list has exactly one entry.
+    public static readonly List<PlayerAim> All = new List<PlayerAim>();
 
     [Header("Gamepad")]
     [Tooltip("Right-stick magnitude required before it counts as aiming.")]
@@ -40,6 +47,12 @@ public class PlayerAim : MonoBehaviour
 
     /// <summary>World-space point being aimed at (mouse cursor, or steered gamepad reticle).</summary>
     public Vector3 WorldPoint { get; private set; }
+
+    /// <summary>Raw Look input this frame (right stick / mouse delta), BEFORE the
+    /// "sticky" normalization that <see cref="Direction"/> applies. Unlike Direction,
+    /// this returns to ~zero when the stick is released, which makes it suitable for
+    /// menu navigation (flick-to-step that re-arms on release).</summary>
+    public Vector2 LookInput => lookInputVector;
 
     private Camera cam;
     private PlayerInput playerInput;
@@ -71,8 +84,19 @@ public class PlayerAim : MonoBehaviour
         return Camera.main;
     }
 
+    void OnEnable()
+    {
+        if (!All.Contains(this)) All.Add(this);
+    }
+
+    void OnDisable()
+    {
+        All.Remove(this);
+    }
+
     void OnDestroy()
     {
+        All.Remove(this);
         if (Instance == this) Instance = null;
     }
 
@@ -90,26 +114,57 @@ public class PlayerAim : MonoBehaviour
         if (playerRef != null && playerRef.Camera != null) cam = playerRef.Camera;
         else if (cam == null) cam = ResolveCamera();
 
+        // Resolve THIS player's aim devices. Co-op: each player has its own paired
+        // pad / mouse. Single player now binds ONE PlayerInput to keyboard+mouse AND a
+        // pad at once, so both show up here.
+        Gamepad pad = null;
+        Mouse mouse = null;
         if (playerInput != null)
-            UsingGamepad = (playerInput.currentControlScheme == "Gamepad");
+        {
+            var devs = playerInput.devices;
+            for (int i = 0; i < devs.Count; i++)
+            {
+                if (pad == null && devs[i] is Gamepad g) pad = g;
+                if (mouse == null && devs[i] is Mouse m) mouse = m;
+            }
+        }
+        if (mouse == null && playerInput == null) mouse = Mouse.current; // legacy object w/o PlayerInput
+
+        Vector2 stick = pad != null ? pad.rightStick.ReadValue() : Vector2.zero;
+
+        // Pick the aim source by the device actually used, NOT by currentControlScheme.
+        // The single-player setup keeps ONE PlayerInput on the Keyboard&Mouse scheme even
+        // while a pad is paired (so both work), so the old scheme check left the right
+        // stick dead. A player pinned to the Gamepad scheme (co-op pad player) is always
+        // gamepad; otherwise the stick (past its deadzone) selects gamepad, mouse motion
+        // selects mouse, and an idle frame keeps whatever was used last so aim never
+        // snaps on its own.
+        bool schemeGamepad = playerInput != null && playerInput.currentControlScheme == "Gamepad";
+        if (schemeGamepad || stick.magnitude > stickDeadzone)
+            UsingGamepad = true;
+        else if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0.25f)
+            UsingGamepad = false;
+        // else: neither active this frame — keep the previous UsingGamepad.
 
         if (UsingGamepad)
         {
-            UpdateGamepadAim();
+            UpdateGamepadAim(stick);
         }
         else
         {
-            UpdateMouseAim();
+            UpdateMouseAim(mouse);
             // Re-seed the reticle in front of the player next time we pick up the pad.
             reticleSeeded = false;
         }
     }
 
-    private void UpdateGamepadAim()
+    private void UpdateGamepadAim(Vector2 stick)
     {
+        float mag = stick.magnitude;
+
         // Absolute aim direction — drives directional weapons + the on-screen cursor.
-        if (lookInputVector.magnitude > stickDeadzone)
-            Direction = lookInputVector.normalized;
+        if (mag > stickDeadzone)
+            Direction = stick.normalized;
 
         // Steered ground reticle — drives mortar / smoke.
         if (!reticleSeeded)
@@ -119,8 +174,8 @@ public class PlayerAim : MonoBehaviour
         }
 
         // Move the reticle proportionally to stick push (small push = slow, full = fast).
-        if (lookInputVector.magnitude > stickDeadzone)
-            reticleWorld += (Vector3)(lookInputVector * reticleMoveSpeed * Time.deltaTime);
+        if (mag > stickDeadzone)
+            reticleWorld += (Vector3)(stick * reticleMoveSpeed * Time.deltaTime);
 
         // Clamp within reach of the player and flatten to the play plane.
         Vector3 off = reticleWorld - transform.position;
@@ -131,9 +186,8 @@ public class PlayerAim : MonoBehaviour
         WorldPoint = reticleWorld;
     }
 
-    private void UpdateMouseAim()
+    private void UpdateMouseAim(Mouse mouse)
     {
-        var mouse = Mouse.current;
         if (mouse == null || cam == null) return;
 
         Vector3 mw = cam.ScreenToWorldPoint(mouse.position.ReadValue());
@@ -145,4 +199,3 @@ public class PlayerAim : MonoBehaviour
             Direction = d.normalized;
     }
 }
-

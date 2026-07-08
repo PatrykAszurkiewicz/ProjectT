@@ -4,34 +4,33 @@ using System.Collections.Generic;
 using UnityEngine;
 
 
-/// THE GAME ORCHESTRATOR — runs an entire roguelike session.
-/// ║  StartRun()                                                ║
-/// ║    │                                                       ║
-/// ║    ├── Stage 1 (random biome, e.g. Grass)                  ║
-/// ║    │     ├── Wave 1  ─┐                                    ║
-/// ║    │     ├── Wave 2   │  wavesPerStage waves               ║
-/// ║    │     ├── ...      │  (from your WaveConfig)            ║
-/// ║    │     ├── Wave 8  ─┘                                    ║
-/// ║    │     └── Stage Boss                                    ║
-/// ║    │                                                       ║
-/// ║    ├── Stage 2 (random biome, e.g. Desert + Night)         ║
-/// ║    │     ├── Wave 1..8                                     ║
-/// ║    │     └── Stage Boss                                    ║
-/// ║    │                                                       ║
-/// ║    ├── Stage 3 (random biome, e.g. Snow + Fog)             ║
-/// ║    │     └── ...                                           ║
-/// ║    │                                                       ║
-/// ║    ├── Stage 4 (random biome, e.g. Wasteland)              ║
-/// ║    │     └── ...                                           ║
-/// ║    │                                                       ║
-/// ║    └── FINAL BOSS                                          ║
-
-/// TESTING:
-/// - Use the [ContextMenu] options (right-click the component in Inspector)
-/// - "Start Run" — begins a full run
-/// - "Skip To Next Stage" — jumps to the next biome stage
-/// - "Log Run Plan" — prints the entire run plan to Console without starting
-/// - Check "Auto Start Run" to begin immediately on Play
+// THE GAME ORCHESTRATOR 
+// ║  StartRun()                                                
+// ║    │                                                       
+// ║    ├── Stage 1 (random biome, e.g. Grass)                  
+// ║    │     ├── Wave 1  ─┐                                    
+// ║    │     ├── Wave 2   │  wavesPerStage waves               
+// ║    │     ├── ...      │  (from your WaveConfig)            
+// ║    │     ├── Wave 8  ─┘                                    
+// ║    │     └── Stage Boss                                    
+// ║    │                                                       
+// ║    ├── Stage 2 (random biome, e.g. Desert + Night)         
+// ║    │     ├── Wave 1..8                                     
+// ║    │     └── Stage Boss                                    
+// ║    │                                                       
+// ║    ├── Stage 3 (random biome, e.g. Snow + Fog)             
+// ║    │     └── ...                                           
+// ║    │                                                       
+// ║    ├── Stage 4 (random biome, e.g. Wasteland)              
+// ║    │     └── ...                                           
+// ║    │                                                       
+// ║    └── FINAL BOSS                                          
+// TESTING:
+// - Use the [ContextMenu] options (right-click the component in Inspector)
+// - "Start Run" — begins a full run
+// - "Skip To Next Stage" — jumps to the next biome stage
+// - "Log Run Plan" — prints the entire run plan to Console without starting
+// - Check "Auto Start Run" to begin immediately on Play
 
 public class GameOrchestrator : MonoBehaviour
 {
@@ -48,11 +47,6 @@ public class GameOrchestrator : MonoBehaviour
     [Tooltip("Start a run automatically when the scene loads? Great for testing.")]
     public bool autoStartRun = true;
 
-    [Tooltip("If true, a saved run on disk is resumed automatically on launch. " +
-             "Leave OFF to always start fresh (recommended until a 'Continue' button is wired). " +
-             "A stale save left from testing is the usual cause of a black-screen boot.")]
-    public bool autoResumeSavedRun = false;
-
     [Header("═══ SCENE REFERENCES ═══")]
     [Tooltip("Drag your BiomeManager here (or leave empty — will auto-find).")]
     public BiomeManager biomeManager;
@@ -62,7 +56,7 @@ public class GameOrchestrator : MonoBehaviour
 
     [Header("═══ DEBUG ═══")]
     [Tooltip("Print detailed state transitions to Console.")]
-    public bool debugLog = true;
+    public bool debugLog = false;
 
     [Header("═══ TRANSITIONS ═══")]
     [Tooltip("Enable smooth fade-to-black transitions between stages.")]
@@ -129,6 +123,53 @@ public class GameOrchestrator : MonoBehaviour
     /// The biome sequence for this run (for UI map screens etc).</summary>
     public List<StageData> RunPlan => currentRunPlan;
 
+    /// <summary>
+    /// Write an autosave at the CURRENT position, but CLAMPED to a real, resumable wave.
+    /// During the final boss CurrentStageIndex/CurrentWaveInStage point PAST the last
+    /// stage (the plan holds only the stages), so saving them raw makes the continue
+    /// screen read "Stage 3 Wave 3" and used to make resume reject the save. Clamping
+    /// here keeps the on-disk position valid. Call this for a forced "Exit & Save"
+    /// (e.g. from the controller-disconnect overlay) instead of AutoSaveWaveStart with
+    /// the raw indices.
+    /// </summary>
+    public void ForceAutoSave()
+    {
+        var p = RunPersistence.Instance;
+        if (p == null) return;
+
+        // During the final boss, keep the dedicated final-boss save so a forced exit
+        // (e.g. controller-disconnect overlay) still resumes straight into the final
+        // boss instead of rewinding to the last wave.
+        if (CurrentState == RunState.FinalBoss)
+        {
+            WriteFinalBossAutoSave();
+            return;
+        }
+
+        int stage = CurrentStageIndex;
+        int wave = CurrentWaveInStage;
+        if (currentRunPlan != null && currentRunPlan.Count > 0)
+        {
+            stage = Mathf.Clamp(stage, 0, currentRunPlan.Count - 1);
+            int lastWave = Mathf.Max(0, currentRunPlan[stage].waves.Count - 1);
+            wave = Mathf.Clamp(wave, 0, lastWave);
+        }
+        p.AutoSaveWaveStart(stage, wave);
+    }
+
+    // Write the start-of-final-boss checkpoint. stageIndex/waveIndex are stored clamped
+    // to the last real wave (so the continue screen reads a valid position), while the
+    // atFinalBoss flag is what actually routes resume into the final boss.
+    private void WriteFinalBossAutoSave()
+    {
+        var p = RunPersistence.Instance;
+        if (p == null || currentRunPlan == null || currentRunPlan.Count == 0) return;
+
+        int lastStage = currentRunPlan.Count - 1;
+        int lastWave = Mathf.Max(0, currentRunPlan[lastStage].waves.Count - 1);
+        p.AutoSaveWaveStart(lastStage, lastWave, atFinalBoss: true);
+    }
+
     //  EVENTS (subscribe from UI, audio, etc.)
 
     /// Fired on every state change. Use for UI transitions.</summary>
@@ -140,6 +181,11 @@ public class GameOrchestrator : MonoBehaviour
     // Holds saved tower data during a crash/exit resume until the stage layout
     // (and its slots) exist; applied once inside RunStage, then cleared.
     private RunSaveData _pendingTowerRestore;
+
+    // Set true by a final-boss resume so the re-entered last stage rebuilds only its
+    // arena/towers and then SKIPS its (already-completed) stage boss + post-stage
+    // reward, going straight to the final boss. One-shot — RunStage reads and clears it.
+    private bool _resumeSkipBossAndReward;
 
     /// Fired when a wave begins. Use for "Wave 5/8" indicators.</summary>
     public event Action<int, int> OnWaveStarted;              // (waveIndex, totalWaves)
@@ -236,6 +282,10 @@ public class GameOrchestrator : MonoBehaviour
         if (WaveCheckpointService.Instance == null) gameObject.AddComponent<WaveCheckpointService>();
         if (RunPersistence.Instance == null) gameObject.AddComponent<RunPersistence>();
 
+        // Powers WavePacingMode.ReadyUp (the bottom-right "READY" button). Built at
+        // runtime like the other helpers; dormant unless the run uses ReadyUp pacing.
+        if (WaveReadyGate.Instance == null) gameObject.AddComponent<WaveReadyGate>();
+
 
     }
 
@@ -243,23 +293,47 @@ public class GameOrchestrator : MonoBehaviour
     {
         ValidateSetup();
 
+        // timeScale persists across scene reloads; if the menu was opened while
+        // paused (timeScale 0), the run's scaled waits would hang on black.
+        Time.timeScale = 1f;
+
         // A throwing or corrupt resume must never strand the player: catch it and
         // fall through to a fresh run instead of leaving the boot half-initialised.
-        bool resumed = false;
-        if (autoResumeSavedRun)
+        if (RunResumeIntent.Pending)                       // came from the continue menu
         {
-            try { resumed = TryResumeSavedRun(); }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[Orchestrator] Saved-run resume failed — starting fresh. {e}");
-                resumed = false;
-            }
+            bool wantResume = RunResumeIntent.Resume;
+            RunResumeIntent.Clear();
+            // Resume must wait until players + their Weapon children are wired up
+            // (augment replay needs them), so it runs deferred in a coroutine.
+            if (wantResume) { StartCoroutine(DeferredResume()); return; }
+            StartRun();                                    // explicit fresh run (Abandon)
+            return;
         }
-        if (!resumed && autoStartRun) StartRun();
 
+        // No resume intent → fresh run. Resuming a saved run ALWAYS goes through the
+        // Continue menu (which sets RunResumeIntent above). There is deliberately no
+        // silent auto-resume of a stale save here — that was a black-screen footgun.
+        if (autoStartRun) StartRun();
     }
 
     //  PUBLIC API
+
+    // Optional player-supplied seed for the NEXT run (a menu can queue one so a run
+    // can be replayed/shared). Consumed once in StartRun; null → fresh TickCount seed
+    // (original behaviour). The run plan is already fully reproducible from the seed.
+    private static int? s_queuedRunSeed;
+    public static void QueueRunSeed(int seed) => s_queuedRunSeed = seed;
+    public static void QueueRunSeed(string text)   // alphanumeric → stable seed
+    {
+        if (string.IsNullOrWhiteSpace(text)) { s_queuedRunSeed = null; return; }
+        if (int.TryParse(text.Trim(), out int n)) { s_queuedRunSeed = n; return; }
+        unchecked
+        {
+            uint h = 2166136261u;                  // FNV-1a: same text ⇒ same run
+            foreach (char c in text.Trim()) { h ^= c; h *= 16777619u; }
+            s_queuedRunSeed = (int)h;
+        }
+    }
 
     /// Start a new roguelike run. Generates a random biome sequence and begins.
     [ContextMenu("▶ Start Run")]
@@ -275,9 +349,15 @@ public class GameOrchestrator : MonoBehaviour
         if (runCoroutine != null)
             StopCoroutine(runCoroutine);
 
-        int runSeed = System.Environment.TickCount;
+        // Lock in the difficulty for this run from the current Options-menu selection.
+        // From here on everything that scales (enemies + bosses) reads ActiveMode.
+        var activeDifficulty = EnemyStatModifierManager.LockActiveFromSelected();
+
+        // Use a player-queued seed if present, otherwise a fresh one (original behaviour).
+        int runSeed = s_queuedRunSeed ?? System.Environment.TickCount;
+        s_queuedRunSeed = null;
         UnityEngine.Random.InitState(runSeed);
-        RunPersistence.Instance?.BeginRun(runSeed, runConfig != null ? runConfig.name : "");
+        RunPersistence.Instance?.BeginRun(runSeed, runConfig != null ? runConfig.name : "", (int)activeDifficulty);
 
 
         // Clear per-player static augment state so a previous run's cooldown /
@@ -398,6 +478,10 @@ public class GameOrchestrator : MonoBehaviour
         // ── Play through each stage ──
         for (CurrentStageIndex = 0; CurrentStageIndex < currentRunPlan.Count; CurrentStageIndex++)
         {
+            // Re-lock difficulty from the current menu selection at each fresh stage, so
+            // a Normal↔Nightmare change made mid-run takes effect from the NEXT stage.
+            EnemyStatModifierManager.LockActiveFromSelected();
+
             yield return RunStage(currentRunPlan[CurrentStageIndex]);
 
             // Check for game over between stages
@@ -501,7 +585,30 @@ public class GameOrchestrator : MonoBehaviour
         }
         else
         {
+            // RESUME path (Continue / crash-recovery): the intro is skipped, but the
+            // biome must still be built — otherwise the stage renders with only the
+            // scene's default background (no overlay, and whatever biome the scene
+            // happened to default to instead of the planned one). Apply it now, then
+            // reveal the screen, since Awake snapped it to black and the intro's
+            // FadeIn (which normally reveals) didn't run.
+            try
+            {
+                ApplyBiome(stage);
+                OnStageStarted?.Invoke(stage);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[Orchestrator] Resume biome setup threw — revealing screen anyway. {e}");
+            }
+
             if (waveSpawner != null) waveSpawner.enemySpawnCountMultiplier = stage.enemyCountMultiplier;
+
+            if (enableTransitions && transitionOverlay != null)
+            {
+                transitionOverlay.NotifyIntroStarted(); // stand down the boot watchdog
+                yield return null;                      // let the biome build one frame
+                yield return transitionOverlay.FadeIn();// reveal (no banner on resume)
+            }
         }
 
         // Deferred tower restore (crash/exit resume): slots only exist once the
@@ -523,6 +630,12 @@ public class GameOrchestrator : MonoBehaviour
         }
 
 
+
+        // One-shot resume flag: when resuming straight into the final boss, the last
+        // stage is re-entered only to rebuild its arena/towers — its boss and reward
+        // were already completed before the save, so skip them this invocation.
+        bool skipBossAndReward = _resumeSkipBossAndReward;
+        _resumeSkipBossAndReward = false;
 
         //  2. WAVES: Play through each wave 
         for (CurrentWaveInStage = startWaveIndex; CurrentWaveInStage < stage.waves.Count; CurrentWaveInStage++)
@@ -548,8 +661,8 @@ public class GameOrchestrator : MonoBehaviour
                 transitionOverlay.FlashWaveStart($"Wave {CurrentWaveInStage + 1} Starts", 1.5f);
             }
 
-            float preWaveDelay = (CurrentWaveInStage == 0) ? 1f : runConfig.timeBetweenWaves;
-            yield return new WaitForSeconds(preWaveDelay);
+            // Mode-aware pause before the wave spawns (countdown / ready-up / immediate).
+            yield return WaitBeforeWave();
 
             // Spawn the wave
             SetState(RunState.WaveActive);
@@ -577,7 +690,7 @@ public class GameOrchestrator : MonoBehaviour
         }
 
         //  3. STAGE BOSS 
-        if (stage.hasStageBoss && stage.stageBossPrefab != null)
+        if (stage.hasStageBoss && stage.stageBossPrefab != null && !skipBossAndReward)
         {
             SetState(RunState.StageBoss);
             OnBossSpawned?.Invoke(stage);
@@ -610,14 +723,17 @@ public class GameOrchestrator : MonoBehaviour
         }
 
         // 4. POST-STAGE CHOICE: Heal+Energy  OR  Augment+Energy 
-        if (enablePostStageChoice && postStageChoiceMenu != null)
+        if (!skipBossAndReward)
         {
-            yield return ShowPostStageChoice(stage);
-        }
-        else if (enableAugmentSelection && augmentsMenu != null)
-        {
-            // Fallback to old behaviour if post-stage choice is disabled
-            yield return ShowAugmentSelection($"stage {stage.stageIndex + 1} boss");
+            if (enablePostStageChoice && postStageChoiceMenu != null)
+            {
+                yield return ShowPostStageChoice(stage);
+            }
+            else if (enableAugmentSelection && augmentsMenu != null)
+            {
+                // Fallback to old behaviour if post-stage choice is disabled
+                yield return ShowAugmentSelection($"stage {stage.stageIndex + 1} boss");
+            }
         }
 
         //  5. STAGE COMPLETE 
@@ -627,6 +743,50 @@ public class GameOrchestrator : MonoBehaviour
             Debug.Log($"[Orchestrator] Stage {stage.stageIndex + 1} complete!");
 
         yield return new WaitForSeconds(pauseAfterLastKill);
+    }
+
+    // Mode-aware pause before each wave spawns. Replaces the old fixed
+    // `WaitForSeconds(timeBetweenWaves)`, so between-wave pacing is selectable per run
+    // via RunConfig.wavePacingMode. Countdown reproduces the original behaviour exactly
+    // (including the 1s lead-in on the first wave of a stage), so the default is a no-op.
+    private IEnumerator WaitBeforeWave()
+    {
+        bool isFirstWaveOfStage = (CurrentWaveInStage == 0);
+        WavePacingMode mode = runConfig != null ? runConfig.wavePacingMode : WavePacingMode.Countdown;
+        var gate = WaveReadyGate.Instance;
+
+        switch (mode)
+        {
+            case WavePacingMode.Immediate:
+                // Back-to-back waves. Keep only the small post-intro breath before the
+                // very first wave so spawns don't land during the stage-intro fade.
+                if (isFirstWaveOfStage)
+                    yield return new WaitForSeconds(1f);
+                yield break;
+
+            case WavePacingMode.ReadyUp:
+                if (gate != null)
+                {
+                    yield return gate.WaitForAllReady(() => CurrentState == RunState.GameOver);
+                }
+                else
+                {
+                    // Gate somehow missing — fall back to a plain wait so a run can
+                    // never stall waiting on a button that isn't there.
+                    Debug.LogWarning("[Orchestrator] WaveReadyGate missing — falling back to a timed wait.");
+                    yield return new WaitForSeconds(isFirstWaveOfStage ? 1f : runConfig.timeBetweenWaves);
+                }
+                yield break;
+
+            case WavePacingMode.Countdown:
+            default:
+                float secs = isFirstWaveOfStage ? 1f : runConfig.timeBetweenWaves;
+                if (gate != null)
+                    yield return gate.WaitForCountdown(secs);   // shows the ticking number
+                else
+                    yield return new WaitForSeconds(secs);
+                yield break;
+        }
     }
 
 
@@ -739,14 +899,100 @@ public class GameOrchestrator : MonoBehaviour
 
     private IEnumerator ResumeRunLoop(int stageIndex, int startWaveIndex)
     {
+        // The resumed (partial) stage keeps the difficulty it was saved with — restored
+        // by AdoptLoadedRun/SetActiveMode — so we do NOT re-lock before this first call.
         yield return RunStage(currentRunPlan[stageIndex], startWaveIndex, skipIntro: true);
         if (CurrentState == RunState.GameOver) yield break;
         for (CurrentStageIndex = stageIndex + 1; CurrentStageIndex < currentRunPlan.Count; CurrentStageIndex++)
         {
+            // Stages AFTER the resumed one are fresh: re-lock from the menu selection.
+            EnemyStatModifierManager.LockActiveFromSelected();
+
             yield return RunStage(currentRunPlan[CurrentStageIndex]);
             if (CurrentState == RunState.GameOver) yield break;
         }
         yield return FinishRun();
+    }
+
+    // Resume after a controlled scene reload (the Continue menu). The augment
+    // replay inside TryResumeSavedRun resolves each weapon-unlock augment against a
+    // Weapon component on the chooser; in Start() the player prefab hasn't finished
+    // wiring its Weapon child yet, so those replays ("Cannot apply augment N to
+    // current target" for 65/93/327…) fail. Wait — bounded — until the expected
+    // players are registered AND a Weapon exists, then resume.
+    private IEnumerator DeferredResume()
+    {
+        Time.timeScale = 1f;
+        if (enableTransitions && transitionOverlay != null)
+            transitionOverlay.NotifyIntroStarted(); // keep the boot watchdog from revealing black mid-wait
+
+        int wantPlayers = CoopManager.Instance != null ? CoopManager.Instance.TargetPlayerCount : 1;
+
+        // Wait until EVERY expected player is registered, resolvable by index, and has
+        // its Weapon child wired — the augment replay targets each player's Weapon, and
+        // resolves the chooser via PlayerRegistry.Get(playerIndex). The old 3s/Count-only
+        // wait gave up too early in co-op: if P2 (or its index/Weapon) wasn't ready, the
+        // replay dropped P2's weapon-unlock augments (partial loss), and on a hard timeout
+        // we fell through to StartRun() — which BeginRun→Clear+DeleteSave WIPED the run.
+        // Cap is generous because the Continue menu already gated on the controllers, so
+        // seating WILL complete; we must never bail early and destroy the save.
+        bool resumed = false;
+        float t = 0f;
+        const float maxWait = 15f;
+        while (t < maxWait && !resumed)
+        {
+            if (ResumePlayersReady(wantPlayers))
+            {
+                try { resumed = TryResumeSavedRun(); }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[Orchestrator] Resume threw — {e}");
+                    break;
+                }
+                if (resumed) break;
+
+                // TryResumeSavedRun returned false. If it DISCARDED the save (corrupt /
+                // old version / incompatible RunConfig), the file is gone → stop and
+                // fresh-start below. If the save is STILL on disk, this was only the
+                // controller gate — keep waiting for the players, never fresh-start.
+                if (!RunPersistence.SaveExists) break;
+            }
+            yield return null;
+            t += Time.unscaledDeltaTime;
+        }
+
+        if (resumed) yield break;
+
+        // Did not resume. Start a fresh run ONLY when there is genuinely no save to
+        // protect. A surviving save means resume was merely deferred (players still
+        // seating) — starting fresh here would BeginRun→delete it and reset the run,
+        // which is exactly the bug that wiped equipped weapons. Preserve the save.
+        if (!RunPersistence.SaveExists)
+        {
+            StartRun();
+        }
+        else
+        {
+            Debug.LogError("[Orchestrator] Could not resume in time, but a SAVE EXISTS — keeping it intact " +
+                           "(NOT starting a fresh run). Return to the menu and press Continue again once both " +
+                           "controllers are connected.");
+        }
+    }
+
+    // Resume readiness: all expected players registered, each resolvable by its index,
+    // and each carrying a Weapon child (the augment-replay target). Stricter than a bare
+    // Count check so co-op replay never applies a player's unlocks to a null/By-position
+    // chooser.
+    private bool ResumePlayersReady(int wantPlayers)
+    {
+        if (PlayerRegistry.Count < wantPlayers) return false;
+        for (int i = 0; i < wantPlayers; i++)
+        {
+            var pr = PlayerRegistry.Instance != null ? PlayerRegistry.Instance.Get(i) : null;
+            if (pr == null) return false;
+            if (pr.GetComponentInChildren<Weapon>() == null) return false;
+        }
+        return true;
     }
 
     public bool TryResumeSavedRun()
@@ -760,22 +1006,52 @@ public class GameOrchestrator : MonoBehaviour
             p.DeleteSave();
             return false;
         }
+
+        // Controller gate: refuse to resume a co-op save until enough players are
+        // seated. Does NOT delete the save — the player can connect a controller
+        // and retry. present == 0 (registry not populated yet) is left to pass so
+        // single-player timing never regresses.
+        int needed = Mathf.Max(1, data.runPlayerCount > 0 ? data.runPlayerCount
+                                  : (data.players != null ? data.players.Count : 1));
+        int present = PlayerRegistry.Count;
+        if (present > 0 && present < needed)
+        {
+            Debug.LogWarning($"[Orchestrator] Saved run needs {needed} players but {present} seated — not resuming (save kept).");
+            return false;
+        }
+
         try
         {
+            // Restore this run's difficulty BEFORE any stage scaling / enemy spawn so a
+            // resumed run scales exactly as the original did.
+            EnemyStatModifierManager.SetActiveMode(data.difficulty);
+
             UnityEngine.Random.InitState(data.runSeed);
             currentRunPlan = GenerateRunPlan();
 
-            // Validate the save against the freshly generated plan. A plan that no
-            // longer contains the saved stage/wave (RunConfig changed, corrupt file)
-            // must NOT resume — that path skips the intro and leaves a black screen.
-            if (currentRunPlan == null
-                || data.stageIndex < 0 || data.stageIndex >= currentRunPlan.Count
-                || data.waveIndex < 0 || data.waveIndex >= currentRunPlan[data.stageIndex].waves.Count)
+            // The run plan holds only the STAGES; the final boss runs AFTER them as a
+            // separate phase, so a saved position past the last stage (CurrentStageIndex
+            // == plan.Count during RunState.FinalBoss) is NORMAL, not corrupt. Never
+            // discard/delete the save for being out of range — that wipes the whole run.
+            // Only a genuinely unusable plan (the seed produced nothing) is unrecoverable.
+            // For everything else, CLAMP to the last real wave and resume there: every
+            // augment/weapon is still replayed, so the player keeps all progress and just
+            // re-approaches the final boss.
+            if (currentRunPlan == null || currentRunPlan.Count == 0)
             {
-                Debug.LogWarning("[Orchestrator] Saved run is incompatible with the current RunConfig — discarding it and starting fresh.");
+                Debug.LogWarning("[Orchestrator] No run plan could be generated from the saved seed — discarding and starting fresh.");
                 p.DeleteSave();
                 return false;
             }
+
+            int lastStage = currentRunPlan.Count - 1;
+            int resumeStage = Mathf.Clamp(data.stageIndex, 0, lastStage);
+            int lastWaveOfStage = Mathf.Max(0, currentRunPlan[resumeStage].waves.Count - 1);
+            int resumeWave = Mathf.Clamp(data.waveIndex, 0, lastWaveOfStage);
+            if (resumeStage != data.stageIndex || resumeWave != data.waveIndex)
+                Debug.LogWarning($"[Orchestrator] Saved position (stage {data.stageIndex + 1}, wave {data.waveIndex + 1}) is past " +
+                                 $"the last stage (final-boss phase) or out of range — resuming at stage {resumeStage + 1}, wave " +
+                                 $"{resumeWave + 1} with all augments/weapons restored.");
 
             p.AdoptLoadedRun(data);
 
@@ -787,28 +1063,94 @@ public class GameOrchestrator : MonoBehaviour
             ProjectileParry.Reset();
 
 
-            if (AugmentRegistry.Instance != null)
+            // Replay augments — ISOLATED per item. This is the core multi-resume fix:
+            // a single augment whose effect throws (or whose weapon target won't resolve
+            // on this particular cycle) must NEVER abort the whole resume. Previously one
+            // such throw fell to the outer catch, which DELETED the save; DeferredResume
+            // then saw no save and started a FRESH run — which is exactly why a second
+            // Continue came back with only the starting melee. Now each augment that
+            // fails is logged and skipped, and every other augment/weapon still restores.
+            int augTried = 0, augOk = 0;
+            if (AugmentRegistry.Instance != null && data.augments != null)
                 foreach (var a in data.augments)
                 {
-                    PlayerStats chooser = null;
-                    var pr = PlayerRegistry.Instance != null ? PlayerRegistry.Instance.Get(a.playerIndex) : null;
-                    if (pr != null) chooser = pr.Stats;
-                    AugmentRegistry.Instance.ApplyAugment(a.id, a.rarity, chooser);
+                    augTried++;
+                    try
+                    {
+                        PlayerStats chooser = null;
+                        var pr = PlayerRegistry.Instance != null ? PlayerRegistry.Instance.Get(a.playerIndex) : null;
+                        if (pr != null) chooser = pr.Stats;
+                        if (AugmentRegistry.Instance.ApplyAugment(a.id, a.rarity, chooser)) augOk++;
+                    }
+                    catch (System.Exception ae)
+                    {
+                        Debug.LogError($"[Orchestrator] Resume: augment {a.id} (P{a.playerIndex}) threw on replay — skipping it, keeping the rest. {ae.Message}");
+                    }
                 }
+
+            // Re-apply in-run blueprint-drop unlocks. No augment backs these, so the
+            // replay above can't rebuild them. ForceUnlock fires OnUnlocksChanged →
+            // each player's WeaponRollController rebuilds its hotbar and re-equips.
+            // Isolated per item for the same reason as the augment replay.
+            int bpTried = 0, bpOk = 0;
+            if (data.blueprintUnlocks != null && WeaponUnlockRegistry.Instance != null)
+                foreach (var bu in data.blueprintUnlocks)
+                {
+                    if (bu == null || bu.slot < 0) continue;
+                    bpTried++;
+                    try { WeaponUnlockRegistry.Instance.ForceUnlock(bu.slot, bu.playerIndex); bpOk++; }
+                    catch (System.Exception be)
+                    {
+                        Debug.LogError($"[Orchestrator] Resume: blueprint unlock slot {bu.slot} (P{bu.playerIndex}) threw — skipping it, keeping the rest. {be.Message}");
+                    }
+                }
+
+            Debug.Log($"[Orchestrator] Resume replay complete: augments {augOk}/{augTried} applied, blueprint unlocks {bpOk}/{bpTried} applied.");
 
             // Towers can't be rebuilt yet — slots don't exist until the stage
             // layout is applied inside RunStage. Defer to there.
             _pendingTowerRestore = data;
-            p.RestoreAbsolutes(data);  // player/core/economy — applied AFTER replay
 
+            // Player/core/economy absolutes — applied AFTER replay. Non-critical to the
+            // run continuing, so a failure here must not abort the resume either.
+            try { p.RestoreAbsolutes(data); }
+            catch (System.Exception re)
+            {
+                Debug.LogError($"[Orchestrator] Resume: restoring absolute stats failed (non-fatal) — {re.Message}");
+            }
+
+            if (data.atFinalBoss)
+            {
+                // Resume straight into the final boss: re-enter the last stage to rebuild
+                // its arena + towers, but skip its (already-beaten) boss and reward, then
+                // fall through to the final boss. Starting past the last wave skips the
+                // wave loop; the skip flag handles the boss + reward.
+                int lastStageIdx = currentRunPlan.Count - 1;
+                int pastAllWaves = currentRunPlan[lastStageIdx].waves != null
+                    ? currentRunPlan[lastStageIdx].waves.Count : 0;
+                _resumeSkipBossAndReward = true;
+                JumpToWave(lastStageIdx, pastAllWaves);
+            }
+            else
+            {
+                JumpToWave(resumeStage, resumeWave);
+            }
+
+            // Consume the save only once the run is definitely resuming (after JumpToWave
+            // has started the run loop). If anything above had thrown, the save survives
+            // so the player can retry from the menu instead of losing the run.
             p.OnSaveConsumed();
-            JumpToWave(data.stageIndex, data.waveIndex);
             return true;
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"[Orchestrator] Resume failed ({e.Message}) — discarding save and starting fresh.");
-            p.DeleteSave();
+            // An unexpected throw here (run-plan / jump / adopt) is rare now that the
+            // replays are isolated above. CRITICAL: do NOT delete the save. Deleting it
+            // is what made DeferredResume start a fresh run and wipe the player's weapons
+            // on the second Continue. Preserve the save so the player can return to the
+            // menu and press Continue again (the controller-gate path already depends on
+            // a surviving save). Log the full stack so the exact cause is visible.
+            Debug.LogError($"[Orchestrator] Resume threw unexpectedly — SAVE PRESERVED for retry (NOT starting a fresh run). {e}");
             return false;
         }
     }
@@ -1158,6 +1500,10 @@ public class GameOrchestrator : MonoBehaviour
             if (anyOpen) yield return new WaitForSecondsRealtime(0.1f);
         }
 
+        // Hold suppression until every gamepad trigger is released (see the note
+        // in ShowAugmentSelection) so a trigger held to confirm can't resume with
+        // the attack dead until re-pulled. No-ops without a held pad trigger.
+        yield return MenuInputGuard.WaitForGamepadTriggersReleased();
         Time.timeScale = prevTimeScale;
         Cursor.visible = false;
         PlayerAttack.SetAllSuppressed(false);
@@ -1222,11 +1568,27 @@ public class GameOrchestrator : MonoBehaviour
 
         yield return WaitForAugmentMenuClosed();
 
+        // Defensive resume. AugmentsMenu restores whatever Time.timeScale it
+        // captured on open. If an upstream menu (e.g. the post-stage reward
+        // screen) handed off while still frozen at 0, the menu restores 0 on
+        // close and the player is stuck until another menu forces timeScale back
+        // to 1. Force a running timescale here so the run always resumes.
         if (coop)
         {
+            // Hold suppression until every gamepad trigger is released. A trigger
+            // still held from confirming the menu had its press-edge swallowed while
+            // suppressed; resuming now would leave that attack dead until re-pulled.
+            // WaitForGamepadTriggersReleased is frame-based + unscaled, so it advances
+            // while still frozen at timeScale 0 and no-ops with no pad/trigger held.
+            yield return MenuInputGuard.WaitForGamepadTriggersReleased();
+
             Time.timeScale = prevTimeScale;
             Cursor.visible = false;
             PlayerAttack.SetAllSuppressed(false);
+        }
+        else
+        {
+            Time.timeScale = 1f;
         }
 
         if (debugLog)
@@ -1352,6 +1714,12 @@ public class GameOrchestrator : MonoBehaviour
         // exactly here (re-running only the final boss, not the last stage).
         WaveCheckpointService.Instance?.CaptureFinalBossSnapshot();
 
+        // Cross-session save: persist progress at the START of the final boss so a
+        // crash/exit during the fight resumes straight into the final boss (the last
+        // stage's boss and post-stage reward already completed, not re-offered),
+        // rather than rewinding to the last wave of the last stage.
+        WriteFinalBossAutoSave();
+
         yield return WaitForBossDead();
 
         if (debugLog)
@@ -1455,13 +1823,16 @@ public class GameOrchestrator : MonoBehaviour
                 biome = biome,
                 layout = layout,
 
-                // Roll weather (with sensible biome-specific overrides)
+                // Roll weather, gated by each biome's allowed weather (single source of
+                // truth = BiomeWeatherDefaults). A biome only gets rain/snow if it supports
+                // it AND the chance roll passes. Snow biome always snows; Marsh can rain.
                 nightMode = UnityEngine.Random.value < runConfig.nightModeChance,
                 fogEnabled = UnityEngine.Random.value < runConfig.fogChance,
-                rainEnabled = UnityEngine.Random.value < runConfig.rainChance
-                              && biome != BiomeType.Desert,
-                snowEnabled = UnityEngine.Random.value < runConfig.snowChance
-                              || biome == BiomeType.Snow,
+                rainEnabled = BiomeWeatherDefaults.ForBiome(biome).rainEnabled
+                              && UnityEngine.Random.value < runConfig.rainChance,
+                snowEnabled = BiomeWeatherDefaults.ForBiome(biome).snowEnabled
+                              && (biome == BiomeType.Snow
+                                  || UnityEngine.Random.value < runConfig.snowChance),
                 balloonsEnabled = UnityEngine.Random.value < runConfig.nightBalloonChance,
 
                 // Difficulty scaling
@@ -1693,4 +2064,3 @@ public class GameOrchestrator : MonoBehaviour
             Instance = null;
     }
 }
-

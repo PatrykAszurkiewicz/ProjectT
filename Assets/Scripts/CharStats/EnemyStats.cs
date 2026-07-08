@@ -96,6 +96,11 @@ public class EnemyStats : CharacterStats
                 // inflating only its HP would unbalance the fight by default.
                 if (!(this is BaseBossStats) || EnemyStatModifierManager.Instance.StageScalingAffectsBosses)
                     maxHealth *= EnemyStatModifierManager.Instance.GetStageHealthMultiplier();
+
+                // Difficulty (Normal/Nightmare) HP — regular enemies here; bosses take
+                // theirs (HP + armour) in BaseBossStats.Awake so it isn't applied twice.
+                if (!(this is BaseBossStats))
+                    maxHealth *= EnemyStatModifierManager.DifficultyHealthMultiplier;
             }
 
             currentHealth = maxHealth;
@@ -347,6 +352,11 @@ public class EnemyStats : CharacterStats
                 if (!(this is BaseBossStats) || EnemyStatModifierManager.Instance.StageScalingAffectsBosses)
                     multiplier *= EnemyStatModifierManager.Instance.GetStageDamageMultiplier();
 
+                // Difficulty (Normal/Nightmare) damage — applies to EVERY enemy, boss
+                // melee included. Boss special attacks scale separately via
+                // BaseBossStats.BossStageDamageMultiplier.
+                multiplier *= EnemyStatModifierManager.DifficultyDamageMultiplier;
+
                 // NOTE: baseDamage is the per-enemy CLONED enemyData.damage, so any
                 // per-enemy growth/buff (e.g. the Berserk's eat growth that multiplies
                 // its own clone) is already baked into baseDamage and compounds here.
@@ -434,4 +444,3 @@ public class EnemyStatsEditor : UnityEditor.Editor
     }
 }
 #endif
-
