@@ -9,6 +9,15 @@ using System.Collections.Generic;
 //   Slot 0 = primary  prefab      (e.g. tree)
 //   Slot 1 = secondary/accent     (e.g. small stone)
 //   Slot 2 = tertiary/accent      (e.g. stone variant)
+//
+// SPAWN ZONE
+// Biome decorations are placed in an annulus around the map centre:
+//   inner = whatever the active MAP LAYOUT occupies (slots, obstacles,
+//           connection lines) + clearance   → see ResolveInnerRadius()
+//   outer = border ring inner edge - minDistanceFromBorder
+// On top of the annulus, individual keep-out discs are built around every
+// layout obstacle / tower slot so nothing lands on the designed terrain even
+// if the annulus is loosened.
 
 public class ObstacleGenerator : MonoBehaviour
 {
@@ -17,7 +26,7 @@ public class ObstacleGenerator : MonoBehaviour
     [Tooltip("Extra padding added to the auto-detected inner radius. " +
              "Increase this when layouts have obstacles that extend outward " +
              "from the tower rings (walls, perimeter buildings).")]
-    public float extraInnerPadding = 6f;
+    public float extraInnerPadding = 2f;
 
     [Header("Prefabs (assigned by BiomeManager per biome — don't edit)")]
     public GameObject[] obstaclePrefabs;
@@ -34,7 +43,10 @@ public class ObstacleGenerator : MonoBehaviour
     public int obstacleCount = 70;
 
 
-    [Tooltip("Minimum distance from map center. -1 = auto-detect from outermost tower ring.")]
+    [Tooltip("Minimum distance from map center. -1 = auto-detect from the active map layout " +
+             "(or the outermost tower ring when no layout is active).\n" +
+             "NOTE: this is a FLOOR, not a cap — when 'Respect Active Layout' is on, the " +
+             "inner radius is still pushed out past the layout footprint.")]
     public float minDistanceFromCenter = -1f;
 
     [Tooltip("Minimum distance from the border ring inner edge.")]
@@ -50,6 +62,36 @@ public class ObstacleGenerator : MonoBehaviour
 
     [Tooltip("Tag used to find the player GameObject for the spawn exclusion check.")]
     public string playerTag = "Player";
+
+    //  Layout clearance 
+
+    [Header("Map Layout Clearance")]
+    [Tooltip("Keep biome decorations away from the active MapLayoutDefinition " +
+             "(its obstacles, tower slots and connection lines).\n" +
+             "Turn off to restore the old ring-only behaviour.")]
+    public bool respectActiveLayout = true;
+
+    [Tooltip("SIMPLE MODE (recommended): push every biome decoration outside a single\n" +
+             "radius that encloses the whole layout footprint.\n" +
+             "inner radius = (furthest layout element from the core) + Layout Clearance.\n" +
+             "Uncheck to allow decorations between layout pieces — they'll still be\n" +
+             "kept off individual obstacles by the per-obstacle keep-outs below.")]
+    public bool useCircularKeepout = true;
+
+    [Tooltip("Gap between the outermost layout element and the first biome decoration " +
+             "(world units). Used when 'Use Circular Keepout' is on.")]
+    public float layoutClearance = 3f;
+
+    [Tooltip("Also build a keep-out disc around EVERY individual layout obstacle. " +
+             "Cheap safety net — catches augment arches and anything spawned after " +
+             "the annulus was computed.")]
+    public bool avoidLayoutObstaclesIndividually = true;
+
+    [Tooltip("Padding around each individual layout obstacle (world units).")]
+    public float obstacleClearance = 2f;
+
+    [Tooltip("Padding around each tower slot, so decorations never cover a build spot.")]
+    public float slotClearance = 1.5f;
 
     [Header("Scale")]
     [Tooltip("Base scale for obstacle prefab instances.")]
@@ -88,6 +130,14 @@ public class ObstacleGenerator : MonoBehaviour
     // same player position even if the player moves during generation.
     // null = no player found / exclusion disabled.
     private Vector2? cachedPlayerPos;
+
+    // Keep-out discs built from the active layout (obstacles + tower slots).
+    // Radii already include their clearance padding.
+    private readonly List<KeepoutDisc> layoutKeepouts = new List<KeepoutDisc>();
+
+    // True once GenerateObstacles() has produced a container. Used by
+    // NotifyLayoutChanged() so a layout swap can rebuild the decorations.
+    public bool HasGenerated => containerGO != null;
 
     //  Built-in cluster templates 
 
@@ -158,6 +208,10 @@ public class ObstacleGenerator : MonoBehaviour
                 cachedPlayerPos = (Vector2)playerGO.transform.position;
         }
 
+        // Build the layout keep-out discs BEFORE any placement so every
+        // candidate position can be tested against the designed terrain.
+        BuildLayoutKeepouts();
+
         // Auto-pull prefabs from BiomeManager if not set
         bool hasPrefabs = false;
         if (obstaclePrefabs != null)
@@ -208,7 +262,8 @@ public class ObstacleGenerator : MonoBehaviour
 
         if (outerRadius <= innerRadius)
         {
-            Debug.LogWarning($"[ObstacleGenerator] Outer radius ({outerRadius:F1}) <= inner radius ({innerRadius:F1}). No room.");
+            Debug.LogWarning($"[ObstacleGenerator] Outer radius ({outerRadius:F1}) <= inner radius ({innerRadius:F1}). No room. " +
+                             "Lower 'Layout Clearance' / 'Extra Inner Padding', or grow the border ring.");
             return;
         }
 
@@ -242,6 +297,12 @@ public class ObstacleGenerator : MonoBehaviour
                 }
                 if (tooClose) continue;
 
+                // Layout keep-out — never anchor a placement on designed terrain.
+                // Widen by clusterSpread when this attempt could become a cluster
+                // so members radiating outward stay clear too.
+                float layoutMargin = enableClusters ? clusterSpread : 0f;
+                if (IsBlockedByLayout(anchor, layoutMargin)) continue;
+
                 // Player exclusion — the anchor is the cluster centre, so we
                 // also widen the check by clusterSpread when this attempt
                 // would become a cluster (members radiate outward from anchor).
@@ -273,6 +334,13 @@ public class ObstacleGenerator : MonoBehaviour
                 anchors.Add(anchor);
                 placedCount++;
             }
+
+            if (placedCount < obstacleCount)
+            {
+                Debug.LogWarning($"[ObstacleGenerator] Only placed {placedCount}/{obstacleCount} " +
+                                 $"decorations — the free ring (inner={innerRadius:F1}, outer={outerRadius:F1}) " +
+                                 "is too tight. Reduce clearance, or lower Min Distance Between Obstacles.");
+            }
         }
 
         //Debug.Log($"[ObstacleGenerator] {placedCount} placements ({clusters} clusters, " +
@@ -282,6 +350,16 @@ public class ObstacleGenerator : MonoBehaviour
         int soloSpawned = SpawnSoloOnlyPrefabs(anchors, innerRadius, outerRadius);
         if (soloSpawned > 0)
             Debug.Log($"[ObstacleGenerator] + {soloSpawned} solo-only obstacles.");
+    }
+
+    // Called by TowerDefenseMap after a layout is (re)built. Rebuilds the
+    // decorations against the NEW layout footprint — but only if we already
+    // generated once, so the first-frame ordering (biome vs. layout) doesn't
+    // spawn a double set.
+    public void NotifyLayoutChanged()
+    {
+        if (!HasGenerated) return;
+        GenerateObstacles();
     }
 
     //  Solo-only prefab spawning (never clustered) 
@@ -320,6 +398,9 @@ public class ObstacleGenerator : MonoBehaviour
                     { tooClose = true; break; }
                 }
                 if (tooClose) continue;
+
+                // Layout keep-out
+                if (IsBlockedByLayout(pos, 0f)) continue;
 
                 // Player exclusion
                 if (cachedPlayerPos.HasValue &&
@@ -386,6 +467,10 @@ public class ObstacleGenerator : MonoBehaviour
             float posDist = pos.magnitude;
             if (posDist < zoneInner || posDist > zoneOuter) continue;
 
+            // Per-member layout keep-out (the anchor was checked with a margin,
+            // but members can still drift onto a wall on non-circular setups).
+            if (IsBlockedByLayout(pos, 0f)) continue;
+
             // Per-member player exclusion (anchor was already checked, but
             // members radiate outward and could still land on the player).
             if (cachedPlayerPos.HasValue &&
@@ -428,6 +513,9 @@ public class ObstacleGenerator : MonoBehaviour
             Vector2 pos = anchor + rotated;
             float posDist = pos.magnitude;
             if (posDist < zoneInner || posDist > zoneOuter) continue;
+
+            // Per-member layout keep-out.
+            if (IsBlockedByLayout(pos, 0f)) continue;
 
             // Per-member player exclusion.
             if (cachedPlayerPos.HasValue &&
@@ -485,31 +573,248 @@ public class ObstacleGenerator : MonoBehaviour
         }
     }
 
+    //  Layout keep-out 
+
+    // Rebuilds `layoutKeepouts` from the map's ACTIVE layout (which is already
+    // the layoutSpreadScale-scaled clone, so no extra scaling needed here).
+    private void BuildLayoutKeepouts()
+    {
+        layoutKeepouts.Clear();
+        if (!respectActiveLayout || !avoidLayoutObstaclesIndividually) return;
+
+        TowerDefenseMap map = FindMap();
+        if (map == null) return;
+
+        MapLayoutDefinition layout = map.activeLayout;
+        if (layout != null && layout.obstacles != null)
+        {
+            foreach (var o in layout.obstacles)
+                AddObstacleKeepout(o);
+        }
+
+        // Live tower slots (covers custom slots, ring slots, bonus slots added
+        // by augments — anything actually spawned in the scene right now).
+        var slots = map.GetAllSlots();
+        if (slots != null)
+        {
+            foreach (var s in slots)
+            {
+                if (s == null) continue;
+                AddDisc(s.transform.position, slotClearance + 0.5f);
+            }
+        }
+
+        // Authored slot positions too, in case the map hasn't been built yet
+        // when the biome applies (first frame ordering).
+        if (layout != null)
+        {
+            if (layout.customSlotPositions != null)
+                foreach (var p in layout.customSlotPositions)
+                    AddDisc(p, layout.customSlotSize * 0.5f + slotClearance);
+            if (layout.bonusSlotPositions != null)
+                foreach (var p in layout.bonusSlotPositions)
+                    AddDisc(p, layout.bonusSlotSize * 0.5f + slotClearance);
+        }
+    }
+
+    private void AddObstacleKeepout(MapLayoutDefinition.LayoutObstacle o)
+    {
+        switch (o.shape)
+        {
+            case MapLayoutDefinition.ObstacleShape.Circle:
+                AddDisc(o.position, o.size.x * 0.5f + obstacleClearance);
+                break;
+
+            // Ellipse / Crescent / Rectangle are all oblong: cover the long axis
+            // with a chain of discs instead of one huge bounding circle, so a
+            // long wall doesn't blank out a whole quadrant of the map.
+            default:
+                AddOblongKeepout(o.position, o.size, o.rotationDegrees, obstacleClearance);
+                break;
+        }
+    }
+
+    private void AddOblongKeepout(Vector2 center, Vector2 size, float rotationDeg, float pad)
+    {
+        float halfLong = Mathf.Max(Mathf.Abs(size.x), Mathf.Abs(size.y)) * 0.5f;
+        float halfShort = Mathf.Min(Mathf.Abs(size.x), Mathf.Abs(size.y)) * 0.5f;
+
+        // Roughly square → one disc is enough.
+        float span = halfLong - halfShort;
+        if (span < 0.01f)
+        {
+            AddDisc(center, halfLong + pad);
+            return;
+        }
+
+        // Direction of the long axis in world space.
+        float axisDeg = rotationDeg + (Mathf.Abs(size.x) >= Mathf.Abs(size.y) ? 0f : 90f);
+        float rad = axisDeg * Mathf.Deg2Rad;
+        Vector2 axis = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
+
+        float discRadius = halfShort + pad;
+        int steps = Mathf.Max(1, Mathf.CeilToInt(span / Mathf.Max(0.25f, halfShort)));
+        for (int i = -steps; i <= steps; i++)
+        {
+            float t = (float)i / steps;
+            AddDisc(center + axis * (span * t), discRadius);
+        }
+    }
+
+    private void AddDisc(Vector2 center, float radius)
+    {
+        if (radius <= 0f) return;
+        layoutKeepouts.Add(new KeepoutDisc { center = center, radius = radius });
+    }
+
+    // True when `p` (grown by `margin`) overlaps any layout keep-out disc.
+    private bool IsBlockedByLayout(Vector2 p, float margin)
+    {
+        if (layoutKeepouts.Count == 0) return false;
+        for (int i = 0; i < layoutKeepouts.Count; i++)
+        {
+            float r = layoutKeepouts[i].radius + margin;
+            if ((p - layoutKeepouts[i].center).sqrMagnitude < r * r)
+                return true;
+        }
+        return false;
+    }
+
     //  Radius resolution 
 
+    // Inner edge of the decoration annulus.
+    //   1. start from the manual override, or the auto ring/layout estimate
+    //   2. when respectActiveLayout + useCircularKeepout are on, push it out
+    //      past the whole layout footprint + layoutClearance
     private float ResolveInnerRadius()
     {
-        if (minDistanceFromCenter >= 0f)
-            return minDistanceFromCenter;
+        float inner = (minDistanceFromCenter >= 0f)
+            ? minDistanceFromCenter
+            : AutoInnerRadius();
 
-        TowerDefenseMap map = FindFirstObjectByType<TowerDefenseMap>();
-        if (map != null && map.rings != null && map.rings.Count > 0)
+        if (respectActiveLayout && useCircularKeepout)
+        {
+            float footprint = LayoutFootprintRadius();
+            if (footprint > 0f)
+                inner = Mathf.Max(inner, footprint + layoutClearance);
+        }
+
+        return inner;
+    }
+
+    // Original ring-based estimate (kept for backwards compatibility), but now
+    // it prefers the ACTIVE layout's rings over the scene's default rings.
+    private float AutoInnerRadius()
+    {
+        TowerDefenseMap map = FindMap();
+        if (map == null) return 5f;
+
+        List<TowerDefenseMap.RingConfiguration> sourceRings = ResolveRingSource(map);
+        if (sourceRings != null)
         {
             float maxRingRadius = 0f;
             float lastSlotSize = 1f;
-            foreach (var ring in map.rings)
+            foreach (var ring in sourceRings)
             {
-                if (ring.enabled && ring.radius > maxRingRadius)
+                if (ring != null && ring.enabled && ring.radius > maxRingRadius)
                 {
                     maxRingRadius = ring.radius;
                     lastSlotSize = ring.slotSize;
                 }
             }
             if (maxRingRadius > 0f)
-                //return maxRingRadius + lastSlotSize * 0.5f + 1f;
                 return maxRingRadius + lastSlotSize * 0.5f + 1f + extraInnerPadding;
         }
         return 5f;
+    }
+
+    // Which ring list actually drives the slots right now (mirrors
+    // TowerDefenseMap.CreateTowerSlots): the layout's rings when it defines
+    // them, otherwise the scene rings. Custom layouts use no rings at all.
+    private List<TowerDefenseMap.RingConfiguration> ResolveRingSource(TowerDefenseMap map)
+    {
+        var layout = map.activeLayout;
+        if (layout != null && layout.layoutType == MapLayoutDefinition.LayoutType.Custom)
+            return null;
+        if (layout != null && layout.rings != null && layout.rings.Count > 0)
+            return layout.rings;
+        return map.rings;
+    }
+
+    // Distance from the core to the furthest point of the designed map:
+    // rings, custom slots, bonus slots, obstacles and connection lines.
+    // Returns -1 when there's nothing to measure.
+    private float LayoutFootprintRadius()
+    {
+        TowerDefenseMap map = FindMap();
+        if (map == null) return -1f;
+
+        float max = -1f;
+
+        // Rings (concentric layouts / no layout).
+        var sourceRings = ResolveRingSource(map);
+        if (sourceRings != null)
+        {
+            foreach (var ring in sourceRings)
+            {
+                if (ring == null || !ring.enabled) continue;
+                max = Mathf.Max(max, ring.radius + ring.slotSize * 0.5f);
+            }
+        }
+
+        MapLayoutDefinition layout = map.activeLayout;
+        if (layout != null)
+        {
+            if (layout.customSlotPositions != null)
+                foreach (var p in layout.customSlotPositions)
+                    max = Mathf.Max(max, p.magnitude + layout.customSlotSize * 0.5f);
+
+            if (layout.bonusSlotPositions != null)
+                foreach (var p in layout.bonusSlotPositions)
+                    max = Mathf.Max(max, p.magnitude + layout.bonusSlotSize * 0.5f);
+
+            if (layout.obstacles != null)
+                foreach (var o in layout.obstacles)
+                    max = Mathf.Max(max, o.position.magnitude + ObstacleBoundingRadius(o));
+
+            if (layout.connectionLines != null)
+                foreach (var line in layout.connectionLines)
+                {
+                    if (line == null || line.points == null) continue;
+                    foreach (var p in line.points)
+                        max = Mathf.Max(max, p.magnitude + line.width);
+                }
+        }
+
+        // Live slots — catches augment-added rings / revealed bonus slots.
+        var slots = map.GetAllSlots();
+        if (slots != null)
+        {
+            foreach (var s in slots)
+            {
+                if (s == null) continue;
+                max = Mathf.Max(max, ((Vector2)s.transform.position).magnitude + 1f);
+            }
+        }
+
+        return max;
+    }
+
+    // Conservative bounding circle of a layout obstacle (half-diagonal for
+    // rectangles, half-major-axis for the round shapes).
+    private float ObstacleBoundingRadius(MapLayoutDefinition.LayoutObstacle o)
+    {
+        switch (o.shape)
+        {
+            case MapLayoutDefinition.ObstacleShape.Circle:
+                return Mathf.Abs(o.size.x) * 0.5f;
+            case MapLayoutDefinition.ObstacleShape.Ellipse:
+            case MapLayoutDefinition.ObstacleShape.Crescent:
+                return Mathf.Max(Mathf.Abs(o.size.x), Mathf.Abs(o.size.y)) * 0.5f;
+            case MapLayoutDefinition.ObstacleShape.Rectangle:
+            default:
+                return new Vector2(o.size.x, o.size.y).magnitude * 0.5f; // half diagonal
+        }
     }
 
     private float ResolveOuterRadius()
@@ -537,6 +842,11 @@ public class ObstacleGenerator : MonoBehaviour
         BiomeManager bm = GetComponent<BiomeManager>();
         if (bm == null) bm = FindFirstObjectByType<BiomeManager>();
         return bm;
+    }
+
+    private TowerDefenseMap FindMap()
+    {
+        return FindFirstObjectByType<TowerDefenseMap>();
     }
 
     //  Cleanup 
@@ -576,6 +886,15 @@ public class ObstacleGenerator : MonoBehaviour
         Gizmos.color = Color.yellow;
         DrawGizmoCircle(Vector3.zero, outer);
 
+        // Layout keep-out discs (magenta). Only populated after a generate;
+        // rebuild them on the fly in the editor so the gizmo is always useful.
+        if (respectActiveLayout && avoidLayoutObstaclesIndividually && !Application.isPlaying)
+            BuildLayoutKeepouts();
+
+        Gizmos.color = new Color(1f, 0.3f, 1f, 0.5f);
+        for (int i = 0; i < layoutKeepouts.Count; i++)
+            DrawGizmoCircle(layoutKeepouts[i].center, layoutKeepouts[i].radius);
+
         if (containerGO != null)
         {
             Gizmos.color = Color.cyan;
@@ -600,6 +919,12 @@ public class ObstacleGenerator : MonoBehaviour
 
     //  Data structures 
 
+    private struct KeepoutDisc
+    {
+        public Vector2 center;
+        public float radius;
+    }
+
     private struct TemplateMember
     {
         public int slotIndex;
@@ -617,4 +942,3 @@ public class ObstacleGenerator : MonoBehaviour
         { name = n; members = m; }
     }
 }
-

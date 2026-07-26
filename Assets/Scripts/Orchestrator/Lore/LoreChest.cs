@@ -20,6 +20,27 @@ public class LoreChest : MonoBehaviour
     [Tooltip("Set by the spawner. true = draw a generated chest sprite; false = keep the prefab's own art.")]
     public bool proceduralVisual = true;
 
+    [Header("Energy Reward")]
+    [Tooltip("Energy granted when the chest is opened, on top of the lore fragment. 0 = no energy.")]
+    public int energyReward = 10;
+
+    [Tooltip("How many orbs the reward is split into. Purely cosmetic — the total always adds up\n" +
+             "to energyReward (e.g. 10 over 3 orbs = 4 + 3 + 3).")]
+    [Min(1)] public int energyOrbCount = 3;
+
+    [Tooltip("Seconds between each orb popping out of the chest, so they burst rather than stack.")]
+    public float energyOrbInterval = 0.09f;
+
+    [Tooltip("How far the orbs scatter from the chest before the magnet pulls them to the player.")]
+    public float energyOrbScatter = 0.6f;
+
+    [Tooltip("Route the orbs through EnergyDropManager so global multipliers and bonus-resource\n" +
+             "rolls apply, exactly like enemy drops. OFF = the chest always pays exactly energyReward.")]
+    public bool useDropManagerScaling = false;
+
+    [Tooltip("Show a '+10 Energy recovered' line on the lore scroll.")]
+    public bool showRewardOnScroll = true;
+
     [Header("Idle Animation")]
     [Tooltip("How much the chest inflates/deflates each beat (0.12 = ±12% size).")]
     public float pulseAmount = 0.12f;
@@ -133,6 +154,11 @@ public class LoreChest : MonoBehaviour
             Open();
     }
 
+    /// True from the moment the player triggers this chest. The spawner uses it so it
+    /// never prunes a chest that's already being read, and the path trail uses it so it
+    /// stops pointing at a chest that's spent.
+    public bool IsOpened => isOpened;
+
     public void Open()
     {
         if (isOpened) return;
@@ -143,26 +169,52 @@ public class LoreChest : MonoBehaviour
         var pos = transform.position; pos.y = baseY; transform.position = pos;
 
         PlayOpenSound();
+        StartCoroutine(OpenRoutine());
+    }
 
+    private IEnumerator OpenRoutine()
+    {
+        var popup = LoreScrollPopup.Instance;
+
+        // If another chest's scroll is on screen, wait our turn. The scroll is modal and
+        // silently ignores a second ShowFragment — without this wait, a chest opened
+        // during that window would pick a fragment, mark it discovered, and the player
+        // would never see it. It'd surface in the archive already read.
+        if (popup != null)
+            while (popup.IsOpen) yield return null;
+
+        // Pick AFTER the wait, so we claim the fragment at the moment we can show it.
         var codex = LoreCodex.Instance;
         int id = codex != null ? codex.PickRandomUndiscoveredId() : -1;
 
-        LoreFragment fragment;
-        if (id >= 0)
+        LoreFragment fragment = id >= 0 ? LoreContent.Get(id) : null;
+        if (fragment == null)
         {
-            fragment = LoreContent.Get(id);
-            codex.Discover(id);   // persists to prefs + fires events
-        }
-        else
-        {
-            // Everything has been found — show a closing note instead of repeating.
+            // Nothing left (or the id has no content) — show a closing note, claim nothing.
+            id = -1;
             fragment = AllFoundFragment();
         }
 
-        if (fragment != null && LoreScrollPopup.Instance != null)
-            LoreScrollPopup.Instance.ShowFragment(fragment);
+        bool shown = fragment != null && popup != null && popup.ShowFragment(fragment, RewardNote());
 
-        StartCoroutine(OpenAndDespawn());
+        // Discover only once the scroll is actually up. PickRandomUndiscoveredId never
+        // returns a known id and Discover is a set-add, so a fragment can't repeat.
+        if (shown && id >= 0) codex.Discover(id);   // persists to prefs + fires events
+
+        yield return StartCoroutine(OpenAndDespawn());
+    }
+
+    /// Remove this chest without giving anything — used by the spawner when the codex runs
+    /// out and a still-unopened chest has nothing left to hand over.
+    public void Vanish()
+    {
+        if (isOpened) return;   // already claimed by the player; let it finish its scroll
+        isOpened = true;        // also stops the idle pulse in Update
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        // Deliberately does NOT snap to baseScale/baseY: Vanish can fire the same frame
+        // the chest spawned, before Start has captured them, and that would pop a
+        // scaled-up chest back to 1×. Fading from wherever it is looks right either way.
+        StartCoroutine(FadeOutAndDestroy(0.5f));
     }
 
     private static LoreFragment AllFoundFragment()
@@ -178,6 +230,46 @@ public class LoreChest : MonoBehaviour
             AudioManager.instance.PlayOneShot(FMODEvents.instance.openChest, transform.position);
     }
 
+    // "+10 Energy recovered", or null when there's nothing to advertise. With
+    // useDropManagerScaling on, the real payout can differ (multiplier / bonus roll),
+    // so we stay vague rather than promise a number we might not pay.
+    private string RewardNote()
+    {
+        if (!showRewardOnScroll || energyReward <= 0) return null;
+        return useDropManagerScaling ? "Energy recovered" : $"+{energyReward} Energy recovered";
+    }
+
+    // Pops the reward out as real EnergyDrop orbs: they scatter, glow, then arc into
+    // the player (who is standing right here — that's how the chest opened), which is
+    // what actually credits the gauge via EnergyManager.GivePlayerEnergy.
+    private IEnumerator SpawnEnergyReward()
+    {
+        int count = Mathf.Max(1, energyOrbCount);
+        int remaining = Mathf.Max(0, energyReward);
+        if (remaining == 0) yield break;
+
+        count = Mathf.Min(count, remaining);   // never spawn 0-value orbs
+
+        for (int i = 0; i < count; i++)
+        {
+            // Even split with the remainder spread over the first orbs (10/3 → 4,3,3).
+            int share = Mathf.CeilToInt(remaining / (float)(count - i));
+            remaining -= share;
+
+            Vector2 offset = Random.insideUnitCircle.normalized * Random.Range(0.15f, energyOrbScatter);
+            Vector3 pos = transform.position + (Vector3)offset;
+            pos.z = 0f;
+
+            if (useDropManagerScaling)
+                EnergyDropManager.TrySpawnEnergyDrop(pos, 1f, share);   // chance 1 = guaranteed
+            else
+                EnergyDrop.CreateEnergyDrop(pos, share);
+
+            if (energyOrbInterval > 0f && i < count - 1)
+                yield return new WaitForSeconds(energyOrbInterval);
+        }
+    }
+
     private IEnumerator OpenAndDespawn()
     {
         // The scroll pauses the game (timeScale 0); wait — unscaled — for it to close.
@@ -190,16 +282,27 @@ public class LoreChest : MonoBehaviour
             while (popup.IsOpen) yield return null;
         }
 
+        // Orbs go out AFTER the scroll closes — they move on scaled time, so spawning
+        // them during the pause would just freeze them behind the backdrop. Awaited
+        // here (not fire-and-forget) because Destroy below would kill the coroutine.
+        if (energyReward > 0)
+            yield return StartCoroutine(SpawnEnergyReward());
+
         // Fade + shrink out (now back at normal time scale).
-        float t = 0f, dur = 0.45f;
+        yield return StartCoroutine(FadeOutAndDestroy(0.45f));
+    }
+
+    private IEnumerator FadeOutAndDestroy(float dur)
+    {
+        float t = 0f;
         Vector3 startScale = transform.localScale;
-        Color start = sr.color;
+        Color start = sr != null ? sr.color : Color.white;
         while (t < dur)
         {
             t += Time.deltaTime;
             float u = Mathf.Clamp01(t / dur);
             transform.localScale = Vector3.Lerp(startScale, startScale * 0.6f, u);
-            sr.color = new Color(start.r, start.g, start.b, Mathf.Lerp(1f, 0f, u));
+            if (sr != null) sr.color = new Color(start.r, start.g, start.b, Mathf.Lerp(1f, 0f, u));
             yield return null;
         }
         Destroy(gameObject);

@@ -66,6 +66,7 @@ public static partial class LoreContent
             foreach (var f in BuiltIn) byId[f.id] = f;
             foreach (var f in More) byId[f.id] = f;    // batch 1 (LoreContentExtra.cs)
             foreach (var f in More2) byId[f.id] = f;   // batch 2 (LoreContentExtra2.cs)
+            foreach (var f in More3) byId[f.id] = f;   // batch 3 (threads & mysteries)
         }
 
         if (_registered != null && _registered.fragments != null)
@@ -98,7 +99,7 @@ public static partial class LoreContent
         new LoreFragment(1, "Chief Engineer's Final Log",
             "The borer in Sector 4 has stopped answering its governor. Raw Gunge has wormed into its logic-engine and now it reads every living thing as bedrock. It turned the plasma-cutter on the night shift before I sealed the bulkhead. Do not face it head-on. Take the optical unit first — but know the drone-brain keeps the cutter lit even after the head is gone."),
 
-        new LoreFragment(2, "Alchemical Refinery Chart",
+        new LoreFragment(2, "Alchemical Refinery Chart (verso)",
             "Raw Gunge is poison going in and fire coming out. Gather the hardened resin the neutralised ones leave behind and feed it straight into the pneumatic turrets. We have no clean fuel left; we will fight the spill with the spill — their own marrow, turned against them."),
 
         new LoreFragment(3, "Containment Memo: The Chief Alchemist",
@@ -120,7 +121,7 @@ public static partial class LoreContent
             "It did not roar — that is what no one tells you. The fault opened with a long, wet sigh, almost gentle, and then the whole valley went purple-black and the birds came down out of the sky already changed. By noon the refinery foremen were no longer men. We ran for the Core because it was the only thing still breathing clean."),
 
         new LoreFragment(9, "Trench-Warden Field Manual, Page 1",
-            "You are the last of the Aegis Hazard Division. Your suit is lead-lined and pressurised; it is the only thing between your lungs and the spill. You carry no spells — only an incinerator, a grapple, and the will to put barricades where the line must hold. The Core behind you is worth more than you are. Act like it."),
+            "Your suit is lead-lined and pressurised; treat it as the only thing standing between your lungs and the spill, because it is. You carry no spells — an incinerator, a grapple, and the judgment to set barricades where the line must hold. The Core behind you is worth more than you are. Act like it. (Beneath, in fresher ink:) 'if you are reading this alone, you are the Division now. all of it. the manual does not change. hold.'"),
 
         new LoreFragment(10, "On the Nature of the Gunge",
             "It is mutagenic to flesh and corrosive to metal, and it hates stillness — left in a pool it coagulates and begins, slowly, to move. It is also gloriously flammable. Every quality that makes it our murderer makes it our ammunition. Respect it the way you respect a loaded weapon you are forced to carry by the barrel."),
@@ -138,7 +139,7 @@ public static partial class LoreContent
             "(static) …tell them I solved it. Tell them the formula was right, only the dose was wrong… I can feel it threading through the marrow now, cold and patient… do not open this door. Whatever answers in my voice, it is doing the arithmetic of the sky, and it has decided we are an error to be corrected. (transmission ends)"),
 
         new LoreFragment(15, "Thermal Vent Logbook",
-            "Quadrant readings at dusk: North — frost on the rails, ice in the coolant. South — the gravel glows and the air shimmers like a forge. Between them, a band of weather that should not exist on one map. The Core is exhaling its broken heart in both directions at once, and the land has no choice but to obey."),
+            "Quadrant readings at dusk: North — frost on the rails, ice in the coolant lines. South — the gravel glows and the air shimmers like a forge mouth. Entered as read, checked twice. I am aware the two readings cannot share a map. I have entered them anyway. The instruments are fine. It is the weather that is broken."),
 
         new LoreFragment(16, "Night Balloon Telemetry",
             "The balloons are not decoration. Each carries a lantern and a strip of treated paper that drinks the air as it drifts. We read the wind by where they go and the toxicity by what colour they burn. The enemy follows their light, sometimes. So do the lost. We have learned to be careful which of them we are guiding home."),
@@ -183,13 +184,13 @@ public static partial class LoreContent
             "entry eighty-eight. or eighty-nine. the numbers slide. the Gunge is in the marrow now and it does the mathematics for me — faster, colder, correct. i see the sky as a ledger of errors and i have the formula to balance it. they sealed the door. good. they do not understand that i am not the one trapped in here. they are trapped out there, in the part of the equation i have not yet solved. soon —"),
 
         new LoreFragment(30, "Letter to the Surface",
-            "To anyone above who can still read: the maps are wrong now. The kingdom you remember is a memory the land no longer agrees to keep. We have water, but it eats the cup. We have warmth, but it comes from the south where nothing should be warm. We were eleven, then nine, then I stopped counting at the funerals. If you can send help, send it sealed and send it soon, and tell it to follow the yellow lanterns. If you cannot, send word that someone heard us."),
+            "To anyone above who can still read: the maps are wrong now. The kingdom you remember is a memory the land no longer agrees to keep. We have water, but only what the Purifier gives back, and it tastes of hot brass. We have warmth, but it comes from the south where nothing should be warm. We were eleven, then nine, then I stopped counting at the funerals. If you can send help, send it sealed and send it soon, and tell it to follow the yellow lanterns. If you cannot, send word that someone heard us."),
 
         new LoreFragment(31, "Balloon Corps — Standing Orders",
-            "Standing orders for the Balloon Corps. One: release at dusk, recover at dawn, never let a lantern fall into the sludge. Two: read the flame — green is death in the air, so seal the bulkheads and signal the deck; yellow is mercy, so guide the lost inward along the lights. Three: if a balloon does not return, do not go after it. The wind that took it is not our wind anymore. Hold the line. Light the lanterns. That is the whole of your duty, and it is enough."),
+            "Standing orders for the Balloon Corps. One: release at dusk, recover at dawn, never let a lantern fall into the sludge. Two: read the flame — green is death in the air, so seal the bulkheads and signal the deck; yellow is mercy, so guide the lost inward along the lights. Three: if a balloon does not return, do not go after it. The wind that took it is not our wind anymore. Hold the line. Light the lanterns. That is your whole duty, and it is enough."),
 
         new LoreFragment(32, "Map Annotation: The Fractured Quadrants",
-            "Annotation, central survey. The quadrants no longer share a season. North: permanent frost, coolant ice on every rail — stand still too long and your joints rime over. South: scorched to glass, the air like the mouth of a forge. East and west flicker between the two as the Core's vents stutter. Draw no fixed border here; redraw it weekly. The land is not lost, exactly. It is confused, the way a wounded thing is confused — and it is taking the weather down with it."),
+            "Annotation, central survey. The quadrants no longer share a season. North: permanent frost, coolant ice on every rail — stand still too long and your joints rime over. South: scorched to glass, the air like the mouth of a forge. East and west flicker between the two as the Core's vents stutter. Draw no fixed border here; redraw it weekly. The land is not lost, exactly. It is confused, the way a wounded animal is confused — and it thrashes."),
 
         new LoreFragment(33, "The Warden's Catechism",
             "Recited inside the suit, where only you can hear it. Who stands when the Guild has fallen? The Warden stands. What does the Warden hold? The line, the valve, the last clean breath. What does the Warden fear? Not the dark, not the deep, not the things the deep sends up — only the silence of a Core that has stopped. And when the Core stops? Then the Warden has nothing left to hold, and may, at last, rest. Until then: hold. Hold. Hold."),
@@ -243,7 +244,7 @@ public static partial class LoreContent
             "Calibration, auto-turret bank C. Fed on crystallized resin the chambers run hot but true; muzzle velocity within tolerance. Note for whoever inherits these guns: they will eat as much resin as you give them and ask for more, like everything else the Guild ever built. Feed them in bursts, let them cool. An overheated turret is just a brass coffin for resin you can't get back — and we can't get any of it back."),
 
         new LoreFragment(50, "A Wager Between Engineers",
-            "Found chalked on a bulkhead, two hands taking turns. 'I wager the Core outlasts us all. — H.' 'I wager it doesn't, and we won't be around to collect. — B.' 'Then we both lose and the bet is fair. — H.' 'Fairest bet I ever made. Drinks on the survivor. — B.' Below, in a third hand, much later and much shakier: 'no survivors. drinks on the Core. it's still turning. it won.'"),
+            "Found chalked on a bulkhead, two hands taking turns. 'I wager the Core outlasts us all. — H.' 'I wager it doesn't, and we won't be around to collect. — B.' 'Then we both lose and the bet is fair. — H.' 'Fairest bet I ever made. Drinks on the survivor. — B.' Below, in a third hand, much later and much shakier: 'both dead. neither collected. drinks on the Core — it's still turning. it won.'"),
 
         new LoreFragment(51, "The Last Supply Caravan",
             "The last caravan from the outer holdings arrived at dusk — two wagons, one driver, no horses; they had been walking the wagons themselves the final mile. They carried barley, lamp oil, and forty refugees who had followed the yellow lanterns in from the dark. The driver asked if this was the place where the air was still good. We told her yes. We did not tell her for how much longer. We unloaded the barley. We lit more lanterns."),
@@ -271,7 +272,7 @@ public static partial class LoreContent
         new LoreFragment(56, "A Surveyor's Marginalia",
             "In the margin of the third pressure chart, a different ink: 'it is not under pressure. it is holding still. there is a difference, and we have wagered the kingdom on not knowing it.'"),
         new LoreFragment(57, "On Stillness",
-            "The alchymists swore the Gunge was inert until refined. They were wrong in the way a man is wrong about a sleeping dog he has never seen wake."),
+            "The alchymists swore it inert until refined. Then a sealed barrel, ten years untouched in the dry stores, was found empty — lid still fast, seals unbroken, and a stain on the ceiling above it. Inert. We used to know what words meant."),
         new LoreFragment(58, "The Patient Tide",
             "It rises a finger's breadth each season. No storm drives it; no moon pulls it. It rises because rising is the only verb it has ever learned."),
         new LoreFragment(59, "Digger's Tally Stick",
@@ -281,7 +282,7 @@ public static partial class LoreContent
         new LoreFragment(61, "The Foreman Who Counted",
             "Voss counted heads every dawn. The morning the count came out one too MANY, he stopped counting, posted no log, and was not seen at the next dawn at all."),
         new LoreFragment(62, "The Cook's Lament",
-            "I fed three hundred at the long tables. Now I cook for nine and set out twelve bowls, for I cannot break the habit, and the empty three keep the living three from weeping. It is a poor magic, but it is mine."),
+            "I fed three hundred at the long tables. Now I cook for nine and set out twelve bowls, for I cannot break the habit, and the empty three keep the living nine from weeping. It is a poor magic, but it is mine."),
         new LoreFragment(63, "Sermon, Undelivered",
             "Brethren: we made a god of the warm dark and named it Progress, and like all such gods it asked for everything and called the asking a blessing. I had meant to preach this Sunday. There is no Sunday now. There is only the wheel, turning, which keeps the air — and to which I have begun, God forgive me, to pray."),
         new LoreFragment(64, "A Chaplain's Doubt",
@@ -297,13 +298,13 @@ public static partial class LoreContent
         new LoreFragment(69, "Valve Sequence, North Gallery",
             "To bleed the north gallery without flooding the deck: open the third valve, then the first, count forty heartbeats, then the fifth. Never the second. The man who taught me the second is part of the wall now."),
         new LoreFragment(70, "Vent Code, Posted at the Junction",
-            "Green lamp: vent open, air foul, do not pass. Amber lamp: vent cycling, hold. No lamp: the vent is dead, and so, shortly, are you. Choose your corridors by their lamps and you may yet choose another morning."),
+            "Green lamp: vent open, air foul, do not pass. Amber lamp: vent cycling, hold. No lamp: the vent is dead, and so, shortly, are you. Choose your corridors by their lamps and you may yet choose another morning. And mind: the vent code is not the lantern code. More than one man has died of reading the one by the other."),
         new LoreFragment(71, "The Three Pressures",
             "South seam runs hot and high — bleed it often. Mid seam runs cold and slow — leave it be. Deep seam reads NOTHING — which is not low pressure but a needle that will not move, and that is the one to fear."),
         new LoreFragment(72, "Maintenance Riddle",
             "Chalked above the coolant manifold: 'I am coldest where the fire is nearest, and I fail where I am needed most. Keep me fed, or keep your prayers handy.' Beneath it, an arrow, and the word: PRIME."),
         new LoreFragment(73, "Counting the Wheels",
-            "There are nine great wheels in the Core. Eight turn. The ninth has not turned in living memory and must never be made to turn; the elders sealed its housing and wrote upon it only: LET IT BE STILL."),
+            "There are nine great wheels in the Core. Eight turn. The ninth has not turned since the second year of the works and must never be made to turn; the elders sealed its housing and wrote upon it only: LET IT BE STILL."),
         new LoreFragment(74, "The Ninth Wheel",
             "They say the ninth wheel does not turn because turning it once turned something else, somewhere below, that has not yet finished turning back."),
         new LoreFragment(75, "What the Liches Compute",
@@ -373,7 +374,7 @@ public static partial class LoreContent
         new LoreFragment(107, "Letter, Mother to Son",
             "My boy — they say you went down to the deep seam with the late shift and have not come up. I keep your supper warm on the manifold, which runs hot enough now to cook on, small mercy. Come up. Any of you that wears his face, come up. I will know you. A mother knows. Come up."),
         new LoreFragment(108, "Letter, Son to Mother (unsent)",
-            "Mother — do not keep my supper warm. Whatever comes up the deep stair wearing my face, bar the door against it, and know that I loved you, and that the loving stopped at the third gallery, where I did, and that what walks now only remembers the route home."),
+            "Mother — do not keep my supper warm. Whatever comes up the deep stair wearing my face, bar the door against it, and know that I loved you, and that the loving stopped somewhere in the third gallery, and that what is left of me now is mostly the route home."),
         new LoreFragment(109, "Two Names on a Door",
             "Carved into a quarters door, a heart, two names worn nearly smooth. Below, fresher: 'one of us kept the watch. one of us did not come back from it. the heart stays. someone should remember it was once just a heart.'"),
         new LoreFragment(110, "Minutes of the Guild, Final Session",
@@ -405,7 +406,7 @@ public static partial class LoreContent
         new LoreFragment(123, "The Bell-Ringer",
             "I rang the shift bells forty years. There are no shifts now, but I ring them still, at the old hours, that the survivors might know dawn from dusk where the sky cannot be trusted to tell them. Three rings for dawn. Two for dusk. One — pray you never hear one. One is for the seal."),
         new LoreFragment(124, "The Cartwright's Wheels",
-            "Made wheels for wagons, once. Make them now for the gun-carriages and the barricade-sleds. Same craft, sadder cargo. A wheel does not care what it carries. I have decided to be more like my wheels."),
+            "Made wheels for wagons, once. Make them now for the gun-carriages and the barricade-sleds. Same craft, sadder cargo. A wheel does not care what it carries. These days I try to be more like my wheels."),
         new LoreFragment(125, "The Night-Soil Man's Philosophy",
             "Lowest job in the kingdom, mine: hauling away what the living leave behind. I have outlived three foremen and an Artificer or two. The lesson, if there is one: the world ends from the top down, and the bottom is where you want to be standing when it does."),
         new LoreFragment(126, "A Beekeeper, Inland",
@@ -449,7 +450,7 @@ public static partial class LoreContent
         new LoreFragment(145, "The Glassblower",
             "I made the observation ports — the sealed ones that look into the deep. I made them too well. So clear that men forget there is anything between themselves and what they watch, and lean in, and that is my fault. I have learned to make the new glass cloudy on purpose. A kindness, frosted in."),
         new LoreFragment(146, "The Drummer Boy",
-            "Too young for the line, they said, so they gave me a drum, to beat the cadence the barricade-crews haul to. I beat it through three breaches. I am not too young for anything now. I would like my drum to have stayed just a drum. It did not."),
+            "Too young for the line, they said, so they gave me a drum, to beat the cadence the barricade-crews haul to. I beat it through three breaches. I am not too young for anything now. The drum still sounds the same as the day they gave it to me. I do not."),
         new LoreFragment(147, "On the Feral, a Kinder Note",
             "One of the diggers brought me a stone today — laid it at the barricade and fled. A grey stone, smoothed by a hand that remembered, once, the shape of giving. I kept the stone. I have not told the others. Some mercies must be carried quietly."),
         new LoreFragment(148, "Scrawl, Forge Quarter",
@@ -475,13 +476,13 @@ public static partial class LoreContent
         new LoreFragment(158, "A Gambler's Creed",
             "Everything down here is a wager: which corridor, which lamp, which morning. I was a gambler in the good years and lost my shirt; I am a gambler now and win each day I keep my skin. The stakes improved my game. I do not recommend the method."),
         new LoreFragment(159, "On Hope, Practically",
-            "Hope is not a feeling here; it is a chore, like priming the manifold or counting the resin. You do it whether or not you feel it, because the doing keeps the thing alive, and the thing, fed daily, occasionally feeds you back. Treat hope as maintenance. It lasts longer that way."),
+            "Hope is not a feeling here; it is a chore, like priming the manifold or counting the resin. You do it whether or not you feel it, because the doing keeps the thing alive, and the thing, fed daily, occasionally feeds you back."),
         new LoreFragment(160, "The Cartographer, Later",
             "I have drawn my last map. It is blank but for the Core at the centre and a single yellow ring around it, and one word inside the ring: HERE. Everything outside the ring is now, accurately, unknown. It is the truest map I have ever made. It is also the smallest."),
         new LoreFragment(161, "Scrawl, Beside the Ninth Wheel",
-            "do not turn it. i know you are curious. curiosity is how the door was opened the first time. do not turn it. let it be still. please. — every hand that has stood here, in turn, for a hundred years"),
+            "do not turn it. i know you are curious. curiosity is how the door was opened the first time. do not turn it. let it be still. please. — every hand that has stood here, in turn, since the founding pour"),
         new LoreFragment(162, "The Tinker's Marvels",
-            "I mend the little clockwork the children play with — the tin wardens, the spinning tops. It is the only work left that ends in laughter instead of a lower count. I have decided it is the most important work in the kingdom. No one has argued. No one has the heart."),
+            "I mend the little clockwork the children play with — the tin wardens, the spinning tops. It is the only work left that ends in laughter instead of a lower count. It may be the most important work left in the kingdom. No one has argued. No one has the heart."),
         new LoreFragment(163, "A Soldier's Plain Account",
             "I am not eloquent. We hold the line. The line breaks. We make a new line behind it, closer to the Core. We have made many lines. Each is shorter than the last, and easier to defend, which is the only good thing about losing ground: less of it to lose, next time. We will hold this one too. Until we make the next."),
         new LoreFragment(164, "The Last Wedding",
@@ -501,7 +502,7 @@ public static partial class LoreContent
         new LoreFragment(171, "On the Yellow",
             "Why yellow, the prentice asked — for the safe lights, the safe lines, the paint that marks the edge of the kingdom? The old hand thought a while. 'Because it is the colour of a lamp in a window,' she said. 'Because it is the colour of someone waiting up for you. We did not choose it. We remembered it.'"),
         new LoreFragment(172, "The Penultimate Page",
-            "If you have read this far — archivist to archivist, reader to writer — then the binding held and the ink held and the kingdom held long enough to be remembered, and that is a victory the Guild with all its brass never managed. Close the book gently. Light a yellow one. Then go and hold whatever you have. That is the whole of it. That was always the whole of it."),
+            "If you have read this far — archivist to archivist, reader to writer — then the binding held and the ink held and the kingdom held long enough to be remembered, and that is a victory the Guild with all its brass never managed. Close the book gently. Light a yellow one. Then go and hold whatever you have. There is nothing else to it. There never was."),
         new LoreFragment(173, "The Last Fragment",
             "Here the records thin to nothing. Beyond this, only the wheel turning, the lanterns drifting, the warden on the stair. If you are the one who comes after — the air is yours now. Keep it good. Someone kept it good for you, in the dark, and asked only that you do the same, and did not wait to be thanked. Hold. Hold. Hold."),
     };
@@ -533,33 +534,33 @@ public static partial class LoreContent
         new LoreFragment(182, "The Technician Who Listened",
             "Against orders, I put my ear to the ninth wheel's housing. I will not write what I heard. I will only write that I have re-welded the housing, added three plates, that I no longer eat alone, and that I check the welds each dawn — and the welds are fine, the welds are always fine, and I check them anyway."),
         new LoreFragment(183, "A Priest's Inventory of Sins",
-            "We confess, in these last days, smaller sins and stranger ones: I hoarded a candle. I lied to a child about the air. I felt relief when a neighbour's lantern went dark, for it meant more rations. I absolve them all. God, if He vents with the clean steam, will understand. We were not built for this either. None of us were."),
+            "We confess, in these last days, smaller sins and stranger ones: I hoarded a candle. I lied to a child about the air. I felt relief when a neighbour's lantern went dark, for it meant more rations. I absolve them all. God — if He is anywhere left in this place, it is in the clean steam — will understand. We were not built for this either. None of us were."),
         new LoreFragment(184, "The Priest's Apostasy",
             "I have stopped asking the old God for rescue and started asking the Core for time, and I cannot say whether the change is heresy or merely honesty. The Core, at least, answers — turning, keeping the air — which is more than the old God managed for the three hundred at the long tables. Judge me for it. Let me be judged. I kept people breathing. Judge that."),
         new LoreFragment(185, "Regular Folk, a Census",
-            "Who is left, on Deck One: a cook, a smith, a locksmith, a schoolmaster, a bell-ringer, a doubting chaplain, a baroness who does not doubt, nine children, four wardens, and one beekeeper with no bees. We are not heroes. We are a Tuesday's worth of ordinary people the tide forgot to take. We have decided that is enough to be going on with."),
+            "Who is left, on Deck One: a cook, a smith, a locksmith, a schoolmaster, a bell-ringer, a doubting chaplain, a baroness who does not doubt, nine children, four wardens, and one beekeeper with no bees. We are not heroes. We are a Tuesday's worth of ordinary people the tide forgot to take. It will have to be enough. So far, it is."),
         new LoreFragment(186, "The Washerwoman's Note",
-            "I scrub the wardens' suits between watches — the heavy lead-lined ones that smell of the deep. It is honest work; I sing while I do it. The wardens say my singing is the second-best sound in the kingdom, after the wheels. I have not asked what the first-worst sound is. I think I know."),
+            "I scrub the wardens' suits between watches — the heavy lead-lined ones that smell of the deep. It is honest work; I sing while I do it. The wardens say my singing is the second-best sound in the kingdom, after the wheels. Nobody has told me what the worst one is. Nobody has had to."),
         new LoreFragment(187, "The Old Soldier's Comfort",
             "Survived three wars before this. The young ones ask how. I tell them: a war ends, lad — that is the trick of it, you need only outlast it. Then I do not tell them the rest: that this is not a war, and may not end, and that 'outlast' is a word I no longer fully trust. Let them have the trick. The trick is most of courage anyway."),
         new LoreFragment(188, "A Child's Brave Lie",
-            "The smallest one tells the others there are knights coming from the east to save us. There are no knights; the east is closed by weather that is not weather. But the others sleep better for the knights, and the smallest one does not sleep at all, keeping watch for them — and I have decided that child is the bravest soul in the kingdom, and have given them the extra ration without saying why."),
+            "The smallest one tells the others there are knights coming from the east to save us. There are no knights; the east is closed by weather that is not weather. But the others sleep better for the knights, and the smallest one does not sleep at all, keeping watch for them — That child keeps the loneliest watch in the kingdom, every night, for knights that are not coming. I give them the extra ration and say it is for growing."),
         new LoreFragment(189, "The Drunkard's Clarity",
             "Sober now, perforce — the cellars are drowned. And sober, I see it plain, what the wine hid: we did this. Not the deep, not the tide, not the Gunge. We dug the door and called the digging progress and drank to it. I drank to it loudest. I am sober now. It is the worst gift the tide has given me, and I cannot give it back."),
         new LoreFragment(190, "The Midwife's Record",
             "Three born since the Spill, all in the sealed crèche, none of whom I was let in to attend — only to call instructions through the welded door. Three cries I heard, and answered with old words through cold metal. I do not know their faces. I know they live, because the door is quiet in the way of a place where someone is cared for, not the other quiet. I cling to the difference."),
         new LoreFragment(191, "The Clockmaker's Heresy",
-            "Time runs wrong here — fast in the frost-quarter, slow in the forge — and my clocks, my beautiful clocks, all disagree. I have stopped trying to make them agree. I have set every clock in the kingdom to the dawn-watch bell instead. We do not keep the hour anymore; we keep each other's company in the same wrong hour — which is, I have decided, what a clock was always secretly for."),
+            "Time runs wrong here — fast in the frost-quarter, slow in the forge — and my clocks, my beautiful clocks, all disagree. I have stopped trying to make them agree. I have set every clock in the kingdom to the dawn-watch bell instead. We do not keep the hour anymore; we keep each other's company in the same wrong hour — which is what a clock was for all along, though it took the death of the hours to teach me."),
         new LoreFragment(192, "The Mapmaker's Apprentice",
             "My master drew the kingdom; I draw only the safe corridors now, in chalk, and rub them out when they betray us. He calls it a lesser craft. I say a map you can trust your life to is worth more than a map you can frame. He has stopped arguing. Yesterday he asked to borrow my chalk."),
-        new LoreFragment(193, "The Glazier's Worse Confession",
+        new LoreFragment(193, "The Glassblower's Worse Confession",
             "I frosted the deep observation ports, as I confessed before. I have since done worse: walled one over entirely, in brick, against orders, because a warden had begun to spend his off-watch hours before it, not looking away. He is angry with me. He is also still himself. I will take the anger. The anger talks like a man. What was forming behind that glass did not."),
         new LoreFragment(194, "Scrawl, Officer's Quarters",
             "promoted to command the deck today. there is no deck left to command, only nine people and a machine. i have decided command means making sure the nine eat and the machine turns. i am, it turns out, good at this. i was a terrible officer in the good years. funny, what the end of the world qualifies a man for."),
         new LoreFragment(195, "The Tax Ledger, Annotated",
             "Final entry, in the assessor's tidy hand: 'Assessed value of the kingdom of Oakhaven — incalculable. Collectible value — nil. The two were always different numbers. I spent my life on the first. I should have spent it on the second. There is no second life in which to correct this. File under: too late.'"),
         new LoreFragment(196, "A Letter to a Brother, Abroad",
-            "Tomas — do not come home, whatever the rumours say. There is no home to come to, only a machine and the people who feed it. Stay where the sky can be trusted. Marry the girl. Name a son for me if you must, but tell him I was a clerk who kept good records, not a hero — the kingdom has heroes enough now, and not one of them wanted the job. Be happy. That is the whole of the will I leave you."),
+            "Willem — do not come home, whatever the rumours say. There is no home to come to, only a machine and the people who feed it. Stay where the sky can be trusted. Marry the girl. Name a son for me if you must, but tell him I was a clerk who kept good records, not a hero — the kingdom has heroes enough now, and not one of them wanted the job. Be happy. That is the whole of the will I leave you."),
         new LoreFragment(197, "The Cook's Second Lament",
             "I have learned to make nine portions taste like a feast through sheer lying with spice. The baroness says I have a gift. I tell her hunger is the gift; I merely garnish it. We laughed — a baroness and a cook, over barley, at the end of the world. The old kingdom would not have permitted it. The new kingdom is built of nothing else."),
         new LoreFragment(198, "The Astronomer's Last Chart",
@@ -587,7 +588,7 @@ public static partial class LoreContent
         new LoreFragment(209, "Scrawl, Deepest Stair",
             "i went one flight too far. i am writing this on the way back up, fast, do not stop to read it, GO. if you are reading this slowly you have already stayed too long. the stair counts your steps down and forgets to count them back up. GO."),
         new LoreFragment(210, "The Beekeeper, Later",
-            "I keep an empty hive on Deck One, by the bean-garden, in case the bees come back. The others think me soft. But the bees knew, before any of us, which way safety lay — they flew east, into the trusted sky — and I have decided that if anything is coming back to save this world, it will be small, and wise, and it will arrive at a clean flower. So I keep the hive ready. So I keep one flower clean. It is a small faith. I will keep telling you that."),
+            "I keep an empty hive on Deck One, by the bean-garden, in case the bees come back. The others think me soft. But the bees knew, before any of us, which way safety lay — they flew east, into the trusted sky — and if anything is ever coming back to save this world, it will be small, and wise, and it will arrive at a clean flower. So I keep the hive ready. So I keep one flower clean. It is a small faith. I will keep telling you that."),
         new LoreFragment(211, "The Aristocrat's Daughter, on Watch",
             "Mother dresses for the end; I have taken a warden's watch instead. She calls it beneath me. It is, in fact, the first thing I have ever done that was above me — and I find I can do it, and the doing has shown the dressing-for-the-end to be the small, frightened thing it always was. I love my mother. I will not become her. The tide has drowned at least that future, and I thank it for the one mercy."),
         new LoreFragment(212, "A Note Passed Through the Seal",
@@ -599,9 +600,9 @@ public static partial class LoreContent
         new LoreFragment(215, "The Last Festival",
             "We held the Lantern Festival on the old date, because the date is ours even if the season is not — nine children, four wardens, a baroness, a cook, and the rest, on Deck One, under the lamps, with barley-cake the cook conjured from nearly nothing. We sang the centrifuge hymn with the new words. For one night the tide was just the dark beyond the lamps, and we have never been afraid of dark. We were afraid of patience. For one night, we forgot to be."),
         new LoreFragment(216, "Scrawl, Behind the Turret Bank",
-            "fed the turrets all the resin we had. they ran hot and true and the tide pulled back a whole gallery. for an afternoon we were WINNING. write that down. for one whole afternoon, in the warm dark, at the end of the world, we were winning, and we knew it, and we cheered. it did not last. but it happened. it happened."),
+            "fed the turrets all the resin we had. they ran hot and true and the tide pulled back a whole gallery. for an afternoon we were WINNING. write that down. for one whole afternoon, in the warm dark, at the end of the world, we were winning, and we knew it, and we cheered. it did not last. write it down anyway. we were winning once, and no tide can make that not have happened."),
         new LoreFragment(217, "The Old Foreman's Wisdom",
-            "Voss is gone, but he left this, chalked where the shift-crews gather: 'count your people every dawn. when the count holds, that is a victory. when it drops, mourn fast and count again at dusk. do not stop counting. the day you stop counting is the day you have decided they do not matter — and they matter, they are the only thing that ever mattered. count them.'"),
+            "Voss is gone, but he left this, chalked where the shift-crews gather: 'count your people every dawn. when the count holds, that is a victory. when it drops, mourn fast and count again at dusk. do not stop counting. the day you stop counting is the day you have decided they do not matter — and they matter, they are the only thing that ever mattered. count them.' He chalked that in the good years. The morning his own count came out wrong, he could not follow it — he put down the chalk and walked out and was not seen again. Count anyway. Count especially then."),
         new LoreFragment(218, "A Wife's Reconciliation",
             "I barred the door against the kind voice three seasons ago and did not open it again. The voice long ago went quiet. Yesterday I unbarred it and went in. There was only dust, and his good coat, and his chalk, and a wall covered floor to ceiling in a single sum worked over and over, the number always one short. I have decided the number it was short was me — that even mad, even at the end, he was trying to make the total come out with me still in it. I have taken the coat. I light a yellow one. I am in the total. He saw to that."),
         new LoreFragment(219, "The Schoolmaster's Curriculum",
@@ -611,7 +612,7 @@ public static partial class LoreContent
         new LoreFragment(221, "Scrawl, Canteen",
             "twelve bowls. nine of us. the cook still sets out twelve. nobody says anything. we eat around the empty three like they are guests. they are guests. they are the best-behaved guests we have."),
         new LoreFragment(222, "The Wheelwright, at the End",
-            "Thirty years I swore the wheels would never fail, and they have not — eight of nine turn yet, true as the day I shod them. If this kingdom ends, let the record show the wheels did not lose it for us. The wheels did their part. We are the part that is uncertain. They shame us with their constancy. I have decided to be shamed, daily, into doing mine."),
+            "Thirty years I swore the wheels would never fail, and they have not — eight of nine turn yet, true as the day I shod them. If this kingdom ends, let the record show the wheels did not lose it for us. The wheels did their part. We are the part that is uncertain. They shame us with their constancy. So I let them shame me, each morning, into doing mine."),
         new LoreFragment(223, "A Prayer Found in a Suit Pocket",
             "Not to any god named: 'whatever keeps the air, keep it one more day. whatever holds the line, hold it one more hour. whatever turns the wheel, turn. i ask for nothing for myself; i have stopped being a self. i am a hand on a valve. let the valve hold. amen, or whatever word means please.'"),
         new LoreFragment(224, "The Doctor's Triage Note",
@@ -619,24 +620,101 @@ public static partial class LoreContent
         new LoreFragment(225, "Scrawl, Above a Sealed Door",
             "what is behind here loved us once. remember the loved-us. do not open the door. you seal a door against a stranger out of fear; you seal it against your own out of grief. this door is grief. let it stay shut. let them stay loved."),
         new LoreFragment(226, "The Tinker's Final Marvel",
-            "I have built the children a little theatre of tin — wardens, gremlins, a spinning Core, a tide of painted cloth you can crank back with a handle. They play out our whole war on it nightly, and in their version we always win, because the handle turns both ways and a child's hand is on it. I have decided this is the truest history of the kingdom: the one in which the tide can be cranked back. Let theirs be the version that survives."),
+            "I have built the children a little theatre of tin — wardens, gremlins, a spinning Core, a tide of painted cloth you can crank back with a handle. They play out our whole war on it nightly, and in their version we always win, because the handle turns both ways and a child's hand is on it. I think it is the truest history of the kingdom we have: the one in which the tide can be cranked back. Let theirs be the version that survives."),
         new LoreFragment(227, "An Aristocrat's Will",
             "I, who owned three streets, leave them to the tide, which has them anyway. I leave my title to no one; titles are weather now. I leave my good linen to the cook, who has fed me without once curtsying, and earned it. I leave my apology to the streets' former tenants, whom I never saw as people and who turned out to be the only people there were. I leave, lastly, my thanks to the child who taught me my name means nothing and her friendship means everything. The estate is settled. I am, finally, solvent."),
         new LoreFragment(228, "The Bell-Ringer's Confession",
             "I rang the seal-ring once — the forbidden one — by accident, my tired hand slipping. The whole kingdom froze; nine children stopped breathing. Then I rang three fast, for dawn, to undo it, and two for dusk though it was not dusk, and rang the hours all wrong all day to drown the one. No one scolded me. They understood. We do not ring one. Especially not by accident. I tie my tired hand to my side at night now. The bells are too honest to trust to a tired hand."),
         new LoreFragment(229, "Scrawl, Resin Vault",
             "the violet stones hum if you hold enough of them. the diggers used to hum the same note, down in the seam, before. i have stopped holding enough at once. i do not want to learn that song. some of the older hands already know it — you can tell, they hum without meaning to. do not hum back."),
-        new LoreFragment(230, "The Widow, Reconciled",
-            "I have moved his good coat to the children's quarters; it makes a fine blanket for three of the smaller ones. He would like that better than my keeping it folded in grief. The dead do not want monuments. They want their coats put to use, their air kept good, and their names said plainly at dusk. I say his plainly now. It does not break me. It warms three children. That is what a name is for, in the end. Use it like a coat."),
+        new LoreFragment(230, "The Coat, Given",
+            "The coat I took from his room has gone to the children's quarters; it makes a fine blanket for three of the smaller ones. He would like that better than my keeping it folded in grief. The dead do not want monuments. They want their coats put to use, their air kept good, and their names said plainly at dusk. I say his plainly now. It does not break me. It warms three children. That is what a name is for, in the end. Use it like a coat."),
         new LoreFragment(231, "The Foreign Mapmaker's Last Map",
             "I came to map a kingdom and could not — it would not hold still. So I have mapped, instead, its people: here the cook, here the smith, here the nine children, here the wardens on their stairs, here the widow and her lanterns, here the baroness learning to laugh. A map of who, not where. It holds still. People hold still in a way land never did for me. It is the best map of my life, and the smallest, and it will never be framed in any court, and I do not care. I am on it — bottom corner. The mapmaker who stayed."),
         new LoreFragment(232, "Scrawl, the Warden's Post",
             "warden: the air behind you is real. the people breathing it are real. the tide before you is patient, but you are stubborn — and stubborn, kept up daily, looks a great deal like hope. hold the line. gather the resin. light the lanterns. read the logs we left you. we held it this long so you could hold it longer. now go. the wheel is turning. so are you."),
         new LoreFragment(233, "The Cook's Recipe for the End",
-            "Take what little you have. Share it past the point of sense. Garnish hunger with company. Set out bowls for the dead, so the living are not alone. Serve it warm. Serve it laughing, if you can manage laughing. Serve it. The serving is the meal. The serving was always the meal. I have cooked three hundred years' worth of meals in three short years and learned only this, and it is everything: serve it warm, and do not eat alone."),
+            "Take what little you have. Share it past the point of sense. Garnish hunger with company. Set out bowls for the dead, so the living are not alone. Serve it warm. Serve it laughing, if you can manage laughing. Serve it. The serving is the meal. I have cooked three hundred years' worth of meals in three short years and learned only this, and it is everything: serve it warm, and do not eat alone."),
         new LoreFragment(234, "The Last Apprentice",
             "Tomas, who bound himself seven years to the Hazard Division, has served three — and there are no masters left to learn from, so he teaches himself from the logs, and teaches the children from what he teaches himself, and signs his practice-sheets 'prentice still, out of stubbornness or hope. He will never make journeyman; there is no Guild to raise him. He keeps the valves anyway. The title was never the point. The keeping was the point. He keeps."),
         new LoreFragment(235, "Scrawl, the Final Corridor",
             "this is the last thing written in the kingdom that i know of. if there is writing past this, someone held longer than us, and that is the best news there could be. close the book. light a yellow one. hold whatever you have. the wheel is turning. that means there is still time. there is always, while the wheel turns, still time. still. still. still."),
     };
 }
+
+//  EXTRA LORE (batch 3) 
+// Thread-closers and thread-openers. Ids 236-256. These deliberately cross-reference
+// earlier fragments (Mira: 20/28/52; the ninth wheel & the knock: 73/74/154/161/182;
+// the creche lantern: 48/147; the sealed stores: 132; "A. Lich": 38/131; the
+// eleventh hour: 34/36; the Behemoth: 45; the count: 61/127/217). Keep ids stable.
+
+public static partial class LoreContent
+{
+    internal static readonly LoreFragment[] More3 =
+    {
+        new LoreFragment(236, "Deck Log: The Woman from the East",
+            "A woman came in off the eastern ridge at dusk, following the lanterns, carrying one of ours — burned out, weeks old, its treated strip long spent. She would not eat until she had asked after two names. The first name is behind the containment door. The second kept the south valves, and died at them the winter before last, with a seat kept dry at his table to the end. She said nothing for a long while after that. Then she asked where the lanterns were made, and whether the work wanted hands."),
+
+        new LoreFragment(237, "The Lantern-Maker's Mark",
+            "Every lantern out of the shop these three years carries the same small mark scratched into the brass collar: a chair. Four-legged, plain, no bigger than a thumbnail. I asked her once what it meant. She went on crimping the seam and said only that somebody once kept a seat for her longer than sense allowed, and that a light is a kind of seat — kept for whoever is still out there. I did not ask again. The rest of us mark our work with initials, like fools. Hers are the ones people follow home."),
+
+        new LoreFragment(238, "M.'s Page, Left in the Lantern Shop",
+            "Two letters were written to me. One said come home before the lanterns burn green; it was never sent, and he kept my seat dry until the winter took him at his valves. The other is pinned to a door I will not open, and asks me to light a yellow one, and to keep the watch. The watch still runs. I wind it at the dawn bell. Everything else in this kingdom stopped at the eleventh hour — not the watch, and not me, and not the lights. I make the lights now. If you are out in the waste following one in: it was lit for two men who cannot come to it. Come in their place. That is what it is for."),
+
+        new LoreFragment(239, "Sinking Record, the First Shaft (old hand)",
+            "Ano the seconde of the workes: at foure hundred foote the bore strucke no rock but a softnesse, and the softnesse strucke BACK — three knockes upon the bit, evenly spaced, as a man knockes who expecteth answer. The Master ordered the ninth winch stilled and its housing sealed, and wrote in the margin of this record: 'we shall not knocke againe.' We drilled on regardless, a mile to the east. It was, we told ourselves, a different door."),
+
+        new LoreFragment(240, "Memorandum: On Superstition",
+            "To the deck, from the pressure office. The 'knock' is a worn crown-bearing in the number four gallery, period thirty-one seconds, and I have the charts to prove it. The ninth wheel is stilled because its governor was miscast in the founding pour and would shake the housing apart — a fact recorded plainly in the commissioning ledger, which nobody reads because a sealed door tells a better story. I signed the deep survey under protest and I was right, and being right bought this kingdom nothing. But I will not watch the deck frighten itself to death with bedtime tales. Superstition is a corrosion like any other. — the surveyor who is still, for the record, right"),
+
+        new LoreFragment(241, "Where the Lanterns Go",
+            "I broke the standing rule and watched the crèche seal through dusk, from the gantry shadows, to learn what takes the weekly lantern. What takes it is a digger — one of the feral ones, small, quick, keeping to the dark the way they do. It lifted the lantern with both hands, the way you carry soup, and went down the old inspection run that ends — I have checked the schematics twice — at a vent grate above the crèche level. I have not told the deck. They would argue about it. I just leave the lantern earlier now, and better filled, and once, against every rule we have, I left two."),
+
+        new LoreFragment(242, "The Last Argument of the Three Chairs",
+            "I kept minutes I was ordered not to keep. The night before the containment sector was sealed, the Master Artificer, the Chief Engineer, and the Chief Alchemist argued four hours over the item that now sits in the deep stores. The Engineer said it would drop the whole deep gallery and end the tide at the seam. The Alchemist said the same charge would crack the Core's footing, and the tide would not so much be ended as inherited. The Master said nothing for a long time, then had it carried down, and the three of them signed the manifest, and underlined the entry, and did not name it. They agreed not to use it. Nobody thought to agree on when."),
+
+        new LoreFragment(243, "Payroll Anomaly",
+            "For the ledger: the overtime sheet continues to fill itself, as reported, in the hands of the dead. One signature belongs to no one dead. It belongs to no one living either. It is the joke name — the one Foreman Voss wanted found out, back when it was funny — and it logs its hours only on the nights the sky comes down over the south quarter. I have cross-checked four such nights. Four entries. I am a clerk; I record what the record shows. The record shows that something is billing us for the meteors. I have locked the drawer."),
+
+        new LoreFragment(244, "The Back Row",
+            "At the dawn handover we stand in two rows and count. For some weeks the back row has held one figure whom everyone supposes somebody else knows — helmeted, correct, still. When Voss's count came out one too many, all those years ago, he stopped counting. We have talked it over and chosen differently: we count, we get one too many, we log the count, and we do not turn around fast. Whatever stands with us at dawn stands the watch. That is more than some of the living managed."),
+
+        new LoreFragment(245, "The Clockmaker's Inventory of the Stopped",
+            "I gather every stopped clock and watch the salvage crews bring in — forty-one now. Here is what I have told no one but this page: every one of them reads the eleventh hour. The ones that stopped in the Spill, yes — but also the hall clock that ran two years after, and the gate watch that drowned only last spring. Whenever a clock in this kingdom dies, it dies at eleven, as if the hands spend all their remaining days only arriving there. There is one watch left that still runs. I no longer offer to service it. Some things keep going because nobody has told them what time it is."),
+
+        new LoreFragment(246, "Requisition, Returned",
+            "Requisition eighty-one, bearing grease, four drums: DENIED — stores cite priority of the turret banks. Resubmitted, with note that without grease the barricade sleds seize and the turret banks will shortly be defending scrap: DENIED, wrong form. Resubmitted on the right form: APPROVED, two drums, collect after inventory. There is a tide at the walls and I am filling in forms in triplicate. In a strange way I find it steadying. The forms, at least, are exactly as stupid as they were before the world ended."),
+
+        new LoreFragment(247, "Found with a Cache",
+            "You will judge me. Fine. Forty tins under my floor, taken one at a time over two years, and every mouth on this deck fed lighter for it. I watched them share and sing and set out bowls for the dead and I thought: fools, the tide does not sing back. I meant to outlast them all. (Below, in the salvage officer's hand:) Cache logged and returned to stores, all forty tins, unopened. He died of the same winter as everyone else — alone, one deck down from the singing. Entered into the record without comment. Except this one."),
+
+        new LoreFragment(248, "A Transcription of the Hum",
+            "The infirmary asked me — I had an ear for music, before — to set down the note the resin hums, and the sludge-touched hum, and the diggers hummed in the seam. It is not a note. It is a work song, slowed a hundredfold: the lower-seam round, the one about going down and coming up. They are all still singing it, at a speed no living throat could hold. Whatever the Gunge keeps of a man, it keeps the shift. Somewhere inside that long, long note, the diggers believe they are still on their way up — to cold stars and a warm meal. I gave the infirmary the transcription. I did not keep a copy. I hum it anyway now, some mornings, without meaning to. I have told no one."),
+
+        new LoreFragment(249, "The Party That Followed the Wrong Yellow",
+            "Six went east after a yellow light the telemetry could not account for. One came back — Warden Sel, suit scored, voice level. Her report, complete: the light kept the same distance no matter their pace; the ground beneath it had never been walked; and when at last it let them close, it was not a lantern. It was only a colour, held up at lantern height. Asked after the other five, she said they were still following it, and that they did not seem distressed, and that this was the worst part — and then she asked to be excused. The amendment to the lantern code was posted the next morning. Read it. Read it every morning."),
+
+        new LoreFragment(250, "The Circles, Plotted",
+            "I plotted the Behemoth's patrol from the sighting reports — eleven months of bearings the wardens brought in. The circles are closing: a few dozen paces with every pass, patient as everything else out there. And they are not centred on the Core, which was the fear. They are centred on the containment sector. The machine that reads every living thing as rock is circling the one man who is neither, drawing in, month on month. I do not know whether it is hunting him, or guarding him, or answering him. I have filed the chart under the heading I use when I do not want the deck to read a thing: ROUTINE."),
+
+        new LoreFragment(251, "Two Corruptions, One Author",
+            "A note for whoever studies this after me. In flesh, the Gunge counts — the alchemist at his sky, the husband at his table-sums, the liches with their patient pens. In machinery, it guards — the excavators at their dead claims, the Behemoth on its circles. Counting, and guarding. An auditor, and a sentry. I put this to the deck plainly and was told to get some sleep. But those are not two madnesses. Those are two halves of one occupation. Something is taking inventory, and something is standing watch over the stock — and no one has yet asked what the stock is being kept for."),
+
+        new LoreFragment(252, "The Four Votes",
+            "For the honesty of the record: the motion to stop tabling the spill failed four to three, and here is what became of the four. One drowned under the east wing with his gold. One signed the last decree swearing there was no spill, and died of the air like most. One fled east the week the weather closed the roads, and the roads have not opened. And one sits on Deck One now, sharing a sealed room with a cook and a child, and is, by every account including mine, a changed and decent man. The three who voted aye are dead too. The vote decided nothing. I record it because the record is how we told ourselves who we were."),
+
+        new LoreFragment(253, "Grey Cloud, East Watch",
+            "East watch reports, dusk: a grey cloud, low, moving west against the wind — against it — toward the lanterns. The beekeeper was sent for, and stood a long while at the rail, and would not speak, and then said 'bees,' once, and sat down on the deck like a dropped coat. The lantern code has nothing to say about bees. The amendment about false colours has nothing to say about bees. We have doubled the watch and left the beekeeper at the rail, and there is one flower on Deck One getting more attention tonight than the Core itself. Whatever is coming in from the east, it is coming toward our light. We have not decided which way to hope."),
+
+        new LoreFragment(254, "Struck from the Archive (kept anyway)",
+            "The first draft of the binding's preface, found crumpled behind the shelf: 'They dug because they were paid, and were paid because we bought, and we bought because it was cold and the fire was cheap. Do not let anyone tell you the kingdom fell to a monster. The monster came second. First came the invoice.' The fair copy on the shelf says something kinder. Both hands are mine. A shelf can hold two truths; I have filed this one where an honest reader would think to look — behind the comfortable one."),
+
+        new LoreFragment(255, "A Question for the Purifier Deck",
+            "Put to me by an apprentice, and I could not answer it, so I am writing it down to be rid of it. The Core drinks refined Gunge. The turrets eat its resin. The tide has had three years to drown one machine at the centre of a beaten kingdom — and instead it circles, and presses, and waits. Why does a flood wait? The apprentice's theory, offered with the terrible ease of the young: 'Maybe you don't drown the part of you that's eating.' I sent him back to his valves. I have not slept well since. Feed the turrets. Hold the line. Do not think about the mouth."),
+
+        new LoreFragment(256, "Loose Page, Unplaceable",
+            "the dawn count came out right this morning. exactly right. first time in three years — no one missing, no one extra. we stood in our two rows with the number hanging in the cold air and nobody said a word, and then the bell-ringer rang three for dawn, and we went to our posts. we are all afraid to count again tomorrow. we will count again tomorrow."),
+    };
+}
+
+

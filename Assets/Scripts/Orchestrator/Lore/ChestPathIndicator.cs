@@ -286,7 +286,9 @@ public class ChestPathIndicator : MonoBehaviour
 
         foreach (var chest in chests)
         {
-            if (chest == null) continue;
+            // Skip chests that are already opened or fading out — the trail should point
+            // at something the player can still collect.
+            if (chest == null || chest.IsOpened) continue;
             float d = Vector3.Distance(playerTransform.position, chest.transform.position);
             if (d < closestDistance) { closestDistance = d; closest = chest.gameObject; }
         }
@@ -301,5 +303,3 @@ public class ChestPathIndicator : MonoBehaviour
 
     void OnDestroy() => ClearPath();
 }
-
-

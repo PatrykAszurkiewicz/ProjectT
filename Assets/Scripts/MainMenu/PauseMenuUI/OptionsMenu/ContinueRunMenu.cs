@@ -48,12 +48,35 @@ public class ContinueRunMenu : MonoBehaviour
     private bool _hasSave;
 
     private bool _committing;               // blocks a second click before the reload lands
-    private static bool _suppressNextOpen;  // static → survives the scene reload
 
-    // Clear the suppress flag at session start so an editor with "no domain
-    // reload" doesn't carry a stale value into the next Play session.
+    // ── The "Continue needs two clicks" bug ──────────────────────────────────
+    // _suppressNextOpen exists to swallow the ONE automatic reopen that happens right
+    // after this menu reloads the scene it lives in. But it was only ever cleared by
+    // being consumed. If the auto-reopen never came (Restart from the pause menu
+    // reloads the scene without re-opening this menu), the flag sat armed until the
+    // NEXT time you legitimately opened the menu — and ate that click. Hence "I often
+    // have to click Restart twice."
+    // It now also EXPIRES: it can only swallow an open that lands within
+    // SuppressWindow seconds of the scene finishing its load. A stale flag is cleared
+    // on the next open and that open proceeds normally.
+    private const float SuppressWindow = 2f;
+    private static bool _suppressNextOpen;  // static → survives the scene reload
+    private static float _suppressDeadline; // realtime; 0 = "armed but no load yet"
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => _suppressNextOpen = false;
+    private static void ResetStatics()
+    {
+        _suppressNextOpen = false;
+        _suppressDeadline = 0f;
+        SceneManager.sceneLoaded -= OnAnySceneLoaded;
+        SceneManager.sceneLoaded += OnAnySceneLoaded;
+    }
+
+    // Start the expiry clock the moment the reload we armed for actually lands.
+    private static void OnAnySceneLoaded(Scene s, LoadSceneMode m)
+    {
+        if (_suppressNextOpen) _suppressDeadline = Time.realtimeSinceStartup + SuppressWindow;
+    }
 
     //  ENTRY POINTS 
     private void Awake() { if (_instance == null) _instance = this; }
@@ -78,10 +101,19 @@ public class ContinueRunMenu : MonoBehaviour
 
     public void OpenMenu()
     {
-        // After a commit, the scene reloads and this menu would otherwise reopen
-        // on top of the freshly-started run (a full-screen dim canvas = "black
-        // screen"). Swallow exactly that one auto-open.
-        if (_suppressNextOpen) { _suppressNextOpen = false; CloseMenu(); return; }
+        // After a commit, the scene reloads and this menu would otherwise reopen on top
+        // of the freshly-started run (a full-screen dim canvas = "black screen").
+        // Swallow exactly that one auto-open — but only if it arrives promptly after the
+        // load. A flag left armed by a reload that never reopened us must not eat a real
+        // click made minutes later.
+        if (_suppressNextOpen)
+        {
+            _suppressNextOpen = false;
+            bool withinWindow = _suppressDeadline > 0f && Time.realtimeSinceStartup <= _suppressDeadline;
+            _suppressDeadline = 0f;
+            if (withinWindow) { CloseMenu(); return; }
+            // else: stale flag — fall through and open normally.
+        }
 
         MenuTheme.EnsureEventSystem();
         ReadSave();
@@ -89,14 +121,26 @@ public class ContinueRunMenu : MonoBehaviour
         RefreshSummary();
         RefreshGate();
         _root.SetActive(true);
-        Cursor.visible = true;
+        // Owns timeScale + cursor while this gate is up. In the main-menu scene there
+        // is no run to freeze, so don't stall that scene's animations.
+        UIModalStack.Push(this, freeze: UIModalStack.GameplayActive);
     }
-    public void CloseMenu() { if (_root != null) _root.SetActive(false); }
+    public void CloseMenu()
+    {
+        if (_root != null) _root.SetActive(false);
+        UIModalStack.Pop(this);
+    }
+
+    private void OnDisable() { if (UIModalStack.Contains(this)) UIModalStack.Pop(this); }
 
     private void Update()
     {
+        if (_root == null || !_root.activeSelf) return;
+
         // Live gate: enable Continue the instant enough controllers are seated.
-        if (_root != null && _root.activeSelf) RefreshGate();
+        RefreshGate();
+
+        if (!_committing && MenuBackInput.ConsumeBack(this)) CloseMenu();
     }
 
     //  SAVE / GATE STATE 
@@ -178,10 +222,11 @@ public class ContinueRunMenu : MonoBehaviour
     {
         CloseMenu();
 
-        // The menu is typically opened from a paused state (Time.timeScale = 0), and
-        // timeScale persists across a scene reload — a frozen new scene hangs the
-        // run's intro on its first scaled WaitForSeconds (black screen). Reset it.
-        Time.timeScale = 1f;
+        // The menu is typically opened from a paused state, and Time.timeScale
+        // persists across a scene reload — a frozen new scene hangs the run's intro
+        // on its first scaled WaitForSeconds (black screen). Drop EVERY open modal
+        // (this one, plus any pause menu underneath) so the next scene starts clean.
+        UIModalStack.ForceClear();
 
         string active = SceneManager.GetActiveScene().name;
         string scene = !string.IsNullOrEmpty(gameplaySceneName)
@@ -195,6 +240,7 @@ public class ContinueRunMenu : MonoBehaviour
         // never reopen — arming the static flag there only lingers and eats the NEXT
         // legitimate open, which is the "Continue needs two clicks" bug.
         _suppressNextOpen = (scene == active);
+        _suppressDeadline = 0f;   // OnAnySceneLoaded starts the clock when the load lands
 
         // Reload a scene so CoopManager.Awake re-seats the right player count from
         // RunResumeIntent (a static — it survives the load). Driving the live
@@ -295,3 +341,4 @@ public class ContinueRunMenu : MonoBehaviour
         img.color = new Color(MenuTheme.Magenta.r, MenuTheme.Magenta.g, MenuTheme.Magenta.b, 0.8f);
     }
 }
+

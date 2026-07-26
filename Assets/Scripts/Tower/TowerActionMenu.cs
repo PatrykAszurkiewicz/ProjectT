@@ -337,8 +337,10 @@ public class TowerActionMenu : MonoBehaviour
 
     private void PlayBuildSound(Vector3 at)
     {
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerCreation, at);
+        // Upgrade and disassemble share the unified tower-placement sound.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.towerPlacement.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerPlacement, at);
     }
 
     private IEnumerator PopIn()
@@ -537,4 +539,3 @@ public class TowerActionMenu : MonoBehaviour
         if (_canvas != null) Destroy(_canvas.gameObject);
     }
 }
-

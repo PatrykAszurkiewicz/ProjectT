@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: BruteData
   m_EditorClassIdentifier: 
   enemyName: Brute
-  maxHealth: 200
+  maxHealth: 100
   maxArmor: 0
   moveSpeed: 1.5
   damage: 8

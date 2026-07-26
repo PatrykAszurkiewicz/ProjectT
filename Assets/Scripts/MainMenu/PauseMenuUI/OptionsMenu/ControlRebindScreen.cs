@@ -36,11 +36,14 @@ public class ControlRebindScreen : MonoBehaviour
     private InputActionAsset _workingCopy;
     private string _scheme = KbmGroup;
     private InputActionRebindingExtensions.RebindingOperation _rebindOp;
+    private InputAction _pendingAction;      // what StartRebind is currently listening for
+    private int _pendingIndex = -1;
 
     private GameObject _root;
     private RectTransform _listContent;
     private GameObject _listenOverlay;
     private TextMeshProUGUI _listenLabel;
+    private TextMeshProUGUI _cancelHint;
     private Button _kbmTab, _padTab;
 
     private Sprite _panelSprite, _buttonSprite;
@@ -105,7 +108,10 @@ public class ControlRebindScreen : MonoBehaviour
 
         if (_root == null) BuildUI();
         _root.SetActive(true);
-        Cursor.visible = true;
+
+        // Freeze only if we're over a running game. On the main menu there is
+        // nothing to freeze, but we still want to own the Esc key while open.
+        UIModalStack.Push(this, freeze: UIModalStack.GameplayActive);
 
         ControlRebindService.ApplyTo(_workingCopy);
         SelectScheme(_scheme);
@@ -115,9 +121,30 @@ public class ControlRebindScreen : MonoBehaviour
     {
         CancelActiveRebind();
         if (_root != null) _root.SetActive(false);
+        UIModalStack.Pop(this);
     }
 
-    private void OnDisable() => CancelActiveRebind();
+    private void Update()
+    {
+        if (_root == null || !_root.activeSelf) return;
+
+        // While an interactive rebind is listening, Escape is that operation's
+        // cancel control (WithCancelingThrough). Swallow the press here so it can't
+        // ALSO reach PauseMenuController and toggle pause behind this screen.
+        if (_rebindOp != null)
+        {
+            if (MenuBackInput.PressedThisFrame) MenuBackInput.Consume();
+            return;
+        }
+
+        if (MenuBackInput.ConsumeBack(this)) CloseInternal();
+    }
+
+    private void OnDisable()
+    {
+        CancelActiveRebind();
+        if (UIModalStack.Contains(this)) UIModalStack.Pop(this);
+    }
 
     private void OnDestroy()
     {
@@ -164,6 +191,11 @@ public class ControlRebindScreen : MonoBehaviour
 
         foreach (var action in map.actions)
         {
+            // `Build` mirrors `AttackWeapon` (ControlRebindService.MirrorAliases keeps
+            // them identical). Showing it invited the player to set the same control
+            // twice and to desync the pair by only doing it once.
+            if (ControlRebindService.IsAlias(action.name)) continue;
+
             for (int i = 0; i < action.bindings.Count; i++)
             {
                 var b = action.bindings[i];
@@ -250,10 +282,13 @@ public class ControlRebindScreen : MonoBehaviour
     {
         CancelActiveRebind();
         GamepadMenuCursor.ClicksSuppressed = true;
+        _pendingAction = action;
+        _pendingIndex = bindingIndex;
 
         var btnLabel = btn.GetComponentInChildren<TextMeshProUGUI>();
         if (btnLabel != null) btnLabel.text = "...";
         ShowListening($"Press a {(_scheme == PadGroup ? "gamepad button" : "key or mouse button")} for\n<b>{displayName}</b>");
+        SetCancelHint(_scheme == PadGroup ? "Cancel (Back / Select)" : "Cancel (Esc)");
 
         var op = action.PerformInteractiveRebinding(bindingIndex)
             .OnMatchWaitForAnother(0.05f)
@@ -271,7 +306,10 @@ public class ControlRebindScreen : MonoBehaviour
         {
             op.WithControlsExcluding("<Keyboard>");
             op.WithControlsExcluding("<Mouse>");
-            op.WithCancelingThrough("<Gamepad>/start");
+            // NOT <Gamepad>/start: that is the Pause binding, so cancelling through it
+            // made Start the one gamepad control that could never be assigned to
+            // anything. Select/Back is bound to nothing in the Player map.
+            op.WithCancelingThrough("<Gamepad>/select");
         }
 
         op.OnComplete(_ => FinishRebind(true)).OnCancel(_ => FinishRebind(false));
@@ -284,8 +322,49 @@ public class ControlRebindScreen : MonoBehaviour
         DisposeOp();
         GamepadMenuCursor.ClicksSuppressed = false;
         HideListening();
-        if (commit) ControlRebindService.CaptureFrom(_workingCopy);
+        if (commit)
+        {
+            if (_pendingAction != null) ClearConflicts(_pendingAction, _pendingIndex);
+            ControlRebindService.CaptureFrom(_workingCopy);
+        }
+        _pendingAction = null;
         RebuildList();
+    }
+
+    // Unbind anything else in this scheme that the new control was already doing.
+    //
+    // Without this the screen happily let a player build the same clash the asset used
+    // to ship with (Sprint and Dash both on LeftShift), where one press fires both
+    // actions and neither is obviously wrong. The freed row shows "—" and can be
+    // reassigned; "Reset to defaults" brings everything back.
+    private void ClearConflicts(InputAction changed, int changedIndex)
+    {
+        var map = _workingCopy.FindActionMap(MapName, false);
+        if (map == null) return;
+
+        string path = changed.bindings[changedIndex].effectivePath;
+        if (string.IsNullOrEmpty(path)) return;
+
+        foreach (var action in map.actions)
+        {
+            if (ControlRebindService.IsAlias(action.name)) continue;   // mirrored, not a real clash
+
+            for (int i = 0; i < action.bindings.Count; i++)
+            {
+                if (action == changed && i == changedIndex) continue;
+
+                var b = action.bindings[i];
+                if (b.isComposite) continue;
+                if (!GroupMatches(b.groups, _scheme)) continue;
+                if (b.effectivePath != path) continue;
+
+                // A composite's OWN parts may legitimately share nothing, but two parts
+                // of the same composite (Move up/down) clashing is still a clash.
+                action.ApplyBindingOverride(i, new InputBinding { overridePath = string.Empty });
+                Debug.Log($"[ControlRebindScreen] {path} was also bound to " +
+                          $"{action.name}; unbound it to keep {changed.name} unambiguous.");
+            }
+        }
     }
 
     private void CancelActiveRebind()
@@ -297,6 +376,7 @@ public class ControlRebindScreen : MonoBehaviour
         DisposeOp();
         GamepadMenuCursor.ClicksSuppressed = false;
         HideListening();
+        _pendingAction = null;
     }
 
     private void DisposeOp()
@@ -324,7 +404,7 @@ public class ControlRebindScreen : MonoBehaviour
         _root = new GameObject("RebindCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = _root.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 5000;
+        canvas.sortingOrder = 5100;   // above TutorialScreen (5000)
         var scaler = _root.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
@@ -455,7 +535,9 @@ public class ControlRebindScreen : MonoBehaviour
         if (_headerFont != null) _listenLabel.font = _headerFont;
         _listenLabel.GetComponent<LayoutElement>().flexibleHeight = 1;
 
-        NewButton("Cancel (Esc)", box.transform, 24, _headerFont).onClick.AddListener(CancelActiveRebind);
+        var cancelBtn = NewButton("Cancel (Esc)", box.transform, 24, _headerFont);
+        cancelBtn.onClick.AddListener(CancelActiveRebind);
+        _cancelHint = cancelBtn.GetComponentInChildren<TextMeshProUGUI>();
         _listenOverlay.SetActive(false);
     }
 
@@ -465,6 +547,11 @@ public class ControlRebindScreen : MonoBehaviour
         if (_listenLabel != null) _listenLabel.text = msg;
         _listenOverlay.transform.SetAsLastSibling();
         _listenOverlay.SetActive(true);
+    }
+
+    private void SetCancelHint(string text)
+    {
+        if (_cancelHint != null) _cancelHint.text = text;
     }
 
     private void HideListening()
@@ -579,8 +666,22 @@ public class ControlRebindScreen : MonoBehaviour
     private static bool GroupMatches(string groups, string scheme)
         => !string.IsNullOrEmpty(groups) && groups.Contains(scheme);
 
+    // "NextWeapon" -> "Next Weapon", "Hotbar10" -> "Hotbar 10", "up" -> "Up".
+    // The list now contains multi-word actions (PreviousWeapon, HotbarModifier) and ten
+    // numbered slots, which ran together unreadably under the old capitalize-only rule.
     private static string Nice(string s)
-        => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        var sb = new System.Text.StringBuilder(s.Length + 4);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            bool boundary = i > 0 &&
+                ((char.IsUpper(c) && !char.IsUpper(s[i - 1])) ||
+                 (char.IsDigit(c) && !char.IsDigit(s[i - 1])));
+            if (boundary) sb.Append(' ');
+            sb.Append(i == 0 ? char.ToUpper(c) : c);
+        }
+        return sb.ToString();
+    }
 }
-
-

@@ -5,7 +5,8 @@ public class MainMenu : MonoBehaviour
 {
     public void PlayGame()
     {
-        SceneManager.LoadScene("StartingWeapon");
+        //SceneManager.LoadScene("StartingWeapon");
+        SceneManager.LoadScene("MenuContinue");
     }
     public void OpenOptions()
     {
@@ -16,7 +17,10 @@ public class MainMenu : MonoBehaviour
     {
         SceneManager.LoadScene("Credits");
     }
-
+    public void BackToMainMenu()
+    {
+        SceneManager.LoadScene("MenuScene");
+    }
     public void ExitGame()
     {
         Application.Quit();

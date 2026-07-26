@@ -86,6 +86,10 @@ public class GameOrchestrator : MonoBehaviour
     private StageTransitionOverlay transitionOverlay;
     private AugmentsMenu augmentsMenu;
     private AugmentsMenu[] augmentsMenus;   // Phase 6: one per player in co-op
+
+    // Identity token for UIModalStack while an augment menu is open. A plain object
+    // (not `this`) so the orchestrator can hold other stack entries independently.
+    private readonly object _augmentModal = new object();
     private PostStageChoiceMenu postStageChoiceMenu;
     private StageClearScreenMenu stageClearMenu;   // Phase 8: prefab-based reward screen (single + co-op split)
 
@@ -461,12 +465,11 @@ public class GameOrchestrator : MonoBehaviour
             if (CurrentState == RunState.GameOver) yield break;
         }
         Time.timeScale = 1f;
-        if (enableTransitions && transitionOverlay != null)
-        {
-            yield return new WaitForSecondsRealtime(1f);
-            yield return transitionOverlay.FadeOut(0.8f);
-            yield return transitionOverlay.ShowMessage("VICTORY", "", 3f);
-        }
+
+        // Show the Win screen directly — no black "VICTORY" banner. A short beat lets
+        // the final kill register; the overlay is already transparent during play, so
+        // nothing needs revealing before OnVictory activates the Win screen.
+        yield return new WaitForSecondsRealtime(0.75f);
         SetState(RunState.Victory);
         OnVictory?.Invoke();
         RunPersistence.Instance?.OnSaveConsumed();
@@ -666,6 +669,7 @@ public class GameOrchestrator : MonoBehaviour
 
             // Spawn the wave
             SetState(RunState.WaveActive);
+            PlayWaveStartCue();
             yield return SpawnAndWaitForWave(wave, stage);
 
             // Wave cleared
@@ -818,11 +822,17 @@ public class GameOrchestrator : MonoBehaviour
         if (CurrentState == RunState.AugmentSelect)
         {
             // Close EVERY player's menu so the wait-loop can exit on a rewind.
+            // ForceClose(), not augmentsMenu.SetActive(false): the latter disables a
+            // CHILD object, so the menu never runs its close path and never pops its
+            // UIModalStack layer — the run would resume permanently frozen.
             if (augmentsMenus != null)
                 foreach (var m in augmentsMenus)
-                    if (m != null && m.augmentsMenu != null) m.augmentsMenu.SetActive(false);
-                    else if (augmentsMenu != null && augmentsMenu.augmentsMenu != null)
-                        augmentsMenu.augmentsMenu.SetActive(false);
+                    if (m != null) m.ForceClose();
+            if (augmentsMenu != null) augmentsMenu.ForceClose();
+
+            // The coroutine that pushed this layer is about to be stopped, so pop it
+            // here or the freeze outlives the menu.
+            UIModalStack.Pop(_augmentModal);
         }
 
         // FINAL BOSS: rewind to the start of the final boss fight only (the final
@@ -874,12 +884,9 @@ public class GameOrchestrator : MonoBehaviour
 
         // Mirror FinishRun's victory tail (RunFinalBoss only runs the fight itself).
         Time.timeScale = 1f;
-        if (enableTransitions && transitionOverlay != null)
-        {
-            yield return new WaitForSecondsRealtime(1f);
-            yield return transitionOverlay.FadeOut(0.8f);
-            yield return transitionOverlay.ShowMessage("VICTORY", "", 3f);
-        }
+
+        // Show the Win screen directly — no black "VICTORY" banner (see FinishRun).
+        yield return new WaitForSecondsRealtime(0.75f);
         SetState(RunState.Victory);
         OnVictory?.Invoke();
         RunPersistence.Instance?.OnSaveConsumed();
@@ -1190,12 +1197,9 @@ public class GameOrchestrator : MonoBehaviour
         // Track enemies
         enemiesAlive += enemyPrefabsToSpawn.Count;
 
-        // Switch music to intense
-        if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
-        {
-            AudioManager.instance.EnsureMusicReady();
-            AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
-        }
+        // Music is handled by MusicDirector, which reacts to SetState(RunState.WaveActive)
+        // just above this call. Driving it from here too meant two owners for one
+        // FMOD parameter.
 
         // Pick a single direction if oneDirectionForAllEnemies
         SpawnDirection chosenDir = SpawnDirection.Top;
@@ -1224,9 +1228,8 @@ public class GameOrchestrator : MonoBehaviour
         // Wait until all enemies are dead
         yield return WaitForAllEnemiesDead();
 
-        // Switch music to calm
-        if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
-            AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
+        // Music: OnWaveCleared (fired by RunStage right after this returns) is what
+        // MusicDirector listens to for the wave-clear sting + drop back to Calm.
     }
 
     private IEnumerator WaitForAllEnemiesDead()
@@ -1273,6 +1276,13 @@ public class GameOrchestrator : MonoBehaviour
     private IEnumerator ShowPostStageChoice(StageData stage)
     {
         SetState(RunState.AugmentSelect); // reuse existing state — gameplay is paused either way
+
+        // Reward-screen appear SFX (covers both the prefab and legacy menus below).
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.rewardScreen.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.rewardScreen, Vector3.zero);
+        }
 
         if (debugLog)
             Debug.Log($"[Orchestrator] Post-stage choice menu: stage {stage.stageIndex + 1}");
@@ -1470,10 +1480,12 @@ public class GameOrchestrator : MonoBehaviour
         SetState(RunState.AugmentSelect);
         if (playerIndices == null || playerIndices.Count == 0) yield break;
 
-        float prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-        Cursor.visible = true;
-        PlayerAttack.SetAllSuppressed(true);
+        // The orchestrator owns the freeze via UIModalStack. It must NOT snapshot
+        // Time.timeScale: when this fires while the pause menu is already up the
+        // snapshot is 0, and restoring it after the player un-pauses re-freezes the
+        // game with no menu on screen and no way to un-freeze. The stack recomputes
+        // the correct state from whatever is actually open.
+        UIModalStack.Push(_augmentModal);
 
         // Resolve each chosen player's bound menu and open it.
         var opened = new System.Collections.Generic.List<AugmentsMenu>();
@@ -1490,7 +1502,9 @@ public class GameOrchestrator : MonoBehaviour
             opened.Add(menu);
         }
 
-        // Wait until every opened menu has closed.
+        // Wait until every opened menu has closed. Each AugmentsMenu now pops only its
+        // OWN stack layer on close, so the first player to confirm can no longer
+        // un-freeze the game while the second is still choosing — this layer holds it.
         bool anyOpen = true;
         while (anyOpen)
         {
@@ -1503,10 +1517,11 @@ public class GameOrchestrator : MonoBehaviour
         // Hold suppression until every gamepad trigger is released (see the note
         // in ShowAugmentSelection) so a trigger held to confirm can't resume with
         // the attack dead until re-pulled. No-ops without a held pad trigger.
+        // Reassert() is insurance against any OTHER screen that still writes
+        // Time.timeScale directly (WeaponBlueprintMenu / LoreArchiveMenu).
+        UIModalStack.Reassert();
         yield return MenuInputGuard.WaitForGamepadTriggersReleased();
-        Time.timeScale = prevTimeScale;
-        Cursor.visible = false;
-        PlayerAttack.SetAllSuppressed(false);
+        UIModalStack.Pop(_augmentModal);
 
         if (debugLog) Debug.Log("[Orchestrator] Per-player augment selection complete.");
     }
@@ -1544,16 +1559,11 @@ public class GameOrchestrator : MonoBehaviour
         if (debugLog)
             Debug.Log($"[Orchestrator] Augment selection after {reason}...");
 
-        // Co-op: the orchestrator owns the freeze so two menus don't fight over
-        // Time.timeScale, and it opens every player's menu and waits for ALL.
-        bool coop = PlayerRegistry.Count > 1;
-        float prevTimeScale = Time.timeScale;
-        if (coop)
-        {
-            Time.timeScale = 0f;
-            Cursor.visible = true;
-            PlayerAttack.SetAllSuppressed(true);
-        }
+        // The orchestrator owns the freeze and opens every player's menu, waiting for ALL.
+        // Always take ownership — not only in co-op. In single player the menu used to
+        // manage the clock alone, so opening it on top of the pause menu (the wave ends
+        // on the same frame you press Esc) left the two fighting over Time.timeScale.
+        UIModalStack.Push(_augmentModal);
 
         var menus = (augmentsMenus != null && augmentsMenus.Length > 0)
             ? augmentsMenus
@@ -1568,28 +1578,14 @@ public class GameOrchestrator : MonoBehaviour
 
         yield return WaitForAugmentMenuClosed();
 
-        // Defensive resume. AugmentsMenu restores whatever Time.timeScale it
-        // captured on open. If an upstream menu (e.g. the post-stage reward
-        // screen) handed off while still frozen at 0, the menu restores 0 on
-        // close and the player is stuck until another menu forces timeScale back
-        // to 1. Force a running timescale here so the run always resumes.
-        if (coop)
-        {
-            // Hold suppression until every gamepad trigger is released. A trigger
-            // still held from confirming the menu had its press-edge swallowed while
-            // suppressed; resuming now would leave that attack dead until re-pulled.
-            // WaitForGamepadTriggersReleased is frame-based + unscaled, so it advances
-            // while still frozen at timeScale 0 and no-ops with no pad/trigger held.
-            yield return MenuInputGuard.WaitForGamepadTriggersReleased();
-
-            Time.timeScale = prevTimeScale;
-            Cursor.visible = false;
-            PlayerAttack.SetAllSuppressed(false);
-        }
-        else
-        {
-            Time.timeScale = 1f;
-        }
+        // Hold suppression until every gamepad trigger is released. A trigger still
+        // held from confirming the menu had its press-edge swallowed while suppressed;
+        // resuming now would leave that attack dead until re-pulled.
+        // WaitForGamepadTriggersReleased is frame-based + unscaled, so it advances
+        // while still frozen at timeScale 0 and no-ops with no pad/trigger held.
+        UIModalStack.Reassert();
+        yield return MenuInputGuard.WaitForGamepadTriggersReleased();
+        UIModalStack.Pop(_augmentModal);
 
         if (debugLog)
             Debug.Log($"[Orchestrator] Augment selected, continuing...");
@@ -1649,6 +1645,14 @@ public class GameOrchestrator : MonoBehaviour
         if (currentBossInstance == null && debugLog)
             Debug.LogWarning("[Orchestrator] SpawnBoss: could not locate the spawned boss GameObject. " +
                              "Falling back to counter-only wait — may exit early if other enemies linger.");
+
+        // ── Boss intro cinematic ──────────────────────────────────────────
+        // The moment the boss exists, focus the camera on it: single player pans +
+        // zooms onto the boss; co-op momentarily leaves the split for one full-screen
+        // zoom, then returns. No-op if no BossZoomController is present in the scene,
+        // so this is safe/opt-in — drop one BossZoomController into GameScene to enable.
+        if (currentBossInstance != null && BossZoomController.Instance != null)
+            BossZoomController.Instance.PlayIntro(currentBossInstance);
     }
 
     // Waits until the specific boss instance is dead AND no other enemies are alive.
@@ -1721,6 +1725,14 @@ public class GameOrchestrator : MonoBehaviour
         WriteFinalBossAutoSave();
 
         yield return WaitForBossDead();
+
+        // Final boss down. Fire the SAME event the stage bosses use, with -1 as the
+        // stage index to mean "this was the final boss" — mirroring the existing
+        // OnBossSpawned(null) convention that RunProgressBar already relies on.
+        // Without this there is no event at all for the final kill: OnVictory doesn't
+        // land until ~2.75s later (2s here + 0.75s in FinishRun), which is far too
+        // late for music or a stinger.
+        OnBossKilled?.Invoke(-1);
 
         if (debugLog)
             Debug.Log("[Orchestrator] FINAL BOSS defeated!");
@@ -2034,6 +2046,24 @@ public class GameOrchestrator : MonoBehaviour
         OnStateChanged?.Invoke(old, newState);
     }
 
+    // One-shot "WaveStart" cue the instant enemies go live. The event is 3D (it has a
+    // Spatializer), so it is played at the player's position — the nearest thing to a
+    // "centered" point for a whole-screen cue — falling back to the camera, then origin.
+    // In co-op it plays once, near player 1; that reads fine for a non-diegetic cue.
+    private void PlayWaveStartCue()
+    {
+        if (AudioManager.instance == null || FMODEvents.instance == null) return;
+        if (FMODEvents.instance.waveStart.IsNull) return;
+
+        Vector3 pos;
+        var pm = FindFirstObjectByType<PlayerMovement>();
+        if (pm != null) pos = pm.transform.position;
+        else if (Camera.main != null) pos = Camera.main.transform.position;
+        else pos = Vector3.zero;
+
+        AudioManager.instance.PlayOneShot(FMODEvents.instance.waveStart, pos);
+    }
+
     //  VALIDATION
     private void ValidateSetup()
     {
@@ -2064,3 +2094,4 @@ public class GameOrchestrator : MonoBehaviour
             Instance = null;
     }
 }
+

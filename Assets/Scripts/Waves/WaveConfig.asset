@@ -22,13 +22,13 @@ MonoBehaviour:
     maxSpawnDelay: 2
     enemies:
     - enemyPrefab: {fileID: 3554655901426140020, guid: df8333252348a3b4ba98f15f72d87222, type: 3}
-      count: 4
+      count: 0
     - enemyPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
       count: 0
     - enemyPrefab: {fileID: 3554655901426140020, guid: e119ac09dd5565f4a9cf2f92076311f8, type: 3}
       count: 0
     - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
-      count: 0
+      count: 1
     - enemyPrefab: {fileID: 3554655901426140020, guid: 996fa1776d101fb4ebff334023bac589, type: 3}
       count: 0
     - enemyPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
@@ -49,6 +49,14 @@ MonoBehaviour:
       count: 0
     - enemyPrefab: {fileID: 3554655901426140020, guid: 8d685dfb046ed364e9f757d2648ed9df, type: 3}
       count: 0
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 206632d8c910d944c8aeab7ac36537f6, type: 3}
+      count: 0
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 7852797c8597a8e4ab75d93bf409f78e, type: 3}
+      count: 0
+    - enemyPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
+      count: 0
+    - enemyPrefab: {fileID: 3554655901426140020, guid: 960f292cc56a018489dc02f245ed4c0c, type: 3}
+      count: 1
   - waveNumber: 0
     extraDelayBeforeStart: 2
     spawnDirections: 000000000200000001000000

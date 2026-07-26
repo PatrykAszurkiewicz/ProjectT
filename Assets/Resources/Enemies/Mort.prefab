@@ -170,8 +170,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 50
-  currentHealth: 50
+  maxHealth: 40
+  currentHealth: 40
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -237,6 +237,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
   detectRange: 6
   attackRange: 4
   attackCooldown: 2
@@ -244,9 +251,19 @@ MonoBehaviour:
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 0
+  blockerLayers:
+    serializedVersion: 2
+    m_Bits: 0
   requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.05
+  smoothSteeringEnabled: 1
+  lookAheadDistance: 1.6
+  avoidanceStrength: 1.8
+  steerResponsiveness: 6
+  wanderStrength: 0.25
+  wanderFrequency: 0.4
+  stuckArcWidth: 0.6
 --- !u!114 &4762212980718008091
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -259,8 +276,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9d30b04b2748c0644b37e325daee16ce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mortarPrefab: {fileID: 3232055685823593232, guid: 88302a0a54415ad499dbe51da51daf8d, type: 3}
+  mortarPrefab: {fileID: 1307074388638911128, guid: 26f15c05ebae07c4294034d8496af196, type: 3}
   flightTime: 1.1
   spawnOffset: {x: 0, y: 0.4, z: 0}
+  autoAddProjectileComponent: 1
   shellMaxLifetime: 6
   aimLead: 0
+  plateSprite: {fileID: 0}
+  plateChildName: MortPlate
+  plateLocalPosition: {x: 0, y: -0.35, z: 0}
+  plateScale: 1
+  plateSortingOffset: 1
+  bodyBobAmplitude: 0.1
+  bodyBobSpeed: 0.9
+  decouplePlateFromBodyBob: 1
+  plateBobAmplitude: 0.05
+  plateBobSpeed: 0.7
+  plateBobPhaseOffset: 0.5

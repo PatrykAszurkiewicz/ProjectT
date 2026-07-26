@@ -11,7 +11,10 @@ public class DecoyDevice : MonoBehaviour
     private float duration = 7f;
     private float bossDuration = 3f;
     private float armDelay = 0.3f;
-    private Vector2 bossVFXOffset = new Vector2(-1f, 2f);
+    // Per-boss nudge for the confusion marks. Defaults to zero: the marks are
+    // anchored to the boss's head automatically, so this is only a deliberate
+    // offset if you ever want one. (Was (-1, 2), which pushed them off to the side.)
+    private Vector2 bossVFXOffset = Vector2.zero;
 
     // State
     private bool isArmed = false;
@@ -19,6 +22,20 @@ public class DecoyDevice : MonoBehaviour
     private float lifeTimer;
     private bool isExpired = false;
     private bool isDisintegrating = false;
+
+    // ── Audio ────────────────────────────────────────────────────────────
+    // DecoyAmbience is a REPEATING ONE-SHOT rather than a held looping instance:
+    // the decoy never moves, so a fresh 3D one-shot at its position spatialises
+    // exactly like every other sound in the game (AudioManager.PlayOneShot) and
+    // there is no instance to leak if the decoy is destroyed mid-pulse.
+    //
+    // Public rather than [SerializeField] because DecoyDevice is built in code by
+    // DecoyLauncherSystem (AddComponent on a bare GameObject), so there is no
+    // prefab inspector to set it in — change the default here, or assign it from
+    // DecoyLauncherSystem.PlaceDecoy before/after Initialize.
+    [Tooltip("Seconds between DecoyAmbience pulses while the decoy is armed. 0 disables the sound.")]
+    public float ambienceInterval = 4f;
+    private float ambienceTimer = 0f;
 
     // Tracked lured enemies so we can release them on expire
     private readonly Dictionary<EnemyController, DecoyConfusionVFX> luredEnemies
@@ -161,6 +178,32 @@ public class DecoyDevice : MonoBehaviour
 
         if (isArmed)
             AttractEnemies();
+
+        UpdateAmbience();
+    }
+
+    // Pulses DecoyAmbience every `ambienceInterval` seconds for as long as the decoy
+    // is armed and alive. The first pulse lands the moment it arms (ambienceTimer
+    // starts at 0), which is just after the decoySetup one-shot Weapon.cs fires on
+    // placement — so the two read as "deployed … then it starts working" rather than
+    // stacking on the same frame.
+    //
+    // Nothing needs to stop this: Update() early-returns once the decoy expires or
+    // starts disintegrating, so the pulses simply stop arriving.
+    private void UpdateAmbience()
+    {
+        if (!isArmed || ambienceInterval <= 0f) return;
+
+        ambienceTimer -= Time.deltaTime;
+        if (ambienceTimer > 0f) return;
+
+        ambienceTimer = ambienceInterval;
+
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.decoyAmbience.IsNull)
+        {
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.decoyAmbience, transform.position);
+        }
     }
 
     private bool IsBoss(GameObject go)
@@ -242,7 +285,7 @@ public class DecoyDevice : MonoBehaviour
             vfx.SetBossMode(bossVFXOffset);
 
         Debug.Log($"[Decoy] Attached ConfusionVFX to {enemy.name} isBoss={isBoss} " +
-                  $"bossOffset={bossVFXOffset} enemyScale={enemy.transform.lossyScale}");
+                  $"bossNudge={bossVFXOffset} enemyScale={enemy.transform.lossyScale}");
 
         return vfx;
     }
@@ -492,7 +535,9 @@ public class DecoyConfusionVFX : MonoBehaviour
     // Offset from enemy position to VFX center
     private Vector2 baseOffset;
     private bool isBoss = false;
-    private Vector2 bossOffset = new Vector2(-1f, 2f);
+    // Optional per-weapon nudge for bosses. Defaults to none — the mark is
+    // anchored to the sprite's head automatically. X flips with facing.
+    private Vector2 bossOffset = Vector2.zero;
 
     private const int ICON_COUNT = 3;
     private const float ORBIT_RADIUS = 0.55f;
@@ -501,8 +546,20 @@ public class DecoyConfusionVFX : MonoBehaviour
     private const float BOB_AMPLITUDE = 0.08f;
     private const float ICON_SCALE = 0.45f;
 
-    private const float SORT_PRECISION = 10f;
-    private const int SORT_ORDER_BASE = 1000;
+    // Extra clearance above the sprite's top edge so the marks don't overlap the head.
+    private const float BOSS_HEAD_CLEARANCE = 0.4f;
+    private const float ENEMY_HEAD_CLEARANCE = 0.2f;
+
+    // Confusion marks render ABOVE health bars but BELOW biome fog. Everything
+    // here lives on the Default sorting layer; the project's numeric bands are:
+    //   400–1600  Y-sorted world sprites (enemies, obstacles)
+    //   2000      boss head / enemy projectiles
+    //   4000      enemy + boss health bars
+    //   5000      biome fog          <- marks must stay UNDER this
+    //   6000      night overlay
+    // 4500 lands cleanly in the gap between the health bar and the fog.
+    private const string OVERLAY_SORT_LAYER = "Default";
+    private const int CONFUSION_SORT_ORDER = 4500;
 
 
     // Call before Start() to configure boss-specific offset. The X component will flip when the boss sprite flips.
@@ -518,26 +575,25 @@ public class DecoyConfusionVFX : MonoBehaviour
         enemyTransform = transform.parent;
         parentSR = enemyTransform != null ? enemyTransform.GetComponent<SpriteRenderer>() : null;
 
-        if (isBoss)
+        // Seed a sane fallback; the real anchor is measured live in GetCurrentOffset().
+        float yOff = 0.8f;
+        if (parentSR != null && parentSR.sprite != null)
         {
-            baseOffset = bossOffset;
+            Bounds b = parentSR.bounds;
+            yOff = (b.max.y - enemyTransform.position.y)
+                 + (isBoss ? BOSS_HEAD_CLEARANCE : ENEMY_HEAD_CLEARANCE);
         }
-        else
-        {
-            float yOff = 0.8f;
-            if (parentSR != null && parentSR.sprite != null)
-            {
-                Bounds b = parentSR.bounds;
-                yOff = (b.max.y - enemyTransform.position.y) + 0.2f;
-            }
-            baseOffset = new Vector2(0f, yOff);
-        }
+        baseOffset = new Vector2(0f, yOff);
 
         iconRenderers = new SpriteRenderer[ICON_COUNT];
         Sprite questionSprite = GenerateQuestionSprite();
 
-        string sortLayerName = parentSR != null ? parentSR.sortingLayerName : "Default";
-        int sortLayerID = parentSR != null ? parentSR.sortingLayerID : 0;
+        // Draw the marks on the same sorting layer as the health bars / fog so the
+        // order values compare directly. (Was inheriting the enemy's layer + order,
+        // which sat ~450–1650 — underneath the 4000 health bar, so the marks
+        // rendered behind it.)
+        string sortLayerName = OVERLAY_SORT_LAYER;
+        int sortLayerID = SortingLayer.NameToID(OVERLAY_SORT_LAYER);
 
         Color[] colors = new Color[]
         {
@@ -555,7 +611,7 @@ public class DecoyConfusionVFX : MonoBehaviour
             sr.sprite = questionSprite;
             sr.sortingLayerName = sortLayerName;
             sr.sortingLayerID = sortLayerID;
-            sr.sortingOrder = SORT_ORDER_BASE + 500;
+            sr.sortingOrder = CONFUSION_SORT_ORDER;
             sr.color = colors[i % colors.Length];
 
             iconObj.transform.localScale = Vector3.one * ICON_SCALE;
@@ -563,20 +619,34 @@ public class DecoyConfusionVFX : MonoBehaviour
         }
 
         Debug.Log($"[DecoyConfusionVFX] Spawned on {enemyTransform?.name ?? "null"} " +
-                  $"isBoss={isBoss} offset={baseOffset} sortLayer={sortLayerName}");
+                  $"isBoss={isBoss} bossNudge={bossOffset} sortLayer={sortLayerName}");
     }
 
     private Vector2 GetCurrentOffset()
     {
-        if (!isBoss)
-            return baseOffset;
+        // Anchor to the actually-rendered sprite: horizontal center of the sprite,
+        // just above its top edge. World bounds already bake in the enemy's scale,
+        // pivot and flipX, so this stays centered on the head for any size/facing.
+        if (parentSR != null && parentSR.sprite != null && enemyTransform != null)
+        {
+            Bounds b = parentSR.bounds;
+            Vector3 p = enemyTransform.position;
 
-        // Flip X with the boss sprite
-        float xOff = baseOffset.x;
-        if (parentSR != null && parentSR.flipX)
-            xOff = -xOff;
+            float xOff = b.center.x - p.x;    // sprite center, not pivot
+            float yOff = (b.max.y - p.y)
+                       + (isBoss ? BOSS_HEAD_CLEARANCE : ENEMY_HEAD_CLEARANCE);
 
-        return new Vector2(xOff, baseOffset.y);
+            if (isBoss)
+            {
+                // Optional per-weapon nudge (defaults to zero). X flips with facing
+                // so a deliberate sideways nudge stays on the same visual side.
+                xOff += parentSR.flipX ? -bossOffset.x : bossOffset.x;
+                yOff += bossOffset.y;
+            }
+            return new Vector2(xOff, yOff);
+        }
+
+        return baseOffset; // fallback if there's no sprite to measure
     }
 
     private Vector3 GetIconWorldPos(int index, float angle, float bob)
@@ -601,15 +671,6 @@ public class DecoyConfusionVFX : MonoBehaviour
         rotationAngle += ROTATION_SPEED * Time.deltaTime;
         float bob = Mathf.Sin(Time.time * BOB_SPEED) * BOB_AMPLITUDE;
 
-        int baseSortOrder;
-        if (parentSR != null)
-            baseSortOrder = parentSR.sortingOrder + 50;
-        else
-        {
-            float worldY = enemyTransform.position.y;
-            baseSortOrder = SORT_ORDER_BASE + Mathf.RoundToInt(-worldY * SORT_PRECISION) + 50;
-        }
-
         for (int i = 0; i < ICON_COUNT; i++)
         {
             if (iconRenderers[i] == null) continue;
@@ -619,7 +680,9 @@ public class DecoyConfusionVFX : MonoBehaviour
             float pulse = 0.9f + 0.1f * Mathf.Sin(Time.time * 5f + i * 2.1f);
             iconRenderers[i].transform.localScale = Vector3.one * ICON_SCALE * pulse;
 
-            iconRenderers[i].sortingOrder = baseSortOrder + i;
+            // Fixed order — above health bars (4000), below fog (5000). The +i only
+            // keeps THIS enemy's three marks layered consistently among themselves.
+            iconRenderers[i].sortingOrder = CONFUSION_SORT_ORDER + i;
         }
     }
 
@@ -732,3 +795,8 @@ public class DisintegrateDecoy : MonoBehaviour
         if (antennaGlowRenderer != null) { Color ac = antennaGlowRenderer.color; ac.a *= (1f - t); antennaGlowRenderer.color = ac; }
     }
 }
+
+
+
+
+

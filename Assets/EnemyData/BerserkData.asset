@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: BerserkData
   m_EditorClassIdentifier: 
   enemyName: Berserk
-  maxHealth: 120
+  maxHealth: 70
   maxArmor: 0
   moveSpeed: 3
   damage: 4

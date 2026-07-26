@@ -62,13 +62,21 @@ public class CoopStartLobby : MonoBehaviour
         if (_root == null) BuildUI();
         RefreshGate();
         _root.SetActive(true);
-        Cursor.visible = true;
+        UIModalStack.Push(this, freeze: UIModalStack.GameplayActive);
     }
-    public void CloseMenu() { if (_root != null) _root.SetActive(false); }
+    public void CloseMenu()
+    {
+        if (_root != null) _root.SetActive(false);
+        UIModalStack.Pop(this);
+    }
+
+    private void OnDisable() { if (UIModalStack.Contains(this)) UIModalStack.Pop(this); }
 
     private void Update()
     {
-        if (_root != null && _root.activeSelf) RefreshGate();
+        if (_root == null || !_root.activeSelf) return;
+        RefreshGate();
+        if (!_committing && MenuBackInput.ConsumeBack(this)) CloseMenu();
     }
 
     //  GATE 
@@ -129,7 +137,7 @@ public class CoopStartLobby : MonoBehaviour
         RunResumeIntent.Set(resume: false, count: 2);
 
         CloseMenu();
-        Time.timeScale = 1f; // persists across loads; a frozen new scene hangs on its intro.
+        UIModalStack.ForceClear();  // timeScale persists across loads; a frozen new scene hangs on its intro.
 
         string scene = !string.IsNullOrEmpty(gameplaySceneName)
             ? gameplaySceneName
@@ -226,3 +234,4 @@ public class CoopStartLobby : MonoBehaviour
         le.minHeight = h; le.preferredHeight = h; le.flexibleHeight = 0f;
     }
 }
+

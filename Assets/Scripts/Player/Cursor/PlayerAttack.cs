@@ -71,7 +71,32 @@ public class PlayerAttack : MonoBehaviour
     // The held-button safety nets below must use this lower analog threshold to match
     // where "started" raised the shield / began firing — otherwise a normal-speed
     // trigger pull gets lowered the same frame it was raised.
-    private const float TRIGGER_HELD_THRESHOLD = 0.1f;
+    // PUBLIC because MenuInputGuard and WeaponRollController need the same threshold:
+    // they used to hardcode their own trigger tests, which quietly stopped agreeing
+    // with this one the moment a player rebound an action.
+    public const float TRIGGER_HELD_THRESHOLD = 0.1f;
+
+    /// <summary>
+    /// True if any control currently bound to <paramref name="action"/> is physically
+    /// actuated past <see cref="TRIGGER_HELD_THRESHOLD"/>. Asking the ACTION for its
+    /// resolved controls means rebinds are honoured for free, and because an action
+    /// only resolves to the devices paired with its owning PlayerInput, it stays
+    /// per-player in co-op. Shared with MenuInputGuard / WeaponRollController so
+    /// "is it still held?" has exactly one answer in the codebase.
+    /// </summary>
+    public static bool ActionPhysicallyHeld(InputAction action)
+    {
+        if (action == null) return false;
+        var controls = action.controls;
+        for (int i = 0; i < controls.Count; i++)
+            if (controls[i] is ButtonControl btn && btn.ReadValue() > TRIGGER_HELD_THRESHOLD)
+                return true;
+        return false;
+    }
+
+    /// <summary>Null-safe action lookup on a PlayerInput. Shared for the same reason.</summary>
+    public static InputAction FindAction(PlayerInput pi, string actionName)
+        => pi == null || pi.actions == null ? null : pi.actions.FindAction(actionName, false);
 
     void Start()
     {
@@ -81,48 +106,37 @@ public class PlayerAttack : MonoBehaviour
         playerInput = GetComponent<PlayerInput>();
         if (playerInput != null && playerInput.actions != null)
         {
-            _attackWeaponAction = playerInput.actions.FindAction("AttackWeapon", false);
-            _attackToolAction = playerInput.actions.FindAction("AttackTool", false);
+            _attackWeaponAction = FindAction(playerInput, "AttackWeapon");
+            _attackToolAction = FindAction(playerInput, "AttackTool");
         }
     }
 
-    // Is this player's WEAPON button (LMB / right trigger) still physically down?
-    // Reads THIS player's paired devices; falls back to the global devices if
-    // there's no PlayerInput (legacy single-player object).
+    // Is this player's WEAPON control (LMB / right trigger / whatever it's bound to)
+    // still physically down? Reads THIS player's paired devices via the action's
+    // resolved controls; falls back to defaults only for a legacy object with no
+    // PlayerInput at all.
     private bool WeaponButtonStillDown()
     {
-        // Read whatever is currently bound to AttackWeapon (mouse button, key,
-        // pad button or trigger). This follows rebinds and, because action.controls
-        // only resolves to this player's paired devices, stays per-player.
         if (_attackWeaponAction != null) return ActionPhysicallyHeld(_attackWeaponAction);
-
-        // Legacy fallback only for an object with no PlayerInput/actions.
-        return (Mouse.current != null && Mouse.current.leftButton.isPressed)
-            || (Gamepad.current != null && (Gamepad.current.rightTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD || Gamepad.current.buttonSouth.isPressed));
+        return LegacyWeaponHeld();
     }
 
-    // Is this player's TOOL button (RMB / left trigger) still physically down?
+    // Is this player's TOOL control (RMB / left trigger / …) still physically down?
     private bool ToolButtonStillDown()
     {
         if (_attackToolAction != null) return ActionPhysicallyHeld(_attackToolAction);
-
-        // Legacy fallback only for an object with no PlayerInput/actions.
-        return (Mouse.current != null && Mouse.current.rightButton.isPressed)
-            || (Gamepad.current != null && (Gamepad.current.leftTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD || Gamepad.current.buttonWest.isPressed));
+        return LegacyToolHeld();
     }
 
-    // True if any control currently bound to `action` is physically actuated past
-    // the analog threshold. Using the action's resolved controls means a rebind is
-    // honoured automatically, and analog triggers use the same low threshold the
-    // press relied on (so a held trigger between ~0.13 and 0.5 still counts as held).
-    private static bool ActionPhysicallyHeld(InputAction action)
-    {
-        var controls = action.controls;
-        for (int i = 0; i < controls.Count; i++)
-            if (controls[i] is ButtonControl btn && btn.ReadValue() > TRIGGER_HELD_THRESHOLD)
-                return true;
-        return false;
-    }
+    private static bool LegacyWeaponHeld()
+        => (Mouse.current != null && Mouse.current.leftButton.isPressed)
+        || (Gamepad.current != null && (Gamepad.current.rightTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD
+                                        || Gamepad.current.buttonSouth.isPressed));
+
+    private static bool LegacyToolHeld()
+        => (Mouse.current != null && Mouse.current.rightButton.isPressed)
+        || (Gamepad.current != null && (Gamepad.current.leftTrigger.ReadValue() > TRIGGER_HELD_THRESHOLD
+                                        || Gamepad.current.buttonWest.isPressed));
 
     void Update()
     {
@@ -317,4 +331,3 @@ public class PlayerAttack : MonoBehaviour
         }
     }
 }
-

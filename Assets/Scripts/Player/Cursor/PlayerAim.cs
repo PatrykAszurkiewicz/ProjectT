@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using System.Collections.Generic;
 
 // Single source of truth for "where is the player aiming". Mouse and gamepad both feed into this via the PlayerInput component.
@@ -22,6 +23,40 @@ public class PlayerAim : MonoBehaviour
     // reading the single global Instance, which only ever reflects one player.
     // In single player this list has exactly one entry.
     public static readonly List<PlayerAim> All = new List<PlayerAim>();
+
+    // Co-op-aware input suppression, mirroring PlayerAttack. Aim runs off raw input
+    // in Update (mouse position / right stick) with NO Time.deltaTime, so a timeScale=0
+    // freeze does NOT stop it — the cursor/player can still be rotated. This gate lets
+    // the Win/Lose screen (and, if wanted, the pause menu) freeze aim as well. A shared
+    // global flag freezes EVERY player at once; a per-instance flag is also available.
+    // Effective suppression = global OR this instance's own flag.
+    private static bool _globalSuppressed = false;
+    private bool _instanceSuppressed = false;
+    private bool Suppressed => _globalSuppressed || _instanceSuppressed;
+
+    // Reset the static gate between Play sessions (domain reload off).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() { _globalSuppressed = false; }
+
+    // Clear the global gate on EVERY scene load, exactly like PlayerAttack: the static
+    // survives an in-play scene reload (Continue / restart / quit-to-menu), so without
+    // this a suppression set on the Win/Lose screen could strand 'true' and leave a
+    // freshly loaded run unable to aim. A new scene always wants aim un-suppressed.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void HookSceneReset()
+    {
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnAnySceneLoaded;
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnAnySceneLoaded;
+    }
+    private static void OnAnySceneLoaded(UnityEngine.SceneManagement.Scene s,
+                                         UnityEngine.SceneManagement.LoadSceneMode m)
+        => _globalSuppressed = false;
+
+    /// <summary>Suppress/unsuppress THIS player's aim updates.</summary>
+    public void SetSuppressed(bool suppressed) { _instanceSuppressed = suppressed; }
+
+    /// <summary>Suppress/unsuppress ALL players' aim at once (used by the Win/Lose screen).</summary>
+    public static void SetAllSuppressed(bool suppressed) { _globalSuppressed = suppressed; }
 
     [Header("Gamepad")]
     [Tooltip("Right-stick magnitude required before it counts as aiming.")]
@@ -59,6 +94,12 @@ public class PlayerAim : MonoBehaviour
     private PlayerRef playerRef;
     private Vector2 lookInputVector = Vector2.zero;
 
+    // The bound "Look" action. Gamepad aim reads whatever stick Look actually resolves
+    // to on this player's pad, rather than assuming pad.rightStick — so if Look is ever
+    // rebound (or exposed in ControlRebindScreen), aim follows it. Rebinding mutates
+    // this same InputAction object, so resolving once in Awake is enough.
+    private InputAction lookAction;
+
     // Steered gamepad reticle state.
     private Vector3 reticleWorld;
     private bool reticleSeeded;
@@ -74,6 +115,7 @@ public class PlayerAim : MonoBehaviour
         playerRef = GetComponent<PlayerRef>();
         cam = ResolveCamera();
         playerInput = GetComponent<PlayerInput>();
+        lookAction = PlayerAttack.FindAction(playerInput, "Look");
     }
 
     // Per-player camera: prefer this player's assigned camera (set by
@@ -109,6 +151,11 @@ public class PlayerAim : MonoBehaviour
 
     void Update()
     {
+        // Frozen (Win/Lose screen etc.): stop tracking input so the cursor/player can't
+        // be rotated once control is disabled. Direction/WorldPoint keep their last
+        // values. Cleared automatically on the next scene load (see OnAnySceneLoaded).
+        if (Suppressed) return;
+
         // Re-bind to this player's camera once PlayerCameraController assigns it
         // (it may be null on the spawn frame). Single player keeps Camera.main.
         if (playerRef != null && playerRef.Camera != null) cam = playerRef.Camera;
@@ -130,7 +177,7 @@ public class PlayerAim : MonoBehaviour
         }
         if (mouse == null && playerInput == null) mouse = Mouse.current; // legacy object w/o PlayerInput
 
-        Vector2 stick = pad != null ? pad.rightStick.ReadValue() : Vector2.zero;
+        Vector2 stick = ReadGamepadLook(pad);
 
         // Pick the aim source by the device actually used, NOT by currentControlScheme.
         // The single-player setup keeps ONE PlayerInput on the Keyboard&Mouse scheme even
@@ -156,6 +203,27 @@ public class PlayerAim : MonoBehaviour
             // Re-seed the reticle in front of the player next time we pick up the pad.
             reticleSeeded = false;
         }
+    }
+
+    // Read the Look action's value from THIS player's pad. Falls back to the raw right
+    // stick if Look has no gamepad binding resolved (e.g. an older asset), so aim can
+    // never go dead because of a missing action.
+    private Vector2 ReadGamepadLook(Gamepad pad)
+    {
+        if (pad == null) return Vector2.zero;
+
+        if (lookAction != null)
+        {
+            var controls = lookAction.controls;
+            for (int i = 0; i < controls.Count; i++)
+                if (controls[i].device == pad && controls[i] is StickControl s)
+                    return s.ReadValue();
+            for (int i = 0; i < controls.Count; i++)
+                if (controls[i].device == pad && controls[i] is Vector2Control v)
+                    return v.ReadValue();
+        }
+
+        return pad.rightStick.ReadValue();
     }
 
     private void UpdateGamepadAim(Vector2 stick)

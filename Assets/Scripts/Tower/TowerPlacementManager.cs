@@ -962,6 +962,14 @@ public class TowerPlacementManager : MonoBehaviour
                     if (requirePlayerProximity && !IsPlayerInRange(slot.transform.position)) continue;
 
                     slot.RemoveTower();
+
+                    // Unified tower-placement sound also covers a slot removal here.
+                    if (AudioManager.instance != null && FMODEvents.instance != null
+                        && !FMODEvents.instance.towerPlacement.IsNull)
+                    {
+                        AudioManager.instance.PlayOneShot(FMODEvents.instance.towerPlacement, slot.transform.position);
+                    }
+
                     break;
                 }
             }
@@ -1035,3 +1043,4 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 }
+

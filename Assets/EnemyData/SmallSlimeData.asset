@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: SmallSlimeData
   m_EditorClassIdentifier: 
   enemyName: Slime
-  maxHealth: 50
+  maxHealth: 8
   maxArmor: 0
   moveSpeed: 2.5
-  damage: 8
+  damage: 6
   mass: 18
   spriteFolderPath: Sprites/EnemySprites/SmallSlime
   animationSpeed: 0.1

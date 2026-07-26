@@ -92,7 +92,23 @@ public class LoreCodex : MonoBehaviour
         return result;
     }
 
-    public bool HasUndiscovered => GetUndiscoveredIds().Count > 0;
+    /// How many fragments are still out there. Allocation-free — the spawner polls this
+    /// every tick, so it must not build a List each time.
+    public int UndiscoveredCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var f in LoreContent.All())
+                if (!_discovered.Contains(f.id)) n++;
+            return n;
+        }
+    }
+
+    public bool HasUndiscovered => UndiscoveredCount > 0;
+
+    /// True once every fragment that exists has been collected — the run's lore is done.
+    public bool AllDiscovered => UndiscoveredCount == 0;
 
     /// Pick a random undiscovered fragment id, or -1 if everything is already known.
     public int PickRandomUndiscoveredId()

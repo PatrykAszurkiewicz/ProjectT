@@ -168,6 +168,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
   detectRange: 3
   attackRange: 2.3
   attackCooldown: 1
@@ -175,9 +182,19 @@ MonoBehaviour:
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8192
+  blockerLayers:
+    serializedVersion: 2
+    m_Bits: 0
   requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.2
+  smoothSteeringEnabled: 1
+  lookAheadDistance: 1.6
+  avoidanceStrength: 1.8
+  steerResponsiveness: 6
+  wanderStrength: 0.25
+  wanderFrequency: 0.4
+  stuckArcWidth: 0.6
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -204,8 +221,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21f9dfe69dcf0424281eb056490349d5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
-  currentHealth: 100
+  maxHealth: 1
+  currentHealth: 1
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -216,6 +233,8 @@ MonoBehaviour:
   canDropEnergy: 1
   damageFlashDuration: 0.1
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  baseDeathVfxDuration: 0
+  baseDestroyHealthBarBeforeVfx: 1
   currentMoveSpeedDebug: 0
   maxArmor: 1000
   bossMaxArmor: 800
@@ -245,8 +264,11 @@ MonoBehaviour:
   smallSlimePrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
   summonCount: 3
   summonRingRadius: 2
-  summonSpawnDelay: 1
+  summonSpawnDelay: 3
   summonSmokeColor: {r: 0.7, g: 0.7, b: 0.8, a: 0.7}
+  summonTelegraphRadius: 0.75
+  summonTelegraphColor: {r: 0.7, g: 0.2, b: 1, a: 0.9}
+  summonTelegraphPulseColor: {r: 1, g: 0.5, b: 1, a: 1}
 --- !u!1001 &4952343202120976192
 PrefabInstance:
   m_ObjectHideFlags: 0

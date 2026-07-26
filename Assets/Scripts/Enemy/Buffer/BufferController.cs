@@ -228,8 +228,17 @@ public class BufferController : MonoBehaviour
         spriteFlip.SetFacingLeft(dx < 0f);
     }
 
+    private void PlaySmokeSound()
+    {
+        if (AudioManager.instance == null || FMODEvents.instance == null) return;
+        if (FMODEvents.instance.bufferSmoke.IsNull) return;
+        AudioManager.instance.PlayOneShot(FMODEvents.instance.bufferSmoke, transform.position);
+    }
+
     private void SpawnFog()
     {
+        PlaySmokeSound();
+
         GameObject fogGO;
         if (fogPrefab != null)
         {
@@ -280,3 +289,4 @@ public class BufferController : MonoBehaviour
     }
 #endif
 }
+

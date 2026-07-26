@@ -35,6 +35,43 @@ public class WaveSpawner : MonoBehaviour
              "to a nudge-toward-area-edge strategy.")]
     public int obstacleAvoidanceMaxAttempts = 12;
 
+    [Header("Wave direction indicators")]
+    [Tooltip("Master toggle for the subtle pulsing arc that telegraphs which side a wave spawns from.")]
+    public bool showWaveIndicators = true;
+
+    [Tooltip("STANDALONE mode only: show the arc this many seconds BEFORE the wave actually spawns, " +
+             "as an early warning. Orchestrator-driven runs show it when the orchestrator triggers the wave.")]
+    public float indicatorLeadTime = 3f;
+
+    [Tooltip("Show an arc when an enemy ACTUALLY spawns from a direction, and refresh it on " +
+             "every further spawn from that side. This is the accurate source of truth and the " +
+             "only path that works in orchestrator mode. Leave ON.")]
+    public bool indicateOnSpawn = true;
+
+    [Tooltip("Honour direction lists passed to ShowWaveIndicatorsPublic() by an external caller " +
+             "(e.g. GameOrchestrator). OFF by default: callers typically pass every AUTHORED " +
+             "direction from WaveData, while enemies only use a subset — which is what makes the " +
+             "arcs appear to lie. With indicateOnSpawn ON you do not need this.")]
+    public bool trustCallerDirections = false;
+
+    [Tooltip("Log every arc trigger with its direction. Use to confirm arcs match real spawns.")]
+    public bool debugLogIndicators = false;
+
+    [Tooltip("Look & feel of the wave arc (colour, span, pulse, sorting).")]
+    public WaveIndicatorStyle waveIndicatorStyle = new WaveIndicatorStyle();
+
+    // Guards the standalone early-warning so it fires once per wave.
+    private int indicatorsShownForWave = -1;
+
+    // Live arcs — one per (direction x player camera). Ticked from LateUpdate().
+    private readonly List<ActiveArc> activeArcs = new List<ActiveArc>();
+
+    // Resolved player cameras, rebuilt whenever a wave is telegraphed.
+    private readonly List<(Camera cam, int playerIndex)> _playerCams = new List<(Camera, int)>();
+
+    // Original cullingMask per camera, captured before we carve out the arc layers.
+    private Dictionary<Camera, int> _maskedCams;
+
     private int currentWaveIndex = 0;
     private int enemiesAlive = 0;
     private float countdown;
@@ -74,8 +111,44 @@ public class WaveSpawner : MonoBehaviour
             return;
         }
 
+        ValidateSpawnAreas();
+
         countdown = GetModifiedWaveDelay();
         StartCoroutine(PreloadEnemyResources());
+    }
+
+    // Spawn areas are matched to a SpawnDirection by NAME, never by list order — so the
+    // order of Elements 0..3 in the Inspector is irrelevant. What DOES matter is that a
+    // collider called "Top" actually sits above the core, etc. If a name and its position
+    // disagree, arcs and enemies still agree with each other (both use this lookup), but
+    // both will point somewhere the designer did not expect. Warn loudly.
+    private void ValidateSpawnAreas()
+    {
+        if (spawnAreas == null) return;
+
+        foreach (SpawnDirection d in System.Enum.GetValues(typeof(SpawnDirection)))
+        {
+            Collider2D area = spawnAreas.Find(c => c != null &&
+                c.name.Equals(d.ToString(), StringComparison.OrdinalIgnoreCase));
+
+            if (area == null)
+            {
+                Debug.LogWarning($"[WaveSpawner] No spawn area named '{d}'. Enemies for that " +
+                                 $"direction will fall back to another area, and its arc will " +
+                                 $"point at that fallback.");
+                continue;
+            }
+
+            Vector2 c2 = area.bounds.center;
+            Vector2 expect = CardinalUnit(d);
+            // Dot < 0 means the area sits on the OPPOSITE side of the core from its name.
+            if (Vector2.Dot(c2.normalized, expect) < 0f)
+            {
+                Debug.LogWarning($"[WaveSpawner] Spawn area '{area.name}' is positioned at {c2}, " +
+                                 $"which is on the opposite side of the core from '{d}'. " +
+                                 $"Its wave arc will point at {c2} — rename or move the collider.");
+            }
+        }
     }
 
     private IEnumerator PreloadEnemyResources()
@@ -112,6 +185,11 @@ public class WaveSpawner : MonoBehaviour
 
     void Update()
     {
+        // NOTE: the wave arcs are driven from LateUpdate(), NOT here — they must be
+        // re-aimed after the camera has moved for the frame, and they must keep
+        // pulsing through every early-return below (orchestrator mode, enemies alive,
+        // waves exhausted). All of those returns are about ADVANCING waves only.
+
         // ORCHESTRATOR MODE: don't auto-advance
         if (IsOrchestratorMode) return;
 
@@ -122,6 +200,20 @@ public class WaveSpawner : MonoBehaviour
         if (currentWaveIndex >= waveConfig.waves.Count) return;
 
         countdown -= Time.deltaTime;
+
+        // Early-warning arc: telegraph the coming wave a few seconds before it spawns.
+        // Fires once per wave; SpawnWave() refreshes the same arcs when enemies actually
+        // start appearing, so they hold through the spawn then fade out on their own.
+        //
+        // Reads the CACHED plan, so the sides promised here are exactly the sides the
+        // enemies will use — EnsurePlan rolls the directions once and SpawnWave reuses it.
+        if (showWaveIndicators
+            && indicatorsShownForWave != currentWaveIndex
+            && countdown <= indicatorLeadTime)
+        {
+            indicatorsShownForWave = currentWaveIndex;
+            ShowWaveIndicators(EnsurePlan(currentWaveIndex).usedDirections);
+        }
 
         if (countdown <= 0f)
         {
@@ -148,9 +240,65 @@ public class WaveSpawner : MonoBehaviour
         if (wave.extraDelayBeforeStart > 0)
             yield return new WaitForSeconds(wave.extraDelayBeforeStart);
 
-        ShowWaveIndicators(wave.spawnDirections);
+        // Decide WHO spawns and FROM WHERE up front, then indicate only the directions
+        // this plan actually uses. Previously the indicators were fed wave.spawnDirections
+        // (every AUTHORED direction) while the spawn loop then picked a subset — so with
+        // oneDirectionForAllEnemies the arcs promised 3 sides and enemies came from 1.
+        WavePlan plan = EnsurePlan(index);
 
-        List<GameObject> enemyPrefabsToSpawn = new List<GameObject>();
+        ShowWaveIndicators(plan.usedDirections);
+
+        // NOTE: music is NOT driven from here any more. MusicDirector is the single
+        // owner of the MusicSection parameter and reacts to GameOrchestrator's
+        // RunState. This block used to fight the orchestrator's own Intense/Calm
+        // calls over the same parameter.
+
+        for (int i = 0; i < plan.prefabs.Count; i++)
+        {
+            SpawnEnemy(plan.prefabs[i], plan.directions[i]);
+
+            float delay = UnityEngine.Random.Range(wave.minSpawnDelay, wave.maxSpawnDelay);
+            yield return new WaitForSeconds(delay);
+        }
+
+        ClearPlan();
+        currentWaveIndex++;
+    }
+
+    //  WAVE PLANNING
+    //
+    //  The plan is the single source of truth for a wave: the exact prefab list, and the
+    //  exact direction each one spawns from. The indicators read plan.usedDirections, the
+    //  spawn loop reads plan.prefabs/plan.directions — so an arc can never point at a side
+    //  no enemy uses.
+    //
+    //  It is built ONCE per wave (on the early-warning, or on first use) and cached, so the
+    //  arc shown seconds before the wave matches the enemies that then arrive. Rebuilding it
+    //  at spawn time would re-roll the random directions and reintroduce the mismatch.
+
+    private WavePlan _plan;
+    private int _planIndex = -1;
+
+    private WavePlan EnsurePlan(int index)
+    {
+        if (_plan != null && _planIndex == index) return _plan;
+        _plan = BuildWavePlan(index);
+        _planIndex = index;
+        return _plan;
+    }
+
+    private void ClearPlan()
+    {
+        _plan = null;
+        _planIndex = -1;
+    }
+
+    private WavePlan BuildWavePlan(int index)
+    {
+        var plan = new WavePlan();
+        WaveData wave = waveConfig.waves[index];
+
+        // Expand groups into a flat prefab list, honouring the count multiplier.
         if (wave.enemies != null)
         {
             foreach (var group in wave.enemies)
@@ -160,58 +308,59 @@ public class WaveSpawner : MonoBehaviour
                 if (group.count <= 0) continue;
 
                 int modifiedCount = Mathf.Max(1, Mathf.RoundToInt(group.count * enemySpawnCountMultiplier));
-
                 for (int i = 0; i < modifiedCount; i++)
-                    enemyPrefabsToSpawn.Add(group.enemyPrefab);
+                    plan.prefabs.Add(group.enemyPrefab);
             }
         }
 
-        Shuffle(enemyPrefabsToSpawn);
+        Shuffle(plan.prefabs);
 
-        if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
-        {
-            AudioManager.instance.EnsureMusicReady();
-            AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Intense);
-            if (AudioManager.instance.enableDebugLogs)
-                Debug.Log($"Wave {currentWaveIndex}: Music switched to Intense.");
-        }
+        bool hasDirs = wave.spawnDirections != null && wave.spawnDirections.Count > 0;
 
         SpawnDirection chosenDir = SpawnDirection.Top;
-        if (wave.oneDirectionForAllEnemies && wave.spawnDirections != null && wave.spawnDirections.Count > 0)
+        if (hasDirs && wave.oneDirectionForAllEnemies)
             chosenDir = wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
 
-        foreach (var prefab in enemyPrefabsToSpawn)
+        // Assign a direction per enemy — the same rolls the spawn loop used to make inline.
+        for (int i = 0; i < plan.prefabs.Count; i++)
         {
             SpawnDirection dir;
-
-            if (wave.spawnDirections == null || wave.spawnDirections.Count == 0)
+            if (!hasDirs)
                 dir = chosenDir;
             else
                 dir = wave.oneDirectionForAllEnemies
                     ? chosenDir
                     : wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
 
-            SpawnEnemy(prefab, dir);
+            plan.directions.Add(dir);
 
-            float delay = UnityEngine.Random.Range(wave.minSpawnDelay, wave.maxSpawnDelay);
-            yield return new WaitForSeconds(delay);
+            // Distinct set — only these get an arc. A direction that no enemy rolled
+            // (easy with few enemies and several authored directions) shows nothing.
+            if (!plan.usedDirections.Contains(dir)) plan.usedDirections.Add(dir);
         }
 
-        currentWaveIndex++;
+        return plan;
+    }
+
+    private class WavePlan
+    {
+        public readonly List<GameObject> prefabs = new List<GameObject>();
+        public readonly List<SpawnDirection> directions = new List<SpawnDirection>();
+        public readonly List<SpawnDirection> usedDirections = new List<SpawnDirection>();
     }
 
     /// Called by EnemyStats.PerformDeath() for ALL enemies (wave + gremlins + anything).
-    /// This ONLY manages the spawner's internal count and music.
+    /// This ONLY manages the spawner's internal count.
     /// It does NOT notify the orchestrator — WaveEnemy.OnDestroy() handles that.
+    ///
+    /// Music was removed from here deliberately. This counter hits 0 constantly during
+    /// an orchestrated wave — the orchestrator spawns through SpawnEnemyPublic with up
+    /// to ~1.5s between spawns, so killing enemy #1 before enemy #2 appears dropped the
+    /// count to 0 and yanked the music to Calm mid-fight. It also fired on gremlin and
+    /// boss deaths. MusicDirector reads the orchestrator's RunState instead.
     public void OnEnemyDeath()
     {
         enemiesAlive--;
-
-        if (enemiesAlive <= 0)
-        {
-            if (AudioManager.instance != null && AudioManager.instance.musicEnabled)
-                AudioManager.instance.SetMusicSection(AudioManager.MusicSection.Calm);
-        }
     }
 
     Vector2 GetRandomPositionInArea(SpawnDirection direction, float clearanceRadius = -1f)
@@ -414,6 +563,13 @@ public class WaveSpawner : MonoBehaviour
         }
 
         enemiesAlive++;
+
+        // GROUND TRUTH: an arc appears if and only if an enemy really spawned from this
+        // side, and each spawn REFRESHES that arc's hold. This is the only indicator path
+        // that survives orchestrator mode, where Update()/SpawnWave() never run and the
+        // orchestrator alone decides directions. Config lists and caller-supplied
+        // direction lists are both untrustworthy; an actual Instantiate is not.
+        if (indicateOnSpawn) ShowWaveIndicator(direction);
     }
 
     // Iteratively pushes the spawn point outward (away from world origin)
@@ -449,8 +605,29 @@ public class WaveSpawner : MonoBehaviour
         SpawnEnemy(prefab, direction);
     }
 
+    /// Spawn without telegraphing a direction. Use for anything that is NOT a wave enemy
+    /// (gremlins, chest guardians, ambient spawns) so it never lights a wave arc.
+    public void SpawnEnemyUnindicated(GameObject prefab, SpawnDirection direction)
+    {
+        bool prev = indicateOnSpawn;
+        indicateOnSpawn = false;
+        try { SpawnEnemy(prefab, direction); }
+        finally { indicateOnSpawn = prev; }
+    }
+
+    // NOTE: external callers (GameOrchestrator) generally hand us WaveData.spawnDirections —
+    // the AUTHORED list — but then spawn enemies from only a subset of it. Honouring that list
+    // lights arcs on sides no enemy ever uses. Ignored unless trustCallerDirections is set;
+    // indicateOnSpawn covers this correctly instead.
     public void ShowWaveIndicatorsPublic(List<SpawnDirection> dirs)
     {
+        if (!trustCallerDirections)
+        {
+            if (debugLogIndicators)
+                Debug.Log("[WaveSpawner] ShowWaveIndicatorsPublic ignored (trustCallerDirections=false); " +
+                          "arcs are driven by real spawns instead.");
+            return;
+        }
         ShowWaveIndicators(dirs);
     }
 
@@ -475,11 +652,6 @@ public class WaveSpawner : MonoBehaviour
         foreach (var d in dirs) ShowWaveIndicator(d);
     }
 
-    void ShowWaveIndicator(SpawnDirection direction)
-    {
-        // Implementation for showing wave indicators
-    }
-
     public void TestWave(int waveIndex)
     {
         if (waveIndex < 0 || waveIndex >= waveConfig.waves.Count)
@@ -489,7 +661,426 @@ public class WaveSpawner : MonoBehaviour
         }
 
         StopAllCoroutines();
+        ClearPlan();   // a forced wave re-rolls its own directions
         StartCoroutine(SpawnWave(waveIndex));
+    }
+
+    //  WAVE DIRECTION ARCS
+    //
+    //  A subtle, pulsing arc telegraphing which side a wave spawns from. The arc is
+    //  ATTACHED TO EACH PLAYER'S CAMERA: it is centred on that camera and re-aimed every
+    //  frame at the bearing from the camera to the spawn area, so it follows the player
+    //  around the map and always points at the incoming wave.
+    //
+    //  ONE ARC PER (DIRECTION x PLAYER CAMERA). A single world-space arc cannot follow two
+    //  cameras at once in split-screen co-op, so each player gets their own.
+    //
+    //  PER-CAMERA ISOLATION. PlayerCamera.prefab ships with cullingMask = Everything, so
+    //  without isolation player 1's arc would also render into player 2's view whenever it
+    //  fell inside their frustum. Each arc therefore lives on a reserved layer keyed to its
+    //  player (P0 -> 31, P1 -> 30 — the SAME convention PlacementModeScreenEffect uses for
+    //  its private Volume), and every player camera masks OUT the other players' arc layers.
+    //  Original culling masks are captured once and restored in OnDestroy.
+    //
+    //  SORTING: high order on the Default sorting layer. The night-darkness overlay
+    //  (BiomeManager) is the highest thing in the world at 6000, fog/searchlight ~5000;
+    //  7000 clears them.
+
+    void ShowWaveIndicator(SpawnDirection direction)
+    {
+        if (!showWaveIndicators) return;
+        if (debugLogIndicators) Debug.Log($"[WaveSpawner] arc -> {direction}");
+
+        // Where the wave comes FROM, in world space. Arcs aim at this point.
+        Vector2 target;
+        if (!TryGetSpawnAreaCenter(direction, out target))
+            target = CardinalUnit(direction) * Mathf.Max(1f, waveIndicatorStyle.fallbackRadius);
+
+        // One arc per player camera.
+        CollectPlayerCameras();
+        for (int i = 0; i < _playerCams.Count; i++)
+        {
+            var pc = _playerCams[i];
+            if (pc.cam == null) continue;
+
+            // Already live for this direction on this camera? Extend its hold, never stack.
+            bool found = false;
+            for (int j = 0; j < activeArcs.Count; j++)
+            {
+                if (activeArcs[j].dir == direction && activeArcs[j].cam == pc.cam)
+                {
+                    activeArcs[j].life = Mathf.Max(activeArcs[j].life, waveIndicatorStyle.holdDuration);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) continue;
+
+            activeArcs.Add(BuildArc(direction, target, pc.cam, pc.playerIndex));
+        }
+
+        ApplyArcLayerMasks();
+    }
+
+    /// <summary>Ease every live arc out (e.g. when a run ends).</summary>
+    public void HideWaveIndicators()
+    {
+        for (int i = 0; i < activeArcs.Count; i++) activeArcs[i].life = 0f;
+    }
+
+    // Arcs are re-aimed from live camera positions, so this MUST run after the camera has
+    // moved for the frame — hence LateUpdate, not Update. Driving it from Update would
+    // leave the arc one frame behind the player, which reads as jitter while running.
+    //
+    // Unscaled time, matching PlayerDamageVignette / PlacementModeScreenEffect, so arcs
+    // keep breathing while the game is time-frozen in placement mode.
+    private void LateUpdate()
+    {
+        if (activeArcs.Count == 0) return;
+
+        float dt = Time.unscaledDeltaTime;
+        var st = waveIndicatorStyle;
+        float fadeRate = st.fadeDuration > 0.0001f ? 1f / st.fadeDuration : 1000f;
+
+        for (int i = activeArcs.Count - 1; i >= 0; i--)
+        {
+            var a = activeArcs[i];
+
+            // The camera can be destroyed under us (player leaves / scene swap).
+            if (a.cam == null || a.arc == null)
+            {
+                DestroyArc(a);
+                activeArcs.RemoveAt(i);
+                continue;
+            }
+
+            a.phase += dt * Mathf.Max(0.0001f, st.pulseSpeed);
+            a.life -= dt;
+            a.env = Mathf.MoveTowards(a.env, a.life > 0f ? 1f : 0f, fadeRate * dt);
+
+            float pulse01 = 0.5f + 0.5f * Mathf.Sin(a.phase * Mathf.PI * 2f);
+
+            // st.color.a is a CEILING: the pulse breathes below it, so the arc can never
+            // flash brighter than authored. That is what keeps this subtle.
+            float alpha = st.color.a * (1f - st.pulseDepth + st.pulseDepth * pulse01) * a.env;
+            float width = st.lineWidth * (1f + st.widthPulse * pulse01);
+
+            AimArc(a);   // follow the camera + re-point at the spawn side
+
+            a.arc.widthMultiplier = width;
+            if (a.arcMat != null)
+                a.arcMat.color = new Color(st.color.r, st.color.g, st.color.b, alpha);
+
+            if (a.life <= 0f && a.env <= 0.0001f)
+            {
+                DestroyArc(a);
+                activeArcs.RemoveAt(i);
+            }
+        }
+
+        if (activeArcs.Count == 0) RestoreCameraMasks();
+    }
+
+    // Rebuilds the arc's points around the CAMERA's current position, on the bearing from
+    // that camera toward the spawn area. Cheap (48 points) and it means the arc both
+    // follows the player and re-aims as they move relative to the spawn side.
+    private void AimArc(ActiveArc a)
+    {
+        var st = waveIndicatorStyle;
+
+        Vector2 camPos = a.cam.transform.position;
+        Vector2 toTarget = a.target - camPos;
+
+        // Player standing (almost) on the spawn area — keep the last good bearing rather
+        // than letting Atan2 snap wildly through a near-zero vector.
+        if (toTarget.sqrMagnitude > 1e-4f)
+            a.bearing = Mathf.Atan2(toTarget.y, toTarget.x);
+
+        // Fit to THIS camera. Every arc point lies exactly `radius` from the camera centre,
+        // so staying inside the camera's inscribed circle (min of half-width, half-height)
+        // guarantees the whole arc is on screen at any bearing and any span.
+        float halfH = a.cam.orthographicSize;
+        float halfW = halfH * a.cam.aspect;
+        float radius = Mathf.Min(halfW, halfH) * Mathf.Clamp01(st.screenFill) - st.radiusInset;
+        radius = Mathf.Max(0.25f, radius);
+
+        float half = st.spanDegrees * 0.5f * Mathf.Deg2Rad;
+        int segs = a.arc.positionCount - 1;
+        for (int i = 0; i <= segs; i++)
+        {
+            float t = i / (float)segs;
+            float ang = a.bearing - half + t * (2f * half);
+            a.arc.SetPosition(i, new Vector3(
+                camPos.x + Mathf.Cos(ang) * radius,
+                camPos.y + Mathf.Sin(ang) * radius,
+                0f));
+        }
+    }
+
+    private ActiveArc BuildArc(SpawnDirection direction, Vector2 target, Camera cam, int playerIndex)
+    {
+        var st = waveIndicatorStyle;
+
+        var a = new ActiveArc
+        {
+            dir = direction,
+            cam = cam,
+            target = target,
+            playerIndex = playerIndex,
+            env = 0f,
+            life = st.holdDuration,
+        };
+
+        a.root = new GameObject($"WaveIndicator_{direction}_P{playerIndex}");
+        // Parent to the camera purely for hierarchy tidiness + automatic teardown; the
+        // LineRenderer writes world positions itself, so parenting does not move it.
+        a.root.transform.SetParent(cam.transform, false);
+        a.root.layer = ArcLayerFor(playerIndex);
+
+        a.arc = a.root.AddComponent<LineRenderer>();
+        a.arcMat = ConfigureLine(a.arc, st.lineWidth);
+        a.arc.positionCount = 49;   // 48 segments
+
+        // Taper the ribbon to nothing at the tips and fade alpha there too, so the arc
+        // dissolves softly into the field instead of ending in hard stubs.
+        a.arc.widthCurve = ArcTaperCurve();
+        a.arc.colorGradient = ArcTipFadeGradient();
+
+        AimArc(a);   // place it before its first render
+        return a;
+    }
+
+    // Shared LineRenderer setup. Returns the unique material instance we animate.
+    private Material ConfigureLine(LineRenderer lr, float width)
+    {
+        var st = waveIndicatorStyle;
+
+        lr.useWorldSpace = true;
+        // TransformZ keeps the ribbon flat in world XY — correct for a top-down 2D field.
+        // View alignment would billboard toward one camera and skew in the other half.
+        lr.alignment = LineAlignment.TransformZ;
+        lr.textureMode = LineTextureMode.Stretch;
+        lr.numCapVertices = 4;
+        lr.numCornerVertices = 4;
+        lr.widthMultiplier = width;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lr.receiveShadows = false;
+        lr.sortingLayerName = st.sortingLayerName;
+        lr.sortingOrder = st.sortingOrder;
+
+        // Sprites/Default respects 2D sorting, vertex colours and transparency, and is
+        // already used (known-good under URP) by GrassCartoonOverlay.
+        var mat = new Material(Shader.Find("Sprites/Default"));
+        lr.material = mat;
+        return mat;
+    }
+
+    //  Per-camera isolation
+
+    // Reserved layer for a player's arcs. Mirrors PlacementModeScreenEffect's volume
+    // layer convention exactly (P0 -> 31, P1 -> 30) so the two features agree on which
+    // high layers are private per-player scratch space.
+    private static int ArcLayerFor(int playerIndex) => Mathf.Clamp(31 - playerIndex, 8, 31);
+
+    // Each player camera renders ONLY its own arc layer, never another player's. We touch
+    // just the reserved arc bits and leave the rest of the mask alone, so a camera that
+    // was set to Everything still sees everything else.
+    private void ApplyArcLayerMasks()
+    {
+        if (_maskedCams == null) _maskedCams = new Dictionary<Camera, int>();
+
+        int allArcBits = 0;
+        for (int i = 0; i < _playerCams.Count; i++)
+            allArcBits |= 1 << ArcLayerFor(_playerCams[i].playerIndex);
+
+        for (int i = 0; i < _playerCams.Count; i++)
+        {
+            var pc = _playerCams[i];
+            if (pc.cam == null) continue;
+
+            if (!_maskedCams.ContainsKey(pc.cam))
+                _maskedCams[pc.cam] = pc.cam.cullingMask;   // capture original once
+
+            int mine = 1 << ArcLayerFor(pc.playerIndex);
+            pc.cam.cullingMask = (_maskedCams[pc.cam] & ~allArcBits) | mine;
+        }
+    }
+
+    private void RestoreCameraMasks()
+    {
+        if (_maskedCams == null) return;
+        foreach (var kv in _maskedCams)
+            if (kv.Key != null) kv.Key.cullingMask = kv.Value;
+        _maskedCams.Clear();
+    }
+
+    // Resolve every player's camera. Prefers PlayerRegistry (same source PlayerDamageVignette
+    // uses); falls back to PlayerRef scan, then Camera.main for a plain single-player scene.
+    private void CollectPlayerCameras()
+    {
+        _playerCams.Clear();
+
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && reg.All != null && reg.All.Count > 0)
+        {
+            var all = reg.All;
+            for (int i = 0; i < all.Count; i++)
+                if (all[i] != null && all[i].Camera != null)
+                    _playerCams.Add((all[i].Camera, all[i].PlayerIndex));
+        }
+
+        if (_playerCams.Count == 0)
+        {
+            foreach (var pr in FindObjectsByType<PlayerRef>(FindObjectsSortMode.None))
+                if (pr != null && pr.Camera != null)
+                    _playerCams.Add((pr.Camera, pr.PlayerIndex));
+        }
+
+        if (_playerCams.Count == 0 && Camera.main != null)
+            _playerCams.Add((Camera.main, 0));
+    }
+
+    private static void DestroyArc(ActiveArc a)
+    {
+        if (a.arcMat != null) Destroy(a.arcMat);
+        if (a.root != null) Destroy(a.root);
+    }
+
+    private void OnDestroy()
+    {
+        for (int i = 0; i < activeArcs.Count; i++) DestroyArc(activeArcs[i]);
+        activeArcs.Clear();
+        RestoreCameraMasks();
+    }
+
+    private bool TryGetSpawnAreaCenter(SpawnDirection direction, out Vector2 center)
+    {
+        center = Vector2.zero;
+        if (spawnAreas == null) return false;
+
+        Collider2D area = spawnAreas.Find(c => c != null &&
+            c.name.Equals(direction.ToString(), StringComparison.OrdinalIgnoreCase));
+        if (area == null) return false;
+
+        center = area.bounds.center;
+        return true;
+    }
+
+    private static Vector2 CardinalUnit(SpawnDirection direction)
+    {
+        switch (direction)
+        {
+            case SpawnDirection.Top: return Vector2.up;
+            case SpawnDirection.Bottom: return Vector2.down;
+            case SpawnDirection.Left: return Vector2.left;
+            case SpawnDirection.Right: return Vector2.right;
+            default: return Vector2.up;
+        }
+    }
+
+    private static AnimationCurve ArcTaperCurve()
+    {
+        var c = new AnimationCurve(
+            new Keyframe(0f, 0f),
+            new Keyframe(0.14f, 1f),
+            new Keyframe(0.86f, 1f),
+            new Keyframe(1f, 0f));
+        for (int i = 0; i < c.length; i++) c.SmoothTangents(i, 0.5f);
+        return c;
+    }
+
+    private static Gradient ArcTipFadeGradient()
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[]
+            {
+                new GradientColorKey(Color.white, 0f),
+                new GradientColorKey(Color.white, 1f),
+            },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(1f, 0.16f),
+                new GradientAlphaKey(1f, 0.84f),
+                new GradientAlphaKey(0f, 1f),
+            });
+        return g;
+    }
+
+    //  Nested types — kept here so the whole effect lives in one file.
+
+    // Plain data, no MonoBehaviour: WaveSpawner already has the LateUpdate() and OnDestroy()
+    // this needs, so a per-arc component would only duplicate plumbing.
+    private class ActiveArc
+    {
+        public SpawnDirection dir;
+        public Camera cam;        // the camera this arc is attached to
+        public Vector2 target;    // world point the arc aims at (spawn area centre)
+        public int playerIndex;
+        public float bearing;     // last good aim angle, radians
+        public GameObject root;
+        public LineRenderer arc;
+        public Material arcMat;
+        public float phase;       // pulse phase, cycles
+        public float env;         // 0..1 fade envelope
+        public float life;        // seconds of hold remaining
+    }
+
+    [System.Serializable]
+    public class WaveIndicatorStyle
+    {
+        [Header("Shape")]
+        [Tooltip("Angular width of the arc in degrees, measured at the player's camera. " +
+                 "~40 is a restrained hint of a bracket; larger values wrap further around.")]
+        public float spanDegrees = 40f;
+
+        [Tooltip("Extra pull inward, in world units, after the arc has been fitted to the screen.")]
+        public float radiusInset = 0.25f;
+
+        [Tooltip("Fraction of the camera's smallest visible half-extent the arc may occupy. " +
+                 "0.92 pushes the arc out near the screen edge; 1.0 lets it touch the edge.")]
+        [Range(0.3f, 1f)] public float screenFill = 0.92f;
+
+        [Tooltip("Fallback distance from the core used only when no matching spawn-area " +
+                 "collider is found for a direction.")]
+        public float fallbackRadius = 12f;
+
+        [Header("Colour & weight")]
+        [Tooltip("Arc colour — light purple (#E673FE), a whitened take on the crystal violet. " +
+                 "The ALPHA here is the CEILING: the pulse breathes below it, so keep it modest " +
+                 "(~0.2) for a subtle look.")]
+        public Color color = new Color(0.90f, 0.45f, 1.00f, 0.20f);
+
+        [Tooltip("Line thickness in world units at the arc's middle (tapers to nothing at the tips). " +
+                 "Below ~0.03 the ribbon goes sub-2px in a split-screen half and shimmers.")]
+        public float lineWidth = 0.04f;
+
+        [Header("Pulse")]
+        [Tooltip("Breaths per second. ~0.6 is a calm, subtle pulse.")]
+        public float pulseSpeed = 0.6f;
+
+        [Tooltip("How deep the alpha breathes. 0.6 = alpha swings between 40% and 100% of the ceiling.")]
+        [Range(0f, 1f)] public float pulseDepth = 0.60f;
+
+        [Tooltip("Extra width added at the peak of each breath, as a fraction of lineWidth.")]
+        [Range(0f, 1f)] public float widthPulse = 0.06f;
+
+        [Header("Lifetime")]
+        [Tooltip("Seconds the arc holds after the LAST enemy spawned from that side (every spawn " +
+                 "refreshes it), before fading out.")]
+        public float holdDuration = 3.0f;
+
+        [Tooltip("Ease in / ease out time in seconds.")]
+        public float fadeDuration = 0.5f;
+
+        [Header("Sorting")]
+        [Tooltip("Must sit ABOVE every ground/biome overlay: the night-darkness overlay uses 6000 " +
+                 "and fog ~5000, so 7000 keeps the arc visible over all of them.")]
+        public int sortingOrder = 7000;
+
+        [Tooltip("Sorting layer name. 'Default' matches the map, grass and biome overlays.")]
+        public string sortingLayerName = "Default";
     }
 
 #if UNITY_EDITOR

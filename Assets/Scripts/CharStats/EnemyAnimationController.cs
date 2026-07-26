@@ -103,25 +103,89 @@ public class EnemyAnimationController : MonoBehaviour
     {
         bool hitFired = false;
 
-        // Play the full attack animation once, firing frame events
-        for (int i = 0; i < enemyData.attack.frameCount; i++)
+        int frameCount = enemyData.attack.frameCount;
+        int startFrame = enemyData.attack.startFrame;
+        float spf = Mathf.Max(0.0001f, enemyData.GetAnimSpeed(enemyData.attack));
+
+        if (frameCount <= 0)
         {
-            int frameIndex = enemyData.attack.startFrame + i;
-            if (frameIndex < sprites.Length)
-                spriteRenderer.sprite = sprites[frameIndex];
+            Debug.LogError($"[{name}] EnemyData '{enemyData.name}' has attack.frameCount = " +
+                           $"{frameCount}. The attack animation cannot play. Set the attack " +
+                           $"range on the EnemyData asset (e.g. startFrame 0 / frameCount 45).");
+            onHitFrame?.Invoke();
+            yield break;
+        }
 
-            // Track current attack frame and fire generic event
-            CurrentAttackFrame = i;
-            OnAttackFrame?.Invoke(i);
+        if (startFrame + frameCount > sprites.Length)
+        {
+            Debug.LogWarning($"[{name}] attack range {startFrame}..{startFrame + frameCount - 1} " +
+                             $"runs past the {sprites.Length} loaded sprites — the tail of the " +
+                             $"animation will not be drawn.");
+        }
 
-            // Fire hit callback at the exact frame — same coroutine, no drift
-            if (!hitFired && hitFrame >= 0 && i == hitFrame)
+        // A hitFrame at or past the end of the range can never be reached by the
+        // loop, so onHitFrame would silently never fire (this is what makes a
+        // ranged enemy play its wind-up and then release nothing). Clamp it to
+        // the last real frame and say so, loudly, once per attack.
+        int safeHitFrame = hitFrame;
+        if (safeHitFrame >= frameCount)
+        {
+            Debug.LogWarning($"[{name}] hitFrame {hitFrame} is outside the attack range " +
+                             $"(frameCount {frameCount}). Clamping to {frameCount - 1}. " +
+                             $"Check EnemyData.attack.frameCount vs EnemyData.hitFrame.");
+            safeHitFrame = frameCount - 1;
+        }
+
+        // Frames are driven off ELAPSED TIME rather than one WaitForSeconds per
+        // frame. WaitForSeconds always rounds up to the next render frame, so a
+        // long animation (the Mort's is 45 frames) accumulates hundreds of ms of
+        // drift and finishes well after the timeline EnemyController.AttackCycle
+        // is using — which desyncs the projectile release from its hit frame.
+        // Sampling against Time.time keeps sprite and damage on one clock.
+        float startTime = Time.time;
+        int shown = -1;
+
+        while (shown < frameCount - 1)
+        {
+            int i = Mathf.Min(frameCount - 1, Mathf.FloorToInt((Time.time - startTime) / spf));
+
+            if (i > shown)
             {
-                hitFired = true;
-                onHitFrame?.Invoke();
+                // Step through every frame we passed, so a hitch can never skip
+                // over the hit frame or a frame event.
+                for (int f = shown + 1; f <= i; f++)
+                {
+                    int frameIndex = startFrame + f;
+                    if (frameIndex >= 0 && frameIndex < sprites.Length)
+                        spriteRenderer.sprite = sprites[frameIndex];
+
+                    CurrentAttackFrame = f;
+                    OnAttackFrame?.Invoke(f);
+
+                    if (!hitFired && safeHitFrame >= 0 && f >= safeHitFrame)
+                    {
+                        hitFired = true;
+                        onHitFrame?.Invoke();
+                    }
+                }
+                shown = i;
             }
 
-            yield return new WaitForSeconds(enemyData.GetAnimSpeed(enemyData.attack));
+            yield return null;
+        }
+
+        // Let the final frame actually be on screen for its full duration
+        // instead of being replaced by idle the instant it is assigned.
+        float endOfLastFrame = startTime + frameCount * spf;
+        while (Time.time < endOfLastFrame)
+            yield return null;
+
+        // Safety net: if hitFrame was negative or something odd happened above,
+        // still deliver the hit so a shot is never swallowed.
+        if (!hitFired && safeHitFrame >= 0)
+        {
+            hitFired = true;
+            onHitFrame?.Invoke();
         }
 
         CurrentAttackFrame = -1;
@@ -178,6 +242,12 @@ public class EnemyAnimationController : MonoBehaviour
 
     public bool IsPlayingLaserAttack() => isLaserAttacking;
     public bool IsPlayingMeleeAttack() => isMeleeAttacking;
+
+    // True from the moment PlayDeathAnimation() is called. Companion controllers
+    // (MortController etc.) read this to suppress anything that would otherwise
+    // fire out of a corpse — attack coroutines on EnemyController keep running
+    // after death, because disabling a MonoBehaviour does not stop its coroutines.
+    public bool IsDying => isDying;
 
     //  Animation Freeze (used by ParryStunEffect) 
     private bool isAnimationFrozen = false;
@@ -498,3 +568,5 @@ public class EnemyAnimationController : MonoBehaviour
         CurrentAttackFrame = -1;
     }
 }
+
+

@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using FMODUnity;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -107,7 +108,14 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public bool isHammerTower = false;
     public float hammerAOERadius = 2f;
     public float hammerAttackInterval = 1.5f;
+    [Tooltip("Body collider size for the Hammer tower (LOCAL units; world size = this x tower scale). " +
+             "This is what blocks the player/enemies. Small & explicit because the sprite frame is mostly empty margin.")]
+    public Vector2 hammerBodyColliderSize = new Vector2(3f, 2f);
+    [Tooltip("Body collider offset (LOCAL units). Nudge Y down so it sits on the base, not the crystals.")]
+    public Vector2 hammerBodyColliderOffset = new Vector2(0f, -2f);
     private float lastHammerAttackTime;
+    private HammerTowerAnimator hammerAnimator;
+    private bool hammerAnimatorChecked;
     public GameObject hammerImpactEffectPrefab;
     [Header("Hammer Particle Effects")]
     public bool enableDustParticles = true;
@@ -137,6 +145,64 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     private float laserScrollOffset = 0f;
     private Material laserBeamMaterial;
     private Material laserGlowMaterial;
+
+    // ── Upgraded laser VFX (added) ──────────────────────────────────────────
+    [Header("Laser VFX (added)")]
+    [Tooltip("Beam hue. The core burns toward white; glow/aura keep this color.")]
+    [ColorUsage(true, true)] public Color laserBeamColor = new Color(0.72f, 0.12f, 1f, 1f);
+    [Tooltip("Master brightness of the additive beam. Raise if you have bloom.")]
+    [Range(0.25f, 4f)] public float laserIntensity = 1.6f;
+    [Tooltip("Muzzle offset above the tower origin (world units).")]
+    public float laserMuzzleOffset = 0.4f;
+    [Tooltip("Spin-up time before the beam reaches full power.")]
+    public float laserChargeTime = 0.28f;
+    [Tooltip("Fade-out time when the beam switches off.")]
+    public float laserPowerDownTime = 0.13f;
+    [Tooltip("Sorting order for the beam. Must beat the grass (~1600 on Default). 32000 is safe.")]
+    public int laserSortingOrder = 32000;
+
+    private LineRenderer laserAuraRenderer;      // widest soft halo
+    private SpriteRenderer laserMuzzleGlow;      // flare at the muzzle
+    private SpriteRenderer laserImpactGlow;      // hot spot at the hit point
+    private Material laserAuraMaterial;
+    private Material laserSpriteMaterial;        // shared additive for glows/rings/particles
+    private Texture2D laserBeamTex, laserDotTex, laserRingTex;
+    private Sprite laserDotSprite, laserRingSprite;
+
+    private float laserEnvelope = 0f;            // 0..1(+) master beam strength
+    private bool laserIgnitedThisRun = false;
+    private float laserNoiseSeed;
+    private Vector3 laserStartCached, laserEndCached;
+    private bool laserHasBeam = false;          // a valid endpoint was set at least once
+
+    private struct LaserRing { public SpriteRenderer sr; public float age, life, maxScale; public Color col; public bool active; }
+    private readonly List<LaserRing> laserRings = new List<LaserRing>();
+
+    [Tooltip("Idle 'charged capacitor' glow at the muzzle: spins up after placing,\n" +
+             "holds while the tower waits, is spent into the beam when it fires, then\n" +
+             "spins up again. Purely cosmetic - turn off to get the old look back.")]
+    public bool enableLaserChargeVisual = true;
+
+    // ── Public laser state, for cosmetic-only companions (LaserChargeVisual) ──
+    // Read-only on purpose: nothing outside this class may drive the beam.
+
+    /// World-space point the beam leaves the tower from. Exactly the maths
+    /// UpdateLaserBeam() uses, so anything hanging off the muzzle stays glued to the
+    /// prefab-calibrated laserMuzzleOffset.
+    public Vector3 LaserMuzzleWorldPosition => transform.position + Vector3.up * laserMuzzleOffset;
+
+    /// True while the tower is lasing a target (from target acquisition through
+    /// power-down request, i.e. the whole time the beam owns the muzzle).
+    public bool IsLaserFiring => isLaserTower && isLaserActive && laserHasBeam;
+
+    /// 0..1(+) master beam strength, as driven by TickLaserFX.
+    public float LaserEnvelope => laserEnvelope;
+
+    public Color LaserBeamColor => laserBeamColor;
+    public float LaserIntensity => laserIntensity;
+    public int LaserSortingOrder => laserSortingOrder;
+    public string LaserSortingLayerName =>
+        laserRenderer != null ? laserRenderer.sortingLayerName : "Default";
 
 
     [Header("Tower Properties")]
@@ -170,6 +236,16 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public bool enableAnimation = true;
     public int animationFrameCount = 43;
     public float animationSpeed = 0.25f;
+
+    [Tooltip("Play a simple ALWAYS-ON looping frame animation from spriteResourcePath,\n" +
+             "driven by a self-contained coroutine (independent of Utilities.AnimateSprite).\n" +
+             "Use for towers whose body is just a looping idle - e.g. the Laser Tower's\n" +
+             "00.png..48.png. Frames used = animationFrameCount, starting at spriteIndex.\n" +
+             "Leave FALSE on every existing tower so they keep their current animation path.")]
+    public bool loopIdleAnimation = false;
+
+    [Tooltip("Playback speed (frames per second) for loopIdleAnimation.")]
+    public float idleAnimationFps = 12f;
 
     [Tooltip("Set TRUE for prefabs that bring their OWN visuals — an Animator-driven\n" +
              "prefab, or a child SpriteRenderer with its own animation. When true the\n" +
@@ -306,6 +382,31 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     private bool isDestroyed = false;
     private Coroutine damageFlashCoroutine;
 
+    // Generator ambience: a per-tower FMOD loop that plays only while a Generator
+    // tower is alive and operational. Owned per-tower (created through RuntimeManager,
+    // not AudioManager.CreateInstance) so it is released cleanly instead of piling up
+    // in the shared instance list as towers are built and sold.
+    //
+    // Continuity: if the FMOD event has a loop region we simply hold the single
+    // instance forever. If it is a one-shot (non-looping) clip we double-buffer —
+    // starting the next instance a moment before the current one ends so the two
+    // overlap and hide any tail/gap. isOneshot (queried at creation) picks the path,
+    // so this stays correct whether or not you loop the event in FMOD.
+    private FMOD.Studio.EventInstance generatorAmbience;
+    private bool generatorAmbienceCreated;
+    private bool generatorAmbienceOneshot;    // true = non-looping clip -> crossfade
+    private int generatorAmbienceLengthMs;    // full event length in ms (0 = unknown)
+
+    // Heal-tower halo + laser-tower beam are simple held loops rather than the
+    // generator's double-buffered crossfade: both events loop cleanly in FMOD, so one
+    // held instance each is enough. SpatialLoopSfx (see AudioManager.cs) owns the
+    // create/guard/stop/release lifecycle. Towers don't move, so position is set on start.
+    private readonly SpatialLoopSfx healHaloSfx = new SpatialLoopSfx("Heal tower halo");
+    private readonly SpatialLoopSfx laserAttackSfx = new SpatialLoopSfx("Laser tower beam");
+
+    // How long before a one-shot clip's end to start the next overlapping instance.
+    private const float GeneratorAmbienceOverlapSeconds = 0.6f;
+
     void Awake()
     {
         LoadConfig();
@@ -324,9 +425,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     // targeted — the only behavioural difference from the old scan.
     public static readonly List<Tower> ActiveTowers = new List<Tower>();
 
-    // Clear the static between Play sessions when domain reload is disabled.
+    // Clear the statics between Play sessions when domain reload is disabled.
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetActiveTowers() => ActiveTowers.Clear();
+    private static void ResetStatics()
+    {
+        ActiveTowers.Clear();
+        SpriteFrameCache.Clear();   // the Sprites it holds don't survive the session
+    }
 
     // Register when active, unregister when disabled or destroyed.
     void OnEnable()
@@ -373,13 +478,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             rangeCollider.radius = 8f;
             //Debug.Log($"Laser setup: collider radius={rangeCollider.radius}, ProjectileRange={ProjectileRange}");
 
-            if (laserRenderer != null)
-            {
-                laserRenderer.startWidth = 0.12f;
-                laserRenderer.endWidth = 0.07f;
-                laserRenderer.sortingOrder = 100;
-                //Debug.Log($"Laser visual: width={laserRenderer.startWidth}, sorting={laserRenderer.sortingOrder}");
-            }
+            // Beam widths + sorting are now driven by the upgraded VFX
+            // (InitializeLaser / TickLaserFX). Nothing to override here — the old
+            // sortingOrder = 100 was BELOW the grass (~1600) and hid the beam.
         }
 
 
@@ -440,6 +541,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void Update()
     {
+        // Runs before the state guards below so the loop stops cleanly the instant the
+        // generator is depleted, disabled by damage, or destroyed.
+        TickGeneratorAmbience();
+        TickHealHalo();       // heal-tower ambience loop
+        TickLaserAttackSfx(); // laser-tower beam loop
+
         if (isDestroyed) return;
 
         try
@@ -464,6 +571,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             {
                 UpdateTargeting();
                 UpdateLaserTower();
+                TickLaserFX(Time.deltaTime);
             }
             else
             {
@@ -486,71 +594,231 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
 
 
+    // GENERATOR AMBIENCE (gapless)
+    // Keeps a continuous loop while this Generator tower is operational and tears it
+    // down the moment it is not. For a looping FMOD event we just hold one instance;
+    // for a one-shot clip we crossfade overlapping instances so there is no gap.
+    private void TickGeneratorAmbience()
+    {
+        if (!IsGenerator()) return;
+
+        if (IsOperational())
+        {
+            // First start, or restart after a disable tore the instance down.
+            if (!generatorAmbienceCreated)
+            {
+                StartGeneratorAmbienceInstance();
+                return;
+            }
+
+            FMOD.Studio.PLAYBACK_STATE state;
+            generatorAmbience.getPlaybackState(out state);
+
+            if (!generatorAmbienceOneshot)
+            {
+                // Event loops in FMOD: it never ends on its own. Only the paranoid
+                // restart if it somehow stopped — no overlap, no per-cycle churn.
+                if (state == FMOD.Studio.PLAYBACK_STATE.STOPPED)
+                    generatorAmbience.start();
+                return;
+            }
+
+            // One-shot clip: keep it seamless.
+            if (state == FMOD.Studio.PLAYBACK_STATE.STOPPED)
+            {
+                // Slipped past the overlap window and stopped — free and restart so it
+                // can never sit silent (self-heals a rare miss).
+                generatorAmbience.release();
+                StartGeneratorAmbienceInstance();
+                return;
+            }
+
+            if (generatorAmbienceLengthMs > 0)
+            {
+                // Crossfade: a moment before the current instance ends, start a fresh
+                // one (they overlap) and release the old, which plays out its tail
+                // then frees itself.
+                int overlapMs = Mathf.RoundToInt(GeneratorAmbienceOverlapSeconds * 1000f);
+                int pos;
+                if (generatorAmbience.getTimelinePosition(out pos) == FMOD.RESULT.OK
+                    && pos >= generatorAmbienceLengthMs - overlapMs)
+                {
+                    var old = generatorAmbience;
+                    if (StartGeneratorAmbienceInstance())
+                        old.release();
+                }
+            }
+        }
+        else if (generatorAmbienceCreated)
+        {
+            // Not operational: fade out and free (frees once the fade completes).
+            generatorAmbience.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            generatorAmbience.release();
+            generatorAmbienceCreated = false;
+        }
+    }
+
+    // Creates, positions, and starts a fresh ambience instance, caching its length and
+    // one-shot flag so TickGeneratorAmbience knows how to keep it continuous. Returns
+    // false if the audio system isn't ready yet.
+    private bool StartGeneratorAmbienceInstance()
+    {
+        if (AudioManager.instance == null || FMODEvents.instance == null) return false;
+        if (FMODEvents.instance.generatorTowerAmbience.IsNull) return false;
+
+        var inst = RuntimeManager.CreateInstance(FMODEvents.instance.generatorTowerAmbience);
+        // Generators do not move, so the 3D position can be set once.
+        inst.set3DAttributes(RuntimeUtils.To3DAttributes(transform));
+        inst.start();
+
+        generatorAmbienceLengthMs = 0;
+        generatorAmbienceOneshot = true; // safe default: treat as non-looping
+        FMOD.Studio.EventDescription desc;
+        if (inst.getDescription(out desc) == FMOD.RESULT.OK)
+        {
+            desc.getLength(out generatorAmbienceLengthMs);
+            desc.isOneshot(out generatorAmbienceOneshot);
+        }
+
+        generatorAmbience = inst;
+        generatorAmbienceCreated = true;
+        return true;
+    }
+
+    private void StopGeneratorAmbience(bool release)
+    {
+        if (!generatorAmbienceCreated) return;
+
+        if (release)
+        {
+            generatorAmbience.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
+            generatorAmbience.release();
+            generatorAmbienceCreated = false;
+        }
+        else
+        {
+            generatorAmbience.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+        }
+    }
+
+    // Continuous halo ambience while a Heal tower is alive and operational. Mirrors
+    // the generator's operational gate, so a depleted/disabled/destroyed heal tower
+    // fades quiet. One held looping instance — no crossfade needed (the event loops).
+    private void TickHealHalo()
+    {
+        var fe = FMODEvents.instance;
+        bool want = fe != null
+                    && (isHealTower || towerType == TowerType.Heal)
+                    && IsOperational();
+
+        if (want && !healHaloSfx.IsActive)
+            healHaloSfx.Play(fe.healingTowerHalo, transform.position);
+        else if (!want && healHaloSfx.IsActive)
+            healHaloSfx.Stop(immediate: false); // fade out
+    }
+
+    // Beam sound that lives exactly as long as the laser tower is emitting. IsLaserFiring
+    // is the tower's own "beam is up" flag (active + has an endpoint), so the sound
+    // starts with the visible beam and stops when it drops — no charge-up gap, matching
+    // the RedEye fix. Held loop, stopped with a fade on power-down.
+    private void TickLaserAttackSfx()
+    {
+        var fe = FMODEvents.instance;
+        bool want = fe != null && IsLaserFiring;
+
+        if (want && !laserAttackSfx.IsActive)
+            laserAttackSfx.Play(fe.laserTowerAttack, LaserMuzzleWorldPosition);
+        else if (!want && laserAttackSfx.IsActive)
+            laserAttackSfx.Stop(immediate: false);
+
+        // Muzzle is fixed on the tower, but keep it pinned in case the tower is ever moved.
+        if (laserAttackSfx.IsActive) laserAttackSfx.SetPosition(LaserMuzzleWorldPosition);
+    }
+
     #region Hammer Tower System
     void UpdateHammerTower()
     {
         if (!isHammerTower) return;
 
-        // Find enemies in AOE range
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, hammerAOERadius, targetLayer);
-        List<GameObject> validTargets = new List<GameObject>();
-
-        foreach (Collider2D hit in hits)
+        // Lazily resolve the optional animator once.
+        if (!hammerAnimatorChecked)
         {
-            if (IsEnemy(hit.gameObject))
-            {
-                validTargets.Add(hit.gameObject);
-            }
+            hammerAnimator = GetComponent<HammerTowerAnimator>();
+            hammerAnimatorChecked = true;
         }
 
-        // Attack at intervals
-        if (validTargets.Count > 0 && Time.time >= lastHammerAttackTime + hammerAttackInterval)
-        {
-            PerformHammerAttack(validTargets);
-            lastHammerAttackTime = Time.time;
-        }
-    }
+        // Mid-swing: let the animation run. Damage/sound fire from the impact callback.
+        if (hammerAnimator != null && hammerAnimator.IsAttacking) return;
 
-    void PerformHammerAttack(List<GameObject> targets)
-    {
+        // Nothing to hit? Don't swing.
+        if (!AnyEnemyInHammerRange()) return;
+
+        // Cooldown between swings.
+        if (Time.time < lastHammerAttackTime + hammerAttackInterval) return;
+
+        // Don't start a swing we can't finish.
         if (IsEnergyDepleted() || isDisabledByDamage || isDestroyed) return;
 
-        // Energy cost for AOE attack (higher than single target)
-        float baseCost = baseDamageForEnergyCost * 0.1f; // More expensive than normal attack
-        float energyCost = baseCost * energyCostMultiplier;
+        lastHammerAttackTime = Time.time;
 
-        // Apply generator proximity efficiency boost
+        if (hammerAnimator != null)
+            hammerAnimator.PlayAttack(onImpact: PerformHammerImpact); // damage fires on the impact frame
+        else
+            PerformHammerImpact();                                    // no animator -> instant (legacy)
+    }
+
+    bool AnyEnemyInHammerRange()
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, hammerAOERadius, targetLayer);
+        foreach (Collider2D hit in hits)
+            if (IsEnemy(hit.gameObject)) return true;
+        return false;
+    }
+
+    // Called at the exact impact frame (or immediately, if there is no animator).
+    // Re-scans the AOE so the slam hits whoever is actually under the hammer when it lands.
+    void PerformHammerImpact()
+    {
+        if (isDisabledByDamage || isDestroyed) return;
+
+        // Ground-slam feedback always plays on impact (a whiff still hits the ground).
+        PlayHammerImpactEffect();
+        AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, transform.position);
+
+        // Dedicated hammer-slam cue, fired on the same impact frame as the hit above.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.hammerTowerAttack.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.hammerTowerAttack, transform.position);
+
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, hammerAOERadius, targetLayer);
+        List<GameObject> targets = new List<GameObject>();
+        foreach (Collider2D hit in hits)
+            if (IsEnemy(hit.gameObject)) targets.Add(hit.gameObject);
+
+        if (targets.Count == 0) return;
+
+        float baseCost = baseDamageForEnergyCost * 0.1f;
+        float energyCost = baseCost * energyCostMultiplier;
         var generatorBoost = GetComponent<GeneratorProximityBoost>();
         if (generatorBoost != null)
-        {
             energyCost *= generatorBoost.GetEnergyEfficiencyMultiplier();
-        }
 
         if (currentEnergy < energyCost) return;
-
         ConsumeEnergy(energyCost);
 
         float effectiveDamage = GetEffectiveDamage();
-
-        // Damage all enemies in range
         foreach (GameObject target in targets)
         {
             if (target == null) continue;
-
             var stats = target.GetComponent<EnemyStats>();
             if (stats != null)
             {
                 TowerKillAttribution.MarkTowerHit(target);
                 stats.TakeDamage(effectiveDamage);
+                CombatStats.ReportTowerDamageDealt(effectiveDamage);
                 ApplyFreezeEffect(target);
             }
         }
-
-        // Visual and audio feedback
-        PlayHammerImpactEffect();
-        AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, transform.position);
-
-        //Debug.Log($"Hammer Tower '{towerName}' hit {targets.Count} enemies for {effectiveDamage} damage each!");
     }
 
     void PlayHammerImpactEffect()
@@ -680,122 +948,337 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     #region Laser Tower System
 
+    // Builds the upgraded, self-contained laser VFX: three additive beam layers
+    // (aura + glow + white-hot core), muzzle/impact glow sprites, converging
+    // charge-up motes and impact sparks. Textures + materials are generated at
+    // runtime, so there is nothing to import. Everything renders at a high
+    // sortingOrder so the grass (~1600 on Default) can never hide it.
     void InitializeLaser()
     {
         if (!isLaserTower) return;
+
+        laserNoiseSeed = UnityEngine.Random.value * 1000f;
+        laserStartCached = laserEndCached = transform.position;
+
+        // Textures/sprites are generated ONCE per session and shared by every laser
+        // tower (LaserVfxAssets). They used to be rebuilt per placement: ~37k pixels
+        // of per-pixel CPU work, two Sprite.Creates and three GPU uploads every time a
+        // tower was dropped - and they were never released, so each placement leaked
+        // them too. Same pixels, same look, paid for once.
+        laserBeamTex = LaserVfxAssets.BeamTexture;
+        laserDotTex = LaserVfxAssets.DotTexture;
+        laserRingTex = LaserVfxAssets.RingTexture;
+        laserDotSprite = LaserVfxAssets.DotSprite;
+        laserRingSprite = LaserVfxAssets.RingSprite;
+
+        // Materials stay per-tower - each beam scrolls its own texture offset - but
+        // they're cheap, and Cleanup() now destroys them instead of leaking them.
+        Shader add = LaserVfxAssets.AdditiveShader;
+        laserBeamMaterial = new Material(add) { mainTexture = laserBeamTex };
+        laserGlowMaterial = new Material(add) { mainTexture = laserBeamTex };
+        laserAuraMaterial = new Material(add) { mainTexture = laserBeamTex };
+        laserSpriteMaterial = new Material(add) { mainTexture = laserDotTex };
+        LaserVfxAssets.Tint(laserBeamMaterial, Color.white); LaserVfxAssets.Tint(laserGlowMaterial, Color.white);
+        LaserVfxAssets.Tint(laserAuraMaterial, Color.white); LaserVfxAssets.Tint(laserSpriteMaterial, Color.white);
 
         laserObject = new GameObject("Laser");
         laserObject.transform.SetParent(transform);
         laserObject.transform.localPosition = Vector3.zero;
 
-        // Main laser beam
-        laserRenderer = laserObject.AddComponent<LineRenderer>();
-        laserBeamMaterial = new Material(Shader.Find("Sprites/Default"));
-        laserBeamMaterial.color = Color.white;
-        laserRenderer.material = laserBeamMaterial;
-        laserRenderer.startWidth = 0.12f;
-        laserRenderer.endWidth = 0.07f;
-        laserRenderer.positionCount = 2;
-        laserRenderer.useWorldSpace = true;
-        laserRenderer.sortingOrder = 200;
-        laserRenderer.startColor = new Color(0.7f, 0f, 1f);
-        laserRenderer.endColor = new Color(0.5f, 0f, 1f, 0.5f);
-        laserRenderer.enabled = false;
+        // Three beam layers (back-to-front): wide aura, soft glow, bright core.
+        laserAuraRenderer = LaserMakeLine("LaserAura", laserAuraMaterial, laserSortingOrder);
+        laserGlowRenderer = LaserMakeLine("LaserGlow", laserGlowMaterial, laserSortingOrder + 1);
+        laserRenderer = LaserMakeLine("LaserCore", laserBeamMaterial, laserSortingOrder + 2);
 
-        // Glow layer (outer glow)
-        GameObject glowObject = new GameObject("LaserGlow");
-        glowObject.transform.SetParent(laserObject.transform);
-        glowObject.transform.localPosition = Vector3.zero;
+        laserMuzzleGlow = LaserMakeGlowSprite("LaserMuzzle", laserSortingOrder + 3);
+        laserImpactGlow = LaserMakeGlowSprite("LaserImpact", laserSortingOrder + 3);
 
-        laserGlowRenderer = glowObject.AddComponent<LineRenderer>();
-        laserGlowMaterial = new Material(Shader.Find("Sprites/Default"));
-        laserGlowMaterial.color = new Color(0.7f, 0f, 1f, 0.3f);
-        laserGlowRenderer.material = laserGlowMaterial;
-        laserGlowRenderer.startWidth = 0.35f;
-        laserGlowRenderer.endWidth = 0.15f;
-        laserGlowRenderer.positionCount = 2;
-        laserGlowRenderer.useWorldSpace = true;
-        laserGlowRenderer.sortingOrder = 199;
-        laserGlowRenderer.startColor = new Color(0.5f, 0f, 1f, 0.4f);
-        laserGlowRenderer.endColor = new Color(0.3f, 0f, 0.8f, 0.1f);
-        laserGlowRenderer.enabled = false;
+        // Charge-up motes converging INTO the muzzle (reuses laserStartParticles).
+        var inflowGO = new GameObject("LaserInflow");
+        inflowGO.transform.SetParent(laserObject.transform);
+        inflowGO.transform.localPosition = Vector3.zero;
+        laserStartParticles = inflowGO.AddComponent<ParticleSystem>();
+        {
+            var m = laserStartParticles.main;
+            m.loop = true; m.playOnAwake = false; m.startLifetime = 0.4f; m.startSpeed = 0f;
+            m.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
+            m.startColor = Color.Lerp(laserBeamColor, Color.white, 0.4f);
+            m.simulationSpace = ParticleSystemSimulationSpace.Local; m.maxParticles = 60;
+            var em = laserStartParticles.emission; em.enabled = true; em.rateOverTime = 90f;
+            var sh = laserStartParticles.shape; sh.enabled = true; sh.shapeType = ParticleSystemShapeType.Circle;
+            sh.radius = 0.7f; sh.radiusThickness = 0f;                 // spawn on the ring edge
+            var vel = laserStartParticles.velocityOverLifetime; vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.Local; vel.radial = new ParticleSystem.MinMaxCurve(-2.2f);
+            var col = laserStartParticles.colorOverLifetime; col.enabled = true;
+            col.color = LaserFadeGradient(laserBeamColor, Color.white);
+            var psr = laserStartParticles.GetComponent<ParticleSystemRenderer>();
+            psr.material = laserSpriteMaterial;
+            psr.sortingLayerName = laserRenderer.sortingLayerName;
+            psr.sortingOrder = laserSortingOrder + 1;
+            laserStartParticles.Stop();
+        }
 
+        // Impact sparks (reuses laserImpactParticles).
+        var sparkGO = new GameObject("LaserImpactParticles");
+        sparkGO.transform.SetParent(laserObject.transform);
+        sparkGO.transform.localPosition = Vector3.zero;
+        laserImpactParticles = sparkGO.AddComponent<ParticleSystem>();
+        {
+            var m = laserImpactParticles.main;
+            m.loop = false; m.playOnAwake = false;
+            m.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.32f);
+            m.startSpeed = new ParticleSystem.MinMaxCurve(2.5f, 6.5f);
+            m.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.09f);
+            m.gravityModifier = 1.3f; m.startColor = Color.Lerp(laserBeamColor, Color.white, 0.5f);
+            m.simulationSpace = ParticleSystemSimulationSpace.World; m.maxParticles = 128;
+            var em = laserImpactParticles.emission; em.enabled = false;   // Emit() manually
+            var sh = laserImpactParticles.shape; sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Sphere; sh.radius = 0.02f;
+            var col = laserImpactParticles.colorOverLifetime; col.enabled = true;
+            col.color = LaserFadeGradient(Color.white, laserBeamColor);
+            var psr = laserImpactParticles.GetComponent<ParticleSystemRenderer>();
+            psr.material = laserSpriteMaterial;
+            psr.sortingLayerName = laserRenderer.sortingLayerName;
+            psr.sortingOrder = laserSortingOrder + 4;
+            laserImpactParticles.Stop();
+        }
 
+        // Idle 'charged capacitor' glow at the muzzle. Added here (rather than on the
+        // prefab) so there's nothing to wire up, and last so it can read the sorting
+        // layer off the beam renderers above. Cosmetic only - it reads the public
+        // laser state and never touches damage, energy or targeting.
+        if (enableLaserChargeVisual && GetComponent<LaserChargeVisual>() == null)
+            gameObject.AddComponent<LaserChargeVisual>();
+    }
 
-        // Laser start particles (muzzle flash effect)
-        GameObject startParticlesObj = new GameObject("LaserStartParticles");
-        startParticlesObj.transform.SetParent(laserObject.transform);
-        startParticlesObj.transform.localPosition = Vector3.zero;
+    // Per-frame VFX driver. Runs every frame for laser towers (see Update). Reads
+    // isLaserActive + the cached muzzle/hit points (set by UpdateLaserBeam) and
+    // plays the whole charge → ignite → beam → power-down cycle. Pure visuals.
+    void TickLaserFX(float dt)
+    {
+        if (!isLaserTower || laserRenderer == null) return;
 
-        laserStartParticles = startParticlesObj.AddComponent<ParticleSystem>();
-        var startMain = laserStartParticles.main;
-        startMain.startLifetime = 0.1f;
-        startMain.startSpeed = 0.2f;
-        startMain.startSize = 0.03f;
-        startMain.startColor = new Color(0.7f, 0f, 1f, 0.3f);
-        startMain.maxParticles = 5;
+        float target = (isLaserActive && laserHasBeam) ? 1f : 0f;
+        float rate = target > laserEnvelope
+            ? dt / Mathf.Max(0.01f, laserChargeTime)
+            : dt / Mathf.Max(0.01f, laserPowerDownTime);
 
-        var startEmission = laserStartParticles.emission;
-        startEmission.rateOverTime = 10f;
+        // Over-bright ignition flash + shock rings on the rising edge.
+        if (target > 0f && !laserIgnitedThisRun && laserEnvelope >= 0.28f)
+        {
+            laserIgnitedThisRun = true;
+            laserEnvelope = 1.15f;
+            SpawnLaserRing(laserStartCached, 0.15f, 1.0f, 0.28f);
+            SpawnLaserRing(laserEndCached, 0.10f, 1.3f, 0.30f);
+            if (laserImpactParticles != null) laserImpactParticles.Emit(14);
+        }
+        if (target <= 0f && laserEnvelope <= 0.05f) laserIgnitedThisRun = false;
 
-        var startShape = laserStartParticles.shape;
-        startShape.shapeType = ParticleSystemShapeType.Cone;
-        startShape.angle = 10f;
-        startShape.radius = 0.05f;
+        laserEnvelope = Mathf.MoveTowards(laserEnvelope, target, rate);
 
-        var startColorOverLifetime = laserStartParticles.colorOverLifetime;
-        startColorOverLifetime.enabled = true;
-        Gradient startGradient = new Gradient();
-        startGradient.SetKeys(
-            new GradientColorKey[] {
-            new GradientColorKey(new Color(0.7f, 0f, 1f), 0f),
-            new GradientColorKey(new Color(0.5f, 0f, 1f), 1f)
-            },
-            new GradientAlphaKey[] {
-            new GradientAlphaKey(0.8f, 0f),
-            new GradientAlphaKey(0f, 1f)
+        bool visible = laserEnvelope > 0.002f;
+        laserRenderer.enabled = visible;
+        if (laserGlowRenderer) laserGlowRenderer.enabled = visible;
+        if (laserAuraRenderer) laserAuraRenderer.enabled = visible;
+        if (laserMuzzleGlow) laserMuzzleGlow.enabled = visible;
+        if (laserImpactGlow) laserImpactGlow.enabled = visible && laserEnvelope > 0.15f;
+
+        // Charge motes play only while spinning up.
+        if (laserStartParticles != null)
+        {
+            laserStartParticles.transform.position = laserStartCached;
+            bool charging = target > 0f && laserEnvelope < 0.9f;
+            if (charging && !laserStartParticles.isPlaying) laserStartParticles.Play();
+            else if (!charging && laserStartParticles.isPlaying) laserStartParticles.Stop();
+        }
+
+        UpdateLaserRings(dt);
+
+        if (!visible)
+        {
+            if (laserImpactParticles != null && laserImpactParticles.isPlaying) laserImpactParticles.Stop();
+            return;
+        }
+
+        float t = Time.time;
+        float e = Mathf.Clamp01(laserEnvelope);
+        float over = Mathf.Max(0f, laserEnvelope - 1f);
+
+        Vector3 start = laserStartCached;
+        Vector3 endJit = laserEndCached + (Vector3)(UnityEngine.Random.insideUnitCircle * 0.015f * e);
+        Vector3 dir = endJit - start; float len = dir.magnitude;
+        if (len < 1e-4f) { dir = Vector3.up; len = 1e-4f; }
+        Vector3 fwd = dir / len;
+        Vector3 perp = new Vector3(-fwd.y, fwd.x, 0f);
+
+        float reach = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(laserEnvelope * 1.6f)); // grows out during charge
+        Vector3 hit = start + fwd * (len * reach);
+
+        const int pts = 16;
+        BuildLaserPolyline(laserAuraRenderer, pts, start, fwd, perp, len, reach, t, e, 0.6f);
+        BuildLaserPolyline(laserGlowRenderer, pts, start, fwd, perp, len, reach, t, e, 1f);
+        BuildLaserPolyline(laserRenderer, pts, start, fwd, perp, len, reach, t, e, 1f);
+
+        float jit = 1f + (Mathf.PerlinNoise(t * 15f, laserNoiseSeed) - 0.5f) * 2f * 0.16f;
+        float snap = 0.55f + 0.45f * e;
+        laserRenderer.widthMultiplier = 0.06f * jit * snap * (1f + over * 1.6f);
+        if (laserGlowRenderer) laserGlowRenderer.widthMultiplier = 0.20f * (0.85f + 0.15f * jit) * snap * (1f + over);
+        if (laserAuraRenderer) laserAuraRenderer.widthMultiplier = 0.50f * (0.9f + 0.1f * jit) * (0.5f + 0.5f * e) * (1f + over * 0.5f);
+
+        Color core = Color.Lerp(laserBeamColor, Color.white, 0.7f + 0.3f * e) * laserIntensity * (0.4f + 0.6f * e) * (1f + over); core.a = e;
+        Color glow = laserBeamColor * laserIntensity * (0.35f + 0.65f * e); glow.a = e * 0.85f;
+        Color aura = laserBeamColor * laserIntensity * (0.25f + 0.4f * e); aura.a = e * 0.4f;
+        SetLaserLineColor(laserRenderer, core, 0.06f);
+        if (laserGlowRenderer) SetLaserLineColor(laserGlowRenderer, glow, 0.08f);
+        if (laserAuraRenderer) SetLaserLineColor(laserAuraRenderer, aura, 0.15f);
+
+        // Energy pattern scrolls along the core.
+        var off = laserRenderer.material.mainTextureOffset;
+        off.x -= 7f * dt * 0.15f;
+        laserRenderer.material.mainTextureOffset = off;
+        laserRenderer.material.mainTextureScale = new Vector2(Mathf.Max(1f, len * 0.8f), 1f);
+
+        if (laserMuzzleGlow)
+        {
+            laserMuzzleGlow.transform.position = start;
+            float mp = 0.9f + 0.22f * Mathf.Sin(t * 34f);
+            laserMuzzleGlow.transform.localScale = Vector3.one * Mathf.Lerp(0.18f, 0.6f, e) * mp * (1f + over);
+            laserMuzzleGlow.transform.rotation = Quaternion.Euler(0, 0, t * 90f);
+            laserMuzzleGlow.color = LaserFade(Color.Lerp(laserBeamColor, Color.white, 0.6f) * laserIntensity, Mathf.Clamp01(e * 1.2f));
+        }
+        if (laserImpactGlow)
+        {
+            laserImpactGlow.transform.position = hit;
+            float ip = 0.85f + 0.3f * Mathf.PerlinNoise(t * 22f, 5.1f);
+            laserImpactGlow.transform.localScale = Vector3.one * Mathf.Lerp(0.12f, 0.55f, e) * ip * (1f + over);
+            laserImpactGlow.transform.rotation = Quaternion.Euler(0, 0, -t * 120f);
+            laserImpactGlow.color = LaserFade(Color.Lerp(laserBeamColor, Color.white, 0.4f) * laserIntensity, e);
+        }
+
+        if (laserImpactParticles != null)
+        {
+            laserImpactParticles.transform.position = hit;
+            if (laserEnvelope > 0.6f)
+            {
+                if (!laserImpactParticles.isPlaying) laserImpactParticles.Play();
+                if (UnityEngine.Random.value < 0.15f) laserImpactParticles.Emit(1);
             }
-        );
-        startColorOverLifetime.color = startGradient;
+        }
+    }
 
-        laserStartParticles.Stop();
-
-        // Laser impact particles
-        GameObject impactParticlesObj = new GameObject("LaserImpactParticles");
-        impactParticlesObj.transform.SetParent(laserObject.transform);
-
-        laserImpactParticles = impactParticlesObj.AddComponent<ParticleSystem>();
-        var impactMain = laserImpactParticles.main;
-        impactMain.startLifetime = 0.2f;
-        impactMain.startSpeed = 1.5f;
-        impactMain.startSize = 0.1f;
-        impactMain.startColor = new Color(1f, 0.3f, 1f, 1f);
-        impactMain.maxParticles = 50;
-        impactMain.loop = true;
-
-        var impactEmission = laserImpactParticles.emission;
-        impactEmission.rateOverTime = 50f;
-
-        var impactShape = laserImpactParticles.shape;
-        impactShape.shapeType = ParticleSystemShapeType.Sphere;
-        impactShape.radius = 0.1f;
-
-        var impactColorOverLifetime = laserImpactParticles.colorOverLifetime;
-        impactColorOverLifetime.enabled = true;
-        Gradient impactGradient = new Gradient();
-        impactGradient.SetKeys(
-            new GradientColorKey[] {
-            new GradientColorKey(new Color(1f, 0.5f, 1f), 0f),
-            new GradientColorKey(new Color(0.5f, 0f, 1f), 1f)
-            },
-            new GradientAlphaKey[] {
-            new GradientAlphaKey(1f, 0f),
-            new GradientAlphaKey(0f, 1f)
+    void BuildLaserPolyline(LineRenderer lr, int pts, Vector3 start, Vector3 fwd, Vector3 perp,
+                            float len, float reach, float t, float e, float waverScale)
+    {
+        if (lr == null) return;
+        lr.positionCount = pts;
+        for (int i = 0; i < pts; i++)
+        {
+            float f = i / (float)(pts - 1);
+            Vector3 p = start + fwd * (len * f * reach);
+            if (i != 0 && i != pts - 1)
+            {
+                float shape = Mathf.Sin(f * Mathf.PI);
+                float n = Mathf.PerlinNoise(laserNoiseSeed + f * 3.5f, t * 10f) - 0.5f;
+                p += perp * (n * 2f * 0.03f * waverScale * shape * e);
             }
-        );
-        impactColorOverLifetime.color = impactGradient;
+            lr.SetPosition(i, p);
+        }
+    }
 
-        laserImpactParticles.Stop();
+    static Color LaserFade(Color c, float a) { c.a = a; return c; }
+
+    static void SetLaserLineColor(LineRenderer lr, Color c, float edge)
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[] { new GradientColorKey(c, 0f), new GradientColorKey(c, 1f) },
+            new[] {
+                new GradientAlphaKey(0f, 0f),
+                new GradientAlphaKey(c.a, edge),
+                new GradientAlphaKey(c.a, 1f - edge),
+                new GradientAlphaKey(c.a * 0.5f, 1f)
+            });
+        lr.colorGradient = g;
+    }
+
+    void SpawnLaserRing(Vector3 pos, float startScale, float maxScale, float life)
+    {
+        int idx = -1;
+        for (int i = 0; i < laserRings.Count; i++) if (!laserRings[i].active) { idx = i; break; }
+        if (idx == -1)
+        {
+            var go = new GameObject("LaserRing");
+            go.transform.SetParent(laserObject != null ? laserObject.transform : transform, false);
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = laserRingSprite; sr.material = laserSpriteMaterial;
+            sr.sortingLayerName = laserRenderer.sortingLayerName;
+            sr.sortingOrder = laserSortingOrder + 2;
+            laserRings.Add(new LaserRing { sr = sr });
+            idx = laserRings.Count - 1;
+        }
+        var r = laserRings[idx];
+        r.sr.transform.position = pos;
+        r.sr.transform.localScale = Vector3.one * startScale;
+        r.age = 0f; r.life = life; r.maxScale = maxScale;
+        r.col = Color.Lerp(laserBeamColor, Color.white, 0.5f) * laserIntensity;
+        r.active = true; r.sr.enabled = true;
+        laserRings[idx] = r;
+    }
+
+    void UpdateLaserRings(float dt)
+    {
+        for (int i = 0; i < laserRings.Count; i++)
+        {
+            var r = laserRings[i];
+            if (!r.active) continue;
+            r.age += dt;
+            float k = r.age / r.life;
+            if (k >= 1f) { r.active = false; if (r.sr) r.sr.enabled = false; laserRings[i] = r; continue; }
+            if (r.sr)
+            {
+                r.sr.transform.localScale = Vector3.one * Mathf.Lerp(0.1f, r.maxScale, Mathf.SmoothStep(0f, 1f, k));
+                var c = r.col; c.a = 1f - k; r.sr.color = c;
+            }
+            laserRings[i] = r;
+        }
+    }
+
+    LineRenderer LaserMakeLine(string goName, Material mat, int order)
+    {
+        var go = new GameObject(goName);
+        go.transform.SetParent(laserObject.transform);
+        go.transform.localPosition = Vector3.zero;
+        var lr = go.AddComponent<LineRenderer>();
+        lr.useWorldSpace = true; lr.material = mat;
+        lr.numCapVertices = 8; lr.numCornerVertices = 4;
+        lr.textureMode = LineTextureMode.Tile; lr.alignment = LineAlignment.View;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; lr.receiveShadows = false;
+        lr.sortingOrder = order; lr.positionCount = 2; lr.enabled = false;
+        return lr;
+    }
+
+    SpriteRenderer LaserMakeGlowSprite(string goName, int order)
+    {
+        var go = new GameObject(goName);
+        go.transform.SetParent(laserObject.transform);
+        go.transform.localPosition = Vector3.zero;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = laserDotSprite; sr.material = laserSpriteMaterial;
+        sr.sortingOrder = order; sr.enabled = false;
+        return sr;
+    }
+
+    // LaserTint / LaserFindAdditiveShader / LaserMakeDot / LaserMakeRing /
+    // LaserMakeBeam moved verbatim to LaserVfxAssets, which builds them once per
+    // session and shares them across every laser tower (and LaserChargeVisual)
+    // instead of regenerating them on every placement.
+    static Gradient LaserFadeGradient(Color from, Color to)
+    {
+        var g = new Gradient();
+        g.SetKeys(
+            new[] { new GradientColorKey(from, 0f), new GradientColorKey(to, 1f) },
+            new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0f, 1f) });
+        return g;
     }
 
 
@@ -852,33 +1335,15 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             return;
         }
         isLaserActive = true;
-        laserRenderer.enabled = true;
-        /*
-        Debug.Log($"✓✓✓ LASER ACTIVATED! LineRenderer enabled: {laserRenderer.enabled}, " +
-                  $"color: {laserRenderer.startColor}, width: {laserRenderer.startWidth}");
-                  */
+        // Renderers/particles are driven by TickLaserFX (charge-up begins now).
     }
 
 
     void DisableLaser()
     {
+        // Just request "off". TickLaserFX plays the power-down fade and turns the
+        // renderers/particles off once the beam has fully faded.
         isLaserActive = false;
-        if (laserRenderer != null)
-        {
-            laserRenderer.enabled = false;
-        }
-        if (laserGlowRenderer != null)
-        {
-            laserGlowRenderer.enabled = false;
-        }
-        if (laserStartParticles != null && laserStartParticles.isPlaying)
-        {
-            laserStartParticles.Stop();
-        }
-        if (laserImpactParticles != null && laserImpactParticles.isPlaying)
-        {
-            laserImpactParticles.Stop();
-        }
     }
 
     void UpdateLaserBeam()
@@ -890,7 +1355,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             return;
         }
 
-        // Energy consumption
+        // Energy consumption (unchanged)
         float energyCost = (damage * 0.1f * Time.deltaTime) * energyCostMultiplier;
         if (currentEnergy < energyCost)
         {
@@ -899,66 +1364,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         ConsumeEnergy(energyCost);
 
-        // Calculate beam positions
-        Vector3 startPos = transform.position;
-        Vector3 endPos = currentTarget.transform.position;
-        Vector3 beamDirection = (endPos - startPos).normalized;
-        laserFlickerTimer += Time.deltaTime * 15f;
-        float wobbleAmount = 0.015f;
-        Vector3 perpendicular = new Vector3(-beamDirection.y, beamDirection.x, 0f);
-        int segmentCount = 4;
-        Vector3[] beamPositions = new Vector3[segmentCount];
-
-        for (int i = 0; i < segmentCount; i++)
-        {
-            float t = (float)i / (segmentCount - 1);
-            Vector3 basePos = Vector3.Lerp(startPos, endPos, t);
-            float wavePhase = laserFlickerTimer + (t * 5f);
-            float wave = Mathf.Sin(wavePhase) * wobbleAmount * Mathf.Sin(t * Mathf.PI) * 0.5f;
-
-            beamPositions[i] = basePos + (perpendicular * wave);
-        }
-
-        // Update main beam with segments
-        laserRenderer.positionCount = segmentCount;
-        laserRenderer.SetPositions(beamPositions);
-        laserRenderer.enabled = true;
-
-        // Update glow layer with same positions
-        if (laserGlowRenderer != null)
-        {
-            laserGlowRenderer.positionCount = segmentCount;
-            laserGlowRenderer.SetPositions(beamPositions);
-            laserGlowRenderer.enabled = true;
-
-            // Pulsate glow - SLOWER pulse
-            float glowPulse = 0.3f + Mathf.Sin(laserFlickerTimer * 0.3f) * 0.08f;
-            laserGlowMaterial.color = new Color(0.7f, 0f, 1f, glowPulse);
-        }
-
-        // Animate color intensity 
-        float colorPulse = 0.9f + Mathf.Sin(laserFlickerTimer * 1.5f) * 0.1f;
-        laserRenderer.startColor = new Color(0.7f * colorPulse, 0f, 1f * colorPulse);
-        laserRenderer.endColor = new Color(0.5f * colorPulse, 0f, 1f * colorPulse, 0.5f);
-        float widthPulse = 1f + Mathf.Sin(laserFlickerTimer * 2f) * 0.05f;
-        laserRenderer.startWidth = 0.12f * widthPulse;
-        laserRenderer.endWidth = 0.07f * widthPulse;
-
-        // Update particle systems
-        if (laserStartParticles != null)
-        {
-            laserStartParticles.transform.position = startPos;
-            laserStartParticles.transform.rotation = Quaternion.LookRotation(Vector3.forward, beamDirection);
-            if (!laserStartParticles.isPlaying)
-                laserStartParticles.Play();
-        }
-
-        if (laserImpactParticles != null)
-        {
-            laserImpactParticles.transform.position = endPos;
-            if (!laserImpactParticles.isPlaying)
-                laserImpactParticles.Play();
-        }
+        // Cache the muzzle + hit point; TickLaserFX draws the actual beam from these.
+        laserStartCached = transform.position + Vector3.up * laserMuzzleOffset;
+        laserEndCached = currentTarget.transform.position;
+        laserHasBeam = true;
 
         // Apply damage. Laser deals continuous damage; the in-place upgrade boosts it
         // (+20% per level) via UpgradePowerMultiplier, matching projectile/melee towers.
@@ -968,6 +1377,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             TowerKillAttribution.MarkTowerHit(targetStats.gameObject);
             targetStats.TakeDamage(damageThisFrame);
+            CombatStats.ReportTowerDamageDealt(damageThisFrame);
         }
     }
     #endregion
@@ -1636,6 +2046,25 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void SetupSpriteCollision()
     {
+        // Respect "Enable Collision = false": do not auto-generate a body collider.
+        // Lets you hand-place a collider that hugs the base instead of the full frame.
+        if (collisionConfig == null || !collisionConfig.enableCollision)
+            return;
+
+        // Hammer tower: its sprite frame is huge and mostly transparent, so the
+        // sprite-fit collider becomes a giant invisible wall. Build a small, explicit
+        // body collider instead (tune hammerBodyColliderSize/Offset in the Inspector).
+        if (isHammerTower)
+        {
+            var body = GetComponent<BoxCollider2D>();
+            if (body == null) body = gameObject.AddComponent<BoxCollider2D>();
+            body.isTrigger = false;
+            body.size = hammerBodyColliderSize;
+            body.offset = hammerBodyColliderOffset;
+            spriteCollider = body;
+            return;
+        }
+
         // When the visible sprite lives on a CHILD (e.g. usePrefabVisuals prefabs
         // whose SpriteRenderer isn't on the root, like the Heal tower), the shared
         // SpriteCollisionManager can't size a collider — it reads the root's
@@ -1688,6 +2117,118 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         spriteCollider = box;
     }
 
+    // ── Sprite frame cache ──────────────────────────────────────────────────
+    //
+    // Nested because LoadSprite() below is its only consumer, and this project has
+    // enough scripts already. Same shape as HammerTowerAnimator's FrameCache, which
+    // exists for the same reason — that one just never got applied to the towers.
+    //
+    // WHY: LoadSprite() used to call Resources.LoadAll<Sprite>() straight from
+    // Start(), i.e. on the frame the tower is instantiated. Resources.LoadAll is a
+    // BLOCKING call: the first Laser Tower placement of a session read and
+    // decompressed all 49 idle frames on the main thread before the frame could
+    // finish. That is the 1-2s freeze at placement — reproducible, not bad luck.
+    //
+    // WHAT: load each folder once per session, and warm the slow ones in the
+    // background at startup so the cost lands during the loading screen instead of
+    // on a placement. Ordering semantics are unchanged: same Resources.LoadAll, same
+    // stable OrderBy on the leading integer of each sprite name.
+    private static class SpriteFrameCache
+    {
+        private static readonly Dictionary<string, Sprite[]> Cache = new Dictionary<string, Sprite[]>();
+
+        public static void Clear() => Cache.Clear();
+
+        /// Frames for 'resourcePath', ordered by the leading integer in each sprite
+        /// name. Loose numeric frames (00.png ... 48.png) play in sequence; sliced
+        /// spritesheets ("tower_melee_sprite_3") have no leading digit, fall back to
+        /// int.MaxValue and — OrderBy being a STABLE sort — keep their slice order.
+        /// Returns a fresh array each call, so no caller can disturb the shared copy.
+        public static Sprite[] GetFrames(string resourcePath)
+        {
+            if (string.IsNullOrEmpty(resourcePath)) return System.Array.Empty<Sprite>();
+
+            if (Cache.TryGetValue(resourcePath, out var cached) && IsValid(cached))
+                return (Sprite[])cached.Clone();
+
+            var loaded = Resources.LoadAll<Sprite>(resourcePath) ?? System.Array.Empty<Sprite>();
+            if (loaded.Length > 1)
+                loaded = loaded.OrderBy(s => ParseLeadingFrameInt(s.name, int.MaxValue)).ToArray();
+
+            // A failed load is cached as an empty array so a broken path doesn't hit
+            // the filesystem on every placement; IsValid() rejects it on read, so a
+            // path that becomes valid later is still picked up.
+            Cache[resourcePath] = loaded;
+            return (Sprite[])loaded.Clone();
+        }
+
+        public static bool IsWarm(string resourcePath) =>
+            !string.IsNullOrEmpty(resourcePath) &&
+            Cache.TryGetValue(resourcePath, out var c) && IsValid(c);
+
+        /// Make a folder resident without blocking. Resources has no async LoadAll, so
+        /// pull the frames one at a time ("00", "01", ...) — each LoadAsync does its
+        /// decompression on a worker thread, spreading the cost over many frames. The
+        /// closing GetFrames() then runs the real LoadAll for exact ordering, which is
+        /// ~free once every texture it wants is already in memory.
+        public static IEnumerator PreloadAsync(string resourcePath)
+        {
+            if (string.IsNullOrEmpty(resourcePath) || IsWarm(resourcePath)) yield break;
+
+            for (int i = 0; i < 512; i++)   // bound: never spin on a pathological folder
+            {
+                var req = Resources.LoadAsync<Sprite>($"{resourcePath}/{i:00}");
+                yield return req;
+                if (req.asset == null) break;          // walked past the last frame
+            }
+            GetFrames(resourcePath);
+        }
+
+        // Parse the leading run of digits in a sprite name ("07_glow" -> 7).
+        private static int ParseLeadingFrameInt(string name, int fallback)
+        {
+            if (string.IsNullOrEmpty(name)) return fallback;
+            int i = 0;
+            while (i < name.Length && char.IsDigit(name[i])) i++;
+            return i > 0 && int.TryParse(name.Substring(0, i), out int v) ? v : fallback;
+        }
+
+        // Cached sprites only stay usable while they're alive — a scene change plus
+        // UnloadUnusedAssets can pull them out from under us.
+        private static bool IsValid(Sprite[] frames) =>
+            frames != null && frames.Length > 0 && frames[0] != null;
+    }
+
+    /// Folders preloaded in the background at startup. Add a tower's
+    /// spriteResourcePath here if its first placement hitches.
+    private static readonly string[] WarmupSpriteFolders =
+    {
+        "Sprites/Buildings/Towers/LaserTower",
+    };
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void WarmTowerSprites()
+    {
+        if (WarmupSpriteFolders == null || WarmupSpriteFolders.Length == 0) return;
+
+        // Statics can't run coroutines, so spawn a throwaway hidden runner —
+        // same trick HammerTowerAnimator.AutoWarmCache() uses.
+        var go = new GameObject("~TowerSpriteWarmup") { hideFlags = HideFlags.HideAndDontSave };
+        DontDestroyOnLoad(go);
+        go.AddComponent<Warmer>().Begin(WarmupSpriteFolders);
+    }
+
+    private class Warmer : MonoBehaviour
+    {
+        public void Begin(string[] folders) => StartCoroutine(Run(folders));
+
+        private IEnumerator Run(string[] folders)
+        {
+            foreach (var f in folders) yield return SpriteFrameCache.PreloadAsync(f);
+            Destroy(gameObject);
+        }
+    }
+
     void LoadSprite()
     {
         // Prefabs that animate themselves (Animator or a child sprite animation)
@@ -1695,7 +2236,43 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // sprite-sheet animation coroutine on top of them.
         if (usePrefabVisuals) return;
 
-        var sprites = Resources.LoadAll<Sprite>(spriteResourcePath);
+        // Frames come from a process-wide cache instead of a direct, BLOCKING
+        // Resources.LoadAll on the placement frame. That LoadAll is what froze the
+        // game for ~1-2s the first time a Laser Tower was placed: it read and
+        // decompressed all 49 idle frames on the main thread. SpriteFrameCache warms
+        // that folder asynchronously at startup and reuses the result afterwards.
+        //
+        // Ordering is unchanged - the cache runs the same Resources.LoadAll and the
+        // same stable OrderBy on the leading integer of each sprite name, so loose
+        // numeric frames (00.png ... 48.png) still play in sequence and sliced
+        // spritesheets still keep their slice order.
+        var sprites = SpriteFrameCache.GetFrames(spriteResourcePath);
+
+        // Always-on looping idle (e.g. Laser Tower): handle this FIRST and
+        // independently of the spriteIndex gate below, and ALWAYS log the load
+        // result. (Previously this lived inside 'if (sprites.Length > spriteIndex)',
+        // so a failed load of 0 sprites skipped everything — including the warning —
+        // silently. That is exactly what "no animation, no warning" looks like.)
+        if (loopIdleAnimation)
+        {
+            int loaded = sprites?.Length ?? 0;
+            if (loaded > 0)
+                Debug.Log($"[IdleAnim] '{towerName}': loaded {loaded} frame(s) from " +
+                          $"Resources/'{spriteResourcePath}' (first='{sprites[0].name}', last='{sprites[loaded - 1].name}').");
+            else
+                Debug.LogError($"[IdleAnim] '{towerName}': loaded 0 frames from Resources/'{spriteResourcePath}'. " +
+                    "Resources.LoadAll<Sprite> found nothing. Verify the frames are at " +
+                    "Assets/Resources/" + spriteResourcePath + "/ and each PNG's Texture Type = Sprite (2D and UI).");
+
+            if (loaded >= 2 && spriteRenderer != null)
+            {
+                int idx = Mathf.Clamp(spriteIndex, 0, loaded - 1);
+                spriteRenderer.sprite = sprites[idx];
+                StartCoroutine(LoopIdleFrames(sprites));
+            }
+            return;   // idle towers never use the Utilities.AnimateSprite path
+        }
+
         if (sprites?.Length > spriteIndex)
         {
             spriteRenderer.sprite = sprites[spriteIndex];
@@ -1710,6 +2287,33 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
     }
 
+    // Self-contained, always-looping frame animation for 'idle-only' towers.
+    // Independent of Utilities.AnimateSprite: fixed FPS, loops forever, and stops
+    // automatically when the tower is destroyed (Unity kills its coroutines).
+    private System.Collections.IEnumerator LoopIdleFrames(Sprite[] frames)
+    {
+        if (frames == null || frames.Length < 2 || spriteRenderer == null) yield break;
+
+        int start = Mathf.Clamp(spriteIndex, 0, frames.Length - 1);
+        int count = animationFrameCount > 1
+            ? Mathf.Min(animationFrameCount, frames.Length - start)
+            : frames.Length - start;
+        if (count < 2) { start = 0; count = frames.Length; }
+
+        float fps = idleAnimationFps > 0.01f ? idleAnimationFps : 12f;
+        var wait = new WaitForSeconds(1f / fps);
+
+        Debug.Log($"[IdleAnim] '{towerName}': looping {count} frame(s) from index {start} at {fps} fps.");
+
+        int i = 0;
+        while (true)
+        {
+            if (spriteRenderer == null) yield break;
+            spriteRenderer.sprite = frames[start + i];
+            i = (i + 1) % count;
+            yield return wait;
+        }
+    }
 
     void SetupEnergyBar()
     {
@@ -1985,6 +2589,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             //Debug.Log($"[TOWER] {towerName} MELEE attack: {effectiveBaseDamage} * {meleeConfig.damageMultiplier} = {meleeDamage} damage to {target.name}");
             TowerKillAttribution.MarkTowerHit(target);
             stats?.TakeDamage(meleeDamage);
+            CombatStats.ReportTowerDamageDealt(meleeDamage);
             ApplyFreezeEffect(target);
             AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, FirePoint?.position ?? transform.position);
         }
@@ -2032,6 +2637,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                     //Debug.Log($"[TOWER] {towerName} DIRECT attack dealing {effectiveBaseDamage} damage to {target.name}");
                     TowerKillAttribution.MarkTowerHit(target);
                     enemyStats.TakeDamage(effectiveBaseDamage);
+                    CombatStats.ReportTowerDamageDealt(effectiveBaseDamage);
                     ApplyFreezeEffect(target);
                 }
             }
@@ -2409,6 +3015,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         ConsumeEnergy(actualDamage);
 
+        // Combat telemetry: damage taken by towers (post-armor, all sources).
+        CombatStats.ReportTowerDamageTaken(actualDamage);
+
         // Play Tower damage sound
         if (AudioManager.instance != null && FMODEvents.instance != null)
         {
@@ -2654,10 +3263,29 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void Cleanup()
     {
+        // Stop and release the generator ambience loop, if any.
+        StopGeneratorAmbience(release: true);
+
+        // Hard-stop the heal-halo and laser-beam loops so a sold/destroyed tower
+        // can't leave a sound droning on. Idempotent if they were never started.
+        healHaloSfx.Stop(immediate: true);
+        laserAttackSfx.Stop(immediate: true);
+
         // Cleanup laser
         if (laserObject != null) DestroyImmediate(laserObject);
         if (laserStartParticles != null) DestroyImmediate(laserStartParticles.gameObject);
         if (laserImpactParticles != null) DestroyImmediate(laserImpactParticles.gameObject);
+
+        // The four additive materials are created per tower, so they have to be
+        // released per tower - Unity does not collect runtime materials on its own,
+        // and selling/rebuilding towers used to leak a set every time. The TEXTURES
+        // and SPRITES are deliberately NOT touched: they belong to LaserVfxAssets and
+        // are shared by every other laser tower.
+        LaserVfxAssets.SafeDestroy(laserBeamMaterial);
+        LaserVfxAssets.SafeDestroy(laserGlowMaterial);
+        LaserVfxAssets.SafeDestroy(laserAuraMaterial);
+        LaserVfxAssets.SafeDestroy(laserSpriteMaterial);
+        laserBeamMaterial = laserGlowMaterial = laserAuraMaterial = laserSpriteMaterial = null;
 
 
         // Mark as destroyed to prevent further operations
@@ -2753,3 +3381,5 @@ public interface IDamageable
     float GetHealthPercentage();
     bool IsDestroyed();
 }
+
+

@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: MortData
   m_EditorClassIdentifier: 
   enemyName: Mort
-  maxHealth: 50
+  maxHealth: 40
   maxArmor: 0
-  moveSpeed: 2
+  moveSpeed: 1.2
   damage: 40
-  mass: 20
+  mass: 40
   spriteFolderPath: Sprites/EnemySprites/Mort
   animationSpeed: 0.1
   laserAttack:

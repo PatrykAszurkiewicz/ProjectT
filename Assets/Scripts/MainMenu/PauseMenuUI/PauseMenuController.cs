@@ -1,29 +1,38 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.InputSystem;
 
+// PAUSE MENU — now a well-behaved member of UIModalStack.
+//
+// Fixed here:
+//  1) It no longer owns Time.timeScale / Cursor.visible / PlayerAttack directly.
+//     UIModalStack does. Two overlapping screens can therefore never restore a
+//     stale value over each other (the "frozen game, no menu" freeze).
+//  2) Esc / Start is claimed through MenuBackInput. While Options, the Tutorial,
+//     the rebind screen, the augment menu or the disconnect guard sits ABOVE the
+//     pause menu, Esc goes to that screen only — it can no longer toggle pause
+//     underneath an open modal and desync everything.
+//  3) `_usingActionPause` used to latch true forever. A downed co-op player's
+//     PlayerInput is disabled (its Pause action goes with it); if that was the
+//     only hooked player, pause became unreachable AND the raw fallback stayed
+//     suppressed. It is now recomputed from the live, ENABLED actions each frame.
+//  4) Two players' Pause actions can fire on the same frame (co-op, or the solo
+//     player that has keyboard AND pad paired with a widened binding mask). A
+//     frame guard stops the double-toggle that opened and instantly closed the menu.
 public class PauseMenuController : MonoBehaviour
 {
     public GameObject pauseMenu;
     private bool activated;
 
-    // Co-op: there can be one weapon-roll canvas per player, so we hide ALL of
-    // them rather than a single GameObject.Find("WeaponRoll_Canvas").
+    // Co-op: one weapon-roll canvas per player, so hide ALL of them.
     private readonly List<GameObject> _weaponRollCanvases = new List<GameObject>();
 
-    // Phase 1: Pause is now a rebindable action ("Pause" in the Player map,
-    // Esc / gamepad Start by default). We subscribe to it on EVERY player so
-    // either co-op player can pause. The raw keyboard/gamepad poll below is kept
-    // ONLY as a fallback for a setup with no Pause action / no PlayerInput, and is
-    // skipped the moment at least one action subscription is live (so pause can
-    // never double-toggle).
     private readonly List<InputAction> _pauseActions = new List<InputAction>();
-    private bool _usingActionPause;
+    private int _lastToggleFrame = -1;
 
     private void Awake()
     {
-        pauseMenu.SetActive(false);
+        if (pauseMenu != null) pauseMenu.SetActive(false);
         activated = false;
     }
 
@@ -41,7 +50,9 @@ public class PauseMenuController : MonoBehaviour
         for (int i = 0; i < _pauseActions.Count; i++)
             if (_pauseActions[i] != null) _pauseActions[i].performed -= OnPausePerformed;
         _pauseActions.Clear();
-        _usingActionPause = false;
+
+        // Torn down (scene reload) while still on the stack? Don't strand the freeze.
+        if (activated) { activated = false; UIModalStack.Pop(this); }
     }
 
     private void OnPlayerJoined(PlayerRef pr) => HookPause(pr);
@@ -49,7 +60,7 @@ public class PauseMenuController : MonoBehaviour
 
     private void HookPause(PlayerRef pr)
     {
-        if (pr == null) return;
+        if (pr == null) return;   // also catches a destroyed PlayerRef (Unity == null)
         var pi = pr.GetComponent<PlayerInput>();
         if (pi == null || pi.actions == null) return;
 
@@ -58,11 +69,12 @@ public class PauseMenuController : MonoBehaviour
 
         a.performed += OnPausePerformed;
         _pauseActions.Add(a);
-        _usingActionPause = true;
     }
 
     private void UnhookPause(PlayerRef pr)
     {
+        // A player that LEFT is usually already destroyed, so GetComponent would throw.
+        // AnyLivePauseAction()/OnDisable sweep the dead entries; just bail here.
         if (pr == null) return;
         var pi = pr.GetComponent<PlayerInput>();
         if (pi == null || pi.actions == null) return;
@@ -72,59 +84,89 @@ public class PauseMenuController : MonoBehaviour
 
         a.performed -= OnPausePerformed;
         _pauseActions.Remove(a);
-        if (_pauseActions.Count == 0) _usingActionPause = false;
     }
 
-    private void OnPausePerformed(InputAction.CallbackContext _) => ActivatePauseMenu();
+    // A hooked action only counts while it is actually enabled. A downed player's
+    // PlayerInput is disabled, taking its Pause action with it.
+    private bool AnyLivePauseAction()
+    {
+        for (int i = _pauseActions.Count - 1; i >= 0; i--)
+            if (_pauseActions[i] == null) _pauseActions.RemoveAt(i);   // destroyed player
+
+        for (int i = 0; i < _pauseActions.Count; i++)
+            if (_pauseActions[i].enabled) return true;
+        return false;
+    }
+
+    private void OnPausePerformed(InputAction.CallbackContext _) => RequestToggle();
 
     private void Update()
     {
-        // Fallback ONLY when no Pause action is hooked (legacy / pre-spawn frames).
-        if (_usingActionPause) return;
+        // Fallback ONLY when no Pause action is live (legacy setup / pre-spawn
+        // frames / every player's input temporarily disabled).
+        if (AnyLivePauseAction()) return;
 
-        // Start (Menu) button opens AND closes the pause menu. Input polling
-        // runs regardless of Time.timeScale, so this still un-pauses at 0.
-        if (Gamepad.current != null && Gamepad.current.startButton.wasPressedThisFrame)
-            ActivatePauseMenu();
-
-        // Esc on the keyboard toggles the pause menu too.
-        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-            ActivatePauseMenu();
+        // PausePressedThisFrame is Esc/Start only. The general back press also
+        // includes gamepad B, which is a GAMEPLAY control (dodge / cancel) — polling
+        // it here would make B open the pause menu.
+        if (MenuBackInput.PausePressedThisFrame) RequestToggle();
     }
 
+    /// <summary>
+    /// Toggle the pause menu — but only if nothing is layered on top of it.
+    /// Whether this arrives from an InputAction callback (which can run before or
+    /// after Update) or from the fallback poll, the arbitration is identical, so
+    /// script execution order can no longer decide who wins the key press.
+    /// </summary>
+    private void RequestToggle()
+    {
+        if (_lastToggleFrame == Time.frameCount) return;   // one toggle per press
+
+        // Some other modal (Options, Tutorial, rebind, augment, disconnect guard)
+        // is in front of us. It owns this press; we stay exactly as we are.
+        if (!UIModalStack.IsTopOrEmpty(this)) return;
+
+        // Claim the press so nobody else acts on the same frame.
+        if (MenuBackInput.PressedThisFrame && !MenuBackInput.ConsumeBack(this, requireTop: false))
+            return;
+
+        _lastToggleFrame = Time.frameCount;
+        ActivatePauseMenu();
+    }
+
+    /// <summary>Public so existing Button OnClick wiring keeps working.</summary>
     public void ActivatePauseMenu()
     {
-        if (activated == false)
+        if (!activated)
         {
             activated = true;
-            Time.timeScale = 0f;
-            Cursor.visible = true;
-            pauseMenu.SetActive(true);
+            if (pauseMenu != null) pauseMenu.SetActive(true);
 
-            // Collect the weapon-roll canvases WHILE THEY ARE STILL ACTIVE, then
-            // hide them. We reuse this same list on resume — re-collecting on
-            // resume would miss them (they're inactive) and they'd never come
-            // back. The WeaponRollUI builds one canvas per player at runtime.
+            // UIModalStack takes timeScale, cursor and attack suppression.
+            UIModalStack.Push(this);
+
+            // Collect the canvases WHILE THEY ARE STILL ACTIVE, then hide them.
+            // Re-collecting on resume would miss them (they're inactive by then).
             CollectWeaponRollCanvases();
             SetWeaponRollCanvasesActive(false);
-            PlayerAttack.SetAllSuppressed(true);
 
-            // Kill any in-flight shake so the menu doesn't wobble.
-            CombatJuice.StopAllShake();
+            CombatJuice.StopAllShake();   // no wobble under the menu
         }
         else
         {
             activated = false;
-            Time.timeScale = 1f;
-            Cursor.visible = false;
-            pauseMenu.SetActive(false);
+            if (pauseMenu != null) pauseMenu.SetActive(false);
             SetWeaponRollCanvasesActive(true);
-            PlayerAttack.SetAllSuppressed(false);
+            UIModalStack.Pop(this);
         }
     }
 
-    // Find every weapon-roll canvas in the scene. Phase 3 gives each player's
-    // canvas a unique name (e.g. "WeaponRoll_Canvas_P0"), so we match by prefix.
+    /// <summary>Close the menu if it is open. Safe to call from anywhere.</summary>
+    public void ClosePauseMenu()
+    {
+        if (activated) ActivatePauseMenu();
+    }
+
     private void CollectWeaponRollCanvases()
     {
         _weaponRollCanvases.Clear();

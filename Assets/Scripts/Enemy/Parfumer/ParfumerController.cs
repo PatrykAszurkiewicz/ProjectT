@@ -187,8 +187,17 @@ public class ParfumerController : MonoBehaviour
         }
     }
 
+    private void PlaySmokeSound()
+    {
+        if (AudioManager.instance == null || FMODEvents.instance == null) return;
+        if (FMODEvents.instance.parfumerSmoke.IsNull) return;
+        AudioManager.instance.PlayOneShot(FMODEvents.instance.parfumerSmoke, transform.position);
+    }
+
     private void SpawnCloud()
     {
+        PlaySmokeSound();
+
         GameObject cloudGO;
         if (cloudPrefab != null)
         {

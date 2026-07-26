@@ -28,6 +28,15 @@ public class PitcherController : MonoBehaviour
              "so a projectile can never leak if its target vanishes mid-flight.")]
     [SerializeField] private float projectileMaxLifetime = 5f;
 
+    [Tooltip("Colour of the short fading trail left behind the thrown dart.")]
+    [SerializeField] private Color tracerColor = new Color(0.72f, 0.38f, 1f);
+
+    [Tooltip("Trail width at the dart, in WORLD units (independent of prefab scale).")]
+    [SerializeField] private float tracerWidth = 0.14f;
+
+    [Tooltip("How long (seconds) a point of the trail lingers.")]
+    [SerializeField] private float tracerTime = 0.14f;
+
     private EnemyController enemyController;
     private EnemyStats stats;
 
@@ -77,6 +86,10 @@ public class PitcherController : MonoBehaviour
 
         GameObject projObj = Instantiate(
             projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
+
+        // The AngleAxis above already puts the dart's tip on its heading (the shot is
+        // non-homing, so that stays true for the whole flight). Just add the tracer.
+        ProjectileDart.Attach(projObj.transform, tracerColor, tracerWidth, tracerTime);
 
         var projectile = projObj.GetComponent<EnemyProjectile>();
         if (projectile != null)

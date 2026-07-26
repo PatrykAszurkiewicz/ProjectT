@@ -188,6 +188,9 @@ public class Projectile : MonoBehaviour
 
             targetStats.TakeDamage(damage);
 
+            // Combat telemetry: tower (ranged) damage dealt.
+            CombatStats.ReportTowerDamageDealt(damage);
+
             // Apply freeze effect if chance > 0
             if (freezeChance > 0f && Random.Range(0f, 1f) <= freezeChance)
             {
@@ -243,3 +246,4 @@ public class Projectile : MonoBehaviour
         transform.rotation = Quaternion.AngleAxis(angle - 90f, Vector3.forward);
     }
 }
+

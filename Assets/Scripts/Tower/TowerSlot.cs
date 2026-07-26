@@ -186,10 +186,11 @@ public class TowerSlot : MonoBehaviour
             return false;
         }
 
-        // Play tower creation sound
-        if (AudioManager.instance != null && FMODEvents.instance != null)
+        // Play the unified tower-placement sound (shared with upgrade / removal).
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.towerPlacement.IsNull)
         {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerCreation, transform.position);
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.towerPlacement, transform.position);
         }
 
         //Debug.Log($"Placing tower {towerPrefab.name} at Ring {ringIndex}, Slot {slotIndex}");

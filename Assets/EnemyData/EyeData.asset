@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: EyeData
   m_EditorClassIdentifier: 
   enemyName: Eye
-  maxHealth: 100
+  maxHealth: 60
   maxArmor: 0
   moveSpeed: 1
   damage: 1

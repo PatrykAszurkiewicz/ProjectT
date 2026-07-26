@@ -98,11 +98,46 @@ public class Boss2 : BaseBossStats
     [Tooltip("Radius of the ring around the boss where slimes appear.")]
     [SerializeField] private float summonRingRadius = 2f;
 
-    [Tooltip("Seconds between the puff of smoke and the slimes actually appearing.")]
-    [SerializeField] private float summonSpawnDelay = 1f;
+    [Tooltip("Seconds the purple warning circles pulse before the slimes actually appear. " +
+             "This is the telegraph lead time — longer gives the player more of a heads-up. " +
+             "~2s reads as a clear 'the Lich is conjuring something' beat.")]
+    [SerializeField] private float summonSpawnDelay = 2f;
 
     [Tooltip("Color of the smoke puff.")]
     [SerializeField] private Color summonSmokeColor = new Color(0.7f, 0.7f, 0.8f, 0.7f);
+
+    [Tooltip("Radius (world units) of each purple warning circle that marks where a slime " +
+             "will appear during the summonSpawnDelay window. Sized to the slime footprint.")]
+    [SerializeField] private float summonTelegraphRadius = 0.75f;
+
+    [Tooltip("Base color of the pulsating summon warning circles (the player's heads-up).")]
+    [SerializeField] private Color summonTelegraphColor = new Color(0.7f, 0.2f, 1f, 0.9f);
+
+    [Tooltip("Color the summon warning circles pulse toward as the slimes are about to spawn.")]
+    [SerializeField] private Color summonTelegraphPulseColor = new Color(1f, 0.5f, 1f, 1f);
+
+    //  Audio 
+    [Header("Boss2 Audio")]
+    [Tooltip("Play FMODEvents.boss2ExplosionWarning for the meteor telegraph window. It is " +
+             "pinned to the LOCKED explosion spot, not to the boss — the warning ring marks " +
+             "fixed ground and the sound has to agree with it, or a spatialised warning would " +
+             "point the player at the wrong place to dodge. Cut the moment the blast lands. " +
+             "Needs a loop region in FMOD Studio (the telegraph is meteorTelegraphDuration " +
+             "seconds long and tunable).")]
+    [SerializeField] private bool playExplosionWarningSound = true;
+
+    [Tooltip("Play FMODEvents.boss2Spawn as each summoned slime materialises, at that " +
+             "slime's own spawn point rather than once at the boss — the minions erupt " +
+             "in a ring around the Lich, so per-spawn placement is what makes a spatialised " +
+             "event tell you which side they came from. The spawns are already staggered a " +
+             "frame apart, which stops the copies landing perfectly on top of each other.")]
+    [SerializeField] private bool playSummonSpawnSound = true;
+
+    // Held instance for the meteor telegraph. Tracked on the boss (rather than
+    // living purely inside the coroutine) for the same reason _activeWarningRing is:
+    // ExecuteBossDeath calls StopAllCoroutines, so the coroutine may never get
+    // another frame in which to clean up after itself.
+    private readonly SpatialLoopSfx explosionWarningSfx = new SpatialLoopSfx("Boss2 explosion warning");
 
     //  Runtime State 
     private SpriteRenderer bossSprite;
@@ -263,11 +298,23 @@ public class Boss2 : BaseBossStats
 
         UpdateHealthBarOffset();
 
-        Canvas canvas = HealthBar.GetComponentInChildren<Canvas>();
+        // Keep the bar above the cartoon-grass overlay.
+        // GrassCartoonOverlay bakes its tufts on the *Default* sorting layer at
+        //     sortingOrder = 1000 + round(-y * 10)   ->  roughly 400..1600 across the map.
+        // A fixed order of 1000 sits INSIDE that band: it only wins against grass
+        // above y = 0 and loses to every tuft below it, so the bar gets buried.
+        // 4000 clears the whole band (and matches what EnemyHealthBar.Initialize
+        // already sets) while staying under fog (5000) and the night overlay (6000).
+        const int HEALTH_BAR_SORTING_ORDER = 4000;
+
+        // includeInactive: the prefab hides its bar UI in Awake(), so an active-only
+        // search can miss the Canvas depending on where it lives in the hierarchy.
+        Canvas canvas = HealthBar.GetComponentInChildren<Canvas>(true);
+        if (canvas == null) canvas = HealthBar.GetComponentInParent<Canvas>();
         if (canvas != null)
         {
             canvas.overrideSorting = true;
-            canvas.sortingOrder = 1000;
+            canvas.sortingOrder = HEALTH_BAR_SORTING_ORDER;
         }
     }
 
@@ -542,17 +589,37 @@ public class Boss2 : BaseBossStats
         // Spawn the pulsating warning ring on top of the grass.
         GameObject warning = SpawnWarningRing(explosionPos, meteorExplosionRadius, meteorTelegraphDuration);
 
+        // Audio twin of that ring, pinned to the SAME locked world spot. No
+        // SetPosition calls follow: the explosion point is fixed for the whole
+        // telegraph (that is what makes the attack dodgeable), so a sound that
+        // drifted with the boss would actively mislead the player about where to
+        // stand. Started after the ring so the two arrive together.
+        if (playExplosionWarningSound && FMODEvents.instance != null)
+            explosionWarningSfx.Play(FMODEvents.instance.boss2ExplosionWarning, explosionPos);
+
         // Wait out the telegraph. The ring animates itself — Boss2 only needs to
         // observe the timer and abort if dying.
         float elapsed = 0f;
         while (elapsed < meteorTelegraphDuration)
         {
-            if (isDying) { if (warning != null) Destroy(warning); _activeWarningRing = null; yield break; }
+            if (isDying)
+            {
+                // Boss died mid-telegraph: the explosion never lands, so the warning
+                // has nothing to resolve into. Fade rather than cut — same treatment
+                // the Bomber's cancelled fuse gets.
+                explosionWarningSfx.Stop(immediate: false);
+                if (warning != null) Destroy(warning);
+                _activeWarningRing = null;
+                yield break;
+            }
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        // BOOM.
+        // BOOM. Cut the warning hard and BEFORE the blast goes out, so the
+        // explosion one-shot lands on silence instead of over a still-running
+        // telegraph — the warning resolving into the bang is the whole gag.
+        explosionWarningSfx.Stop(immediate: true);
         if (warning != null) Destroy(warning);
         _activeWarningRing = null;
         SpawnExplosion(explosionPos, meteorExplosionRadius);
@@ -565,14 +632,14 @@ public class Boss2 : BaseBossStats
         var go = new GameObject("Boss2_MeteorWarningRing");
         go.transform.position = new Vector3(worldPos.x, worldPos.y, 0f);
 
-        // Parent to the boss with worldPositionStays = true so the ring's world position
-        // stays locked to the cast site (boss doesn't move during a cast, but anchoring it
-        // to the boss means it dies when the boss dies — without this parenting an
-        // unparented ring leaks as a permanent decal if the boss dies mid-telegraph,
-        // because ExecuteBossDeath calls StopAllCoroutines before the meteor coroutine
-        // can clean up its own ring.
-        go.transform.SetParent(transform, worldPositionStays: true);
-
+        // IMPORTANT: do NOT parent this to the boss. The ring must stay pinned to the
+        // exact world spot where the blast will land. If it were parented to the boss,
+        // any drift of the boss during the telegraph (collisions, separation, knockback)
+        // would carry the ring away from the locked explosion point — so the ring would
+        // no longer mark where the explosion actually detonates. It's left unparented in
+        // world space; boss-death cleanup is handled explicitly via _activeWarningRing
+        // in ExecuteBossDeath (which runs before StopAllCoroutines), and the normal path
+        // destroys it when the telegraph ends.
         var anim = go.AddComponent<Boss2MeteorWarningRing>();
         anim.Initialize(radius, duration, meteorWarningColor, meteorWarningPulseColor);
         _activeWarningRing = go;
@@ -674,15 +741,12 @@ public class Boss2 : BaseBossStats
         if (AudioManager.instance != null && FMODEvents.instance != null)
             AudioManager.instance.PlayOneShot(FMODEvents.instance.bossGroundHit, transform.position);
 
-        yield return new WaitForSeconds(summonSpawnDelay);
-
-        if (isDying) yield break;
-
-        // Spawn slimes in an evenly-spaced ring around the boss. A tiny per-slot
-        // smoke puff sells the "they appear out of magic" idea.
+        // If nothing can be summoned, still honour the cast timing but skip the
+        // telegraph — there's nothing to warn the player about.
         if (smallSlimePrefab == null)
         {
             Debug.LogWarning("Boss2: smallSlimePrefab is not assigned — summon attack cannot spawn anything.");
+            yield return new WaitForSeconds(summonSpawnDelay);
             yield break;
         }
 
@@ -692,23 +756,62 @@ public class Boss2 : BaseBossStats
         if (bossCol != null) bossColliderR = bossCol.radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.y);
         float safeSpawnRadius = Mathf.Max(summonRingRadius, bossColliderR + 0.5f);
 
-        // Spread the spawns across frames so the engine doesn't have to instantiate
-        // every slime, run their Awake/Start chains, and load their sprites in a single
-        // frame. 
+        // Resolve EVERY slime's spawn point NOW, before the delay, so the warning
+        // circles can mark the exact spots the slimes will erupt from. The boss is
+        // held still for the whole cast (velocity zeroed + EnemyController disabled in
+        // CastNextSpell), so these world positions stay valid across the delay — and
+        // the spawn loop below reuses these SAME positions, which guarantees the
+        // telegraph never lies about where a minion lands.
+        Vector3[] spawnPositions = new Vector3[summonCount];
         for (int i = 0; i < summonCount; i++)
         {
             float angleDeg = (360f / summonCount) * i + Random.Range(-10f, 10f);
             float angleRad = angleDeg * Mathf.Deg2Rad;
             Vector3 offset = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0f) * safeSpawnRadius;
-            Vector3 spawnPos = transform.position + offset;
+            spawnPositions[i] = transform.position + offset;
+        }
 
-            SpawnSmokePuff(spawnPos, 0.6f);
+        // HEADS-UP: purple pulsating circles on each spawn spot. They live exactly
+        // summonSpawnDelay seconds and pulse faster as that timer runs down, so the
+        // beat peaks right as the slimes materialize — the player's warning that
+        // minions are incoming, and precisely from where.
+        SpawnSummonTelegraphs(spawnPositions, summonSpawnDelay);
+
+        yield return new WaitForSeconds(summonSpawnDelay);
+
+        // The telegraphs self-destruct at end of life, but clear them explicitly here
+        // too so nothing lingers a frame past the spawn (and so a mid-window death is
+        // covered — see ExecuteBossDeath).
+        ClearSummonTelegraphs();
+
+        if (isDying) yield break;
+
+        // Spawn slimes at the pre-computed, already-telegraphed positions. A tiny
+        // per-slot smoke puff sells the "they appear out of magic" idea.
+        // Spread the spawns across frames so the engine doesn't have to instantiate
+        // every slime, run their Awake/Start chains, and load their sprites in a single
+        // frame.
+        for (int i = 0; i < summonCount; i++)
+        {
+            Vector3 spawnPos = spawnPositions[i];
+
+            SpawnSummonPoof(spawnPos);
+
+            // One-shot per minion, at ITS spawn point — this is the frame the slime
+            // becomes visible, so the sound and the poof land together. A one-shot
+            // (not a held instance) because there is nothing to stop: the minion
+            // appearing is an instant, not a state.
+            if (playSummonSpawnSound && AudioManager.instance != null
+                && FMODEvents.instance != null && !FMODEvents.instance.boss2Spawn.IsNull)
+            {
+                AudioManager.instance.PlayOneShot(FMODEvents.instance.boss2Spawn, spawnPos);
+            }
+
             GameObject slime = Instantiate(smallSlimePrefab, spawnPos, Quaternion.identity);
 
-            var slimeAnim = slime.GetComponent<EnemyAnimationController>();
-            if (slimeAnim != null) slimeAnim.enabled = true;
-            var slimeCtl = slime.GetComponent<EnemyController>();
-            if (slimeCtl != null) slimeCtl.enabled = true;
+            // Enable behaviour, guarantee correct sorting (so the grass overlay can't
+            // bury it), and kick off the materialize pop.
+            PrepareSummonedSlime(slime);
 
             StartCoroutine(SuperviseSpawnedSlime(slime));
 
@@ -718,6 +821,38 @@ public class Boss2 : BaseBossStats
             if (i < summonCount - 1)
                 yield return null;
         }
+    }
+
+    // Tracked so ExecuteBossDeath can wipe the warning circles immediately if the boss
+    // dies during the summon telegraph window, mirroring how _activeWarningRing handles
+    // the meteor ring. (Each telegraph also self-destructs on its own after its life.)
+    private readonly List<GameObject> _activeSummonTelegraphs = new List<GameObject>();
+
+    // Drops one purple pulsating warning circle on each upcoming slime spawn spot.
+    private void SpawnSummonTelegraphs(Vector3[] positions, float duration)
+    {
+        ClearSummonTelegraphs(); // never stack two summons' worth of rings
+
+        string layer = bossSprite != null ? bossSprite.sortingLayerName : "Default";
+        foreach (var pos in positions)
+        {
+            var go = new GameObject("Boss2_SummonTelegraph");
+            // World-pinned (NOT parented to the boss) so each circle marks its fixed
+            // spawn spot even if the boss is nudged mid-cast — same reasoning as the
+            // meteor warning ring.
+            go.transform.position = new Vector3(pos.x, pos.y, 0f);
+            var tel = go.AddComponent<Boss2SummonTelegraph>();
+            tel.Initialize(summonTelegraphRadius, duration,
+                           summonTelegraphColor, summonTelegraphPulseColor, layer);
+            _activeSummonTelegraphs.Add(go);
+        }
+    }
+
+    private void ClearSummonTelegraphs()
+    {
+        for (int i = 0; i < _activeSummonTelegraphs.Count; i++)
+            if (_activeSummonTelegraphs[i] != null) Destroy(_activeSummonTelegraphs[i]);
+        _activeSummonTelegraphs.Clear();
     }
 
 
@@ -752,29 +887,73 @@ public class Boss2 : BaseBossStats
         Vector3 stuckPos = slime.transform.position;
         Destroy(slime);
 
+        SpawnSummonPoof(stuckPos);
         GameObject fresh = Instantiate(smallSlimePrefab, stuckPos, Quaternion.identity);
-        var freshAnim = fresh.GetComponent<EnemyAnimationController>();
-        if (freshAnim != null) freshAnim.enabled = true;
-        var freshCtl = fresh.GetComponent<EnemyController>();
-        if (freshCtl != null) freshCtl.enabled = true;
+        PrepareSummonedSlime(fresh);
     }
 
-    private void SpawnSmokePuff(Vector3 pos, float scale)
+    // Shared setup for a freshly-summoned slime: enable its behaviour, guarantee it
+    // sorts ABOVE the cartoon-grass overlay, and start its materialize pop.
+    //
+    // WHY THE SORTING STEP EXISTS (the "invisible slimes" fix):
+    // GrassCartoonOverlay bakes ~40k grass tufts as meshes at sortingOrder ~1000–1600
+    // on the *Default* sorting layer. Ordinary enemies stay visible because
+    // EnemyController.Start() adds a YSortEntity (sortOrderBase 1000) that rewrites the
+    // sprite's sortingOrder from its Y position every frame, dropping it into that same
+    // band. The SmallSlime prefab, however, ships on the Default layer at sortingOrder
+    // 0 with no sprite assigned (it's loaded at runtime). Until its Y-sort init has
+    // fully run, it sits at order 0 — underneath every blade of grass — so it reads as
+    // "invisible." We configure the Y-sort here, the instant the slime is spawned, so
+    // there is never a frame where it can be buried, regardless of Start() timing.
+    private void PrepareSummonedSlime(GameObject slime)
     {
-        EnsureCircleSprite();
+        if (slime == null) return;
 
-        GameObject puff = new GameObject("Boss2_SmokePuff");
-        puff.transform.position = new Vector3(pos.x, pos.y, 0f);
-        puff.transform.localScale = Vector3.one * scale;
+        var slimeAnim = slime.GetComponent<EnemyAnimationController>();
+        if (slimeAnim != null) slimeAnim.enabled = true;
+        var slimeCtl = slime.GetComponent<EnemyController>();
+        if (slimeCtl != null) slimeCtl.enabled = true;
 
-        SpriteRenderer sr = puff.AddComponent<SpriteRenderer>();
-        sr.sprite = _filledCircleSprite;
-        sr.color = summonSmokeColor;
-        sr.sortingLayerName = bossSprite != null ? bossSprite.sortingLayerName : "Default";
-        sr.sortingOrder = 2400;
+        EnsureSlimeYSort(slime);
+    }
 
-        var fx = puff.AddComponent<Boss2SmokeFX>();
-        fx.Initialize(scale, 0.7f);
+    // Guarantees the slime has a correctly-configured YSortEntity right now, matching
+    // what EnemyController.Start() would set up for a non-boss enemy. If EnemyController
+    // later runs Start(), its own `GetComponent<YSortEntity>() == null` check sees the
+    // one we added and leaves it alone — no double component, no conflict. We also set a
+    // correct interim sortingOrder for the very first frame, before YSortEntity's own
+    // update runs, so there's zero window at order 0 under the grass.
+    private void EnsureSlimeYSort(GameObject slime)
+    {
+        const float sortPrecision = 10f;
+        const int sortOrderBase = 1000;
+        const float sortYOffset = -0.2f; // EnemyController's non-boss value
+
+        var ysort = slime.GetComponent<YSortEntity>();
+        if (ysort == null) ysort = slime.AddComponent<YSortEntity>();
+        ysort.sortPrecision = sortPrecision;
+        ysort.sortOrderBase = sortOrderBase;
+        ysort.sortYOffset = sortYOffset;
+
+        var sr = slime.GetComponent<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.sortingOrder = sortOrderBase +
+                Mathf.RoundToInt(-(slime.transform.position.y + sortYOffset) * sortPrecision);
+        }
+    }
+
+    // A per-slime materialization burst: a bright magic flash, an expanding conjure
+    // ring, a spinning ground sigil, a billowing puff of smoke, and rising sparkle
+    // motes — so each slime looks like it was conjured out of the Lich's magic.
+    // Tinted to match the boss's purple/pink cast so the whole summon reads as one spell.
+    private void SpawnSummonPoof(Vector3 pos)
+    {
+        var root = new GameObject("Boss2_SummonPoof");
+        root.transform.position = new Vector3(pos.x, pos.y, 0f);
+        var fx = root.AddComponent<Boss2SummonPoofFX>();
+        string layer = bossSprite != null ? bossSprite.sortingLayerName : "Default";
+        fx.Play(layer, summonSmokeColor);
     }
 
     // A magical summon flash for the boss body — layered effect that reads as
@@ -836,6 +1015,7 @@ public class Boss2 : BaseBossStats
         {
             //Debug.Log($"[Boss2] OnTriggerEnter2D: WeaponProjectile {other.name} dmg={wp.GetDamage()}");
             TakeDamage(wp.GetDamage());
+            CombatStats.ReportPlayerDamageDealt(wp.GetOwner(), wp.GetDamage(), transform.position);
             Destroy(other.gameObject);
             return;
         }
@@ -845,6 +1025,7 @@ public class Boss2 : BaseBossStats
         {
             //Debug.Log($"[Boss2] OnTriggerEnter2D: Projectile {other.name} dmg={proj.damage}");
             TakeDamage(proj.damage);
+            CombatStats.ReportTowerDamageDealt(proj.damage);
             Destroy(other.gameObject);
             return;
         }
@@ -856,7 +1037,7 @@ public class Boss2 : BaseBossStats
     public override void TakeDamage(float amount)
     {
         //Debug.Log($"[Boss2] TakeDamage({amount}) called. isDying={isDying}, armorDestroyed={armorDestroyed}, bossArmor={bossArmor}, currentHealth={currentHealth}");
-
+        if (DebugCheats.DamageBlocked(this)) return;
         if (isDying) return;
 
         if (!armorDestroyed && bossArmor > 0)
@@ -924,6 +1105,16 @@ public class Boss2 : BaseBossStats
             _activeWarningRing = null;
         }
 
+        // Wipe any summon warning circles that were mid-pulse when the boss died.
+        ClearSummonTelegraphs();
+
+        // Kill the meteor warning sound for the same reason the ring above is
+        // destroyed HERE and not in the coroutine: StopAllCoroutines() is a few
+        // lines down, so PerformMeteorAttack may never get another frame in which
+        // to notice isDying and clean up after itself. Without this the telegraph
+        // would keep looping over a corpse until the scene unloaded.
+        explosionWarningSfx.Stop(immediate: false);
+
         if (HealthBar != null)
             Destroy(HealthBar.gameObject);
 
@@ -977,6 +1168,10 @@ public class Boss2 : BaseBossStats
     //  CLEANUP 
     private void OnDestroy()
     {
+        // Safety net for the paths that never run ExecuteBossDeath — scene unload
+        // mid-cast, or the boss being destroyed outright. Idempotent.
+        explosionWarningSfx.Stop(immediate: true);
+
         if (HealthBar != null)
             Destroy(HealthBar.gameObject);
     }
@@ -1118,6 +1313,252 @@ public class Boss2MeteorWarningRing : MonoBehaviour
 }
 
 
+/// A purple pulsating warning circle that marks where a summoned slime is about to
+/// appear. Purely cosmetic — it deals no damage and spawns nothing. Its only job is to
+/// give the player a heads-up that minions are being conjured and exactly where, the
+/// same way Boss2MeteorWarningRing telegraphs the meteor blast.
+///
+/// Lives for exactly the summon delay, then destroys itself. It reuses the shared
+/// procedural sprites (soft disc + ring) so it adds no texture cost.
+public class Boss2SummonTelegraph : MonoBehaviour
+{
+    // Sort above the grass overlay (grass tops out ~1600 in this project) so the
+    // circle is never buried. It vanishes before the slimes fully materialize, so
+    // sitting above them for its short life reads fine as a ground warning.
+    private const string SortLayer = "Default";
+    private const int FillOrder = 2400;
+    private const int RingOrder = 2401;
+
+    private float _radius;
+    private float _duration;
+    private Color _baseColor;
+    private Color _pulseColor;
+    private string _sortLayer = SortLayer;
+    private float _startTime;
+
+    private SpriteRenderer _glow;       // wide, very faint aura that breathes slowly
+    private SpriteRenderer _fill;        // translucent danger patch on the ground
+    private SpriteRenderer _outerRing;   // main perimeter ring, pulses outward on the beat
+    private SpriteRenderer _innerRing;   // thinner ring that breathes against the outer one
+
+    private Transform _runes;            // slowly-rotating ring of arcane glyph dots
+    private Transform _runesInner;       // a second, faster counter-rotating inner set
+    private SpriteRenderer[] _runeDots;  // every glyph dot (both rings) for cheap per-frame tint
+    private float[] _runePhases;         // per-dot twinkle offset so they shimmer out of sync
+
+    // Relative diameters (× radius). The ring sprite is 1 world-unit across at scale 1,
+    // so scaling by (radius × factor) gives a ring of that diameter.
+    private const float GlowSize = 2.7f;
+    private const float FillSize = 2.0f;
+    private const float OuterSize = 2.0f;
+    private const int MoteCount = 6;
+    private const int RuneCount = 12;      // outer glyph ring
+    private const int RuneInnerCount = 6;  // inner glyph ring
+
+    // Progress through the telegraph window, 0→1. Shared by the rings and the motes.
+    private float Progress => Mathf.Clamp01((Time.time - _startTime) / _duration);
+
+    public void Initialize(float radius, float duration, Color baseColor, Color pulseColor, string sortLayer)
+    {
+        _radius = Mathf.Max(0.15f, radius);
+        _duration = Mathf.Max(0.1f, duration);
+        _baseColor = baseColor;
+        _pulseColor = pulseColor;
+        if (!string.IsNullOrEmpty(sortLayer)) _sortLayer = sortLayer;
+        _startTime = Time.time;
+        BuildVisuals();
+        StartCoroutine(Run());
+    }
+
+    private void BuildVisuals()
+    {
+        // GLOW — a big, faint aura behind everything so the circle blooms softly
+        // into the ground instead of showing a hard edge.
+        _glow = MakeSprite("SummonTelegraphGlow", Boss2SummonFlashSprites.GetSoftDisc(),
+                           FillOrder - 1, _radius * GlowSize);
+        // FILL — the translucent danger patch marking the spawn spot.
+        _fill = MakeSprite("SummonTelegraphFill", Boss2SummonFlashSprites.GetSoftDisc(),
+                           FillOrder, _radius * FillSize);
+        // OUTER RING — a slim pulsing outline (thinner than the meteor ring, so it reads
+        // as an elegant conjuring circle rather than a blunt danger zone).
+        _outerRing = MakeSprite("SummonTelegraphRing", Boss2WarningSprites.GetRing(0.05f),
+                                RingOrder, _radius * OuterSize);
+        // INNER RING — a finer ring that breathes out of phase and tightens toward center.
+        _innerRing = MakeSprite("SummonTelegraphRingInner", Boss2WarningSprites.GetRing(0.03f),
+                                RingOrder + 1, _radius * 1.3f);
+
+        // MOTES — sparks of magic that orbit and spiral inward, gathering at the center
+        // as the summon nears. This "energy converging here" motion sells the intent.
+        for (int i = 0; i < MoteCount; i++)
+            StartCoroutine(MoteRoutine((360f / MoteCount) * i));
+
+        // RUNE RINGS — two rings of small glyph dots that slowly counter-rotate, turning
+        // the plain circle into an arcane summoning sigil.
+        BuildRuneRings();
+    }
+
+    private void BuildRuneRings()
+    {
+        var dots = new List<SpriteRenderer>();
+        var phases = new List<float>();
+
+        _runes = MakeContainer("SummonTelegraphRunes");
+        AddRuneDots(_runes, RuneCount, _radius * 0.92f, _radius * 0.07f, RingOrder + 3, dots, phases);
+
+        _runesInner = MakeContainer("SummonTelegraphRunesInner");
+        AddRuneDots(_runesInner, RuneInnerCount, _radius * 0.5f, _radius * 0.05f, RingOrder + 3, dots, phases);
+
+        _runeDots = dots.ToArray();
+        _runePhases = phases.ToArray();
+    }
+
+    private Transform MakeContainer(string name)
+    {
+        var t = new GameObject(name).transform;
+        t.SetParent(transform, false);
+        return t;
+    }
+
+    private void AddRuneDots(Transform container, int count, float ringR, float dotSize, int order,
+                             List<SpriteRenderer> outDots, List<float> outPhases)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            float ang = (360f / count) * i * Mathf.Deg2Rad;
+            var go = new GameObject("Rune");
+            go.transform.SetParent(container, false);
+            go.transform.localPosition = new Vector3(Mathf.Cos(ang) * ringR, Mathf.Sin(ang) * ringR, 0f);
+            go.transform.localScale = Vector3.one * dotSize;
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = Boss2SummonFlashSprites.GetSoftDisc();
+            sr.sortingLayerName = _sortLayer;
+            sr.sortingOrder = order;
+            sr.color = new Color(_baseColor.r, _baseColor.g, _baseColor.b, 0f);
+            outDots.Add(sr);
+            outPhases.Add(Random.Range(0f, 6.2831853f));
+        }
+    }
+
+    private SpriteRenderer MakeSprite(string name, Sprite sprite, int order, float worldSize)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        go.transform.localScale = Vector3.one * worldSize;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingLayerName = _sortLayer;
+        sr.sortingOrder = order;
+        // Start fully transparent so everything eases in rather than popping.
+        sr.color = new Color(_baseColor.r, _baseColor.g, _baseColor.b, 0f);
+        return sr;
+    }
+
+    private static void Tint(SpriteRenderer sr, Color rgb, float alpha)
+    {
+        if (sr == null) return;
+        rgb.a = Mathf.Clamp01(alpha);
+        sr.color = rgb;
+    }
+
+    private IEnumerator Run()
+    {
+        float elapsed = 0f;
+        while (elapsed < _duration)
+        {
+            float progress = Mathf.Clamp01(elapsed / _duration);
+
+            // Graceful ease-in over the first 18% so nothing snaps into existence.
+            float appear = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / 0.18f));
+
+            // Pulse rate accelerates as the spawn nears — calm ~1.2 Hz early, ramping to
+            // ~4.5 Hz in the final stretch so the "here they come" beat feels urgent.
+            float pulseHz = Mathf.Lerp(1.2f, 4.5f, progress * progress);
+            float pulsePhase = Mathf.Sin(elapsed * pulseHz * Mathf.PI * 2f);
+            // Map sin [-1..1] to a softer, rounded [0..1] beat.
+            float pulse01 = Mathf.Pow(0.5f + 0.5f * pulsePhase, 1.5f);
+
+            Color beat = Color.Lerp(_baseColor, _pulseColor, pulse01);
+
+            // GLOW: slow wide breathe, kept very transparent so it's an aura, not a blob.
+            float glowBreath = 0.5f + 0.5f * Mathf.Sin(elapsed * 2.2f);
+            _glow.transform.localScale = Vector3.one * (_radius * GlowSize * Mathf.Lerp(0.95f, 1.06f, glowBreath));
+            Tint(_glow, beat, appear * Mathf.Lerp(0.05f, 0.13f, progress) * (0.6f + 0.4f * glowBreath));
+
+            // FILL: gentle throb, firming up a little across the window but staying light.
+            Tint(_fill, Color.Lerp(_baseColor, _pulseColor, pulse01 * 0.5f),
+                 appear * Mathf.Lerp(0.10f, 0.22f, progress) * (0.8f + 0.2f * pulse01));
+
+            // OUTER RING: expands slightly on each beat.
+            _outerRing.transform.localScale = Vector3.one * (_radius * OuterSize * Mathf.Lerp(0.95f, 1.05f, pulse01));
+            Tint(_outerRing, beat, appear * Mathf.Lerp(0.30f, 0.6f, progress));
+
+            // INNER RING: breathes against the outer one (opposite phase) and its average
+            // radius tightens toward the center as the timer runs down — closing in.
+            float innerDiam = Mathf.Lerp(1.35f, 1.05f, progress) + (1f - pulse01) * 0.12f;
+            _innerRing.transform.localScale = Vector3.one * (_radius * innerDiam);
+            Tint(_innerRing, Color.Lerp(_pulseColor, _baseColor, pulse01), appear * Mathf.Lerp(0.22f, 0.5f, progress));
+
+            // RUNE RINGS: slow counter-rotation + a gentle out-of-sync twinkle on each dot,
+            // so the whole mark turns like an arcane summoning circle.
+            if (_runes != null) _runes.localRotation = Quaternion.Euler(0f, 0f, elapsed * 22f);
+            if (_runesInner != null) _runesInner.localRotation = Quaternion.Euler(0f, 0f, -elapsed * 36f);
+            if (_runeDots != null)
+            {
+                for (int i = 0; i < _runeDots.Length; i++)
+                {
+                    float tw = 0.5f + 0.5f * Mathf.Sin(elapsed * 6f + _runePhases[i]);
+                    Tint(_runeDots[i], Color.Lerp(_baseColor, _pulseColor, tw),
+                         appear * Mathf.Lerp(0.3f, 0.85f, tw) * Mathf.Lerp(0.55f, 1f, progress));
+                }
+            }
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        Destroy(gameObject);
+    }
+
+    // A single spark: repeatedly spirals inward from the rim to the center, fading as it
+    // arrives, then restarts. Cycles speed up as the summon nears so the motes rush in.
+    private IEnumerator MoteRoutine(float startAngleDeg)
+    {
+        var sr = MakeSprite("SummonTelegraphMote", Boss2SummonFlashSprites.GetSoftDisc(), RingOrder + 2, 1f);
+        var t = sr.transform;
+        float baseSize = Random.Range(0.09f, 0.15f);
+
+        while (true)
+        {
+            float cycle = Mathf.Lerp(1.15f, 0.5f, Progress);   // quicker gathering later
+            float spin = Random.Range(45f, 95f) * (Random.value < 0.5f ? 1f : -1f);
+            float startR = _radius * Random.Range(1.05f, 1.35f);
+
+            float e = 0f;
+            while (e < cycle)
+            {
+                e += Time.deltaTime;
+                float k = Mathf.Clamp01(e / cycle);
+                // Ease inward (fast, then settle) toward the center.
+                float inward = 1f - (1f - k) * (1f - k);
+                float dist = Mathf.Lerp(startR, _radius * 0.04f, inward);
+                float ang = (startAngleDeg + spin * k) * Mathf.Deg2Rad;
+                t.localPosition = new Vector3(Mathf.Cos(ang) * dist, Mathf.Sin(ang) * dist, 0f);
+
+                float twinkle = 0.8f + 0.2f * Mathf.Sin(Time.time * 22f + startAngleDeg);
+                t.localScale = Vector3.one * (baseSize * twinkle * Mathf.Lerp(1f, 0.35f, k));
+
+                // Fade in off the rim, out at the center; whole set strengthens over time.
+                float rimIn = Mathf.Clamp01(k / 0.25f);
+                float coreOut = 1f - Mathf.Clamp01((k - 0.7f) / 0.3f);
+                Color c = Color.Lerp(_pulseColor, _baseColor, k);
+                c.a = rimIn * coreOut * Mathf.Clamp01(Progress / 0.18f) * Mathf.Lerp(0.35f, 0.7f, Progress);
+                sr.color = c;
+                yield return null;
+            }
+        }
+    }
+}
+
+
 // Procedural sprite cache for the warning ring. Built once on first use, shared
 // across every meteor cast for the rest of the session.
 public static class Boss2WarningSprites
@@ -1213,9 +1654,14 @@ public class Boss2MeteorVFX : MonoBehaviour
     private const string SortLayer = "Default";
     private const int ScorchOrder = -110;
     private const int CrackOrder = -100;
+    private const int SmokeOrder = 5250;   // rising aftermath smoke (behind debris/fire)
     private const int DustOrder = 5200;
     private const int DebrisOrder = 5400;
+    private const int ShockwaveOrder = 5500; // expanding pressure ring
+    private const int FireballOrder = 5520; // billowing fire blobs
     private const int FlashOrder = 5600;
+    private const int EmberOrder = 5620;   // glowing sparks fly above the fire
+    private const int BloomOrder = 5700;   // topmost split-second detonation flash
 
     // Meteor color palette — hotter and more orange than the hammer's dusty palette
     // so the AoE reads as fire, not stone-on-stone.
@@ -1223,6 +1669,11 @@ public class Boss2MeteorVFX : MonoBehaviour
     private static readonly Color EmberRed = new Color(0.9f, 0.18f, 0.08f, 1f);
     private static readonly Color CharcoalBrown = new Color(0.18f, 0.10f, 0.07f, 1f);
     private static readonly Color DustTan = new Color(0.78f, 0.66f, 0.5f, 1f);
+    // Extra hues for the upgraded blast: a white-hot detonation core, glowing spark
+    // yellow, and a warm-tinted smoke that reads as burnt rather than neutral gray.
+    private static readonly Color WhiteHot = new Color(1f, 0.95f, 0.80f, 1f);
+    private static readonly Color EmberYellow = new Color(1f, 0.82f, 0.32f, 1f);
+    private static readonly Color SmokeDark = new Color(0.14f, 0.12f, 0.12f, 1f);
 
     private float _radius;
 
@@ -1234,36 +1685,25 @@ public class Boss2MeteorVFX : MonoBehaviour
 
     private IEnumerator Run()
     {
-        // Instant ground marks first so they appear behind everything else.
-        BuildScorch();
-        BuildCracks();
+        // Fiery, layered blast — no flat dust rings or scorch discs (those read as ugly
+        // circles). A split-second bloom sells the detonation, a crisp shockwave ring
+        // snaps outward, the fireball billows and cools through the flame gradient,
+        // glowing embers arc off it, rock debris is thrown clear, and a wispy dark
+        // smoke column rises as the aftermath.
+        BuildCracks();          // faint radial fracture lines (thin slashes, not a disc)
+        BuildBloomFlash();      // t=0 white detonation pop
+        BuildShockwaveRing();   // small, subtle pressure ring at the blast edge
+        BuildFireball();        // billowing white-hot → orange → smoke core (the star)
+        BuildFireCore();        // bright flickering flame that lingers INSIDE the smoke
+        BuildFlameLicks();      // tongues of flame leaping up from the core
+        BuildCoreFlash();       // sharp hot pinpoint at the very center
+        BuildEmbers();          // glowing sparks arcing up and out
+        BuildDebris();          // rock chunks thrown by the blast
+        BuildSmokePlume();      // wispy dark smoke rising and dissipating
 
-        // Front-of-player volume + burst.
-        BuildDustShockwave();
-        BuildDustDisc();
-        BuildDebris();
-        BuildCoreFlash();
-
-        // The longest-lived child (debris flight + bounce + rest + fade) drives the
-        // self-destruct delay. After 2.6s every spawned sub-coroutine is finished.
-        yield return new WaitForSeconds(2.6f);
+        // The longest-lived child is the rising smoke (~2.2s); 3.0s covers the show.
+        yield return new WaitForSeconds(3.0f);
         Destroy(gameObject);
-    }
-
-    //  SCORCH: a dark patch stamped on the ground at impact 
-    private void BuildScorch()
-    {
-        var go = new GameObject("Scorch");
-        go.transform.SetParent(transform, false);
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = Boss2VFXSprites.GetSoftDisc();
-        sr.sortingLayerName = SortLayer;
-        sr.sortingOrder = ScorchOrder;
-        Color c = CharcoalBrown; c.a = 0.7f;
-        sr.color = c;
-        go.transform.localScale = Vector3.one * (_radius * 1.8f);
-        // Scorch sticks around briefly then fades out.
-        StartCoroutine(FadeSprite(sr, life: 1.6f, delay: 0.35f));
     }
 
     //  CRACKS: thin radial slash marks that look painted onto the ground 
@@ -1309,90 +1749,6 @@ public class Boss2MeteorVFX : MonoBehaviour
                 StartCoroutine(FadeSprite(sr, life: 1.4f, delay: 0.5f));
             }
         }
-    }
-
-    //  DUST SHOCKWAVE: rolling ring of dust expanding outward 
-    private void BuildDustShockwave()
-    {
-        // Multiple small dust puffs in a ring, each expanding outward.
-        int puffCount = 14;
-        for (int i = 0; i < puffCount; i++)
-        {
-            float angle = (360f / puffCount) * i * Mathf.Deg2Rad + Random.Range(-0.15f, 0.15f);
-            Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-
-            var go = new GameObject($"DustPuff_{i}");
-            go.transform.SetParent(transform, false);
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = Boss2VFXSprites.GetSoftDisc();
-            sr.sortingLayerName = SortLayer;
-            sr.sortingOrder = DustOrder;
-            // Warm dust — sand-tan tinged with the fire orange so the cloud reads as
-            // "kicked up by something hot" rather than a generic gray puff.
-            Color dust = Color.Lerp(DustTan, FireOrange, 0.25f);
-            dust.a = 0.78f;
-            sr.color = dust;
-
-            float startR = _radius * Random.Range(0.08f, 0.18f);
-            float endR = _radius * Random.Range(0.95f, 1.25f);
-            float startSize = _radius * Random.Range(0.16f, 0.26f);
-            float endSize = _radius * Random.Range(0.45f, 0.72f);
-            StartCoroutine(DustPuffRoutine(go.transform, sr, dir, startR, endR, startSize, endSize));
-        }
-    }
-
-    private IEnumerator DustPuffRoutine(Transform t, SpriteRenderer sr, Vector2 dir,
-                                        float startR, float endR, float startSize, float endSize)
-    {
-        float life = Random.Range(0.6f, 0.85f);
-        Color startCol = sr.color;
-        float e = 0f;
-        while (e < life)
-        {
-            e += Time.deltaTime;
-            float p = Mathf.Clamp01(e / life);
-            float eased = 1f - (1f - p) * (1f - p); // ease-out
-            t.localPosition = dir * Mathf.Lerp(startR, endR, eased);
-            float s = Mathf.Lerp(startSize, endSize, eased);
-            t.localScale = new Vector3(s, s, 1f);
-            Color c = startCol; c.a = startCol.a * (1f - p); sr.color = c;
-            yield return null;
-        }
-        Destroy(t.gameObject);
-    }
-
-    //  DUST DISC: soft ground-hugging cloud at the impact center 
-    private void BuildDustDisc()
-    {
-        var go = new GameObject("DustDisc");
-        go.transform.SetParent(transform, false);
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = Boss2VFXSprites.GetSoftDisc();
-        sr.sortingLayerName = SortLayer;
-        sr.sortingOrder = DustOrder - 1;
-        // Slightly darker, slightly more orange than the ring puffs.
-        Color dust = Color.Lerp(DustTan, FireOrange, 0.4f);
-        dust.a = 0.55f;
-        sr.color = dust;
-
-        StartCoroutine(DustDiscRoutine(go.transform, sr));
-    }
-
-    private IEnumerator DustDiscRoutine(Transform t, SpriteRenderer sr)
-    {
-        float life = 0.9f;
-        Color startCol = sr.color;
-        float e = 0f;
-        while (e < life)
-        {
-            e += Time.deltaTime;
-            float p = Mathf.Clamp01(e / life);
-            float eased = 1f - (1f - p) * (1f - p);
-            t.localScale = Vector3.one * Mathf.Lerp(_radius * 0.4f, _radius * 2.1f, eased);
-            Color c = startCol; c.a = startCol.a * (1f - p); sr.color = c;
-            yield return null;
-        }
-        Destroy(t.gameObject);
     }
 
     //  DEBRIS: arcing rock chunks scattered outward by the blast 
@@ -1562,20 +1918,447 @@ public class Boss2MeteorVFX : MonoBehaviour
 
     private IEnumerator CoreFlashRoutine(Transform t, SpriteRenderer sr)
     {
-        // Bright hot core that snaps to size then shrinks and fades.
-        Color hot = Color.Lerp(FireOrange, Color.white, 0.7f);
-        float life = 0.28f;
+        // Tight, very bright hot core that snaps in and collapses fast — the sharp
+        // pinprick of white-hot at the exact center of the detonation.
+        Color hot = Color.Lerp(FireOrange, Color.white, 0.85f);
+        float life = 0.22f;
         float e = 0f;
         while (e < life)
         {
             e += Time.deltaTime;
             float p = Mathf.Clamp01(e / life);
-            t.localScale = Vector3.one * Mathf.Lerp(_radius * 1.25f, _radius * 0.55f, p);
-            Color c = hot; c.a = Mathf.Lerp(0.95f, 0f, p);
+            t.localScale = Vector3.one * Mathf.Lerp(_radius * 1.0f, _radius * 0.4f, p);
+            Color c = hot; c.a = Mathf.Lerp(1f, 0f, p);
             sr.color = c;
             yield return null;
         }
         Destroy(t.gameObject);
+    }
+
+    //  FLAME LICKS: tongues of fire that leap up from the core then collapse 
+    private void BuildFlameLicks()
+    {
+        int count = Random.Range(7, 10);
+        for (int i = 0; i < count; i++)
+        {
+            float baseX = Random.Range(-0.55f, 0.55f) * _radius;
+            StartCoroutine(FlameLickRoutine(baseX, Random.Range(0f, 0.09f)));
+        }
+    }
+
+    private IEnumerator FlameLickRoutine(float baseX, float delay)
+    {
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+
+        var go = new GameObject("FlameLick");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = Boss2VFXSprites.GetSoftDisc();
+        sr.sortingLayerName = SortLayer;
+        sr.sortingOrder = FireballOrder + 15;   // above the fire-core layers, tonguing over it
+
+        float life = Random.Range(0.3f, 0.46f);
+        float peakHeight = _radius * Random.Range(0.9f, 1.7f);
+        float width = _radius * Random.Range(0.16f, 0.30f);
+        float swayAmp = _radius * Random.Range(0.06f, 0.16f);
+        float swayFreq = Random.Range(8f, 14f);
+
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+
+            // Shoot up fast (reach full height in the first ~30%), then collapse back.
+            float riseP = Mathf.Clamp01(p / 0.3f);
+            float fallP = Mathf.Clamp01((p - 0.3f) / 0.7f);
+            float curH = Mathf.Lerp(peakHeight, peakHeight * 0.25f, fallP) * riseP;
+            // Taper the flame's width toward its tip as it burns out.
+            float curW = width * Mathf.Sin(Mathf.Clamp01(p) * Mathf.PI);
+            curW = Mathf.Max(curW, width * 0.15f);
+
+            go.transform.localScale = new Vector3(curW, Mathf.Max(curH, 0.001f), 1f);
+            // Anchor the base near the blast center; sway the tip a little.
+            float sway = Mathf.Sin(e * swayFreq) * swayAmp * p;
+            go.transform.localPosition = new Vector3(baseX + sway, curH * 0.42f, 0f);
+
+            // Hot at the root of its life, cooling to ember as it dies.
+            Color col = (p < 0.3f) ? Color.Lerp(WhiteHot, FireOrange, p / 0.3f)
+                                   : Color.Lerp(FireOrange, EmberRed, (p - 0.3f) / 0.7f);
+            col.a = Mathf.Lerp(0.92f, 0f, p * p);
+            sr.color = col;
+            yield return null;
+        }
+        Destroy(go);
+    }
+
+    //  BLOOM FLASH: split-second white detonation pop that reads as "it went off" 
+    private void BuildBloomFlash()
+    {
+        var go = new GameObject("BloomFlash");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = Boss2VFXSprites.GetSoftDisc();
+        sr.sortingLayerName = SortLayer;
+        sr.sortingOrder = BloomOrder;
+        StartCoroutine(BloomRoutine(go.transform, sr));
+
+        // A softer, larger glow halo lingers a touch longer, so the detonation reads
+        // as a burst of light rather than a hard-edged disc that pops off instantly.
+        var g = new GameObject("BloomGlow");
+        g.transform.SetParent(transform, false);
+        var gsr = g.AddComponent<SpriteRenderer>();
+        gsr.sprite = Boss2VFXSprites.GetSoftDisc();
+        gsr.sortingLayerName = SortLayer;
+        gsr.sortingOrder = BloomOrder - 1;
+        StartCoroutine(BloomGlowRoutine(g.transform, gsr));
+    }
+
+    private IEnumerator BloomGlowRoutine(Transform t, SpriteRenderer sr)
+    {
+        const float life = 0.35f;
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float openP = Mathf.Clamp01(p / 0.12f);
+            t.localScale = Vector3.one * Mathf.Lerp(_radius * 1.2f, _radius * 3.4f, openP);
+            Color c = Color.Lerp(EmberYellow, FireOrange, p);
+            c.a = Mathf.Lerp(0.5f, 0f, p);   // softer than the core flash
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
+    }
+
+    private IEnumerator BloomRoutine(Transform t, SpriteRenderer sr)
+    {
+        // Snaps to full size almost instantly (the "flash"), holds a frame, then
+        // fades fast. Colour cools from pure white to a warm yellow as it dies so it
+        // hands off cleanly to the orange fireball underneath.
+        const float life = 0.16f;
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float openP = Mathf.Clamp01(p / 0.18f);             // rush to full in first 18%
+            float scale = Mathf.Lerp(_radius * 0.6f, _radius * 2.7f, openP);
+            t.localScale = Vector3.one * scale;
+            Color c = Color.Lerp(Color.white, EmberYellow, p);
+            c.a = Mathf.Lerp(1f, 0f, p * p);                    // ease-out fade
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
+    }
+
+    //  SHOCKWAVE RING: a small, subtle pressure ring at the blast edge 
+    private void BuildShockwaveRing()
+    {
+        // Kept deliberately small and faint — just a hint of a concussion at the blast
+        // edge, not a big sweeping hoop. A thin bright leading ring plus a fainter,
+        // slightly wider trailing ring.
+        SpawnShockRing(thickness: 0.04f, life: 0.28f, maxR: 1.25f, startAlpha: 0.5f, delay: 0f);
+        SpawnShockRing(thickness: 0.025f, life: 0.36f, maxR: 1.5f, startAlpha: 0.28f, delay: 0.04f);
+    }
+
+    private void SpawnShockRing(float thickness, float life, float maxR, float startAlpha, float delay)
+    {
+        var go = new GameObject("ShockwaveRing");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        // Reuse the warning-ring sprite factory — a crisp hollow ring stroke.
+        sr.sprite = Boss2WarningSprites.GetRing(thicknessFraction: thickness);
+        sr.sortingLayerName = SortLayer;
+        sr.sortingOrder = ShockwaveOrder;
+        StartCoroutine(ShockwaveRoutine(go.transform, sr, life, maxR, startAlpha, delay));
+    }
+
+    private IEnumerator ShockwaveRoutine(Transform t, SpriteRenderer sr,
+                                         float life, float maxR, float startAlpha, float delay)
+    {
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            // Ease-out: bursts out fast then decelerates, like a real pressure front
+            // losing energy as it overshoots the blast radius.
+            float eased = 1f - (1f - p) * (1f - p);
+            float diameter = Mathf.Lerp(_radius * 0.4f, _radius * maxR, eased) * 2f;
+            t.localScale = Vector3.one * diameter;
+            Color c = Color.Lerp(WhiteHot, FireOrange, p);
+            c.a = Mathf.Lerp(startAlpha, 0f, p);
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
+    }
+
+    //  FIREBALL: overlapping blobs that billow up and cool from white-hot to smoke 
+    private void BuildFireball()
+    {
+        // A fuller, boiling fireball: a fat molten core, an inner ring of medium blobs,
+        // and an outer ring of smaller ones. Each blob rides the flame gradient on its
+        // own clock and wobbles as it rises, so the mass churns like real fire instead
+        // of scaling as one flat disc.
+        StartCoroutine(FireballBlob(Vector2.zero, _radius * 0.55f, _radius * 1.25f,
+                                    Random.Range(0.55f, 0.7f), 0f));
+
+        int inner = 5;
+        for (int i = 0; i < inner; i++)
+        {
+            float ang = (360f / inner) * i * Mathf.Deg2Rad + Random.Range(-0.3f, 0.3f);
+            Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+            StartCoroutine(FireballBlob(dir * (_radius * Random.Range(0.22f, 0.45f)),
+                                        _radius * Random.Range(0.34f, 0.5f),
+                                        _radius * Random.Range(0.7f, 1.0f),
+                                        Random.Range(0.48f, 0.62f),
+                                        Random.Range(0f, 0.05f)));
+        }
+
+        int outer = 7;
+        for (int i = 0; i < outer; i++)
+        {
+            float ang = (360f / outer) * i * Mathf.Deg2Rad + Random.Range(-0.3f, 0.3f);
+            Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+            StartCoroutine(FireballBlob(dir * (_radius * Random.Range(0.5f, 0.85f)),
+                                        _radius * Random.Range(0.22f, 0.36f),
+                                        _radius * Random.Range(0.45f, 0.72f),
+                                        Random.Range(0.4f, 0.55f),
+                                        Random.Range(0f, 0.1f)));
+        }
+    }
+
+    private IEnumerator FireballBlob(Vector2 driftTarget, float startSize, float endSize,
+                                     float life, float delay)
+    {
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+
+        var go = new GameObject("FireBlob");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = Boss2VFXSprites.GetSoftDisc();
+        sr.sortingLayerName = SortLayer;
+        sr.sortingOrder = FireballOrder + Random.Range(0, 4);
+
+        // Blobs drift outward AND rise buoyantly as they burn, like hot gas.
+        Vector2 rise = Vector2.up * (_radius * Random.Range(0.2f, 0.45f));
+        // Per-blob turbulence so it wobbles/churns while rising (decays as it dies).
+        float turbAmp = _radius * Random.Range(0.04f, 0.12f);
+        float turbFreq = Random.Range(6f, 12f);
+        float turbPhase = Random.Range(0f, 6.2831853f);
+        float spin = Random.Range(-120f, 120f);
+
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float eased = 1f - (1f - p) * (1f - p);
+
+            Vector2 basePos = Vector2.Lerp(Vector2.zero, driftTarget + rise, eased);
+            Vector2 turb = new Vector2(Mathf.Sin(e * turbFreq + turbPhase),
+                                       Mathf.Cos(e * turbFreq * 0.8f + turbPhase)) * (turbAmp * (1f - p));
+            go.transform.localPosition = basePos + turb;
+            go.transform.localScale = Vector3.one * Mathf.Lerp(startSize, endSize, eased);
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, spin * p);
+
+            // Smooth flame gradient that stays HOT for most of the blob's life and only
+            // cools to smoke right at the very end — so the mass reads as fire, not a
+            // dark billowing puff. white-hot → yellow → orange → ember-red → smoke.
+            Color col;
+            if (p < 0.2f) col = Color.Lerp(WhiteHot, EmberYellow, p / 0.2f);
+            else if (p < 0.45f) col = Color.Lerp(EmberYellow, FireOrange, (p - 0.2f) / 0.25f);
+            else if (p < 0.75f) col = Color.Lerp(FireOrange, EmberRed, (p - 0.45f) / 0.3f);
+            else col = Color.Lerp(EmberRed, SmokeDark, (p - 0.75f) / 0.25f);
+            // Stay solid while burning, then fade as it turns to smoke.
+            col.a = p < 0.7f ? 0.96f : Mathf.Lerp(0.96f, 0f, (p - 0.7f) / 0.3f);
+            sr.color = col;
+            yield return null;
+        }
+        Destroy(go);
+    }
+
+    //  FIRE CORE: a bright, flickering heart of flame that lingers at the blast center,
+    //  sitting IN FRONT of the rising smoke so the explosion clearly reads as fire and not
+    //  just a smoke puff. Built from overlapping hot discs — inner ones white-hot, outer
+    //  ones orange — whose overlap brightens the middle (a cheap stand-in for additive
+    //  glow). They fade out while STAYING hot-coloured instead of cooling to dark, which
+    //  is the key difference from the fireball blobs that turn to smoke.
+    private void BuildFireCore()
+    {
+        int layers = Random.Range(6, 8);
+        for (int i = 0; i < layers; i++)
+            StartCoroutine(FireCoreBlob(i, layers));
+    }
+
+    private IEnumerator FireCoreBlob(int index, int total)
+    {
+        var go = new GameObject("FireCore");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = Boss2VFXSprites.GetSoftDisc();
+        sr.sortingLayerName = SortLayer;
+        // Above the fireball blobs and the smoke. Innermost (hottest) layers get the
+        // HIGHER order so the white-hot centre draws ON TOP of the cooler orange outer
+        // layers instead of being buried by them.
+        sr.sortingOrder = FireballOrder + 6 + (total - 1 - index);
+
+        float f = index / Mathf.Max(1f, total - 1f);            // 0 = innermost/hottest
+        float baseSize = Mathf.Lerp(_radius * 0.5f, _radius * 1.2f, f);
+        Vector2 offset = Random.insideUnitCircle * (_radius * 0.15f);
+        float life = Random.Range(0.7f, 1.05f);
+        float flickerFreq = Random.Range(18f, 30f);
+        float riseAmp = _radius * Random.Range(0.15f, 0.4f);
+
+        // Inner layers born white-hot; outer layers born yellow-orange.
+        Color bornHot = Color.Lerp(WhiteHot, EmberYellow, f);
+        Color bornMid = Color.Lerp(EmberYellow, FireOrange, f);
+
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+
+            // Rapid flicker + a brief grow-then-settle so the flame looks alive.
+            float flick = 0.85f + 0.15f * Mathf.Sin(e * flickerFreq + index);
+            float grow = Mathf.Lerp(0.75f, 1.1f, Mathf.Sin(Mathf.Clamp01(p * 1.3f) * Mathf.PI));
+            go.transform.localScale = Vector3.one * (baseSize * flick * grow);
+            go.transform.localPosition = (Vector3)offset + Vector3.up * (riseAmp * p);
+
+            // Colour rides the hot end of the flame gradient and, crucially, fades out
+            // while still orange rather than turning to dark smoke.
+            Color col = (p < 0.5f) ? Color.Lerp(bornHot, bornMid, p / 0.5f)
+                                   : Color.Lerp(bornMid, FireOrange, (p - 0.5f) / 0.5f);
+            // Inner layers are more opaque to build a bright centre; all ease out at the end.
+            float baseA = Mathf.Lerp(0.9f, 0.45f, f);
+            col.a = baseA * (p < 0.6f ? 1f : Mathf.Lerp(1f, 0f, (p - 0.6f) / 0.4f));
+            sr.color = col;
+            yield return null;
+        }
+        Destroy(go);
+    }
+
+    //  EMBERS: glowing sparks flung up and out, arcing under gravity and twinkling 
+    private void BuildEmbers()
+    {
+        int count = Random.Range(28, 38);
+        for (int i = 0; i < count; i++)
+            StartCoroutine(EmberRoutine());
+    }
+
+    private IEnumerator EmberRoutine()
+    {
+        var go = new GameObject("Ember");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = Boss2VFXSprites.GetSoftDisc();
+        sr.sortingLayerName = SortLayer;
+        sr.sortingOrder = EmberOrder;
+        // Bright, crisp sparks — biased hot (mostly white/yellow), newest-looking.
+        Color hot = Color.Lerp(EmberYellow, WhiteHot, Random.Range(0.3f, 0.9f));
+        sr.color = hot;
+
+        // Launch outward with a strong upward bias, then let "gravity" pull it back
+        // down — a real ballistic ember arc rather than a flat radial spray.
+        float ang = Random.Range(0f, Mathf.PI * 2f);
+        Vector2 outDir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+        float outSpeed = _radius * Random.Range(1.6f, 3.6f);
+        float upSpeed = _radius * Random.Range(2.4f, 5f);
+        Vector2 vel = outDir * outSpeed + Vector2.up * upSpeed;
+        float gravity = _radius * Random.Range(8f, 12f);
+
+        float size = _radius * Random.Range(0.03f, 0.075f);   // smaller & crisper
+        float life = Random.Range(0.55f, 1.15f);
+        Vector3 pos = Vector3.zero;
+        Color baseCol = sr.color;
+        float e = 0f;
+        while (e < life)
+        {
+            float dt = Time.deltaTime;
+            e += dt;
+            float p = Mathf.Clamp01(e / life);
+
+            vel.y -= gravity * dt;
+            pos += (Vector3)(vel * dt);
+            go.transform.localPosition = pos;
+
+            // Fast twinkle + shrink as the spark burns out; colour cools to red.
+            float twinkle = 0.7f + 0.3f * Mathf.Sin(e * 55f + ang);
+            float s = size * twinkle * Mathf.Lerp(1f, 0.25f, p);
+            go.transform.localScale = Vector3.one * s;
+
+            Color c = Color.Lerp(baseCol, EmberRed, p);
+            c.a = Mathf.Lerp(1f, 0f, p * p);
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(go);
+    }
+
+    //  SMOKE PLUME: wispy dark smoke that rises, drifts, expands, and dissipates 
+    private void BuildSmokePlume()
+    {
+        int puffs = Random.Range(9, 13);
+        for (int i = 0; i < puffs; i++)
+        {
+            float delay = Random.Range(0f, 0.35f);
+            StartCoroutine(SmokePuffRoutine(delay));
+        }
+    }
+
+    private IEnumerator SmokePuffRoutine(float delay)
+    {
+        if (delay > 0f) yield return new WaitForSeconds(delay);
+
+        var go = new GameObject("SmokePuff");
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = Boss2VFXSprites.GetSoftDisc();
+        sr.sortingLayerName = SortLayer;
+        sr.sortingOrder = SmokeOrder + Random.Range(0, 3);
+
+        // Warm-tinted charcoal so it reads as burnt smoke, not neutral fog.
+        Color smoke = Color.Lerp(SmokeDark, CharcoalBrown, Random.Range(0.15f, 0.5f));
+
+        // Start low and off-centre, rise while drifting sideways so the column leans
+        // and breaks up like real smoke instead of stacking as concentric circles.
+        Vector2 start = new Vector2(Random.Range(-0.35f, 0.35f), Random.Range(-0.1f, 0.2f)) * _radius;
+        float driftX = Random.Range(-0.5f, 0.5f) * _radius;
+        float riseHeight = _radius * Random.Range(1.6f, 3.0f);
+        float startSize = _radius * Random.Range(0.28f, 0.5f);
+        float endSize = _radius * Random.Range(0.9f, 1.5f);
+        float spin = Random.Range(-50f, 50f);
+        float life = Random.Range(1.5f, 2.4f);
+        float maxAlpha = Random.Range(0.28f, 0.44f);   // softer, so it stays wispy
+
+        float e = 0f;
+        float rot = Random.Range(0f, 360f);
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float eased = 1f - (1f - p) * (1f - p);
+
+            Vector2 posXY = start + new Vector2(driftX * eased, riseHeight * eased);
+            go.transform.localPosition = posXY;
+            go.transform.localScale = Vector3.one * Mathf.Lerp(startSize, endSize, eased);
+            rot += spin * Time.deltaTime;
+            go.transform.localRotation = Quaternion.Euler(0f, 0f, rot);
+
+            Color c = smoke;
+            // Fade in briefly (rising out of the fire), then thin out to nothing.
+            c.a = (p < 0.15f) ? Mathf.Lerp(0f, maxAlpha, p / 0.15f)
+                              : Mathf.Lerp(maxAlpha, 0f, (p - 0.15f) / 0.85f);
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(go);
     }
 
     //  SHARED FADE HELPER 
@@ -1713,45 +2496,220 @@ public static class Boss2VFXSprites
 }
 
 
-// Tiny self-destructing animator for the summon-attack smoke puff.
-public class Boss2SmokeFX : MonoBehaviour
+// Per-slime summon materialization burst. A layered effect that reads as
+// "conjured from the Lich's magic": a bright magic flash, an expanding conjure ring,
+// a spinning ground sigil, a billowing puff of smoke, and rising sparkle motes.
+// Palette echoes the boss's purple/pink cast so the whole summon feels like one spell.
+public class Boss2SummonPoofFX : MonoBehaviour
 {
-    private float _baseScale;
-    private float _duration;
-    private float _elapsed;
-    private SpriteRenderer _sr;
-    private Color _startColor;
+    private static readonly Color FlashHot = new Color(1f, 0.85f, 1f, 1f);    // near-white pink
+    private static readonly Color RingColor = new Color(0.95f, 0.5f, 1f, 1f);  // bright magenta
+    private static readonly Color SigilColor = new Color(0.6f, 0.15f, 0.95f, 1f); // deep violet
+    private static readonly Color SparkColor = new Color(1f, 0.78f, 1f, 1f);   // hot pink mote
+    private static readonly Color PurpleSmoke = new Color(0.45f, 0.35f, 0.6f, 1f); // magic-tinted smoke
 
-    public void Initialize(float baseScale, float duration)
+    private const int SigilOrder = 2380;   // ground decal, below the slime
+    private const int SmokeOrder = 2540;   // billows over the slime as it appears
+    private const int RingOrder = 2550;
+    private const int FlashOrder = 2560;
+    private const int SparkleOrder = 2570;
+
+    private string _sortLayer = "Default";
+    private Color _smokeTint = PurpleSmoke;
+
+    public void Play(string sortingLayerName, Color smokeTint)
     {
-        _baseScale = baseScale;
-        _duration = Mathf.Max(0.05f, duration);
-        _sr = GetComponent<SpriteRenderer>();
-        if (_sr != null) _startColor = _sr.color;
+        if (!string.IsNullOrEmpty(sortingLayerName)) _sortLayer = sortingLayerName;
+        // Blend the inspector's smoke colour toward the magic purple so it stays cohesive
+        // with the cast, while still respecting whatever tint the designer chose.
+        _smokeTint = Color.Lerp(smokeTint, PurpleSmoke, 0.5f);
+        StartCoroutine(Run());
     }
 
-    void Update()
+    private IEnumerator Run()
     {
-        _elapsed += Time.deltaTime;
-        float t = Mathf.Clamp01(_elapsed / _duration);
+        BuildSigil();
+        BuildFlash();
+        BuildRing();
+        BuildSmoke();
+        BuildSparkles();
+        // Longest sub-effect (smoke) is ~0.75s. Self-destruct safely after that.
+        yield return new WaitForSeconds(0.9f);
+        Destroy(gameObject);
+    }
 
-        // Expand to 1.8× and drift upward slightly to look like a real smoke puff.
-        float scale = Mathf.Lerp(0.4f, 1.8f, t) * _baseScale;
-        transform.localScale = new Vector3(scale, scale, 1f);
-        transform.position += Vector3.up * (0.3f * Time.deltaTime);
+    private SpriteRenderer NewSprite(string name, Sprite sprite, int order)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingLayerName = _sortLayer;
+        sr.sortingOrder = order;
+        return sr;
+    }
 
-        if (_sr != null)
+    //  FLASH: bright pinkish pop at the appear point 
+    private void BuildFlash()
+    {
+        var sr = NewSprite("PoofFlash", Boss2SummonFlashSprites.GetSoftDisc(), FlashOrder);
+        StartCoroutine(FlashRoutine(sr.transform, sr));
+    }
+
+    private IEnumerator FlashRoutine(Transform t, SpriteRenderer sr)
+    {
+        const float life = 0.22f;
+        float e = 0f;
+        while (e < life)
         {
-            Color c = _startColor;
-            // Ease-out alpha so the puff is solid at first and fades gently.
-            c.a = Mathf.Lerp(_startColor.a, 0f, t * t);
-            _sr.color = c;
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float openP = Mathf.Clamp01(p / 0.2f);
+            float scale = Mathf.Lerp(0.2f, 1.3f, openP) * Mathf.Lerp(1f, 0.7f, p);
+            t.localScale = Vector3.one * scale;
+            Color c = Color.Lerp(FlashHot, RingColor, p);
+            c.a = Mathf.Lerp(1f, 0f, p * p);
+            sr.color = c;
+            yield return null;
         }
+        Destroy(t.gameObject);
+    }
 
-        if (_elapsed >= _duration)
-            Destroy(gameObject);
+    //  RING: quick conjuration ring bursting outward 
+    private void BuildRing()
+    {
+        var sr = NewSprite("PoofRing", Boss2SummonFlashSprites.GetThinRing(), RingOrder);
+        sr.color = RingColor;
+        StartCoroutine(RingRoutine(sr.transform, sr));
+    }
+
+    private IEnumerator RingRoutine(Transform t, SpriteRenderer sr)
+    {
+        const float life = 0.4f;
+        Color baseCol = sr.color;
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float expansion = 1f - (1f - p) * (1f - p);
+            t.localScale = Vector3.one * Mathf.Lerp(0.2f, 1.5f, expansion);
+            Color c = baseCol; c.a = baseCol.a * (1f - p); sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
+    }
+
+    //  SIGIL: violet magic circle stamped on the ground 
+    private void BuildSigil()
+    {
+        var sr = NewSprite("PoofSigil", Boss2SummonFlashSprites.GetThinRing(), SigilOrder);
+        Color c = SigilColor; c.a = 0.7f;
+        sr.color = c;
+        StartCoroutine(SigilRoutine(sr.transform, sr));
+    }
+
+    private IEnumerator SigilRoutine(Transform t, SpriteRenderer sr)
+    {
+        const float life = 0.5f;
+        Color startCol = sr.color;
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            // Snap out to size, spin slowly, then fade.
+            float scale = Mathf.Lerp(0.4f, 1.3f, Mathf.Clamp01(p / 0.2f));
+            t.localScale = Vector3.one * scale;
+            t.localRotation = Quaternion.Euler(0f, 0f, p * 90f);
+            Color c = startCol; c.a = startCol.a * (1f - p); sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
+    }
+
+    //  SMOKE: a few billowing puffs the slime emerges from 
+    private void BuildSmoke()
+    {
+        int puffs = 5;
+        for (int i = 0; i < puffs; i++)
+            StartCoroutine(SmokeRoutine());
+    }
+
+    private IEnumerator SmokeRoutine()
+    {
+        var sr = NewSprite("PoofSmoke", Boss2SummonFlashSprites.GetSoftDisc(), SmokeOrder + Random.Range(0, 3));
+        Vector2 start = new Vector2(Random.Range(-0.25f, 0.25f), Random.Range(-0.1f, 0.1f));
+        float rise = Random.Range(0.35f, 0.7f);
+        float startSize = Random.Range(0.3f, 0.5f);
+        float endSize = Random.Range(0.75f, 1.15f);
+        float spin = Random.Range(-60f, 60f);
+        float life = Random.Range(0.55f, 0.78f);
+
+        Color tint = Color.Lerp(_smokeTint, Color.white, Random.Range(0f, 0.15f));
+        float e = 0f, rot = Random.Range(0f, 360f);
+        var t = sr.transform;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float eased = 1f - (1f - p) * (1f - p);
+            t.localPosition = start + Vector2.up * (rise * eased);
+            t.localScale = Vector3.one * Mathf.Lerp(startSize, endSize, eased);
+            rot += spin * Time.deltaTime;
+            t.localRotation = Quaternion.Euler(0f, 0f, rot);
+            Color c = tint;
+            c.a = (p < 0.2f ? Mathf.Lerp(0f, 0.75f, p / 0.2f)
+                            : Mathf.Lerp(0.75f, 0f, (p - 0.2f) / 0.8f));
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
+    }
+
+    //  SPARKLES: pink motes rising and spiralling up out of the smoke 
+    private void BuildSparkles()
+    {
+        int count = 7;
+        for (int i = 0; i < count; i++)
+            StartCoroutine(SparkleRoutine((360f / count) * i));
+    }
+
+    private IEnumerator SparkleRoutine(float baseAngleDeg)
+    {
+        var sr = NewSprite("PoofSparkle", Boss2SummonFlashSprites.GetSoftDisc(), SparkleOrder);
+        sr.color = SparkColor;
+        var t = sr.transform;
+
+        float life = Random.Range(0.4f, 0.65f);
+        float radius = Random.Range(0.3f, 0.6f);
+        float rise = Random.Range(0.5f, 0.9f);
+        float startSize = Random.Range(0.1f, 0.18f);
+        float spiral = Random.Range(-70f, 70f);
+        Color baseCol = sr.color;
+
+        float e = 0f;
+        while (e < life)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / life);
+            float ang = (baseAngleDeg + spiral * p) * Mathf.Deg2Rad;
+            float dist = radius * (1f - (1f - p) * (1f - p));
+            t.localPosition = new Vector3(Mathf.Cos(ang) * dist,
+                                          Mathf.Sin(ang) * dist * 0.6f + rise * p, 0f);
+            float twinkle = 0.7f + 0.3f * Mathf.Sin(e * 30f + baseAngleDeg);
+            t.localScale = Vector3.one * (startSize * twinkle * Mathf.Lerp(1f, 0.3f, p));
+            Color c = baseCol;
+            c.a = baseCol.a * (p < 0.5f ? 1f : Mathf.Lerp(1f, 0f, (p - 0.5f) / 0.5f));
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(t.gameObject);
     }
 }
+
+
+
 
 
 // Magical summon flash
@@ -2009,3 +2967,6 @@ public static class Boss2SummonFlashSprites
         return _thinRing;
     }
 }
+
+
+

@@ -20,7 +20,7 @@ MonoBehaviour:
   knockBack: 1
   knockBackForce: 5
   isRanged: 1
-  projectilePrefab: {fileID: 3232055685823593232, guid: 2ba789b52e493624b98470c3b775efe8, type: 3}
+  projectilePrefab: {fileID: 3232055685823593232, guid: 7ea1d9be1e07e514abb49a628ecb9ab3, type: 3}
   projectileSpeed: 10
   size: {x: 1, y: 1}
   isGrapplingHook: 0
@@ -87,6 +87,7 @@ MonoBehaviour:
   hammerShakeJolt: 0.42
   hammerShakeRumble: 0.16
   hammerShakeRumbleDuration: 0.55
+  hammerHitSfxLead: 0
   hammerShockwaveColor: {r: 0.93, g: 0.74, b: 0.45, a: 1}
   hammerCrackColor: {r: 0.16, g: 0.12, b: 0.09, a: 1}
   hammerDebrisCount: 14

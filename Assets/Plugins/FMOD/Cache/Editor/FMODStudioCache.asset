@@ -27,6 +27,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-8592834847162232750
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BerserkAttack
+  m_EditorClassIdentifier: 
+  Path: event:/BerserkAttack
+  Guid:
+    Data1: -663322445
+    Data2: 1189255672
+    Data3: 636476834
+    Data4: 509965551
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-8331417670184570684
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -189,7 +216,7 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
---- !u!114 &-7811742797356613956
+--- !u!114 &-7800943913588123390
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -198,21 +225,24 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
-  m_Name: parameter:/OLDMusicAmbient/MusicSection
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/SmokeExplosion
   m_EditorClassIdentifier: 
-  Name: MusicSection
-  StudioPath: 
-  Min: 0
-  Max: 6
-  Default: 0
-  ID:
-    data1: 2983279385
-    data2: 672085133
-  Type: 0
-  IsGlobal: 0
-  Labels: []
-  Exists: 1
+  Path: event:/SmokeExplosion
+  Guid:
+    Data1: 1282179777
+    Data2: 1154339199
+    Data3: -1541828683
+    Data4: -2097106145
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-7770443109233565685
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -267,7 +297,7 @@ MonoBehaviour:
   - {fileID: 4699882167230820914}
   MinDistance: 1
   MaxDistance: 20
-  Length: 121333
+  Length: 122833
 --- !u!114 &-7431918612028469694
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -295,7 +325,7 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
---- !u!114 &-6915338866723983408
+--- !u!114 &-7350064042848569212
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -304,21 +334,51 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
-  m_Name: parameter:/OLDMusicPiano 2/MusicSection
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Bing
   m_EditorClassIdentifier: 
-  Name: MusicSection
-  StudioPath: 
-  Min: 0
-  Max: 6
-  Default: 0
-  ID:
-    data1: 2983279385
-    data2: 672085133
-  Type: 0
-  IsGlobal: 0
-  Labels: []
-  Exists: 1
+  Path: event:/Bing
+  Guid:
+    Data1: -89311253
+    Data2: 1307372813
+    Data3: 1120801664
+    Data4: -510272759
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-7243214235869449900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/DecoyAmbience
+  m_EditorClassIdentifier: 
+  Path: event:/DecoyAmbience
+  Guid:
+    Data1: -440677014
+    Data2: 1154328126
+    Data3: -1323941216
+    Data4: 1961407982
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-6798565564640319563
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -416,15 +476,55 @@ MonoBehaviour:
   Name: MusicSection
   StudioPath: 
   Min: 0
-  Max: 6
+  Max: 12
   Default: 0
   ID:
     data1: 2983279385
     data2: 672085133
-  Type: 0
+  Type: 2
   IsGlobal: 0
-  Labels: []
+  Labels:
+  - Intro
+  - Calm
+  - Trumpet
+  - Pause
+  - Intense
+  - Piano
+  - Menu
+  - StageIntro
+  - Boss
+  - FinalBoss
+  - Reward
+  - Victory
+  - GameOver
   Exists: 1
+--- !u!114 &-6498343118558566077
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/GeneratorTowerAmbience
+  m_EditorClassIdentifier: 
+  Path: event:/GeneratorTowerAmbience
+  Guid:
+    Data1: -1227214063
+    Data2: 1181242989
+    Data3: 334510742
+    Data4: 1623363263
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-6444098505816144973
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -506,6 +606,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-5794406209282425696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/RewardScreen
+  m_EditorClassIdentifier: 
+  Path: event:/RewardScreen
+  Guid:
+    Data1: -1631081471
+    Data2: 1239986127
+    Data3: 1889847180
+    Data4: 766772946
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-5771018700811837762
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -533,6 +660,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-5657856620949431993
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/StingerGameOver
+  m_EditorClassIdentifier: 
+  Path: event:/Music/StingerGameOver
+  Guid:
+    Data1: -1772308522
+    Data2: 1258773652
+    Data3: 437650589
+    Data4: 2031109412
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 11142
 --- !u!114 &-5609916661290021126
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -587,6 +741,34 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-5163854650707592912
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/MusicMenu
+  m_EditorClassIdentifier: 
+  Path: event:/Music/MusicMenu
+  Guid:
+    Data1: -1451426620
+    Data2: 1222330275
+    Data3: 545491116
+    Data4: 1018636422
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters:
+  - {fileID: 48546162078551497}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 209142
 --- !u!114 &-5051054718417278305
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -641,6 +823,60 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-4721295459251855674
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/WaveEnd
+  m_EditorClassIdentifier: 
+  Path: event:/WaveEnd
+  Guid:
+    Data1: 639463143
+    Data2: 1325564995
+    Data3: -1429884032
+    Data4: -2140236361
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-4418850786984957061
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Unused1
+  m_EditorClassIdentifier: 
+  Path: event:/Unused1
+  Guid:
+    Data1: -679304605
+    Data2: 1154868427
+    Data3: -1770493769
+    Data4: 1497306749
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-4336789798712153391
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -659,6 +895,33 @@ MonoBehaviour:
     Data2: 1218359914
     Data3: 1487889832
     Data4: -993017630
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-4303560238264729687
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Boss2ExplosionWarning
+  m_EditorClassIdentifier: 
+  Path: event:/Boss2ExplosionWarning
+  Guid:
+    Data1: 2060984378
+    Data2: 1141253024
+    Data3: -696827972
+    Data4: -1815806022
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
@@ -722,6 +985,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-3772309247765217581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BossZoomSoundShorter
+  m_EditorClassIdentifier: 
+  Path: event:/BossZoomSoundShorter
+  Guid:
+    Data1: 2070350851
+    Data2: 1211264450
+    Data3: -145954908
+    Data4: 1491012297
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-3723619638092549200
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -776,6 +1066,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-3378545655894950407
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BassySound
+  m_EditorClassIdentifier: 
+  Path: event:/BassySound
+  Guid:
+    Data1: 323620811
+    Data2: 1313556280
+    Data3: -1347489140
+    Data4: 1207580591
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-3364550810353487170
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -821,6 +1138,33 @@ MonoBehaviour:
     Data2: 1234501350
     Data3: 305116045
     Data4: -1671416936
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-3292625278803796227
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BossZoomSoundShort
+  m_EditorClassIdentifier: 
+  Path: event:/BossZoomSoundShort
+  Guid:
+    Data1: 1602104550
+    Data2: 1100721641
+    Data3: -1592419939
+    Data4: 1865586507
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
@@ -899,14 +1243,27 @@ MonoBehaviour:
   Name: MusicSection
   StudioPath: 
   Min: 0
-  Max: 6
+  Max: 12
   Default: 0
   ID:
     data1: 2983279385
     data2: 672085133
-  Type: 0
+  Type: 2
   IsGlobal: 0
-  Labels: []
+  Labels:
+  - Intro
+  - Calm
+  - Trumpet
+  - Pause
+  - Intense
+  - Piano
+  - Menu
+  - StageIntro
+  - Boss
+  - FinalBoss
+  - Reward
+  - Victory
+  - GameOver
   Exists: 1
 --- !u!114 &-3022535177794394964
 MonoBehaviour:
@@ -1070,6 +1427,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-2108779374622883557
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/RedEyeLaserAttack
+  m_EditorClassIdentifier: 
+  Path: event:/RedEyeLaserAttack
+  Guid:
+    Data1: -578133600
+    Data2: 1235218217
+    Data3: -1263540086
+    Data4: 1607279729
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 1
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-2009635258836309910
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1151,6 +1535,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-1822143213161487219
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/GremlinAppearance2
+  m_EditorClassIdentifier: 
+  Path: event:/GremlinAppearance2
+  Guid:
+    Data1: -137785337
+    Data2: 1256328913
+    Data3: 259961991
+    Data4: 1195445433
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &-1123512589560027423
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1169,6 +1580,60 @@ MonoBehaviour:
     Data2: 1266718532
     Data3: 1784811681
     Data4: -1821924106
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-896119884272022184
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Boss2Spawn
+  m_EditorClassIdentifier: 
+  Path: event:/Boss2Spawn
+  Guid:
+    Data1: 444658756
+    Data2: 1084113188
+    Data3: 1226184861
+    Data4: -1159817588
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &-577127564434431217
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/WaveStart
+  m_EditorClassIdentifier: 
+  Path: event:/WaveStart
+  Guid:
+    Data1: 216846135
+    Data2: 1180219007
+    Data3: 1794102433
+    Data4: 190369664
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
@@ -1247,10 +1712,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 639190262228044620
+  lastModified: 639206141633727153
   FileSizes:
   - Name: Desktop
-    Value: 4252
+    Value: 5616
   Exists: 1
 --- !u!114 &11400000
 MonoBehaviour:
@@ -1275,13 +1740,8 @@ MonoBehaviour:
   - {fileID: -3723619638092549200}
   - {fileID: -5856974683079393109}
   - {fileID: 6045371974070151471}
-  - {fileID: 5056624467990409799}
   - {fileID: -6643075125367941810}
-  - {fileID: 3748478789586696555}
-  - {fileID: 4878125545354185004}
   - {fileID: -7576298359550858565}
-  - {fileID: 7812522369849875838}
-  - {fileID: 7043781551158048209}
   - {fileID: -2308969310433941878}
   - {fileID: 8111230708531817370}
   - {fileID: 2632449698367640323}
@@ -1340,13 +1800,47 @@ MonoBehaviour:
   - {fileID: -3691365229529003222}
   - {fileID: 3625142845573257829}
   - {fileID: 8498129719075306488}
+  - {fileID: -6498343118558566077}
+  - {fileID: 7426444333276437676}
+  - {fileID: 8392928039421690018}
+  - {fileID: -3378545655894950407}
+  - {fileID: 8222143086027003162}
+  - {fileID: -5794406209282425696}
+  - {fileID: 7464976115606786650}
+  - {fileID: 1441047590572049966}
+  - {fileID: 1333078040109823651}
+  - {fileID: -7800943913588123390}
+  - {fileID: 3795602560006020090}
+  - {fileID: 9175838353860124454}
+  - {fileID: 2182875544045007348}
+  - {fileID: -5163854650707592912}
+  - {fileID: -5657856620949431993}
+  - {fileID: -7243214235869449900}
+  - {fileID: -7350064042848569212}
+  - {fileID: -1822143213161487219}
+  - {fileID: 6605431446945243452}
+  - {fileID: 4102881829318519488}
+  - {fileID: 8372633860899369044}
+  - {fileID: -577127564434431217}
+  - {fileID: -4303560238264729687}
+  - {fileID: -896119884272022184}
+  - {fileID: -4418850786984957061}
+  - {fileID: 8511541149565712657}
+  - {fileID: -2108779374622883557}
+  - {fileID: 620583971250156343}
+  - {fileID: -8592834847162232750}
+  - {fileID: -4721295459251855674}
+  - {fileID: 6888708235203910759}
+  - {fileID: -3772309247765217581}
+  - {fileID: 1563202687344063534}
+  - {fileID: -3292625278803796227}
   EditorParameters: []
   MasterBanks:
   - {fileID: 1320380482680642554}
   StringsBanks:
   - {fileID: -89216244576792818}
   cacheVersion: 131848
-  cacheTime: 639190262228404970
+  cacheTime: 639206141638895484
   SerializableEventsDict:
   - key: event:/MultiShot
     index: 0
@@ -1358,136 +1852,231 @@ MonoBehaviour:
     index: 3
   - key: event:/Music/MusicAmbient
     index: 4
-  - key: event:/Music/OLDMusicAmbient
-    index: 5
   - key: event:/Music/MusicPiano
-    index: 6
-  - key: event:/Music/OLDMusicAmbientTransition
-    index: 7
-  - key: event:/Music/OLDMusicAmbient 2
-    index: 8
+    index: 5
   - key: event:/Music/MusicElectronic
-    index: 9
-  - key: event:/Music/OLDMusicAmbient2
-    index: 10
-  - key: event:/Music/OLDMusicPiano 2
-    index: 11
+    index: 6
   - key: event:/TowerMeleeHit
-    index: 12
+    index: 7
   - key: event:/TowerDamage
-    index: 13
+    index: 8
   - key: event:/TowerRepair
-    index: 14
+    index: 9
   - key: event:/ResourceDropCollection
-    index: 15
+    index: 10
   - key: event:/GrapplingHookShoot
-    index: 16
+    index: 11
   - key: event:/TowerCreation
-    index: 17
+    index: 12
   - key: event:/CentralCoreDeath
-    index: 18
+    index: 13
   - key: event:/Click
-    index: 19
+    index: 14
   - key: event:/TowerDeath
-    index: 20
+    index: 15
   - key: event:/GremlinAppearance
-    index: 21
+    index: 16
   - key: event:/AugmentReroll
-    index: 22
+    index: 17
   - key: event:/GremlinDeath
-    index: 23
+    index: 18
   - key: event:/EnemyAttack
-    index: 24
+    index: 19
   - key: event:/Music/MusicCalm
-    index: 25
+    index: 20
   - key: event:/BossLaserShot
-    index: 26
+    index: 21
   - key: event:/Boss1GroundHit
-    index: 27
+    index: 22
   - key: event:/ShieldParry
-    index: 28
+    index: 23
   - key: event:/TurretRotate
-    index: 29
+    index: 24
   - key: event:/TurretShot
-    index: 30
+    index: 25
   - key: event:/ShieldBlock
-    index: 31
+    index: 26
   - key: event:/ProximityMineExplode
-    index: 32
+    index: 27
   - key: event:/Flamethrower
-    index: 33
+    index: 28
   - key: event:/ProximityMine
-    index: 34
+    index: 29
   - key: event:/MeleeSwingHit
-    index: 35
+    index: 30
   - key: event:/MeleeSwing
-    index: 36
+    index: 31
   - key: event:/MeleeHit
-    index: 37
+    index: 32
   - key: event:/ScarecrowScream
-    index: 38
+    index: 33
   - key: event:/RangedShot
-    index: 39
+    index: 34
   - key: event:/TrapSetup
-    index: 40
+    index: 35
   - key: event:/BoomerangShot
-    index: 41
+    index: 36
   - key: event:/DecoySetup
-    index: 42
+    index: 37
   - key: event:/BoomerangHit
-    index: 43
+    index: 38
   - key: event:/RangedHit
-    index: 44
+    index: 39
   - key: event:/MenuClick2
-    index: 45
+    index: 40
   - key: event:/MenuClick
-    index: 46
+    index: 41
   - key: event:/RewindActivate
-    index: 47
+    index: 42
   - key: event:/AugmentScreen
-    index: 48
+    index: 43
   - key: event:/Boss2Explosion
-    index: 49
+    index: 44
   - key: event:/TorchSetup
-    index: 50
+    index: 45
   - key: event:/MortarShot
-    index: 51
+    index: 46
   - key: event:/OpenChest
-    index: 52
+    index: 47
   - key: event:/EyeAttack 2
-    index: 53
+    index: 48
   - key: event:/ProjectileParry
-    index: 54
+    index: 49
   - key: event:/MineExplosion
-    index: 55
+    index: 50
   - key: event:/MortarExplosion
-    index: 56
+    index: 51
   - key: event:/MineSetup
-    index: 57
+    index: 52
   - key: event:/TurretSetup
-    index: 58
+    index: 53
   - key: event:/InsectAttack
-    index: 59
+    index: 54
   - key: event:/SmokeShot
-    index: 60
+    index: 55
   - key: event:/HammerHit
-    index: 61
+    index: 56
   - key: event:/BomberExplosion
-    index: 62
+    index: 57
   - key: event:/WolfAttack
-    index: 63
+    index: 58
   - key: event:/CloakActivate
-    index: 64
+    index: 59
   - key: event:/SlimeAttack
-    index: 65
+    index: 60
   - key: event:/PitcherHit
-    index: 66
+    index: 61
   - key: event:/EyeAttack
-    index: 67
+    index: 62
   - key: event:/PitcherAttack
-    index: 68
+    index: 63
   - key: event:/TrapCapture
+    index: 64
+  - key: event:/GeneratorTowerAmbience
+    index: 65
+  - key: event:/VortexSpawn
+    index: 66
+  - key: event:/SplitterAttack
+    index: 67
+  - key: event:/BassySound
+    index: 68
+  - key: event:/SplitterSplit
     index: 69
+  - key: event:/RewardScreen
+    index: 70
+  - key: event:/RevenantActivation
+    index: 71
+  - key: event:/TowerPlacement
+    index: 72
+  - key: event:/BufferSmoke
+    index: 73
+  - key: event:/SmokeExplosion
+    index: 74
+  - key: event:/ParfumerSmoke
+    index: 75
+  - key: event:/Music/StingerVictory
+    index: 76
+  - key: event:/Music/StingerVictory2
+    index: 77
+  - key: event:/Music/MusicMenu
+    index: 78
+  - key: event:/Music/StingerGameOver
+    index: 79
+  - key: event:/DecoyAmbience
+    index: 80
+  - key: event:/Bing
+    index: 81
+  - key: event:/GremlinAppearance2
+    index: 82
+  - key: event:/LaserTowerAttack
+    index: 83
+  - key: event:/Unused2
+    index: 84
+  - key: event:/HammerTowerAttack
+    index: 85
+  - key: event:/WaveStart
+    index: 86
+  - key: event:/Boss2ExplosionWarning
+    index: 87
+  - key: event:/Boss2Spawn
+    index: 88
+  - key: event:/Unused1
+    index: 89
+  - key: event:/BombWarning
+    index: 90
+  - key: event:/RedEyeLaserAttack
+    index: 91
+  - key: event:/HealingTowerHalo
+    index: 92
+  - key: event:/BerserkAttack
+    index: 93
+  - key: event:/WaveEnd
+    index: 94
+  - key: event:/ChestAppearance
+    index: 95
+  - key: event:/BossZoomSoundShorter
+    index: 96
+  - key: event:/BossZoomSound
+    index: 97
+  - key: event:/BossZoomSoundShort
+    index: 98
+--- !u!114 &48546162078551497
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/MusicMenu/MusicSection
+  m_EditorClassIdentifier: 
+  Name: MusicSection
+  StudioPath: 
+  Min: 0
+  Max: 12
+  Default: 0
+  ID:
+    data1: 2983279385
+    data2: 672085133
+  Type: 2
+  IsGlobal: 0
+  Labels:
+  - Intro
+  - Calm
+  - Trumpet
+  - Pause
+  - Intense
+  - Piano
+  - Menu
+  - StageIntro
+  - Boss
+  - FinalBoss
+  - Reward
+  - Victory
+  - GameOver
+  Exists: 1
 --- !u!114 &466687119483286031
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1509,6 +2098,33 @@ MonoBehaviour:
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &620583971250156343
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/HealingTowerHalo
+  m_EditorClassIdentifier: 
+  Path: event:/HealingTowerHalo
+  Guid:
+    Data1: -880089179
+    Data2: 1321301663
+    Data3: -1634964062
+    Data4: 16657855
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 1
   Is3D: 1
   IsOneShot: 1
   Parameters: []
@@ -1557,38 +2173,27 @@ MonoBehaviour:
   Name: MusicSection
   StudioPath: 
   Min: 0
-  Max: 6
+  Max: 12
   Default: 0
   ID:
     data1: 2983279385
     data2: 672085133
-  Type: 0
+  Type: 2
   IsGlobal: 0
-  Labels: []
-  Exists: 1
---- !u!114 &1197225308460702449
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
-  m_Name: parameter:/OLDMusicAmbientTransition/MusicSection
-  m_EditorClassIdentifier: 
-  Name: MusicSection
-  StudioPath: 
-  Min: 0
-  Max: 6
-  Default: 0
-  ID:
-    data1: 2983279385
-    data2: 672085133
-  Type: 0
-  IsGlobal: 0
-  Labels: []
+  Labels:
+  - Intro
+  - Calm
+  - Trumpet
+  - Pause
+  - Intense
+  - Piano
+  - Menu
+  - StageIntro
+  - Boss
+  - FinalBoss
+  - Reward
+  - Victory
+  - GameOver
   Exists: 1
 --- !u!114 &1272753002779917664
 MonoBehaviour:
@@ -1632,11 +2237,92 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/Master.bank
   Name: Master
   StudioPath: bank:/Master
-  lastModified: 638898438174316050
+  lastModified: 639194473467170589
   FileSizes:
   - Name: Desktop
     Value: 1982
   Exists: 1
+--- !u!114 &1333078040109823651
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BufferSmoke
+  m_EditorClassIdentifier: 
+  Path: event:/BufferSmoke
+  Guid:
+    Data1: 1292956552
+    Data2: 1297374201
+    Data3: -361919852
+    Data4: -1072792042
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &1441047590572049966
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/TowerPlacement
+  m_EditorClassIdentifier: 
+  Path: event:/TowerPlacement
+  Guid:
+    Data1: -1886757548
+    Data2: 1256546323
+    Data3: 37228461
+    Data4: 1016271403
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &1563202687344063534
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BossZoomSound
+  m_EditorClassIdentifier: 
+  Path: event:/BossZoomSound
+  Guid:
+    Data1: -905492433
+    Data2: 1133231976
+    Data3: 1147984270
+    Data4: 1838871532
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &2033433031323360437
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1664,6 +2350,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &2182875544045007348
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/StingerVictory2
+  m_EditorClassIdentifier: 
+  Path: event:/Music/StingerVictory2
+  Guid:
+    Data1: 1178402996
+    Data2: 1112948412
+    Data3: -1858781045
+    Data4: 764355336
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 7500
 --- !u!114 &2339957932704232335
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1826,7 +2539,7 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
---- !u!114 &3748478789586696555
+--- !u!114 &3795602560006020090
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1836,24 +2549,23 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Music/OLDMusicAmbientTransition
+  m_Name: event:/ParfumerSmoke
   m_EditorClassIdentifier: 
-  Path: event:/Music/OLDMusicAmbientTransition
+  Path: event:/ParfumerSmoke
   Guid:
-    Data1: 636068961
-    Data2: 1163063478
-    Data3: 1942136723
-    Data4: -422838714
+    Data1: 67939562
+    Data2: 1276364989
+    Data3: 636684435
+    Data4: 1228644669
   Banks:
-  - {fileID: 8434910682899568656}
+  - {fileID: 4485862351229570366}
   IsStream: 0
-  Is3D: 0
-  IsOneShot: 0
-  Parameters:
-  - {fileID: 1197225308460702449}
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
   MinDistance: 1
   MaxDistance: 20
-  Length: 207666
+  Length: 0
 --- !u!114 &3977268413993745447
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1881,6 +2593,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &4102881829318519488
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Unused2
+  m_EditorClassIdentifier: 
+  Path: event:/Unused2
+  Guid:
+    Data1: 1051549746
+    Data2: 1090121378
+    Data3: -1895464574
+    Data4: 1063125112
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &4485862351229570366
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1896,10 +2635,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/FX.bank
   Name: FX
   StudioPath: bank:/FX
-  lastModified: 639190262228404970
+  lastModified: 639206141638895484
   FileSizes:
   - Name: Desktop
-    Value: 2888704
+    Value: 4304896
   Exists: 1
 --- !u!114 &4681440307763707746
 MonoBehaviour:
@@ -1943,71 +2682,28 @@ MonoBehaviour:
   Name: MusicSection
   StudioPath: 
   Min: 0
-  Max: 6
+  Max: 12
   Default: 0
   ID:
     data1: 2983279385
     data2: 672085133
-  Type: 0
+  Type: 2
   IsGlobal: 0
-  Labels: []
+  Labels:
+  - Intro
+  - Calm
+  - Trumpet
+  - Pause
+  - Intense
+  - Piano
+  - Menu
+  - StageIntro
+  - Boss
+  - FinalBoss
+  - Reward
+  - Victory
+  - GameOver
   Exists: 1
---- !u!114 &4878125545354185004
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Music/OLDMusicAmbient 2
-  m_EditorClassIdentifier: 
-  Path: event:/Music/OLDMusicAmbient 2
-  Guid:
-    Data1: 1630351498
-    Data2: 1088801058
-    Data3: 1478809734
-    Data4: -1384734006
-  Banks:
-  - {fileID: 8434910682899568656}
-  IsStream: 0
-  Is3D: 0
-  IsOneShot: 0
-  Parameters:
-  - {fileID: 7729493964428327597}
-  MinDistance: 1
-  MaxDistance: 20
-  Length: 202800
---- !u!114 &5056624467990409799
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Music/OLDMusicAmbient
-  m_EditorClassIdentifier: 
-  Path: event:/Music/OLDMusicAmbient
-  Guid:
-    Data1: -303871223
-    Data2: 1086396090
-    Data3: -188790856
-    Data4: -913032655
-  Banks:
-  - {fileID: 8434910682899568656}
-  IsStream: 0
-  Is3D: 0
-  IsOneShot: 1
-  Parameters:
-  - {fileID: -7811742797356613956}
-  MinDistance: 1
-  MaxDistance: 20
-  Length: 0
 --- !u!114 &5293760198380736230
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2117,7 +2813,7 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 171135
---- !u!114 &6112901616673511526
+--- !u!114 &6605431446945243452
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2126,21 +2822,24 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
-  m_Name: parameter:/OLDMusicAmbient2/MusicSection
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/LaserTowerAttack
   m_EditorClassIdentifier: 
-  Name: MusicSection
-  StudioPath: 
-  Min: 0
-  Max: 6
-  Default: 0
-  ID:
-    data1: 2983279385
-    data2: 672085133
-  Type: 0
-  IsGlobal: 0
-  Labels: []
-  Exists: 1
+  Path: event:/LaserTowerAttack
+  Guid:
+    Data1: 402338324
+    Data2: 1301538740
+    Data3: -135552356
+    Data4: -1733743937
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 1
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &6850197530369327895
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2168,7 +2867,7 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
---- !u!114 &7043781551158048209
+--- !u!114 &6888708235203910759
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2178,24 +2877,77 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Music/OLDMusicPiano 2
+  m_Name: event:/ChestAppearance
   m_EditorClassIdentifier: 
-  Path: event:/Music/OLDMusicPiano 2
+  Path: event:/ChestAppearance
   Guid:
-    Data1: -1177859412
-    Data2: 1270687480
-    Data3: 1057360816
-    Data4: -271800353
+    Data1: -351554827
+    Data2: 1128854556
+    Data3: -747732304
+    Data4: 1624760792
   Banks:
-  - {fileID: 8434910682899568656}
+  - {fileID: 4485862351229570366}
   IsStream: 0
-  Is3D: 0
-  IsOneShot: 0
-  Parameters:
-  - {fileID: -6915338866723983408}
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
   MinDistance: 1
   MaxDistance: 20
-  Length: 175666
+  Length: 0
+--- !u!114 &7426444333276437676
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/VortexSpawn
+  m_EditorClassIdentifier: 
+  Path: event:/VortexSpawn
+  Guid:
+    Data1: -523449827
+    Data2: 1295171623
+    Data3: 2048082355
+    Data4: 1805621944
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &7464976115606786650
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/RevenantActivation
+  m_EditorClassIdentifier: 
+  Path: event:/RevenantActivation
+  Guid:
+    Data1: 2117981760
+    Data2: 1120098540
+    Data3: -1096177771
+    Data4: 321594150
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &7686635985281884391
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2223,58 +2975,6 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
---- !u!114 &7729493964428327597
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
-  m_Name: parameter:/OLDMusicAmbient 2/MusicSection
-  m_EditorClassIdentifier: 
-  Name: MusicSection
-  StudioPath: 
-  Min: 0
-  Max: 6
-  Default: 0
-  ID:
-    data1: 2983279385
-    data2: 672085133
-  Type: 0
-  IsGlobal: 0
-  Labels: []
-  Exists: 1
---- !u!114 &7812522369849875838
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Music/OLDMusicAmbient2
-  m_EditorClassIdentifier: 
-  Path: event:/Music/OLDMusicAmbient2
-  Guid:
-    Data1: 1023081344
-    Data2: 1244326282
-    Data3: 1942578613
-    Data4: -2099529089
-  Banks:
-  - {fileID: 8434910682899568656}
-  IsStream: 0
-  Is3D: 0
-  IsOneShot: 0
-  Parameters:
-  - {fileID: 6112901616673511526}
-  MinDistance: 1
-  MaxDistance: 20
-  Length: 175666
 --- !u!114 &8111230708531817370
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2330,6 +3030,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 162666
+--- !u!114 &8222143086027003162
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/SplitterSplit
+  m_EditorClassIdentifier: 
+  Path: event:/SplitterSplit
+  Guid:
+    Data1: 790187261
+    Data2: 1329952572
+    Data3: 907250334
+    Data4: -639339375
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &8346838553085091532
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2357,6 +3084,60 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &8372633860899369044
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/HammerTowerAttack
+  m_EditorClassIdentifier: 
+  Path: event:/HammerTowerAttack
+  Guid:
+    Data1: 134657330
+    Data2: 1233975418
+    Data3: 494478493
+    Data4: 1221938407
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &8392928039421690018
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/SplitterAttack
+  m_EditorClassIdentifier: 
+  Path: event:/SplitterAttack
+  Guid:
+    Data1: -1614499900
+    Data2: 1318866254
+    Data3: -960455278
+    Data4: -1497507770
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &8434910682899568656
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2372,10 +3153,10 @@ MonoBehaviour:
   Path: Assets/Audio/FMOD/Tower Defense FMOD/Build/Desktop/MusicAmbient.bank
   Name: MusicAmbient
   StudioPath: bank:/MusicAmbient
-  lastModified: 638996926772407147
+  lastModified: 639202277171581643
   FileSizes:
   - Name: Desktop
-    Value: 3311232
+    Value: 6281152
   Exists: 1
 --- !u!114 &8498129719075306488
 MonoBehaviour:
@@ -2395,6 +3176,33 @@ MonoBehaviour:
     Data2: 1159070431
     Data3: 872787369
     Data4: 2006400210
+  Banks:
+  - {fileID: 4485862351229570366}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
+--- !u!114 &8511541149565712657
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/BombWarning
+  m_EditorClassIdentifier: 
+  Path: event:/BombWarning
+  Guid:
+    Data1: -1661188467
+    Data2: 1253479177
+    Data3: 1158436797
+    Data4: 569958508
   Banks:
   - {fileID: 4485862351229570366}
   IsStream: 0
@@ -2431,3 +3239,30 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &9175838353860124454
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Music/StingerVictory
+  m_EditorClassIdentifier: 
+  Path: event:/Music/StingerVictory
+  Guid:
+    Data1: 387915679
+    Data2: 1105488373
+    Data3: -947672675
+    Data4: 1567662813
+  Banks:
+  - {fileID: 8434910682899568656}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 7500

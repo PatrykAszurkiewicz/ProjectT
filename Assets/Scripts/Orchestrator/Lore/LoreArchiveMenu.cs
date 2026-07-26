@@ -29,12 +29,11 @@ public class LoreArchiveMenu : MonoBehaviour
         }
     }
 
-    public static LoreArchiveMenu Ensure(bool showButton, KeyCode hotkey, bool debugReset = false)
+    public static LoreArchiveMenu Ensure(KeyCode hotkey, bool debugReset = false)
     {
         var inst = Instance;
         inst.hotkey = hotkey;
         inst.debugResetButton = debugReset;
-        inst.SetButtonVisible(showButton);
         return inst;
     }
 
@@ -63,19 +62,15 @@ public class LoreArchiveMenu : MonoBehaviour
     public KeyCode hotkey = KeyCode.J;
     public bool debugResetButton = false;
 
-    // runtime — button
-    private GameObject buttonCanvas, buttonGO;
-    private bool builtButton;
-
     // runtime — panel
     private Canvas canvas;
     private GameObject root;
     private RectTransform listContent;
     private TextMeshProUGUI headerLabel, readingTitle, readingBody;
     private bool builtPanel, isOpen;
-    private float prevTimeScale;
-    private bool prevInputSuppressed;
-    private bool prevCursorVisible;
+    // prevTimeScale / prevInputSuppressed / prevCursorVisible are gone: snapshotting
+    // and restoring them is what let this menu re-freeze the game after the screen
+    // underneath had already resumed. UIModalStack owns all three now (MenuTheme.cs).
 
     private TMP_FontAsset font;                 // resolved font (assigned, else TMP default)
     private Sprite solid, paper;                // generated fallbacks / paper
@@ -89,28 +84,79 @@ public class LoreArchiveMenu : MonoBehaviour
     private readonly List<Item> items = new List<Item>();
     private int selectedId = int.MinValue;
 
+    // MenuScene's Button_Lore points at the LoreArchiveMenu COMPONENT sitting in that
+    // scene. This class is DontDestroyOnLoad, so on the second visit to MenuScene the
+    // scene's copy used to `Destroy(gameObject)` itself as a duplicate — leaving the
+    // button wired to a destroyed component. Clicking Lore then did nothing, which is
+    // exactly the "sometimes it opens, sometimes it doesn't" you saw (fresh boot: the
+    // scene copy IS the singleton; after returning from a run: it isn't).
+    // Fix: the duplicate survives as a thin PROXY that forwards to the real instance,
+    // so any scene wiring keeps working forever.
+    private bool _isProxy;
+
     void Awake()
     {
-        if (_instance != null && _instance != this) { Destroy(gameObject); return; }
+        if (_instance != null && _instance != this) { _isProxy = true; return; }
         _instance = this;
         if (transform.parent != null) transform.SetParent(null);
         DontDestroyOnLoad(gameObject);
+
+        // This object SURVIVES scene loads. Left open across one, its canvas would still
+        // be on screen while UIModalStack (which drains on sceneLoaded) no longer knows
+        // about it — so Esc could never close it and the overlay would be permanently
+        // stuck over the new scene. Close on every load.
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
-    void OnDestroy() { if (_instance == this) _instance = null; }
+    void OnDestroy()
+    {
+        if (_isProxy) return;
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (_instance == this) _instance = null;
+    }
+
+    private void OnSceneLoaded(UnityEngine.SceneManagement.Scene s,
+                               UnityEngine.SceneManagement.LoadSceneMode m) => Close();
 
     void Update()
     {
-        if (HotkeyDown(hotkey)) Toggle();
-        if (isOpen && EscDown()) Close();
+        if (_isProxy) return;
+
+        // The hotkey is live in EVERY scene, every frame, because this object is
+        // DontDestroyOnLoad. Pressing J on top of another modal — or, worse, while
+        // ControlRebindScreen is capturing a key, or while the disconnect guard is
+        // waiting for a pad — used to open the archive anyway. Accept it only from
+        // gameplay, the pause menu, or Options (where it always belonged).
+        if (HotkeyDown(hotkey) && HotkeyAllowed()) Toggle();
+
+        // Esc is arbitrated, not read raw: reading it here AND in the Pause action meant
+        // one press both closed this menu and toggled pause underneath it.
+        if (isOpen && MenuBackInput.ConsumeBack(this)) Close();
+    }
+
+    // Nothing else open, we're the thing that's open, or the top screen is one this
+    // archive is legitimately reachable from.
+    private bool HotkeyAllowed()
+    {
+        if (isOpen || !UIModalStack.IsOpen) return true;
+        var top = UIModalStack.Top;
+        return top is PauseMenuController || top is OptionsMenu;
     }
 
     //  control 
-    public bool IsOpen => isOpen;
-    public void Toggle() { if (isOpen) Close(); else Open(); }
+    // Every public entry point forwards from a proxy to the real singleton, so a
+    // Button wired to the scene copy behaves identically to one wired to the survivor.
+    public bool IsOpen => _isProxy ? (_instance != null && _instance.isOpen) : isOpen;
+
+    public void Toggle()
+    {
+        if (_isProxy) { if (_instance != null) _instance.Toggle(); return; }
+        if (isOpen) Close(); else Open();
+    }
 
     public void Open()
     {
+        if (_isProxy) { if (_instance != null) _instance.Open(); return; }
         if (builtPanel && (root == null || canvas == null)) builtPanel = false;
         EnsurePanel();
         Populate();
@@ -118,31 +164,27 @@ public class LoreArchiveMenu : MonoBehaviour
         isOpen = true;
 
         CombatJuice.StopAllShake();
-        prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-        prevCursorVisible = Cursor.visible;
-        Cursor.visible = true;
-        prevInputSuppressed = PlayerAttack.InputSuppressed;
-        PlayerAttack.InputSuppressed = true;
+        UIModalStack.Push(this, freeze: UIModalStack.GameplayActive);
     }
 
     public void Close()
     {
+        if (_isProxy) { if (_instance != null) _instance.Close(); return; }
         if (!isOpen) return;
-        Time.timeScale = prevTimeScale;
-        PlayerAttack.InputSuppressed = prevInputSuppressed;
-        // Restore whatever the cursor was before (e.g. the pause menu
-        // underneath had it visible) instead of forcing it off.
-        Cursor.visible = prevCursorVisible;
-        if (root != null) root.SetActive(false);
         isOpen = false;
+        if (root != null) root.SetActive(false);
+        UIModalStack.Pop(this);
     }
 
-    public void SetButtonVisible(bool visible)
+    private void OnDisable()
     {
-        if (visible) EnsureButton();
-        if (buttonGO != null) buttonGO.SetActive(visible);
+        if (_isProxy) return;
+        if (isOpen) { isOpen = false; UIModalStack.Pop(this); }
     }
+
+    // NOTE: The archive is opened by wiring a UI Button's OnClick to one of the
+    // public Open() / Close() / Toggle() methods above (see LoreArchiveOpener), or
+    // from code via LoreArchiveMenu.Instance.Open(). It also responds to `hotkey`.
 
     //  themed-art loading 
     private void CacheArt()
@@ -155,7 +197,7 @@ public class LoreArchiveMenu : MonoBehaviour
 
         if (themePanel == null)
         {
-            themePanel = Themed(assignedPanel, "MenuPanel_1", new Vector4(140, 140, 140, 140));
+            themePanel = Themed(assignedPanel, "MenuPanel 1", new Vector4(140, 140, 140, 140));
             if (themePanel == null) { themePanel = LorePaperArt.MakePanelSprite(); WarnLoadFailed(); }
         }
         if (themeListPanel == null && assignedListPanel != null)
@@ -170,7 +212,7 @@ public class LoreArchiveMenu : MonoBehaviour
         _warnedLoad = true;
         Debug.LogWarning("[LoreArchive] Themed panel not found — using fallback art. " +
             "Either assign the sprites on the LoreChestSpawner (Archive Theming), or make sure the PNGs " +
-            "live under 'Assets/Resources/" + ThemeFolder + "' imported as Sprites (path: '" + ThemeFolder + "MenuPanel_1').");
+            "live under 'Assets/Resources/" + ThemeFolder + "' imported as Sprites (path: '" + ThemeFolder + "MenuPanel 1').");
     }
 
     private Sprite Themed(Sprite assigned, string resourceName, Vector4 border)
@@ -195,33 +237,6 @@ public class LoreArchiveMenu : MonoBehaviour
                                  SpriteMeshType.FullRect, border);
         }
         catch { return src; }
-    }
-
-    //  on-screen "ARCHIVE" button 
-    private void EnsureButton()
-    {
-        if (builtButton) return;
-        builtButton = true;
-        CacheArt();
-
-        buttonCanvas = new GameObject("LoreArchiveButtonCanvas");
-        var c = buttonCanvas.AddComponent<Canvas>();
-        c.renderMode = RenderMode.ScreenSpaceOverlay;
-        c.sortingOrder = 9990;
-        var sc = buttonCanvas.AddComponent<CanvasScaler>();
-        sc.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        sc.referenceResolution = new Vector2(1920, 1080);
-        sc.matchWidthOrHeight = 0.5f;
-        buttonCanvas.AddComponent<GraphicRaycaster>();
-        EnsureEventSystem();
-
-        var btn = ThemedButton("ArchiveButton", buttonCanvas.transform, "ARCHIVE", 28, out RectTransform rt);
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 0f);
-        rt.pivot = new Vector2(0f, 0f);
-        rt.anchoredPosition = new Vector2(26, 26);
-        rt.sizeDelta = new Vector2(220, 74);
-        btn.onClick.AddListener(Open);
-        buttonGO = btn.gameObject;
     }
 
     //  archive panel 

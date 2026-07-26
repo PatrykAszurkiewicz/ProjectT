@@ -36,6 +36,8 @@ public class LoreScrollPopup : MonoBehaviour
     public Color titleColor = new Color(0.20f, 0.12f, 0.05f, 1f);
     public Color bodyColor = new Color(0.16f, 0.10f, 0.05f, 1f);
     public Color hintColor = new Color(0.30f, 0.20f, 0.10f, 0.8f);
+    [Tooltip("Colour of the '+10 Energy recovered' line. Ink-blue so it reads as a stamp on the page.")]
+    public Color rewardColor = new Color(0.10f, 0.32f, 0.46f, 1f);
 
     [Header("Animation")]
     public float entranceDuration = 0.4f;
@@ -51,6 +53,7 @@ public class LoreScrollPopup : MonoBehaviour
     private RectTransform panelRect;
     private TextMeshProUGUI titleText;
     private TextMeshProUGUI bodyText;
+    private TextMeshProUGUI rewardText;
     private bool built;
     private bool isOpen;
     private bool dismissRequested;
@@ -61,20 +64,30 @@ public class LoreScrollPopup : MonoBehaviour
 
     public bool IsOpen => isOpen;
 
-    public void ShowFragment(LoreFragment fragment)
+    /// Returns true if the scroll took the fragment. False means it was rejected (another
+    /// scroll is already up) — the caller must NOT treat the fragment as read.
+    public bool ShowFragment(LoreFragment fragment, string rewardNote = null)
     {
-        if (fragment == null) return;
-        if (isOpen) return; // modal — one scroll at a time
-        StartCoroutine(ShowRoutine(fragment));
+        if (fragment == null) return false;
+        if (isOpen) return false; // modal — one scroll at a time
+        StartCoroutine(ShowRoutine(fragment, rewardNote));
+        return isOpen;            // ShowRoutine runs to its first yield synchronously
     }
 
-    public IEnumerator ShowRoutine(LoreFragment fragment)
+    public IEnumerator ShowRoutine(LoreFragment fragment, string rewardNote = null)
     {
         if (built && (root == null || canvas == null)) built = false;
         EnsureBuilt();
 
         titleText.text = fragment.title;
         bodyText.text = fragment.body;
+
+        bool hasReward = !string.IsNullOrEmpty(rewardNote);
+        if (rewardText != null)
+        {
+            rewardText.text = rewardNote ?? "";
+            rewardText.gameObject.SetActive(hasReward);
+        }
 
         dismissRequested = false;
         root.SetActive(true);
@@ -92,6 +105,9 @@ public class LoreScrollPopup : MonoBehaviour
             AudioManager.instance.PlayOneShot(FMODEvents.instance.towerCreation, Vector3.zero);
 
         yield return StartCoroutine(PlayEntrance());
+
+        // Stamp the reward line on a beat after the page settles.
+        if (hasReward) StartCoroutine(PopReward());
 
         yield return null; // swallow the opening click
         while (!dismissRequested && !DismissInputDown())
@@ -142,6 +158,35 @@ public class LoreScrollPopup : MonoBehaviour
         }
         rootGroup.alpha = 1f;
         panelRect.localScale = to;
+    }
+
+    // Reward line fades in and overshoots slightly — unscaled, since the game is paused.
+    private IEnumerator PopReward()
+    {
+        if (rewardText == null) yield break;
+
+        var rt = rewardText.rectTransform;
+        const float dur = 0.32f;
+        float t = 0f;
+
+        Color c = rewardColor; c.a = 0f;
+        rewardText.color = c;
+        rt.localScale = Vector3.one * 0.75f;
+
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / dur);
+            float e = 1f - Mathf.Pow(1f - u, 3f);
+            float overshoot = 1f + 0.12f * Mathf.Sin(e * Mathf.PI);   // small pop past 1
+            rt.localScale = Vector3.one * (Mathf.Lerp(0.75f, 1f, e) * overshoot);
+            c.a = rewardColor.a * e;
+            rewardText.color = c;
+            yield return null;
+        }
+
+        rt.localScale = Vector3.one;
+        rewardText.color = rewardColor;
     }
 
     // UI CONSTRUCTION 
@@ -217,7 +262,15 @@ public class LoreScrollPopup : MonoBehaviour
         bodyText.lineSpacing = 6f;
         var bodyR = bodyText.rectTransform;
         bodyR.anchorMin = new Vector2(0f, 0f); bodyR.anchorMax = new Vector2(1f, 1f);
-        bodyR.offsetMin = new Vector2(110, 126); bodyR.offsetMax = new Vector2(-110, -212);
+        // Bottom padding raised from 126 → 168 to reserve a lane for the reward line.
+        bodyR.offsetMin = new Vector2(110, 168); bodyR.offsetMax = new Vector2(-110, -212);
+
+        rewardText = CreateText("Reward", panelRect, "", 24, FontStyles.Bold, TextAlignmentOptions.Center, rewardColor);
+        var rr = rewardText.rectTransform;
+        rr.anchorMin = new Vector2(0f, 0f); rr.anchorMax = new Vector2(1f, 0f);
+        rr.pivot = new Vector2(0.5f, 0f);
+        rr.offsetMin = new Vector2(80, 122); rr.offsetMax = new Vector2(-80, 160);
+        rewardText.gameObject.SetActive(false);
 
         var hint = CreateText("Hint", panelRect, "— click to continue —", 20, FontStyles.Normal, TextAlignmentOptions.Bottom, hintColor);
         var hr = hint.rectTransform;

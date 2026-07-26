@@ -182,6 +182,13 @@ public class SmokeScreenProjectile : MonoBehaviour
         root.transform.position = landingPos;
         root.AddComponent<SmokeScreenCloud>().Initialize(cloudRadius, cloudDuration, cloudColor);
 
+        // Burst SFX: the moment the smoke cloud appears at the landing spot.
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.smokeExplosion.IsNull)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.smokeExplosion, landingPos);
+        }
+
         DestroyTelegraph();
         Destroy(gameObject);
     }
@@ -444,4 +451,3 @@ public class SmokeScreenVisual : MonoBehaviour
             playing = false;
     }
 }
-

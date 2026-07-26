@@ -52,6 +52,13 @@ MonoBehaviour:
   generationInterval: 0.25
   showGenerationEffects: 0
   generationEffectColor: {r: 0.3, g: 0.7, b: 1, a: 0.5}
+  isHealTower: 0
+  healRange: 4
+  healPerSecond: 5
+  healInterval: 0.25
+  healSelfConsumption: 0.1
+  showHealEffects: 1
+  healEffectColor: {r: 0.3, g: 1, b: 0.4, a: 0.5}
   freezeChance: 0
   healthRegenRate: 0
   energyCostMultiplier: 1
@@ -63,23 +70,41 @@ MonoBehaviour:
   isHammerTower: 0
   hammerAOERadius: 2
   hammerAttackInterval: 2.5
+  hammerBodyColliderSize: {x: 3, y: 2}
+  hammerBodyColliderOffset: {x: 0, y: -2}
   hammerImpactEffectPrefab: {fileID: 0}
+  enableDustParticles: 1
+  dustColor: {r: 0.6, g: 0.5, b: 0.4, a: 0.8}
+  dustParticleCount: 50
+  dustLifetime: 1.5
+  dustSpeed: 3
+  dustSize: 0.15
   isLaserTower: 1
   laserWidth: 0.1
   laserMaxLength: 12
-  laserDamagePerSecond: 45
+  laserDamagePerSecond: 3
   laserColor: {r: 0.4867924, g: 0.12399423, b: 0.35364076, a: 1}
+  laserBeamColor: {r: 0.72, g: 0.12, b: 1, a: 1}
+  laserIntensity: 1.6
+  laserMuzzleOffset: 0.15
+  laserChargeTime: 0.28
+  laserPowerDownTime: 0.13
+  laserSortingOrder: 32000
+  enableLaserChargeVisual: 1
   towerName: Laser Tower
-  damage: 30
+  damage: 5
   fireRate: 1
   cost: 120
   towerType: 2
-  spriteResourcePath: Sprites/Buildings/Towers/tower_ranged_sprite
+  spriteResourcePath: Sprites/Buildings/Towers/LaserTower
   spriteIndex: 0
   spriteScale: 0.55
-  enableAnimation: 0
-  animationFrameCount: 43
+  enableAnimation: 1
+  animationFrameCount: 49
   animationSpeed: 0.25
+  loopIdleAnimation: 1
+  idleAnimationFps: 12
+  usePrefabVisuals: 0
   targetLayer:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -88,6 +113,8 @@ MonoBehaviour:
   upgradeTowerPrefab: {fileID: 0}
   upgradeLevel: 1
   maxUpgradeLevel: 3
+  upgradeDamageBonusPerLevel: 0.2
+  upgradeHealthBonusPerLevel: 0.2
   useTentacleTurret: 0
   tentacleConfig:
     length: 1.2
@@ -132,6 +159,7 @@ MonoBehaviour:
   currentEnergy: 120
   requiresEnergyToFunction: 1
   showEnergyBar: 1
+  energyBarOffsetOverride: 1.7
   armorReduction: 0
   immuneToEnemyDamage: 0
   damageFlashDuration: 0.15

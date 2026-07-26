@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Users;
 using UnityEngine.SceneManagement;
 using TMPro;
 
@@ -50,8 +51,6 @@ public class ControllerDisconnectGuard : MonoBehaviour
     private readonly HashSet<PlayerInput> _everHadPad = new HashSet<PlayerInput>();
 
     private bool _engaged;
-    private float _prevTimeScale = 1f;
-    private bool _weSuppressed;
     private bool _committing;
 
     // UI (built once, mirrors ContinueRunMenu)
@@ -68,16 +67,19 @@ public class ControllerDisconnectGuard : MonoBehaviour
         // Never leave the game frozen if torn down mid-overlay (e.g. scene reload).
         if (_engaged)
         {
-            Time.timeScale = _prevTimeScale <= 0f ? 1f : _prevTimeScale;
-            if (_weSuppressed) { PlayerAttack.SetAllSuppressed(false); _weSuppressed = false; }
             _engaged = false;
+            UIModalStack.Pop(this);
         }
         _everHadPad.Clear();
     }
 
     private void Update()
     {
-        // Remember who currently holds a connected gamepad.
+        // Remember who currently holds a connected gamepad. Destroyed PlayerInputs
+        // must be dropped, or a respawn/scene teardown leaves a ghost "pad player"
+        // that can never have a pad again — permanently stranding the guard open.
+        _everHadPad.RemoveWhere(pi => pi == null);
+
         var all = PlayerInput.all;
         for (int i = 0; i < all.Count; i++)
             if (all[i] != null && HasConnectedGamepad(all[i])) _everHadPad.Add(all[i]);
@@ -180,8 +182,35 @@ public class ControllerDisconnectGuard : MonoBehaviour
             if (pi == null || !_everHadPad.Contains(pi) || HasConnectedGamepad(pi)) continue;
             try
             {
-                pi.SwitchCurrentControlScheme("Gamepad", pad);  // pair + activate
-                if (debugLog) Debug.Log($"[DisconnectGuard] Re-paired '{pad.displayName}' to player {pi.playerIndex + 1}.");
+                // BUG FIX. This used to be an unconditional
+                //     pi.SwitchCurrentControlScheme("Gamepad", pad);
+                // SwitchCurrentControlScheme UNPAIRS every device currently paired to
+                // the player and pairs only the one passed in. In single player,
+                // CoopManager deliberately pairs keyboard + mouse + every pad to the
+                // ONE PlayerInput and widens its binding mask to "Keyboard&Mouse;Gamepad"
+                // so both are live at once. Unplug the pad, plug it back in, and this
+                // line silently threw the keyboard and mouse away: the pad worked, the
+                // keyboard and mouse were dead until the scene reloaded. Exactly the
+                // "lost mouse and keyboard, controller still fine" symptom.
+                //
+                // So: only take the destructive path for a player that has nothing but
+                // gamepads. Anyone holding keyboard+mouse gets the pad paired ADDITIVELY,
+                // leaving their existing devices (and widened mask) untouched.
+                if (HasKeyboardMouse(pi))
+                {
+                    var user = pi.user;
+                    if (user.valid)
+                    {
+                        InputUser.PerformPairingWithDevice(pad, user);
+                        if (debugLog) Debug.Log($"[DisconnectGuard] Paired '{pad.displayName}' to player {pi.playerIndex + 1} " +
+                                                "additively (keyboard+mouse preserved).");
+                    }
+                }
+                else
+                {
+                    pi.SwitchCurrentControlScheme("Gamepad", pad);  // pad-only player: pair + activate
+                    if (debugLog) Debug.Log($"[DisconnectGuard] Re-paired '{pad.displayName}' to player {pi.playerIndex + 1}.");
+                }
             }
             catch (System.Exception e)
             {
@@ -202,17 +231,19 @@ public class ControllerDisconnectGuard : MonoBehaviour
 
     //  Pause / resume 
 
+    // This overlay sits at sortingOrder 6000 — ABOVE the pause menu and the augment
+    // menus. It used to snapshot Time.timeScale on engage and write it back on
+    // resume, which stomped whatever the screen underneath had set. It now pushes
+    // itself onto UIModalStack: resuming pops one layer and the stack recomputes
+    // the correct global state, leaving any menu below still correctly paused.
     private void Engage()
     {
         _engaged = true;
-        _prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-        PlayerAttack.SetAllSuppressed(true);
-        _weSuppressed = true;
-        Cursor.visible = true;
 
         if (_root == null) BuildUI();
         if (_root != null) _root.SetActive(true);
+
+        UIModalStack.Push(this);
         RefreshGate();
 
         if (debugLog) Debug.Log("[DisconnectGuard] Controller lost — run paused.");
@@ -222,9 +253,7 @@ public class ControllerDisconnectGuard : MonoBehaviour
     {
         _engaged = false;
         if (_root != null) _root.SetActive(false);
-        Time.timeScale = _prevTimeScale <= 0f ? 1f : _prevTimeScale;
-        if (_weSuppressed) { PlayerAttack.SetAllSuppressed(false); _weSuppressed = false; }
-        Cursor.visible = false;
+        UIModalStack.Pop(this);
 
         if (debugLog) Debug.Log("[DisconnectGuard] Resumed.");
     }
@@ -294,17 +323,18 @@ public class ControllerDisconnectGuard : MonoBehaviour
 
     private void QuitToMenu()
     {
-        if (_weSuppressed) { PlayerAttack.SetAllSuppressed(false); _weSuppressed = false; }
         _engaged = false;
         if (_root != null) _root.SetActive(false);
+
+        // Drop EVERY open modal, not just ours: the pause menu / augment menu may
+        // still be beneath us, and their freeze would ride into the menu scene.
+        UIModalStack.ForceClear();
 
         // Leave no stale resume intent behind: GameOrchestrator/CoopManager read this
         // static on the next boot, and a leftover value could mis-seat or mis-route the
         // next launch. Exit & Save still leaves the run SAVE on disk (resume via
         // ContinueRunMenu); we only clear the one-shot intent handoff.
         RunResumeIntent.Clear();
-
-        Time.timeScale = 1f;   // timeScale persists across loads; a frozen next scene hangs.
 
         // Prefer the explicit field, else the default (matches PauseMenu's "MenuScene").
         string scene = !string.IsNullOrEmpty(mainMenuScene) ? mainMenuScene : defaultMenuScene;
@@ -328,7 +358,10 @@ public class ControllerDisconnectGuard : MonoBehaviour
             typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = _root.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 6000;   // above pause / augment menus
+        // Must be the topmost thing on screen. 6000 sat UNDER LoreArchiveMenu (9996)
+        // and RunProgressBar (9995): lose a pad with the archive open and the "plug it
+        // back in" overlay rendered behind it, invisible.
+        canvas.sortingOrder = 10000;
         var scaler = _root.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
@@ -412,4 +445,3 @@ public class ControllerDisconnectGuard : MonoBehaviour
         le.minHeight = h; le.preferredHeight = h; le.flexibleHeight = 0f;
     }
 }
-

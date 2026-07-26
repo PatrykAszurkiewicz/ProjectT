@@ -181,8 +181,10 @@ public class RevenantNecronomiconSystem
         if (store != null)
             store.book.StartActive(data.bookAuraDuration, BookCooldownDuration());
 
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.resourceDropCollection,
+        // Activation SFX for the Revenant Necronomicon (the moment the aura is cast).
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.revenantActivation.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.revenantActivation,
                                               playerTransform.position);
     }
 
@@ -1047,4 +1049,3 @@ public class SoulBurstVFX : MonoBehaviour
         return _cachedMote;
     }
 }
-

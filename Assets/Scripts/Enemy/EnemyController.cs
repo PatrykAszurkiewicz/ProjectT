@@ -24,6 +24,7 @@ public class EnemyController : MonoBehaviour
 
     [SerializeField] private float attackRange = 1.7f;
     [SerializeField] private float attackCooldown = 1f;
+
     private float attackTimer = 0f;
 
     [Header("Obstacle Avoidance")]
@@ -958,6 +959,17 @@ public class EnemyController : MonoBehaviour
             && (GetComponent<ParryStunEffect>()?.IsStunActive != true)
             && (EnergyManager.Instance == null || !EnergyManager.Instance.IsGameOver()))
         {
+            // Boss1 owns the sprite while its laser routine runs. Opening a melee
+            // cycle here would call PlayMeleeAttackAnimation(), which early-outs
+            // during a laser — the damage would land on an invisible swing. Hold
+            // the melee until the laser finishes; Boss1 already refuses to start a
+            // laser mid-swing, so the two attacks strictly take turns.
+            if (boss1 != null && boss1.IsPerformingLaserAttack)
+            {
+                attackTimer = 0f;
+                return;
+            }
+
             float distance = Vector2.Distance(transform.position, currentTarget.position);
 
             if (distance <= attackRange)
@@ -1405,5 +1417,6 @@ public class EnemyController : MonoBehaviour
     }
 
 }
+
 
 

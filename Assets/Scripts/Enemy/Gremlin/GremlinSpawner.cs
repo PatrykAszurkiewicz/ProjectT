@@ -191,10 +191,13 @@ public class GremlinSpawner : MonoBehaviour
         GameObject newGremlin = Instantiate(gremlinPrefab, position, Quaternion.identity);
         newGremlin.SetActive(true);
 
-        // Play gremlin appearance sound
-        if (AudioManager.instance != null && FMODEvents.instance != null)
+        // Play gremlin appearance sound. Uses the newer GremlinAppearance2 event; the
+        // old gremlinAppearance is intentionally NOT also played, so only one spawn
+        // cue fires. (Swap back, or play both, if you wanted them layered.)
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.gremlinAppearance2.IsNull)
         {
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.gremlinAppearance, position);
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.gremlinAppearance2, position);
         }
 
         activeGremlins.Add(newGremlin);
@@ -223,3 +226,5 @@ public class GremlinSpawner : MonoBehaviour
         }
     }
 }
+
+

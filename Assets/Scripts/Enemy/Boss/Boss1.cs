@@ -29,7 +29,14 @@ public class Boss1 : BaseBossStats //, IDamageable
     [SerializeField] private float hookIndicatorYAboveHealthBar = 0.3f;
 
     private EnemyAnimationController animController;
+    private EnemyController enemyController;
     private bool isPerformingLaserAttack = false;
+
+    /// True for the WHOLE laser routine (charge → fire → cleanup), not just the
+    /// laser animation. EnemyController reads this so it never opens a melee
+    /// cycle mid-laser — PlayMeleeAttackAnimation() early-outs while the laser
+    /// animation owns the sprite, which would deal damage with no swing on screen.
+    public bool IsPerformingLaserAttack => isPerformingLaserAttack;
 
     [Header("Boss1 Configuration")]
     [SerializeField] private float bossMaxArmor = 1000f;
@@ -39,6 +46,7 @@ public class Boss1 : BaseBossStats //, IDamageable
     //private FMOD.Studio.EventInstance? laserChargeSoundInstance;
     private FMOD.Studio.EventInstance laserChargeSoundInstance;
     private bool hasLaserSound = false;
+    private float nextLaserSoundLogTime;
     [SerializeField] private float laserDamagePerSecond = 35f;
     [SerializeField] private float laserRange = 10f;
     [SerializeField] private float laserChargeDuration = 1.1f;
@@ -57,11 +65,56 @@ public class Boss1 : BaseBossStats //, IDamageable
     [SerializeField] private LaserTrackingMode trackingMode = LaserTrackingMode.DelayedTracking;
     [SerializeField] private float trackingRotationSpeed = 90f;
     [SerializeField] private float trackingDelay = 0.3f;
+
+    [Header("Laser Rendering Order")]
+    [Tooltip("Sorting order for the laser beam. This must be a FIXED value ABOVE the " +
+             "Y-sort band, NOT derived from the boss's own sorting order.\n\n" +
+             "Why: every Y-sorted sprite in the project uses\n" +
+             "    sortingOrder = 1000 + round(-footY * 10)\n" +
+             "so the band runs roughly 400-1600 and a sprite one world unit lower on " +
+             "screen sorts 10 higher. The laser is a long beam that spans many Y " +
+             "values at once, so no single Y-derived order can ever be correct for " +
+             "it — it has to opt out of Y-sorting entirely.\n\n" +
+             "Existing fixed orders in the project for reference:\n" +
+             "    -1   terrain\n" +
+             "    500  connection lines\n" +
+             "    600  non-blocking layout decorations\n" +
+             "    400-1600  Y-sorted sprites (boss, blocking obstacles, trees, rocks)\n" +
+             "    2000 boss head, enemy projectiles\n" +
+             "    2500 obstacle-drawing line")]
+    [SerializeField] private int laserSortingOrder = 2100;
+
+    [Header("Laser Charge Telegraph")]
+    [Tooltip("Show the charge-up tell (muzzle glow + short aim stub) while the " +
+             "laser winds up. Off = no telegraph at all.")]
     [SerializeField] private bool showWarningTelegraph = true;
-    [SerializeField] private Color warningLineColor = new Color(1f, 0f, 0f, 0.5f);
+    [Tooltip("Tint of the charge telegraph. Keep it close to the beam's colour so " +
+             "players read it as 'that thing is about to fire'.")]
+    [SerializeField] private Color telegraphColor = new Color(1f, 0.32f, 0.22f, 1f);
+    [Tooltip("Peak opacity of the telegraph at full charge. This is the main " +
+             "subtlety dial — lower = quieter tell.")]
+    [Range(0f, 1f)][SerializeField] private float telegraphMaxAlpha = 0.55f;
+    [Tooltip("World radius of the glow at the muzzle when fully charged. It grows " +
+             "into this from ~35% over the charge.")]
+    [SerializeField] private float telegraphOrbRadius = 0.45f;
+    [Tooltip("Length (world units) of the short aim stub at full charge. This only " +
+             "hints at the direction — it deliberately does NOT reach the target " +
+             "the way the old full-length warning line did.")]
+    [SerializeField] private float telegraphStubLength = 2.2f;
+    [Tooltip("Width of the aim stub at the muzzle end. It tapers to a point.")]
+    [SerializeField] private float telegraphStubWidth = 0.14f;
+    [Tooltip("Draw the contracting intake ring that collapses into the muzzle. " +
+             "This is what reads as 'charging' rather than just 'glowing'.")]
+    [SerializeField] private bool telegraphShowIntakeRing = true;
 
     [Header("Laser Audio")]
     [SerializeField] private bool playLaserChargeSound = true;
+    [Tooltip("Log the live FMOD instance count for bossLaserShot every time a boss " +
+             "creates/stops one, plus the FMOD.RESULT of start(). Turn this on for " +
+             "one playtest to prove whether instances are leaking (count climbs and " +
+             "never returns to 0) or whether the event is hitting Max Instances " +
+             "(start() returns ERR_STUDIO_MAX_INSTANCES / count sits at the cap).")]
+    [SerializeField] private bool logLaserSoundDiagnostics = false;
 
     public enum LaserTrackingMode
     {
@@ -112,9 +165,17 @@ public class Boss1 : BaseBossStats //, IDamageable
     private System.Collections.Generic.List<GameObject> laserNightLights =
         new System.Collections.Generic.List<GameObject>();
 
-    // Warning telegraph 
-    private LineRenderer laserWarningLine;
-    private GameObject laserWarningObject;
+    // Charge telegraph — muzzle glow + contracting intake ring + short aim stub.
+    // Replaces the old full-length red LineRenderer warning.
+    private GameObject telegraphRoot;
+    private SpriteRenderer telegraphOrb;
+    private SpriteRenderer telegraphRing;
+    private LineRenderer telegraphStub;
+    private Gradient telegraphGradient;
+    private GradientColorKey[] telegraphColorKeys;
+    private GradientAlphaKey[] telegraphAlphaKeys;
+    private Sprite telegraphGlowSprite;
+    private Sprite telegraphRingSprite;
 
     // Delayed tracking 
     private System.Collections.Generic.List<PositionSnapshot> positionHistory =
@@ -168,6 +229,7 @@ public class Boss1 : BaseBossStats //, IDamageable
         // minimal flip avoids stepping on them.
         bossSmoothFlip.SetMinimalMode(true);
         animController = GetComponent<EnemyAnimationController>();
+        enemyController = GetComponent<EnemyController>();
         // Instantiate health bar (same as EnemyStats.Start())
         //if (healthBarPrefab != null)
         //{
@@ -242,11 +304,23 @@ public class Boss1 : BaseBossStats //, IDamageable
 
         UpdateHealthBarOffset();
 
-        Canvas canvas = HealthBar.GetComponentInChildren<Canvas>();
+        // Keep the bar above the cartoon-grass overlay.
+        // GrassCartoonOverlay bakes its tufts on the *Default* sorting layer at
+        //     sortingOrder = 1000 + round(-y * 10)   ->  roughly 400..1600 across the map.
+        // A fixed order of 1000 sits INSIDE that band: it only wins against grass
+        // above y = 0 and loses to every tuft below it, so the bar gets buried.
+        // 4000 clears the whole band (and matches what EnemyHealthBar.Initialize
+        // already sets) while staying under fog (5000) and the night overlay (6000).
+        const int HEALTH_BAR_SORTING_ORDER = 4000;
+
+        // includeInactive: the prefab hides its bar UI in Awake(), so an active-only
+        // search can miss the Canvas depending on where it lives in the hierarchy.
+        Canvas canvas = HealthBar.GetComponentInChildren<Canvas>(true);
+        if (canvas == null) canvas = HealthBar.GetComponentInParent<Canvas>();
         if (canvas != null)
         {
             canvas.overrideSorting = true;
-            canvas.sortingOrder = 1000;
+            canvas.sortingOrder = HEALTH_BAR_SORTING_ORDER;
         }
     }
 
@@ -278,23 +352,207 @@ public class Boss1 : BaseBossStats //, IDamageable
         laserObject = new GameObject("Boss1_Laser");
         laserRenderer = laserObject.AddComponent<SpriteRenderer>();
         laserRenderer.sortingLayerName = bossSprite != null ? bossSprite.sortingLayerName : "Default";
-        laserRenderer.sortingOrder = (bossSprite != null ? bossSprite.sortingOrder : 0) + 10;
+        // Fixed order above the Y-sort band. Previously this was bossSprite.sortingOrder
+        // + 10, which only bought the beam ONE world unit of headroom — anything whose
+        // foot sat more than 1 unit below the boss sorted over it.
+        laserRenderer.sortingOrder = laserSortingOrder;
         laserRenderer.enabled = false;
 
-        if (showWarningTelegraph)
-        {
-            laserWarningObject = new GameObject("Boss1_LaserWarning");
-            laserWarningLine = laserWarningObject.AddComponent<LineRenderer>();
+        InitializeChargeTelegraph();
+    }
 
-            Material lineMat = new Material(Shader.Find("Sprites/Default"));
-            lineMat.color = warningLineColor;
-            laserWarningLine.material = lineMat;
-            laserWarningLine.startWidth = 0.15f;
-            laserWarningLine.endWidth = 0.15f;
-            laserWarningLine.positionCount = 2;
-            laserWarningLine.sortingLayerName = bossSprite != null ? bossSprite.sortingLayerName : "Default";
-            laserWarningLine.sortingOrder = (bossSprite != null ? bossSprite.sortingOrder : 0) + 9;
-            laserWarningLine.enabled = false;
+    // LASER CHARGE TELEGRAPH
+    //
+    // The old tell was a LineRenderer stretched the full laserRange at the target
+    // (thick, flat red, opaque). This replaces it with three quiet cues that all
+    // ramp in over the charge, so the boss reads as "winding up, pointed THAT way"
+    // without painting a red stripe across the arena:
+    //   1. a soft glow at the muzzle that grows + brightens as the charge fills
+    //   2. an intake ring that repeatedly collapses inward into the muzzle
+    //   3. a short aim stub that tapers and fades out well short of the target
+    // All three are built procedurally, so there are no prefabs/assets to wire up.
+
+    private void InitializeChargeTelegraph()
+    {
+        if (!showWarningTelegraph) return;
+
+        telegraphGlowSprite = BuildRadialSprite(isRing: false);
+        telegraphRingSprite = BuildRadialSprite(isRing: true);
+
+        telegraphRoot = new GameObject("Boss1_LaserChargeTelegraph");
+
+        // 1. Muzzle charge glow.
+        var orbGo = new GameObject("ChargeOrb");
+        orbGo.transform.SetParent(telegraphRoot.transform, false);
+        telegraphOrb = orbGo.AddComponent<SpriteRenderer>();
+        telegraphOrb.sprite = telegraphGlowSprite;
+        telegraphOrb.color = Color.clear;
+
+        // 2. Intake ring (energy being pulled into the muzzle).
+        if (telegraphShowIntakeRing)
+        {
+            var ringGo = new GameObject("IntakeRing");
+            ringGo.transform.SetParent(telegraphRoot.transform, false);
+            telegraphRing = ringGo.AddComponent<SpriteRenderer>();
+            telegraphRing.sprite = telegraphRingSprite;
+            telegraphRing.color = Color.clear;
+        }
+
+        // 3. Short, tapered, fading aim stub.
+        var stubGo = new GameObject("AimStub");
+        stubGo.transform.SetParent(telegraphRoot.transform, false);
+        telegraphStub = stubGo.AddComponent<LineRenderer>();
+        telegraphStub.material = new Material(Shader.Find("Sprites/Default"));
+        telegraphStub.useWorldSpace = true;
+        telegraphStub.positionCount = 2;
+        telegraphStub.numCapVertices = 4;
+        telegraphStub.textureMode = LineTextureMode.Stretch;
+        telegraphStub.alignment = LineAlignment.View;
+        telegraphStub.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        telegraphStub.receiveShadows = false;
+        // Fat at the muzzle, needle-thin at the tip.
+        telegraphStub.widthCurve = new AnimationCurve(
+            new Keyframe(0f, 1f), new Keyframe(1f, 0.1f));
+        telegraphStub.widthMultiplier = telegraphStubWidth;
+
+        // Cached so the per-frame update doesn't allocate a Gradient every frame.
+        telegraphGradient = new Gradient();
+        telegraphColorKeys = new[]
+        {
+            new GradientColorKey(telegraphColor, 0f),
+            new GradientColorKey(telegraphColor, 1f)
+        };
+        telegraphAlphaKeys = new[]
+        {
+            new GradientAlphaKey(1f, 0f),
+            new GradientAlphaKey(0.45f, 0.5f),
+            new GradientAlphaKey(0f, 1f)
+        };
+
+        telegraphRoot.SetActive(false);
+    }
+
+    // 32x32 soft radial sprite, center-pivoted, pixelsPerUnit == size so the
+    // sprite is exactly 1 world unit across and localScale == world diameter.
+    // Same trick BossHead.BuildGlowSprite uses for its drip glow.
+    private Sprite BuildRadialSprite(bool isRing)
+    {
+        const int s = 32;
+        var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        tex.wrapMode = TextureWrapMode.Clamp;
+
+        var pixels = new Color[s * s];
+        float center = s * 0.5f;
+
+        for (int py = 0; py < s; py++)
+            for (int px = 0; px < s; px++)
+            {
+                // 0 at the center, 1 at the sprite edge
+                float d = Vector2.Distance(new Vector2(px + 0.5f, py + 0.5f),
+                                           new Vector2(center, center)) / center;
+                float a;
+                if (isRing)
+                {
+                    // Thin soft annulus sitting just inside the sprite edge.
+                    a = Mathf.Clamp01(1f - Mathf.Abs(d - 0.8f) / 0.16f);
+                    a *= a;
+                }
+                else
+                {
+                    // Soft falloff blob, hot in the middle.
+                    a = Mathf.Pow(Mathf.Clamp01(1f - d), 2.2f);
+                }
+                pixels[py * s + px] = a > 0.004f ? new Color(1f, 1f, 1f, a) : Color.clear;
+            }
+
+        tex.SetPixels(pixels);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, s, s), Vector2.one * 0.5f, s);
+    }
+
+    private void SetChargeTelegraphActive(bool active)
+    {
+        if (telegraphRoot == null) return;
+        telegraphRoot.SetActive(active);
+    }
+
+    // progress01: 0 at the start of the wind-up, 1 on the frame before it fires.
+    private void UpdateChargeTelegraph(float progress01)
+    {
+        if (telegraphRoot == null || !telegraphRoot.activeSelf || currentTarget == null) return;
+
+        Vector3 spawnPos = GetLaserSpawnPosition();
+        Vector3 dir = (currentTarget.position - spawnPos);
+        if (dir.sqrMagnitude < 0.0001f) return;
+        dir.Normalize();
+
+        float t = Mathf.Clamp01(progress01);
+        // Quadratic ramp: nearly invisible early, firms up right before the shot,
+        // so the tell doesn't dominate the fight for the whole wind-up.
+        float ramp = t * t;
+        // Fast, low-amplitude flicker — reads as unstable energy, not a strobe.
+        float flicker = 1f + Mathf.Sin(Time.time * 22f) * 0.10f * t;
+        float alpha = telegraphMaxAlpha * ramp;
+
+        // Fixed order just under the beam, for the same reason the beam is fixed: the
+        // telegraph is a gameplay-critical tell and must never be hidden behind a rock.
+        int layerId = bossSprite != null ? bossSprite.sortingLayerID : 0;
+        int order = laserSortingOrder - 10;
+
+        // 1. Muzzle glow — grows 35% -> 100% and brightens with the charge.
+        if (telegraphOrb != null)
+        {
+            telegraphOrb.sortingLayerID = layerId;
+            telegraphOrb.sortingOrder = order;
+            telegraphOrb.transform.position = spawnPos;
+            float dia = telegraphOrbRadius * 2f * (0.35f + 0.65f * ramp) * flicker;
+            telegraphOrb.transform.localScale = Vector3.one * dia;
+
+            Color c = telegraphColor;
+            // Glow core runs a bit hotter than the stub so the muzzle is the focal point.
+            c.a = Mathf.Clamp01(alpha * 1.25f);
+            telegraphOrb.color = c;
+        }
+
+        // 2. Intake ring — collapses inward, loops ~2.2x/sec, speeding up slightly
+        //    as the charge fills. Brightest mid-collapse, gone at the center.
+        if (telegraphRing != null)
+        {
+            telegraphRing.sortingLayerID = layerId;
+            telegraphRing.sortingOrder = order - 1;
+            telegraphRing.transform.position = spawnPos;
+
+            float cycle = Mathf.Repeat(Time.time * (2.2f + 1.6f * t), 1f);
+            float ringDia = Mathf.Lerp(telegraphOrbRadius * 5f, telegraphOrbRadius * 1.2f,
+                                       cycle * cycle);
+            telegraphRing.transform.localScale = Vector3.one * ringDia;
+
+            Color rc = telegraphColor;
+            rc.a = alpha * 0.7f * Mathf.Sin(cycle * Mathf.PI); // fade in and back out
+            telegraphRing.color = rc;
+        }
+
+        // 3. Aim stub — short taper pointing where the beam will go. Starts just
+        //    outside the glow so the two don't muddy each other, and stops well
+        //    short of the target (that's the whole point vs. the old line).
+        if (telegraphStub != null)
+        {
+            telegraphStub.sortingLayerID = layerId;
+            telegraphStub.sortingOrder = order;
+
+            float len = telegraphStubLength * (0.45f + 0.55f * ramp);
+            telegraphStub.SetPosition(0, spawnPos + dir * (telegraphOrbRadius * 0.5f));
+            telegraphStub.SetPosition(1, spawnPos + dir * len);
+            telegraphStub.widthMultiplier = telegraphStubWidth * (0.7f + 0.3f * flicker);
+
+            telegraphColorKeys[0].color = telegraphColor;
+            telegraphColorKeys[1].color = telegraphColor;
+            telegraphAlphaKeys[0].alpha = alpha;
+            telegraphAlphaKeys[1].alpha = alpha * 0.45f;
+            telegraphAlphaKeys[2].alpha = 0f;
+            telegraphGradient.SetKeys(telegraphColorKeys, telegraphAlphaKeys);
+            telegraphStub.colorGradient = telegraphGradient;
         }
     }
 
@@ -324,6 +582,7 @@ public class Boss1 : BaseBossStats //, IDamageable
             float dmg = wp.GetDamage();
             //Debug.Log($"Boss1 taking {dmg} damage from WeaponProjectile");
             TakeDamage(dmg);  // calls Boss1's override TakeDamage(float)
+            CombatStats.ReportPlayerDamageDealt(wp.GetOwner(), dmg, transform.position);
             Destroy(other.gameObject);
             return;
         }
@@ -333,6 +592,7 @@ public class Boss1 : BaseBossStats //, IDamageable
         {
             //Debug.Log($"Boss1 taking {proj.damage} damage from Projectile");
             TakeDamage(proj.damage);
+            CombatStats.ReportTowerDamageDealt(proj.damage);
             Destroy(other.gameObject);
             return;
         }
@@ -373,6 +633,7 @@ public class Boss1 : BaseBossStats //, IDamageable
         UpdateHealthBarOffset();
         UpdateColliderOffset();
         UpdateGrapplingTargetOffset();
+        UpdateLaserChargeSoundPosition();
 
         FindTarget();
 
@@ -387,7 +648,18 @@ public class Boss1 : BaseBossStats //, IDamageable
             // Laser is the only attack Boss1 manages directly.
             // Melee is fully handled by EnemyController.
             //if (distance <= attackRange && !isPerformingLaserAttack)
-            if (distance > meleeOnlyRange && distance <= attackRange && !isPerformingLaserAttack)
+            //
+            // ATTACK COMMITMENT: the boss finishes whatever it started.
+            // IsMeleeAttackInProgress() blocks the laser while a melee cycle is
+            // live. Without it, a player who steps from inside meleeOnlyRange to
+            // outside it mid-swing pushes the boss straight into TryLaser(), and
+            // PlayLaserAttackAnimation() stops the running animation coroutine —
+            // the swing visibly gets chopped off partway through.
+            // Update() re-evaluates every frame, so the laser simply fires on the
+            // first frame after the swing recovers (laserCooldown is unaffected;
+            // lastLaserTime is only stamped when the laser actually starts).
+            if (distance > meleeOnlyRange && distance <= attackRange
+                && !isPerformingLaserAttack && !IsMeleeAttackInProgress())
 
                 TryLaser();
         }
@@ -396,6 +668,7 @@ public class Boss1 : BaseBossStats //, IDamageable
     // DAMAGE / DEATH
     public override void TakeDamage(float amount)
     {
+        if (DebugCheats.DamageBlocked(this)) return;
         if (isDying) return;
 
         //Debug.Log($">>> Boss1.TakeDamage called! amount={amount}, armor={bossArmor}, health={currentHealth}");
@@ -438,6 +711,14 @@ public class Boss1 : BaseBossStats //, IDamageable
         //Debug.Log("[BOSS] ExecuteBossDeath called");
 
         isDying = true;  // FIRST — before any checks
+
+        // Release the held FMOD instance BEFORE the early-out below. This used to sit
+        // ~20 lines further down, after "if (!gameObject.scene.isLoaded) return;", so a
+        // boss dying during a scene unload while its laser was charging orphaned its
+        // instance. FMOD's system outlives scene loads, so an orphan keeps counting
+        // against the event's Max Instances for the rest of the session.
+        StopLaserChargeSound(immediate: true);
+
         if (!gameObject.scene.isLoaded) return;
         transform.rotation = Quaternion.identity;
         // Boss death freeze + shake — tune duration here
@@ -457,7 +738,7 @@ public class Boss1 : BaseBossStats //, IDamageable
             Destroy(HealthBar.gameObject);
 
         StopAllCoroutines();
-        StopLaserChargeSound();
+        StopLaserChargeSound(immediate: true); // no-op if already released above
 
         isLaserActive = false;
         isPerformingLaserAttack = false;
@@ -465,7 +746,7 @@ public class Boss1 : BaseBossStats //, IDamageable
         CleanupLaserNightLights();
 
         if (laserRenderer != null) laserRenderer.enabled = false;
-        if (laserWarningLine != null) laserWarningLine.enabled = false;
+        SetChargeTelegraphActive(false);
 
         Rigidbody2D rb = GetComponent<Rigidbody2D>();
         if (rb != null)
@@ -693,22 +974,205 @@ public class Boss1 : BaseBossStats //, IDamageable
     // LASER ATTACK
 
 
+    /// True from the first frame of a melee cycle until its recovery ends.
+    /// Two sources, deliberately OR'd:
+    ///   • EnemyController.IsAttacking — the authoritative cycle flag (wind-up,
+    ///     hit frame, recovery), covering the timer-driven fallback path too.
+    ///   • animController.IsPlayingMeleeAttack() — covers the single frame at the
+    ///     tail of the cycle where the controller has cleared its flag but the
+    ///     animation coroutine hasn't returned to idle yet.
+    private bool IsMeleeAttackInProgress()
+    {
+        if (enemyController != null && enemyController.IsAttacking) return true;
+        return animController != null && animController.IsPlayingMeleeAttack();
+    }
+
     private void TryLaser()
     {
+        // Second line of defence: TryLaser() is also the entry point any future
+        // caller would use, so re-check here rather than trusting Update() alone.
+        if (IsMeleeAttackInProgress()) return;
+
         if (isLaserActive || isPerformingLaserAttack
             || Time.time < lastLaserTime + laserCooldown) return;
         if (laserSprites == null || laserSprites.Length < 63) return;
 
         StartCoroutine(PerformLaserAttack());
     }
-    private void StopLaserChargeSound()
+    // LASER CHARGE SOUND — instance lifecycle
+    //
+    // This is the ONLY held FMOD EventInstance in the codebase (everything else is
+    // fire-and-forget AudioManager.PlayOneShot), so it is the only sound that can
+    // leak an instance or act on a recycled handle. Rules enforced below:
+    //   • hasLaserSound is cleared BEFORE the stop/release, so a re-entrant or
+    //     double call can never release the same handle twice. A double release is
+    //     what lets one boss's cleanup silence ANOTHER boss: FMOD recycles handle
+    //     pointers, so a stale struct copy can end up pointing at whatever instance
+    //     was created into that slot next.
+    //   • clearHandle() zeroes the struct after release so a stale copy can't be
+    //     used even by accident.
+    //   • isValid() guards every call.
+    //   • 3D attributes are refreshed every frame from Update() with POSITION ONLY,
+    //     which is exactly what AudioManager.PlayOneShot(evt, pos) does for every
+    //     other sound in the game. Previously set3DAttributes was called once at
+    //     creation, so the sound stayed pinned where the boss started charging.
+    //
+    // Deliberately NOT using RuntimeManager.AttachInstanceToGameObject here. Attaching
+    // hands FMOD the boss's full transform + Rigidbody2D, which adds two things none of
+    // your other (working) sounds have:
+    //   – orientation: the event's panner/cone would rotate with the boss, so volume
+    //     would depend on which way the boss faces. Boss1 rotates for the laser.
+    //   – velocity: FMOD would apply Doppler off the Rigidbody2D as the boss walks.
+    // Position-only updates keep the laser spatialising identically to the sounds you
+    // already have tuned, and sidestep the deprecated Transform overload entirely.
+
+    private void PlayLaserChargeSound()
     {
-        if (hasLaserSound)
+        if (!playLaserChargeSound || FMODEvents.instance == null) return;
+        if (FMODEvents.instance.bossLaserShot.IsNull) return;
+
+        // Release any previous instance from this boss first.
+        StopLaserChargeSound(immediate: true);
+
+        laserChargeSoundInstance = FMODUnity.RuntimeManager.CreateInstance(
+            FMODEvents.instance.bossLaserShot);
+
+        if (!laserChargeSoundInstance.isValid())
         {
-            laserChargeSoundInstance.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
-            laserChargeSoundInstance.release();
+            laserChargeSoundInstance.clearHandle();
             hasLaserSound = false;
+            if (logLaserSoundDiagnostics)
+                Debug.LogWarning($"[Boss1 Laser SFX] {name}: CreateInstance returned an invalid instance.");
+            return;
         }
+
+        // Same call shape AudioManager.PlayOneShot uses; refreshed each frame below.
+        laserChargeSoundInstance.set3DAttributes(
+            FMODUnity.RuntimeUtils.To3DAttributes(transform.position));
+
+        FMOD.RESULT startResult = laserChargeSoundInstance.start();
+
+        if (startResult != FMOD.RESULT.OK)
+        {
+            // ERR_STUDIO_MAX_INSTANCES here = the event's Max Instances cap in FMOD
+            // Studio is full. That is exactly what "the sound just wasn't there"
+            // looks like from the player's side.
+            Debug.LogWarning($"[Boss1 Laser SFX] {name}: start() failed with {startResult}. " +
+                             $"Check Max Instances / stealing on the bossLaserShot event.");
+            laserChargeSoundInstance.release();
+            laserChargeSoundInstance.clearHandle();
+            hasLaserSound = false;
+            return;
+        }
+
+        hasLaserSound = true;
+        LogLaserSoundDiagnostics("start");
+    }
+
+    // immediate == true  → hard cut (boss died, or a new laser is starting).
+    // immediate == false → ALLOWFADEOUT, so the event's own release/tail plays out
+    //                      instead of being chopped at exactly chargeDuration +
+    //                      fireDuration. This is the "sound cut short" fix.
+    // Keeps the held instance sitting on the boss as it moves. Position only — no
+    // orientation, no velocity — matching AudioManager.PlayOneShot's behaviour.
+    private void UpdateLaserChargeSoundPosition()
+    {
+        if (!hasLaserSound) return;
+        if (!laserChargeSoundInstance.isValid()) return;
+
+        laserChargeSoundInstance.set3DAttributes(
+            FMODUnity.RuntimeUtils.To3DAttributes(transform.position));
+
+        // Watch the sound while it plays — this is what catches a voice being stolen
+        // mid-charge, or finalVol collapsing as you step away.
+        if (logLaserSoundDiagnostics && Time.time >= nextLaserSoundLogTime)
+        {
+            nextLaserSoundLogTime = Time.time + 0.25f;
+            LogLaserSoundDiagnostics("playing");
+        }
+    }
+
+    private void StopLaserChargeSound(bool immediate = true)
+    {
+        if (!hasLaserSound) return;
+
+        // Clear FIRST — before any FMOD call — so nothing can re-enter and release twice.
+        hasLaserSound = false;
+
+        if (laserChargeSoundInstance.isValid())
+        {
+            laserChargeSoundInstance.stop(immediate
+                ? FMOD.Studio.STOP_MODE.IMMEDIATE
+                : FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            laserChargeSoundInstance.release();
+        }
+
+        // Zero the struct so this boss can never touch the (now recycled) handle.
+        laserChargeSoundInstance.clearHandle();
+        LogLaserSoundDiagnostics(immediate ? "stop-immediate" : "stop-fadeout");
+    }
+
+    // Asks FMOD at runtime what it actually thinks about this event. This answers the
+    // questions Boss1.cs alone cannot, because everything below is authored in FMOD
+    // Studio, not in C#:
+    //
+    //   minDist/maxDist — the event's 3D attenuation range, in Unity units. maxDist is
+    //       a HARD cutoff: past it the event is silent/culled no matter how loud it is.
+    //       If maxDist is small (say 5-10) and your arena is 40 wide, the laser will
+    //       literally vanish a few steps away. minDist is the full-volume radius.
+    //   instances — live bossLaserShot instances across ALL bosses. Two bosses charging
+    //       should read 2. If it climbs and never returns to 0, something leaks. If it
+    //       pins at a low number while a boss is silent, you are hitting Max Instances.
+    //   state — the instance's own playback state. If this reads STOPPED while the boss
+    //       is still visibly charging, FMOD stole the voice (Max Instances + a stealing
+    //       mode of Quietest/Furthest/Oldest). That is the classic two-boss symptom:
+    //       which boss is "quietest"/"furthest" flips as you walk, so the sound you can
+    //       hear swaps between them or drops out entirely.
+    //   finalVol — volume AFTER all attenuation, panning and stealing. 0 while close to
+    //       the boss means the problem is attenuation/virtualisation, not the C# code.
+    //   listenerDist — distance from the FMOD listener to this boss. Compare against
+    //       minDist/maxDist above. Also reveals where your listener actually is: if this
+    //       never drops below ~10 even when standing on the boss, the listener is on the
+    //       camera (z = -10) rather than the player, and every 3D sound is being
+    //       attenuated from a 10-unit floor.
+    private void LogLaserSoundDiagnostics(string phase)
+    {
+        if (!logLaserSoundDiagnostics || FMODEvents.instance == null) return;
+        if (FMODEvents.instance.bossLaserShot.IsNull) return;
+
+        var desc = FMODUnity.RuntimeManager.GetEventDescription(FMODEvents.instance.bossLaserShot);
+        if (!desc.isValid()) return;
+
+        desc.getInstanceCount(out int count);
+        desc.getMinMaxDistance(out float minDist, out float maxDist);
+        desc.is3D(out bool is3D);
+        desc.isOneshot(out bool oneshot);
+        desc.getLength(out int lengthMs);
+
+        string state = "-", finalVol = "-";
+        if (laserChargeSoundInstance.isValid())
+        {
+            laserChargeSoundInstance.getPlaybackState(out FMOD.Studio.PLAYBACK_STATE ps);
+            state = ps.ToString();
+            laserChargeSoundInstance.getVolume(out float v, out float fv);
+            finalVol = $"{fv:F3} (set {v:F2})";
+        }
+
+        float listenerDist = -1f;
+        var studio = FMODUnity.RuntimeManager.StudioSystem;
+        if (studio.isValid()
+            && studio.getListenerAttributes(0, out FMOD.ATTRIBUTES_3D la) == FMOD.RESULT.OK)
+        {
+            listenerDist = Vector3.Distance(
+                new Vector3(la.position.x, la.position.y, la.position.z), transform.position);
+        }
+
+        Debug.Log(
+            $"[Boss1 Laser SFX] {name} | {phase} @{Time.time:F2}s\n" +
+            $"    instances={count}  state={state}  finalVol={finalVol}\n" +
+            $"    listenerDist={listenerDist:F2}  minDist={minDist:F2}  maxDist={maxDist:F2}\n" +
+            $"    is3D={is3D}  oneshot={oneshot}  eventLength={lengthMs}ms  " +
+            $"bossPos={transform.position}");
     }
     private IEnumerator PerformLaserAttack()
     {
@@ -732,24 +1196,10 @@ public class Boss1 : BaseBossStats //, IDamageable
         if (trackingMode == LaserTrackingMode.DelayedTracking && currentTarget != null)
             positionHistory.Add(new PositionSnapshot(currentTarget.position, Time.time));
 
-        if (showWarningTelegraph && laserWarningLine != null)
-            laserWarningLine.enabled = true;
+        SetChargeTelegraphActive(true);
+        UpdateChargeTelegraph(0f);
 
-        //if (playLaserChargeSound
-        //    && AudioManager.instance != null && FMODEvents.instance != null)
-        //    AudioManager.instance.PlayOneShot(
-        //        FMODEvents.instance.bossLaserShot, transform.position);
-
-        if (playLaserChargeSound && FMODEvents.instance != null)
-        {
-            StopLaserChargeSound(); // stop any previous instance
-            laserChargeSoundInstance = FMODUnity.RuntimeManager.CreateInstance(
-                FMODEvents.instance.bossLaserShot);
-            laserChargeSoundInstance.set3DAttributes(
-                FMODUnity.RuntimeUtils.To3DAttributes(transform.position));
-            laserChargeSoundInstance.start();
-            hasLaserSound = true;
-        }
+        PlayLaserChargeSound();
 
         float chargeFrameTime = laserChargeDuration / 34f;
         for (int frame = 0; frame <= 33; frame++)
@@ -761,13 +1211,13 @@ public class Boss1 : BaseBossStats //, IDamageable
                 UpdateBossFlipForLaser();
                 UpdateLaserTransform(false);
 
-                if (showWarningTelegraph && laserWarningLine != null && currentTarget != null)
-                    UpdateWarningLine();
+                // Ramp the charge tell across the 34 wind-up frames.
+                UpdateChargeTelegraph(frame / 33f);
             }
             yield return new WaitForSeconds(chargeFrameTime);
         }
 
-        if (laserWarningLine != null) laserWarningLine.enabled = false;
+        SetChargeTelegraphActive(false);
 
         if (currentTarget != null)
         {
@@ -836,9 +1286,10 @@ public class Boss1 : BaseBossStats //, IDamageable
         isLaserActive = false;
         lockedLaserDirection = Vector3.zero;
         positionHistory.Clear();
-        StopLaserChargeSound();
+        // Natural end of the attack: don't chop the event, let its own fade/tail run.
+        StopLaserChargeSound(immediate: false);
 
-        if (laserWarningLine != null) laserWarningLine.enabled = false;
+        SetChargeTelegraphActive(false);
 
         if (animController != null)
         {
@@ -873,27 +1324,6 @@ public class Boss1 : BaseBossStats //, IDamageable
             bossSmoothFlip.SetFacingLeft(wasFlippedBeforeLaser);
     }
 
-    private void UpdateWarningLine()
-    {
-        if (currentTarget == null || laserWarningLine == null) return;
-        // Stay above boss as YSortEntity updates each frame
-        if (bossSprite != null)
-        {
-            laserWarningLine.sortingLayerID = bossSprite.sortingLayerID;
-            laserWarningLine.sortingOrder = bossSprite.sortingOrder + 9;
-        }
-        Vector3 spawnPos = GetLaserSpawnPosition();
-        Vector3 direction = (currentTarget.position - spawnPos).normalized;
-
-        laserWarningLine.SetPosition(0, spawnPos);
-        laserWarningLine.SetPosition(1, spawnPos + direction * laserRange);
-
-        float pulseAlpha = 0.3f + Mathf.PingPong(Time.time * 3f, 0.4f);
-        Color pulseColor = warningLineColor;
-        pulseColor.a = pulseAlpha;
-        laserWarningLine.material.color = pulseColor;
-    }
-
     private Vector3 GetLaserDamageDirection()
     {
         if (currentTarget == null) return Vector3.zero;
@@ -919,12 +1349,13 @@ public class Boss1 : BaseBossStats //, IDamageable
     private void UpdateLaserTransform(bool isFiring)
     {
         if (currentTarget == null || laserRenderer.sprite == null) return;
-        // Keep laser drawn above the boss even as YSortEntity updates boss sorting order each frame
+
+        // Track the boss's sorting LAYER only. The sorting ORDER is deliberately fixed
+        // (set in InitializeLaser) and must NOT be re-derived from bossSprite.sortingOrder
+        // here — that is what put the beam back underneath the obstacles every frame.
         if (bossSprite != null)
-        {
             laserRenderer.sortingLayerID = bossSprite.sortingLayerID;
-            laserRenderer.sortingOrder = bossSprite.sortingOrder + 10;
-        }
+
         Vector3 laserSpawnPos = GetLaserSpawnPosition();
         Vector3 directionToUse;
 
@@ -1050,18 +1481,18 @@ public class Boss1 : BaseBossStats //, IDamageable
     {
         CleanupLaserNightLights();
         if (laserObject != null) Destroy(laserObject);
-        if (laserWarningObject != null) Destroy(laserWarningObject);
+        if (telegraphRoot != null) Destroy(telegraphRoot);
         if (spawnedHead != null && spawnedHead.gameObject != null)
             Destroy(spawnedHead.gameObject);
         if (HealthBar != null)
             Destroy(HealthBar.gameObject);
 
-        StopLaserChargeSound();
+        StopLaserChargeSound(immediate: true);
 
         isLaserActive = false;
         isPerformingLaserAttack = false;
         if (laserRenderer != null) laserRenderer.enabled = false;
-        if (laserWarningLine != null) laserWarningLine.enabled = false;
+        SetChargeTelegraphActive(false);
     }
 
 
@@ -1215,5 +1646,3 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 #endif
 }
-
-

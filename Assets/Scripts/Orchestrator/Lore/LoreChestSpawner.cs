@@ -86,9 +86,6 @@ public class LoreChestSpawner : MonoBehaviour
     [Header("Archive (recovered-logs browser)")]
     [Tooltip("Create the archive so the player can browse already-unlocked papers.")]
     public bool enableArchiveBrowser = true;
-    [Tooltip("Show a small on-screen button that opens the archive. " +
-             "(The archive can also be opened from code or the hotkey below.)")]
-    public bool showArchiveButton = true;
     [Tooltip("Keyboard key that toggles the archive. Set to None to disable the hotkey.")]
     public KeyCode archiveHotkey = KeyCode.J;
     [Tooltip("Show a 'Reset Lore' button inside the archive (handy for testing). Off for players.")]
@@ -119,6 +116,7 @@ public class LoreChestSpawner : MonoBehaviour
     private Transform coreTransform;
     private float playRadius;
     private ChestPathIndicator pathIndicator;
+    private LoreCodex subscribedCodex;   // cached: never touch LoreCodex.Instance from OnDestroy
 
     void Awake()
     {
@@ -128,6 +126,8 @@ public class LoreChestSpawner : MonoBehaviour
 
     void OnDestroy()
     {
+        if (subscribedCodex != null)
+            subscribedCodex.OnCodexChanged -= OnCodexChanged;
         if (Instance == this) Instance = null;
     }
 
@@ -162,13 +162,23 @@ public class LoreChestSpawner : MonoBehaviour
             LoreArchiveMenu.Instance.ApplyTheme(
                 archivePanelSprite, archiveListPanelSprite,
                 archiveButtonSprite, archiveButtonHighlightSprite, loreFont);
-            LoreArchiveMenu.Ensure(showArchiveButton, archiveHotkey, archiveResetButton);
+            LoreArchiveMenu.Ensure(archiveHotkey, archiveResetButton);
         }
 
         if (showPathToChest) SetupPathIndicator();
 
+        // React the moment the last fragment is claimed rather than waiting up to
+        // spawnInterval seconds for the next tick.
+        if (LoreCodex.Instance != null)
+        {
+            subscribedCodex = LoreCodex.Instance;
+            subscribedCodex.OnCodexChanged += OnCodexChanged;
+        }
+
         InvokeRepeating(nameof(TrySpawn), initialDelay, spawnInterval);
     }
+
+    void OnCodexChanged() => PruneSurplusChests();
 
     void SetupPathIndicator()
     {
@@ -217,17 +227,73 @@ public class LoreChestSpawner : MonoBehaviour
     void TrySpawn()
     {
         activeChests.RemoveAll(c => c == null);
+
+        // Retire any chest that can no longer pay out (also runs on codex changes).
+        PruneSurplusChests();
+
         if (activeChests.Count >= maxChestsOnMap) return;
 
-        // Nothing left to give? Don't litter the map with empty chests.
+        // Nothing left to give? Don't litter the map with empty chests. Each live chest
+        // will claim one fragment when opened, so the map may only hold as many chests as
+        // there are fragments still out there — otherwise the extra one opens onto the
+        // "Archive is Complete" note.
         var codex = LoreCodex.Instance;
-        if (codex != null && !codex.HasUndiscovered) return;
+        if (codex != null && codex.UndiscoveredCount <= UnclaimedChestCount()) return;
 
         if (playerTransform == null) FindPlayer();
 
         if (TryFindClearSpawnPosition(out Vector3 pos))
             SpawnChestAt(pos);
         // else: silently retry next interval (matches GremlinSpawner)
+    }
+
+    // Chests sitting on the map that the player hasn't triggered yet — i.e. chests that
+    // still have a fragment "reserved" against the remaining pool.
+    int UnclaimedChestCount()
+    {
+        int n = 0;
+        foreach (var c in activeChests)
+        {
+            if (c == null) continue;
+            var lc = c.GetComponent<LoreChest>();
+            if (lc != null && !lc.IsOpened) n++;
+        }
+        return n;
+    }
+
+    // Fades out unopened chests that outnumber the fragments left. Normally this does
+    // nothing (maxChestsOnMap = 1, and the chest that takes the last fragment removes
+    // itself); it matters when maxChestsOnMap > 1, and it's what guarantees no chest is
+    // left standing on the map once the codex is complete.
+    void PruneSurplusChests()
+    {
+        activeChests.RemoveAll(c => c == null);
+
+        var codex = LoreCodex.Instance;
+        if (codex == null) return;
+
+        var unclaimed = new List<LoreChest>();
+        foreach (var c in activeChests)
+        {
+            if (c == null) continue;
+            var lc = c.GetComponent<LoreChest>();
+            if (lc != null && !lc.IsOpened) unclaimed.Add(lc);
+        }
+
+        int surplus = unclaimed.Count - codex.UndiscoveredCount;
+        if (surplus <= 0) return;
+
+        // Take the farthest ones first, so a chest the player is walking toward is the
+        // last to disappear.
+        if (playerTransform != null)
+        {
+            Vector3 p = playerTransform.position;
+            unclaimed.Sort((a, b) => Vector3.SqrMagnitude(b.transform.position - p)
+                                     .CompareTo(Vector3.SqrMagnitude(a.transform.position - p)));
+        }
+
+        for (int i = 0; i < surplus && i < unclaimed.Count; i++)
+            unclaimed[i].Vanish();
     }
 
     Vector3 CenterPosition => coreTransform != null ? coreTransform.position : Vector3.zero;
@@ -330,8 +396,10 @@ public class LoreChestSpawner : MonoBehaviour
         if (chestScale > 0f && !Mathf.Approximately(chestScale, 1f))
             chest.transform.localScale = chest.transform.localScale * chestScale;
 
-        if (AudioManager.instance != null && FMODEvents.instance != null)
-            AudioManager.instance.PlayOneShot(FMODEvents.instance.gremlinAppearance, position);
+        // Dedicated chest cue (this used to fire gremlinAppearance by mistake).
+        if (AudioManager.instance != null && FMODEvents.instance != null
+            && !FMODEvents.instance.chestAppearance.IsNull)
+            AudioManager.instance.PlayOneShot(FMODEvents.instance.chestAppearance, position);
 
         activeChests.Add(chest);
     }
@@ -364,15 +432,17 @@ public class LoreChestSpawner : MonoBehaviour
         int total = LoreContent.TotalCount;
         int found = codex != null ? codex.DiscoveredCount : 0;
         activeChests.RemoveAll(c => c == null);
-        bool gated = codex != null && !codex.HasUndiscovered;
+        int unclaimed = UnclaimedChestCount();
+        bool gated = codex != null && codex.UndiscoveredCount <= unclaimed;
         float dbgBaseOuter = (spawnRadiusOverride > 0.5f) ? spawnRadiusOverride : playRadius;
         float dbgInner = Mathf.Max(coreClearance, minDistanceFromCenter);
         float dbgOuter = Mathf.Max(dbgBaseOuter, dbgInner + Mathf.Max(1f, minRingWidth));
         Debug.Log($"[LoreChestSpawner] Lore {found}/{total} discovered, {total - found} left. " +
-                  $"Active chests {activeChests.Count}/{maxChestsOnMap}. " +
+                  $"Active chests {activeChests.Count}/{maxChestsOnMap} ({unclaimed} unclaimed). " +
                   $"Spawn ring ≈ {dbgInner:F1}..{dbgOuter:F1} (playRadius={playRadius:F1}, " +
                   $"override={(spawnRadiusOverride > 0.5f ? spawnRadiusOverride.ToString("F1") : "off")}). " +
-                  (gated ? "→ SPAWNING DISABLED: nothing left to give (Reset Lore Codex to test)."
+                  (gated ? "→ SPAWNING DISABLED: every remaining fragment is already claimed by a live chest "
+                         + "(or nothing is left — Reset Lore Codex to test)."
                          : "→ Spawning enabled."));
     }
 }

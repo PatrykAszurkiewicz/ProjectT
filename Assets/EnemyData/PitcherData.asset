@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: PitcherData
   m_EditorClassIdentifier: 
   enemyName: Pitcher
-  maxHealth: 100
+  maxHealth: 16
   maxArmor: 0
   moveSpeed: 2
   damage: 5

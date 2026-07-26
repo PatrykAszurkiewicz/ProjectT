@@ -108,6 +108,11 @@ public class RunPersistence : MonoBehaviour
         augmentLedger.Clear();
         blueprintUnlockLedger.Clear();
         DeleteSave();
+
+        // Fresh run → clear the previous run's combat telemetry. Resume goes through
+        // AdoptLoadedRun (not BeginRun), so a continued run keeps its restored totals.
+        CombatStats.Instance?.ResetForNewRun();
+
         if (debugLog) Debug.Log($"[Persistence] New run started (seed={seed}, difficulty={difficulty}).");
     }
 
@@ -175,6 +180,10 @@ public class RunPersistence : MonoBehaviour
         // Players (per-player; single player = one entry at index 0).
         data.players = CapturePlayers();
         data.runPlayerCount = Mathf.Max(1, data.players.Count);
+
+        // Combat telemetry (damage dealt/received + DPS clock). Written after the
+        // player entries exist so per-player totals land on the right entry.
+        CombatStats.Instance?.CaptureInto(data);
 
         var core = FindFirstObjectByType<CentralCore>();
         if (core != null)
@@ -317,6 +326,10 @@ public class RunPersistence : MonoBehaviour
         // Lore codex — restore the saved discovered set so the resumed run matches.
         if (data.loreFragmentIds != null && LoreCodex.Instance != null)
             LoreCodex.Instance.RestoreDiscoveredExact(data.loreFragmentIds);
+
+        // Combat telemetry — resume keeps counting from the saved totals (a fresh
+        // run resets these separately via StartRun → ResetForNewRun).
+        CombatStats.Instance?.RestoreFrom(data);
     }
 
     //  PLAYERS (Phase 7c) — per-player capture / resolve, mirroring the in-memory

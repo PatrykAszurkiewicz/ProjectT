@@ -85,10 +85,12 @@ public class AugmentsMenu : MonoBehaviour
     private bool _dirSwallowTrigger;
     private bool _navJustActivated;
 
-    // In co-op the GameOrchestrator owns Time.timeScale / cursor / suppression
-    // (otherwise two menus saving & restoring it fight each other). In single
-    // player the menu manages it itself, exactly as before.
-    private bool CoopManaged => PlayerRegistry.Count > 1;
+    // Time.timeScale / cursor / attack-suppression are owned by UIModalStack.
+    // This menu used to manage them itself in single player and defer to the
+    // GameOrchestrator in co-op — a split that broke as soon as ANY third screen
+    // (pause menu, disconnect guard) was open at the same time. Now it simply
+    // Push()es and Pop()s like every other screen, and the stack works out the
+    // resulting global state. See MenuTheme.cs.
 
     // The PlayerStats that should receive this menu's picks.
     private PlayerStats Chooser()
@@ -135,11 +137,6 @@ public class AugmentsMenu : MonoBehaviour
 
     // State variables
     private bool isHidden = false;
-    // Saved host state so this menu nests correctly (e.g. opened from the
-    // pause menu) instead of forcing timeScale/cursor/input back to defaults.
-    private float prevTimeScale = 1f;
-    private bool prevCursorVisible;
-    private bool prevInputSuppressed;
     private bool isMenuActive = false;
     [System.NonSerialized]
 
@@ -201,6 +198,18 @@ public class AugmentsMenu : MonoBehaviour
         if (augmentImages != null && (rerollsLeft == null || rerollsLeft.Length != augmentImages.Length))
         {
             InitializeArrays();
+        }
+    }
+
+    void OnDisable()
+    {
+        // Torn down while open (scene reload, player despawn). Never leave the stack —
+        // and therefore Time.timeScale — pinned by a menu that no longer exists.
+        if (isMenuActive)
+        {
+            isMenuActive = false;
+            GamepadMenuCursor.ClicksSuppressed = false;
+            UIModalStack.Pop(this);
         }
     }
 
@@ -613,15 +622,12 @@ public class AugmentsMenu : MonoBehaviour
                 AudioManager.instance.PlayOneShot(FMODEvents.instance.augmentScreen, Vector3.zero);
             }
 
-            if (!CoopManaged)
-            {
-                prevCursorVisible = Cursor.visible;
-                prevTimeScale = Time.timeScale;
-                prevInputSuppressed = PlayerAttack.InputSuppressed;
-                Cursor.visible = true;
-                Time.timeScale = 0f;
-                PlayerAttack.InputSuppressed = true;
-            }
+            // Was: snapshot Time.timeScale / Cursor.visible / PlayerAttack.InputSuppressed
+            // and restore them in CloseMenu(). Opening on top of the pause menu captured
+            // the ALREADY-PAUSED 0; restoring it after the player un-paused re-froze the
+            // game with no menu on screen. In co-op, the first player to confirm restored
+            // the clock while the second was still choosing.
+            UIModalStack.Push(this);
             isMenuActive = true;
 
             // Force regeneration of augments each time menu opens
@@ -739,7 +745,13 @@ public class AugmentsMenu : MonoBehaviour
         }
         else
         {
-            Debug.LogError($"Failed to apply {selectedRarity} augment {chosenId}");
+            // The menu is the frontmost modal, so Esc/pause is deliberately blocked
+            // while it's up. If we returned here without closing, the player would be
+            // frozen in front of a menu that refuses every input — a hard lockout.
+            // Reroll the slot instead so there is always something selectable.
+            Debug.LogError($"Failed to apply {selectedRarity} augment {chosenId} — rerolling the slot.");
+            if (rerollsLeft != null && slotIndex < rerollsLeft.Length) rerollsLeft[slotIndex]++;
+            Reroll(slotIndex);
         }
         //FindAnyObjectByType<StatsUI>().RefreshUI();
         FindAnyObjectByType<StatsPanelUI>()?.RefreshAll();
@@ -976,19 +988,28 @@ public class AugmentsMenu : MonoBehaviour
     private void CloseMenu()
     {
         augmentsMenu.SetActive(false);
-        // Single player restores the host state here. In co-op the orchestrator
-        // owns it (it waits for BOTH menus before un-pausing).
-        if (!CoopManaged)
-        {
-            Cursor.visible = prevCursorVisible;
-            Time.timeScale = prevTimeScale;
-            PlayerAttack.InputSuppressed = prevInputSuppressed;
-        }
         isMenuActive = false;
         ClearNavHighlight();
         GamepadMenuCursor.ClicksSuppressed = false;
 
+        // Pop OUR layer only. Anything still open underneath — the orchestrator's own
+        // layer while it waits for the other player, the pause menu, the disconnect
+        // guard — keeps the game correctly frozen. The stack recomputes the truth.
+        UIModalStack.Pop(this);
+
         if (debugMode) Debug.Log("AugmentsMenu: Menu closed");
+    }
+
+    /// <summary>
+    /// Close this menu from the outside WITHOUT applying a pick (the Time-Rewind
+    /// augment does this). Direct `augmentsMenu.SetActive(false)` is not enough: it
+    /// disables a CHILD object, so OnDisable never runs, isMenuActive stays true and
+    /// this menu's UIModalStack layer is left pushed — the game stays frozen forever.
+    /// </summary>
+    public void ForceClose()
+    {
+        if (!isMenuActive) { if (augmentsMenu != null) augmentsMenu.SetActive(false); return; }
+        CloseMenu();
     }
 
     public void ResetRerolls()
@@ -1288,4 +1309,3 @@ public class AugmentsMenu : MonoBehaviour
         }
     }
 }
-

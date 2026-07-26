@@ -3,18 +3,17 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
 
-
-// Lets a gamepad's LEFT stick (and optionally the
-// dpad) scroll the scroll area the on-screen cursor is
-// hovering. Pairs with GamepadMenuCursor, which drives that cursor with the
-// RIGHT stick — so right stick moves/clicks, left stick scrolls.
-// One component for the whole pause screen. No per-panel or per-player wiring:
-// it finds the scroll rect under the cursor and nudges it. Works for the
-// single-player grid AND the co-op P1/P2 augment columns, because each player
-// drives the shared cursor over their own panel (same single-cursor model the
-// pause menu already uses).
-
-
+// Left-stick scrolling for the scroll area under the pad cursor.
+//
+// This now DEFERS to MenuNavigator. Both used to read the left stick and the dpad,
+// so as soon as focus navigation existed, one press both stepped the selection and
+// scrolled the panel. Rule: while the player is navigating by focus, MenuNavigator
+// owns the left stick and scrolls the selection into view itself. This script only
+// runs in pure cursor mode (right stick / mouse), where nothing is focused.
+//
+// Performance: FindObjectsByType<ScrollRect> ran EVERY FRAME the stick was off
+// centre — an allocating full-scene scan, on a stick that rests slightly off zero
+// on a worn pad. Now cached and refreshed at most a few times a second.
 public class GamepadScrollRouter : MonoBehaviour
 {
     [Tooltip("Scroll speed in CONTENT pixels per second at full stick deflection.")]
@@ -23,24 +22,32 @@ public class GamepadScrollRouter : MonoBehaviour
     [Tooltip("Left-stick Y magnitude before scrolling starts.")]
     [Range(0f, 0.9f)] public float stickDeadzone = 0.2f;
 
-    [Tooltip("Also scroll with the dpad up/down. Turn off if it clashes with " +
-             "dpad menu navigation on a screen that's open at the same time.")]
-    public bool useDpad = true;
+    [Tooltip("Also scroll with the dpad up/down. OFF by default: the dpad now steps " +
+             "between controls (MenuNavigator).")]
+    public bool useDpad = false;
 
-    [Tooltip("Only scroll while the game is paused (Time.timeScale == 0).")]
+    [Tooltip("Only scroll while a menu is open (or the game is frozen).")]
     public bool onlyWhilePaused = true;
 
-    private static readonly List<ScrollRect> _scratch = new List<ScrollRect>();
+    [Tooltip("Seconds between rescans for ScrollRects. 0 = every frame (slow).")]
+    public float rescanInterval = 0.3f;
+
+    private ScrollRect[] _cache = new ScrollRect[0];
+    private float _nextScan;
 
     private void Update()
     {
-        if (onlyWhilePaused && Time.timeScale != 0f) return;
+        // Was `Time.timeScale != 0f`, which left the stick dead for non-freezing
+        // overlays AND for the whole main-menu scene. Ask the modal stack instead.
+        if (onlyWhilePaused && !UIModalStack.MenuInputActive) return;
 
-        var pad = Gamepad.current;          // same "active pad" model as the cursor
+        // Focus navigation owns the left stick and the dpad while it's active.
+        if (MenuNavigator.NavigationActive) return;
+
+        var pad = Gamepad.current;
         var mouse = Mouse.current;
         if (pad == null || mouse == null) return;
 
-        // Combine stick + dpad into a single -1..1 vertical input.
         float input = 0f;
         Vector2 stick = pad.leftStick.ReadValue();
         if (Mathf.Abs(stick.y) > stickDeadzone) input += stick.y;
@@ -51,30 +58,29 @@ public class GamepadScrollRouter : MonoBehaviour
         }
         if (Mathf.Approximately(input, 0f)) return;
 
-        Vector2 cursor = mouse.position.ReadValue();
-        var sr = FindScrollRectUnder(cursor);
+        var sr = FindScrollRectUnder(mouse.position.ReadValue());
         if (sr == null || sr.content == null || sr.viewport == null) return;
 
-        // Pixels of content hidden outside the viewport (how far we can scroll).
         float hidden = sr.content.rect.height - sr.viewport.rect.height;
-        if (hidden <= 1f) return; // content fits — nothing to scroll
+        if (hidden <= 1f) return; // content fits
 
-        // verticalNormalizedPosition: 1 = top, 0 = bottom. Stick up (positive y)
-        // reveals earlier items (toward the top), so add the delta.
+        // verticalNormalizedPosition: 1 = top, 0 = bottom. Stick up reveals earlier
+        // items (toward the top), so add the delta.
         float deltaNorm = (input * scrollSpeed * Time.unscaledDeltaTime) / hidden;
-        sr.verticalNormalizedPosition =
-            Mathf.Clamp01(sr.verticalNormalizedPosition + deltaNorm);
+        sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + deltaNorm);
     }
 
-
-    /// Topmost active ScrollRect whose viewport contains the cursor. Uses a
-    /// rect test rather than the EventSystem so it has no extra dependencies.
-
+    /// Topmost active ScrollRect whose viewport contains the cursor.
     private ScrollRect FindScrollRectUnder(Vector2 screenPos)
     {
-        var all = FindObjectsByType<ScrollRect>(FindObjectsSortMode.None);
+        if (Time.unscaledTime >= _nextScan)
+        {
+            _cache = FindObjectsByType<ScrollRect>(FindObjectsSortMode.None);
+            _nextScan = Time.unscaledTime + Mathf.Max(0f, rescanInterval);
+        }
+
         ScrollRect best = null;
-        foreach (var sr in all)
+        foreach (var sr in _cache)
         {
             if (sr == null || !sr.isActiveAndEnabled) continue;
 
@@ -83,7 +89,7 @@ public class GamepadScrollRouter : MonoBehaviour
 
             Camera cam = GetCanvasCamera(sr);
             if (RectTransformUtility.RectangleContainsScreenPoint(vp, screenPos, cam))
-                best = sr; // later match wins; fine since panels don't overlap
+                best = sr; // later match wins; panels don't overlap
         }
         return best;
     }
@@ -95,3 +101,4 @@ public class GamepadScrollRouter : MonoBehaviour
         return canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
     }
 }
+

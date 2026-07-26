@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: WolfData
   m_EditorClassIdentifier: 
   enemyName: Wolf
-  maxHealth: 60
+  maxHealth: 8
   maxArmor: 0
   moveSpeed: 3.2
   damage: 2

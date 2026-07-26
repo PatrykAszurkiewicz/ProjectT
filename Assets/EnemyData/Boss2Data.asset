@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Boss2Data
   m_EditorClassIdentifier: 
   enemyName: Boss2
-  maxHealth: 1
+  maxHealth: 30
   maxArmor: 1
   moveSpeed: 1
   damage: 0

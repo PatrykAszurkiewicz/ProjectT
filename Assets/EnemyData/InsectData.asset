@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: InsectData
   m_EditorClassIdentifier: 
   enemyName: Insect
-  maxHealth: 40
+  maxHealth: 8
   maxArmor: 0
   moveSpeed: 3
   damage: 3

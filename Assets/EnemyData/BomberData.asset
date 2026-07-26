@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: BomberData
   m_EditorClassIdentifier: 
   enemyName: Bomber
-  maxHealth: 40
+  maxHealth: 12
   maxArmor: 0
   moveSpeed: 2
   damage: 40

@@ -1,17 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
 /// Smoothly flips a sprite to simulate a volumetric creature turning around.
-///
 /// Layered illusion tricks (each can be disabled independently):
-///   1. PERSPECTIVE HINGE — sprite hinges around its leading edge, not center.
-///   2. SQUASH & HOP — vertical squash + small arc hop, sells weight.
-///   3. MOTION TRAIL — fading ghost sprites during the flip.
-///   4. RIM FLASH — brightness pulse at midpoint.
-///   5. MINIMUM WIDTH — sprite never collapses to zero.
-///
-/// --- Boss-compatible mode ---
 /// If useMinimalMode is enabled, ONLY the hinge + squash + hop run. Trail,
 /// rim flash, and color writes are disabled. Use this for bosses where:
 ///   - Other systems read SpriteRenderer.color (damage/armor flashes).
@@ -19,28 +10,64 @@ using UnityEngine;
 ///     health bars / grapple points every frame (they'll jump at the flip's
 ///     midpoint swap, which is visible on a large sprite).
 ///   - Ghost sprites at boss-scale create visual noise.
-///
-/// --- Oscillation debounce ---
-/// The boss's laser-attack loop calls SetFacingLeft() many times per second.
-/// If the target is near the boss's X-axis, noise can flip the decision back
-/// and forth. minTimeBetweenFlips (default 80ms) debounces this — direction
-/// changes within that window are ignored, so the flip animation always gets
-/// to finish some visible progress before the next one can start.
-///
-/// --- Smooth reversal ---
-/// If SetFacingLeft() is called with the opposite direction WHILE a flip is
-/// in progress (and past the debounce window), the animation MIRRORS its
-/// progress rather than restarting. Prevents shrink-expand flicker.
-///
-/// --- Write hygiene ---
-/// Driven from LateUpdate, after physics. Peels off last frame's additive
-/// position/rotation/color writes before applying this frame's, so we don't
-/// drift or compound with physics or other scripts.
-/// </summary>
+
 [RequireComponent(typeof(SpriteRenderer))]
 public class SmoothSpriteFlip : MonoBehaviour
 {
+    // GLOBAL MASTER SWITCH
+    // false = every enemy and boss flips instantly (plain flipX — no squash,
+    //         hop, hinge, trail or rim flash).
+    // true  = the animated flip.
+
+    private const bool DEFAULT_SMOOTH_FLIP = false;
+
+    public static bool SmoothFlipEnabled = DEFAULT_SMOOTH_FLIP;
+
+    // Re-seeds the switch every play session. Also guards against statics
+    // surviving Play-Mode restarts when domain reload is disabled.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void InitSwitch()
+    {
+#if UNITY_EDITOR
+        SmoothFlipEnabled = UnityEditor.EditorPrefs.GetBool(MenuPrefKey, DEFAULT_SMOOTH_FLIP);
+#else
+        SmoothFlipEnabled = DEFAULT_SMOOTH_FLIP;
+#endif
+    }
+
+#if UNITY_EDITOR
+    // Menu-bar checkbox. Lives here rather than in an Editor script so no
+    // extra file is needed — MenuItem works fine from a runtime class as
+    // long as it's static and editor-only.
+    private const string MenuPrefKey = "SmoothSpriteFlip.Enabled";
+    private const string MenuPath = "Tools/Smooth Sprite Flip";
+
+    [UnityEditor.MenuItem(MenuPath)]
+    private static void ToggleFromMenu()
+    {
+        bool v = !UnityEditor.EditorPrefs.GetBool(MenuPrefKey, DEFAULT_SMOOTH_FLIP);
+        UnityEditor.EditorPrefs.SetBool(MenuPrefKey, v);
+        SmoothFlipEnabled = v; // applies immediately, mid-play included
+    }
+
+    [UnityEditor.MenuItem(MenuPath, true)]
+    private static bool ToggleFromMenuValidate()
+    {
+        UnityEditor.Menu.SetChecked(
+            MenuPath, UnityEditor.EditorPrefs.GetBool(MenuPrefKey, DEFAULT_SMOOTH_FLIP));
+        return true;
+    }
+#endif
+
     [Header("Mode")]
+    [Tooltip("Per-instance opt-out. Even with the global switch ON, this " +
+             "sprite flips instantly when unchecked. Has no effect while " +
+             "SmoothSpriteFlip.SmoothFlipEnabled is false.")]
+    [SerializeField] private bool allowSmoothFlip = true;
+
+    // Single source of truth used by SetFacingLeft and LateUpdate.
+    private bool UseSmoothFlip => SmoothFlipEnabled && allowSmoothFlip;
+
     [Tooltip("ON for bosses or any sprite whose flipX / color / position is read by other scripts every frame. Disables trail, rim flash, color writes, AND the perspective hinge (which writes transform.position.x). In minimal mode the flip uses symmetric squash + hop only — no horizontal translation of the GameObject.")]
     [SerializeField] private bool useMinimalMode = false;
 
@@ -51,6 +78,55 @@ public class SmoothSpriteFlip : MonoBehaviour
     [Tooltip("Minimum seconds between direction changes. Debounces rapid oscillation when SetFacingLeft is called many times per second with jittering direction.")]
     [Range(0f, 0.5f)]
     [SerializeField] private float minTimeBetweenFlips = 0.08f;
+
+    [Header("Flip Tolerance (applies with the smooth effect ON or OFF)")]
+    [Tooltip("A new direction must be requested CONTINUOUSLY for this long " +
+             "before the sprite actually turns. This is what stops enemies " +
+             "strobing left/right while they scrape along obstacles: the " +
+             "jitter never sustains, so it never gets honoured. A real turn " +
+             "just costs this much delay. 0 = turn the instant it's asked " +
+             "(old behaviour). 0.15–0.25 feels tolerant without looking slow.")]
+    [Range(0f, 0.6f)]
+    [SerializeField] private float flipConfirmDelay = 0.18f;
+
+    [Tooltip("Hold required to reverse a flip that JUST happened. Turning back " +
+             "is treated as more suspicious than turning for the first time, " +
+             "which is what kills the left-right-left weave between obstacles. " +
+             "Decays back down to flipConfirmDelay over flipBackWindow. Set " +
+             "equal to flipConfirmDelay to disable this.")]
+    [Range(0f, 1.5f)]
+    [SerializeField] private float flipBackDelay = 0.45f;
+
+    [Tooltip("How long a flip counts as 'just happened'. Within this window a " +
+             "reversal needs the longer flipBackDelay hold; after it, facing is " +
+             "considered settled and normal rules resume. Also the calm period " +
+             "that clears the escalation below.")]
+    [Range(0f, 3f)]
+    [SerializeField] private float flipBackWindow = 1.0f;
+
+    [Tooltip("Escalation: each flip that lands while still inside flipBackWindow " +
+             "multiplies the next required hold, so an enemy that keeps changing " +
+             "its mind progressively commits to a side instead of strobing. " +
+             "This is the ceiling on that — the longest a turn can ever be made " +
+             "to wait. Lower = more responsive, more strobe-prone.")]
+    [Range(0f, 2f)]
+    [SerializeField] private float maxFlipHold = 1.0f;
+
+    // How many stacked rapid flips the escalation counts before it saturates.
+    private const int MaxEscalationSteps = 3;
+    private int rapidFlipCount;
+
+    // If nobody calls SetFacingLeft for this long, a half-confirmed turn is
+    // forgotten. Without it, an enemy that requested "left" for 0.1s, stopped,
+    // then asked again minutes later would turn instantly — the pending timer
+    // would look like it had been satisfied all along. A few frames is plenty.
+    private const float RequestStaleTime = 0.12f;
+
+    // Pending (requested but not yet confirmed) direction.
+    private bool pendingFacingLeft;
+    private bool hasPending;
+    private float pendingSince;
+    private float lastRequestTime = -999f;
 
     [Header("Perspective Hinge")]
     [Tooltip("Minimum X-scale fraction at the flip midpoint. Higher = more volumetric, less dramatic rotation.")]
@@ -141,18 +217,85 @@ public class SmoothSpriteFlip : MonoBehaviour
 
     /// <summary>
     /// Request the sprite to face left (true) or right (false). Safe to spam;
-    /// idempotent. Rapid oscillations are debounced via minTimeBetweenFlips.
-    /// Mid-flip direction reversals are handled smoothly without restart.
+    /// idempotent. The request must persist for flipConfirmDelay before it's
+    /// honoured, so jittery direction noise (obstacle scraping, a target
+    /// hovering near our X axis) is filtered out instead of strobing the
+    /// sprite. Mid-flip direction reversals are handled smoothly.
     /// </summary>
     public void SetFacingLeft(bool shouldFaceLeft)
     {
-        // Same as target → no-op.
-        if (shouldFaceLeft == facingLeft) return;
+        float now = Time.time;
 
-        // Debounce: too soon after last flip start → swallow this change.
-        // This matters most on the boss, which calls this dozens of times
-        // per second during the laser attack while the target jitters.
-        if (Time.time - lastFlipStartTime < minTimeBetweenFlips) return;
+        // Did we skip enough frames that the pending request went cold?
+        bool stale = now - lastRequestTime > RequestStaleTime;
+        lastRequestTime = now;
+
+        // Already facing that way → nothing to do, and any opposite request
+        // still in flight is abandoned. THIS is the hysteresis: a jittering
+        // caller alternates directions, so each request cancels the previous
+        // one's progress and neither ever reaches flipConfirmDelay.
+        if (shouldFaceLeft == facingLeft)
+        {
+            hasPending = false;
+            return;
+        }
+
+        // Start (or restart) the confirmation window.
+        if (!hasPending || pendingFacingLeft != shouldFaceLeft || stale)
+        {
+            hasPending = true;
+            pendingFacingLeft = shouldFaceLeft;
+            pendingSince = now;
+        }
+
+        // How long must this request be held to be honoured? Reversing a flip
+        // we just made is treated as suspicious: the requirement starts at
+        // flipBackDelay right after a flip and decays to the normal
+        // flipConfirmDelay once flipBackWindow has passed without one.
+        float sinceFlip = now - lastFlipStartTime;
+        if (sinceFlip > flipBackWindow) rapidFlipCount = 0; // settled → forgiven
+
+        float settled = flipBackWindow <= 0f ? 1f : Mathf.Clamp01(sinceFlip / flipBackWindow);
+        float required = Mathf.Lerp(
+            Mathf.Max(flipBackDelay, flipConfirmDelay), flipConfirmDelay, settled);
+
+        // Escalation: each flip that lands while still inside the window makes
+        // the next one wait longer, so an enemy weaving between two obstacles
+        // stops arguing with itself and commits to a side.
+        required *= 1f + rapidFlipCount;
+        required = Mathf.Min(required, Mathf.Max(maxFlipHold, flipConfirmDelay));
+
+        // Not held long enough yet — keep waiting.
+        if (now - pendingSince < required) return;
+
+        // Confirmed, but too soon after the last flip. Keep the request
+        // pending so it lands the moment the cooldown expires.
+        if (now - lastFlipStartTime < minTimeBetweenFlips) return;
+
+        hasPending = false;
+        CommitFlip(shouldFaceLeft);
+    }
+
+    // The actual turn, once the request has earned it.
+    private void CommitFlip(bool shouldFaceLeft)
+    {
+        // Count this flip against the streak BEFORE lastFlipStartTime moves.
+        // Landing inside flipBackWindow of the previous flip = indecisive;
+        // outside it = a clean, settled turn that resets the escalation.
+        rapidFlipCount = (Time.time - lastFlipStartTime <= flipBackWindow)
+            ? Mathf.Min(rapidFlipCount + 1, MaxEscalationSteps)
+            : 0;
+
+        // ---- INSTANT MODE ----
+        // No animation: just mirror the renderer. LateUpdate cleans up any
+        // in-progress flip on the next frame if we were toggled off mid-flip.
+        if (!UseSmoothFlip)
+        {
+            facingLeft = shouldFaceLeft;
+            if (spriteRenderer != null) spriteRenderer.flipX = facingLeft;
+            lastFlipStartTime = Time.time;
+            return;
+        }
 
         // Direction change.
         if (isFlipping)
@@ -183,11 +326,9 @@ public class SmoothSpriteFlip : MonoBehaviour
     public bool IsFlipping => isFlipping;
     public void RecaptureBaseScale() => CaptureBase();
 
-    /// <summary>
     /// Enable minimal mode at runtime. Boss1 calls this so auto-added
     /// components get the boss-compatible config without needing the
     /// component pre-placed on the prefab with the right toggle.
-    /// </summary>
     public void SetMinimalMode(bool minimal) => useMinimalMode = minimal;
 
     private void LateUpdate()
@@ -219,6 +360,20 @@ public class SmoothSpriteFlip : MonoBehaviour
 
         UpdateGhosts();
 
+        // Instant mode: nothing to animate. The residual peel above already
+        // ran, so any leftover hop / hinge / rim-flash from the frame we were
+        // switched off is undone here.
+        if (!UseSmoothFlip)
+        {
+            if (isFlipping) // toggled off mid-flip → snap to rest
+            {
+                transform.localScale = baseScale;
+                if (spriteRenderer != null) spriteRenderer.flipX = facingLeft;
+                isFlipping = false;
+            }
+            return; // deliberately does NOT re-write localScale every frame
+        }
+
         if (!isFlipping)
         {
             if (transform.localScale != baseScale) transform.localScale = baseScale;
@@ -229,7 +384,7 @@ public class SmoothSpriteFlip : MonoBehaviour
         float k = Mathf.Clamp01(flipT / Mathf.Max(0.0001f, flipDuration));
         float eased = k * k * (3f - 2f * k);
 
-        // --- Motion trail (skipped entirely in minimal mode) ---
+        //  Motion trail (skipped entirely in minimal mode) 
         if (!useMinimalMode && enableTrail && trailGhostCount > 0 && spriteRenderer.sprite != null)
         {
             float worldWidth = spriteRenderer.sprite.bounds.size.x * baseScaleAbsX;
@@ -245,7 +400,7 @@ public class SmoothSpriteFlip : MonoBehaviour
             }
         }
 
-        // --- X SCALE ---
+        //  X SCALE 
         float fullAbsX = baseScaleAbsX;
         float minAbsX = baseScaleAbsX * minWidthFraction;
         float absX;
@@ -254,13 +409,13 @@ public class SmoothSpriteFlip : MonoBehaviour
         else
             absX = Mathf.Lerp(minAbsX, fullAbsX, (eased - 0.5f) * 2f);
 
-        // --- Y SQUASH ---
+        //  Y SQUASH 
         float squeeze = 1f - Mathf.Abs(eased - 0.5f) * 2f;
         float absY = absBaseY * (1f - squashAmount * squeeze);
 
         transform.localScale = new Vector3(absX, absY * baseYSign, baseScale.z);
 
-        // --- PERSPECTIVE HINGE ---
+        //  PERSPECTIVE HINGE 
         // Skipped in minimal mode: the hinge writes transform.position.x,
         // which is read each frame by the boss's health bar, collider,
         // grapple point, and laser origin code. Even though we peel the
@@ -281,7 +436,7 @@ public class SmoothSpriteFlip : MonoBehaviour
             hingeOffset = halfShrinkWorld * hingeSign * hingeStrength;
         }
 
-        // --- HOP ---
+        //  HOP 
         // Kept in minimal mode: writes transform.position.y. Y-axis movement
         // is benign for the systems reading position (health bar tracks the
         // boss vertically anyway, collider offset doesn't care about Y jitter).
@@ -294,7 +449,7 @@ public class SmoothSpriteFlip : MonoBehaviour
             lastHingeOffsetX = hingeOffset;
         }
 
-        // --- LEAN ---
+        //  LEAN 
         if (applyLean)
         {
             float leanDir = facingLeft ? 1f : -1f;
@@ -308,7 +463,7 @@ public class SmoothSpriteFlip : MonoBehaviour
             }
         }
 
-        // --- RIM FLASH (skipped entirely in minimal mode) ---
+        //  RIM FLASH (skipped entirely in minimal mode) 
         if (!useMinimalMode && rimFlashStrength > 0f && squeeze > 0.01f)
         {
             float flash = squeeze * rimFlashStrength;
@@ -402,3 +557,4 @@ public class SmoothSpriteFlip : MonoBehaviour
         isFlipping = false;
     }
 }
+

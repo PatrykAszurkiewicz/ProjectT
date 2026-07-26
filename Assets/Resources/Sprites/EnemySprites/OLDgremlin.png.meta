@@ -1,0 +1,689 @@
+fileFormatVersion: 2
+guid: 9e6981240a65f2d44ba4fd7d5caa4bc2
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -1009190255234647725
+    second: OLDgremlin_0
+  - first:
+      213: -8861224534519058676
+    second: OLDgremlin_1
+  - first:
+      213: 1862293031361870610
+    second: OLDgremlin_2
+  - first:
+      213: -2933509670515257963
+    second: OLDgremlin_3
+  - first:
+      213: 3860656452982196098
+    second: OLDgremlin_4
+  - first:
+      213: 2429210612639420517
+    second: OLDgremlin_5
+  - first:
+      213: 1565361100489518950
+    second: OLDgremlin_6
+  - first:
+      213: 4750161417621634521
+    second: OLDgremlin_7
+  - first:
+      213: 4940083489046929925
+    second: OLDgremlin_8
+  - first:
+      213: -4423784524827962562
+    second: OLDgremlin_9
+  - first:
+      213: -3282681132407130184
+    second: OLDgremlin_10
+  - first:
+      213: 2865894728834674612
+    second: OLDgremlin_11
+  - first:
+      213: 1869987165862719296
+    second: OLDgremlin_12
+  - first:
+      213: -3613431413425946742
+    second: OLDgremlin_13
+  - first:
+      213: -1976803741788103082
+    second: OLDgremlin_14
+  - first:
+      213: 1809159281846703395
+    second: OLDgremlin_15
+  - first:
+      213: -2190120714763868217
+    second: OLDgremlin_16
+  - first:
+      213: -4536492642589960205
+    second: OLDgremlin_17
+  - first:
+      213: -4798417446518836122
+    second: OLDgremlin_18
+  - first:
+      213: -3502662322306808435
+    second: OLDgremlin_19
+  - first:
+      213: -8325185828122676688
+    second: OLDgremlin_20
+  - first:
+      213: -1042998051553939052
+    second: OLDgremlin_21
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: OLDgremlin_0
+      rect:
+        serializedVersion: 2
+        x: 2
+        y: 1122
+        width: 412
+        height: 343
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 359f3fd4fc2aef1f0800000000000000
+      internalID: -1009190255234647725
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_1
+      rect:
+        serializedVersion: 2
+        x: 513
+        y: 1088
+        width: 323
+        height: 390
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c0fe3011c3b960580800000000000000
+      internalID: -8861224534519058676
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_2
+      rect:
+        serializedVersion: 2
+        x: 928
+        y: 1122
+        width: 337
+        height: 327
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 21b720a25a138d910800000000000000
+      internalID: 1862293031361870610
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_3
+      rect:
+        serializedVersion: 2
+        x: 11
+        y: 760
+        width: 451
+        height: 311
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 59dc3cf3f741a47d0800000000000000
+      internalID: -2933509670515257963
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_4
+      rect:
+        serializedVersion: 2
+        x: 510
+        y: 760
+        width: 322
+        height: 312
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 287c2dfd69ec39530800000000000000
+      internalID: 3860656452982196098
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_5
+      rect:
+        serializedVersion: 2
+        x: 928
+        y: 760
+        width: 318
+        height: 311
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5605bf28e2a46b120800000000000000
+      internalID: 2429210612639420517
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_6
+      rect:
+        serializedVersion: 2
+        x: 2
+        y: 8
+        width: 389
+        height: 695
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 66f64e390a749b510800000000000000
+      internalID: 1565361100489518950
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_7
+      rect:
+        serializedVersion: 2
+        x: 549
+        y: 395
+        width: 267
+        height: 236
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9dd7a1354a6fbe140800000000000000
+      internalID: 4750161417621634521
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_8
+      rect:
+        serializedVersion: 2
+        x: 1089
+        y: 581
+        width: 39
+        height: 38
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5022a6572c3be8440800000000000000
+      internalID: 4940083489046929925
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_9
+      rect:
+        serializedVersion: 2
+        x: 963
+        y: 510
+        width: 59
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e3352c2b96f8b92c0800000000000000
+      internalID: -4423784524827962562
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_10
+      rect:
+        serializedVersion: 2
+        x: 1033
+        y: 552
+        width: 25
+        height: 27
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8b7fef707e29172d0800000000000000
+      internalID: -3282681132407130184
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_11
+      rect:
+        serializedVersion: 2
+        x: 1075
+        y: 481
+        width: 69
+        height: 72
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4bfeadb5214b5c720800000000000000
+      internalID: 2865894728834674612
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_12
+      rect:
+        serializedVersion: 2
+        x: 1144
+        y: 552
+        width: 49
+        height: 26
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 04f69c37b6783f910800000000000000
+      internalID: 1869987165862719296
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_13
+      rect:
+        serializedVersion: 2
+        x: 1039
+        y: 481
+        width: 27
+        height: 27
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a8f328636438addc0800000000000000
+      internalID: -3613431413425946742
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_14
+      rect:
+        serializedVersion: 2
+        x: 1171
+        y: 497
+        width: 28
+        height: 23
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 65e9e0c687bf094e0800000000000000
+      internalID: -1976803741788103082
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_15
+      rect:
+        serializedVersion: 2
+        x: 482
+        y: 8
+        width: 621
+        height: 409
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 325d29018cc6b1910800000000000000
+      internalID: 1809159281846703395
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_16
+      rect:
+        serializedVersion: 2
+        x: 769
+        y: 411
+        width: 35
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7c7664d40d02b91e0800000000000000
+      internalID: -2190120714763868217
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_17
+      rect:
+        serializedVersion: 2
+        x: 955
+        y: 414
+        width: 74
+        height: 79
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3f790481af32b01c0800000000000000
+      internalID: -4536492642589960205
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_18
+      rect:
+        serializedVersion: 2
+        x: 999
+        y: 386
+        width: 81
+        height: 57
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 664353861c8986db0800000000000000
+      internalID: -4798417446518836122
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_19
+      rect:
+        serializedVersion: 2
+        x: 1077
+        y: 453
+        width: 24
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d8502cefc2b046fc0800000000000000
+      internalID: -3502662322306808435
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_20
+      rect:
+        serializedVersion: 2
+        x: 1103
+        y: 386
+        width: 72
+        height: 57
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 032b1a9199ff67c80800000000000000
+      internalID: -8325185828122676688
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: OLDgremlin_21
+      rect:
+        serializedVersion: 2
+        x: 1145
+        y: 453
+        width: 26
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 491f3b35cc68681f0800000000000000
+      internalID: -1042998051553939052
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      OLDgremlin_0: -1009190255234647725
+      OLDgremlin_1: -8861224534519058676
+      OLDgremlin_10: -3282681132407130184
+      OLDgremlin_11: 2865894728834674612
+      OLDgremlin_12: 1869987165862719296
+      OLDgremlin_13: -3613431413425946742
+      OLDgremlin_14: -1976803741788103082
+      OLDgremlin_15: 1809159281846703395
+      OLDgremlin_16: -2190120714763868217
+      OLDgremlin_17: -4536492642589960205
+      OLDgremlin_18: -4798417446518836122
+      OLDgremlin_19: -3502662322306808435
+      OLDgremlin_2: 1862293031361870610
+      OLDgremlin_20: -8325185828122676688
+      OLDgremlin_21: -1042998051553939052
+      OLDgremlin_3: -2933509670515257963
+      OLDgremlin_4: 3860656452982196098
+      OLDgremlin_5: 2429210612639420517
+      OLDgremlin_6: 1565361100489518950
+      OLDgremlin_7: 4750161417621634521
+      OLDgremlin_8: 4940083489046929925
+      OLDgremlin_9: -4423784524827962562
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

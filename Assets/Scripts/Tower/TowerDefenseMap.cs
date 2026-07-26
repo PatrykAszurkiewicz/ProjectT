@@ -211,6 +211,14 @@ public class TowerDefenseMap : MonoBehaviour
         {
             DrawDebugCircles();
         }
+
+        // Biome decorations (trees/rocks) are placed relative to this layout's
+        // footprint, so they must be rebuilt whenever the layout changes —
+        // otherwise props spawned for the previous layout sit on top of the new
+        // walls. No-op until ObstacleGenerator has generated at least once, so
+        // this can't double-spawn during first-frame startup ordering.
+        var obstacleGen = FindFirstObjectByType<ObstacleGenerator>();
+        if (obstacleGen != null) obstacleGen.NotifyLayoutChanged();
     }
 
     void ClearExistingMap()

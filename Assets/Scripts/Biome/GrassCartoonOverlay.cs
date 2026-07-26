@@ -9,6 +9,16 @@ public class GrassCartoonOverlay : MonoBehaviour
     public float spawnRadius = 60f;
     public float coreExclusionRadius = 1.5f;
 
+    [Tooltip("Shrink coreExclusionRadius so it can't swallow the Core's base.\n\n" +
+             "Grass only draws in FRONT of the Core when it sits below the Core's Y-sort line, which is " +
+             "|CentralCore.ComputeYSortOffset()| below the Core's pivot — about 0.68 units at ppu 1200 / " +
+             "coreSize 2. An exclusion radius of 1.5 reaches well past that, so every blade that could " +
+             "overlap the base is deleted before it spawns and the Core looks like it floats above the " +
+             "whole field. No sort order can fix that; the grass simply isn't there.\n\n" +
+             "This clamps the radius to 90% of that reach, leaving a visible band. Grass that spawns " +
+             "inside the mound needs no exclusion — it sorts BEHIND the Core and the mound hides it.")]
+    public bool fitCoreExclusionToCore = true;
+
     [Header("Prefabs (set by BiomeManager — null slots are skipped)")]
     public GameObject[] prefabs;
 
@@ -110,7 +120,15 @@ public class GrassCartoonOverlay : MonoBehaviour
         var bands = new SortedDictionary<int, Dictionary<Sprite, List<QuadInstance>>>();
 
         int prefabCount = validPrefabs.Count;
-        float coreExclSq = coreExclusionRadius * coreExclusionRadius;
+
+        // Core exclusion. The inspector value (1.5, set by BiomeManager) predates the current
+        // Core sprite and reaches past the Core's Y-sort line, which deletes every blade that
+        // could overlap its base. Clamped below to leave that band intact.
+        Vector2 coreCenter = Vector2.zero;
+        float coreExcl = coreExclusionRadius;
+        if (fitCoreExclusionToCore) ResolveCoreExclusion(ref coreCenter, ref coreExcl);
+
+        float coreExclSq = coreExcl * coreExcl;
         float radiusSq = spawnRadius * spawnRadius;
 
         float area = Mathf.PI * spawnRadius * spawnRadius;
@@ -128,8 +146,12 @@ public class GrassCartoonOverlay : MonoBehaviour
                 float cy = gy * cellSize;
                 float distSq = cx * cx + cy * cy;
 
-                if (distSq > radiusSq) continue;
-                if (distSq < coreExclSq) continue;
+                if (distSq > radiusSq) continue;   // spawn area: still measured from origin
+
+                // Core exclusion: measured from the Core's ground footprint.
+                float ex = cx - coreCenter.x;
+                float ey = cy - coreCenter.y;
+                if (ex * ex + ey * ey < coreExclSq) continue;
 
                 float jx = cx + Random.Range(-0.45f, 0.45f) * cellSize;
                 float jy = cy + Random.Range(-0.45f, 0.45f) * cellSize;
@@ -216,6 +238,49 @@ public class GrassCartoonOverlay : MonoBehaviour
 
         //Debug.Log($"[GrassCartoonOverlay] Baked {spawned} grass quads into {meshCount} band meshes " +
         //          $"(bandSize={bandSize}, {bands.Count} bands, {spriteMeta.Count} sprite(s)).");
+    }
+
+    //  Core exclusion 
+
+    /// Clamp the exclusion radius so grass can reach the Core's base, and centre it on the
+    /// Core rather than assuming the world origin.
+    ///
+    /// This only ever SHRINKS the inspector value. An earlier version of this method widened
+    /// it to the Core's mound, which deleted precisely the band of grass that Y-sorting exists
+    /// to draw in front of the base — the Core ended up floating above every blade with a bald
+    /// ring under it. Widening was the bug; the mound is 0.82 units across and the radius was
+    /// already 1.5.
+    private void ResolveCoreExclusion(ref Vector2 center, ref float radius)
+    {
+        // Nothing to clamp: BiomeManager serialises 0 here, so no grass is being excluded and
+        // the Core has nothing to complain about. Skip quietly rather than warning about a
+        // Core that legitimately doesn't exist yet (GameOrchestrator bakes grass first).
+        if (radius <= 0f) return;
+
+        var core = Object.FindFirstObjectByType<CentralCore>();
+        if (core == null)
+        {
+            Debug.LogWarning("[GrassCartoonOverlay] No CentralCore found while generating grass — " +
+                $"leaving coreExclusionRadius at {radius:F2}. If the Core spawns after the grass, this " +
+                "radius may be swallowing the grass that should draw in front of it; set it by hand " +
+                "(right-click CentralCore -> Log Y-Sort Diagnostics prints the ceiling).");
+            return;
+        }
+
+        center = core.transform.position;
+
+        // How far below the pivot the Core sorts from. Grass must get below this line to
+        // draw in front, so the exclusion circle has to stop short of it.
+        float reach = Mathf.Abs(core.ComputeYSortOffset());
+        if (reach <= 0.01f) return;   // sprite not loaded yet; leave the value alone
+
+        float maxAllowed = reach * 0.9f;
+        if (radius > maxAllowed)
+        {
+            Debug.Log($"[GrassCartoonOverlay] Clamping coreExclusionRadius {radius:F2} -> {maxAllowed:F2} " +
+                      $"so grass can reach the Core's base (sort line sits {reach:F2} below its pivot).");
+            radius = maxAllowed;
+        }
     }
 
     //  Mesh building 

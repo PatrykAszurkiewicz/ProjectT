@@ -185,7 +185,14 @@ public class WaveCheckpointService : MonoBehaviour
         DestroyAllOfType<SmokeScreenProjectile>(); // canister still arcing
         DestroyAllOfType<SmokeScreenCloud>();       // lingering smoke wall
 
-        // 3) Lingering poison ON the player. The Parfumer's poison keeps ticking
+        // 3) Uncollected energy drops. RestoreEconomy resets player energy to the
+        //    wave-start absolute, so any orb still lying on the ground (or mid-arc)
+        //    belongs to a timeline that no longer exists — collecting it after the
+        //    rewind would credit energy the snapshot already rolled back. Covers
+        //    enemy/boss drops as well as lore-chest orbs.
+        DestroyAllOfType<EnergyDrop>();
+
+        // 4) Lingering poison ON the player. The Parfumer's poison keeps ticking
         //    ~20s after exposure via a PoisonStatusEffect. The rewind restores
         //    wave-start HP, so a poison from the rewound timeline must not survive.
         var playerGO = GameObject.FindGameObjectWithTag("Player");
@@ -410,4 +417,3 @@ public class TowerSnapshot
     public float currentEnergy;
     public float maxEnergy;
 }
-

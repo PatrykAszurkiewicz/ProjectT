@@ -37,6 +37,17 @@ public class RunSaveData
     public int stageIndex;
     public int waveIndex;
 
+    // Combat telemetry (CombatStatsTracker). Shared run clock used as the DPS
+    // denominator; per-player damage totals live on each PlayerSaveEntry below.
+    // Missing in older saves → 0, so no save-version bump is needed (these are
+    // purely additive and only feed the Win/Lose stats display).
+    public float combatSeconds = 0f;
+
+    // Combat telemetry — run-wide (shared across co-op players).
+    public float towerDamageDealt = 0f;
+    public float towerDamageTaken = 0f;
+    public int enemiesKilled = 0;
+
     // True if this checkpoint was written at the START OF THE FINAL BOSS (after all
     // stages, their bosses, and post-stage rewards were already completed). When set,
     // resume rebuilds the last stage's arena/towers but SKIPS its boss + reward and
@@ -94,6 +105,14 @@ public class PlayerSaveEntry
     public float playerMana, playerMaxMana;
     public float playerStamina, playerMaxStamina;
     public int playerDashesLeft;
+
+    // Combat telemetry (CombatStatsTracker) — this player's run totals, restored on
+    // resume so the tally keeps counting. Missing in older saves → 0.
+    public float damageDealt;
+    public float damageReceived;
+    // Seconds this player was actively attacking (used for real DPS, not an average
+    // over the whole run).
+    public float activeAttackSeconds;
 }
 
 // One in-run hotbar unlock that came from collecting a boss blueprint drop, keyed
@@ -144,3 +163,4 @@ public class TowerSaveEntry
     public float currentEnergy;
     public float maxEnergy;
 }
+

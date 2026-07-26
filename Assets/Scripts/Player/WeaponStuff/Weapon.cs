@@ -1179,6 +1179,7 @@ public class Weapon : MonoBehaviour
         GameObject projectile = Instantiate(weaponData.projectilePrefab, transform.position, Quaternion.identity);
         var weaponProjectile = projectile.GetComponent<WeaponProjectile>();
         weaponProjectile?.Initialize(direction, weaponData.damage, weaponData.projectileSpeed, weaponData.knockBackForce);
+        weaponProjectile?.SetOwner(_playerRef);   // co-op: credit damage to the firing player
 
         // Ranged fire SFX
         if (AudioManager.instance != null && FMODEvents.instance != null
@@ -1512,6 +1513,10 @@ public class Weapon : MonoBehaviour
                     damage *= parryEffect.DamageMultiplier;
 
                 stats.TakeDamage(damage);
+
+                // Combat telemetry: player melee/flamethrower/hammer damage dealt,
+                // attributed to this weapon's owner (co-op safe via _playerRef).
+                CombatStats.ReportPlayerDamageDealt(_playerRef, damage);
             }
 
             var vampireEffect = playerStats?.GetComponent<EnergyVampireTouchEffect>();

@@ -66,8 +66,22 @@ public class WeaponBlueprintMenu : MonoBehaviour
 
     public static void Open()
     {
+        // Prefer a scene-placed component, even an inactive one: that is the instance
+        // whose 'Slot Source' you filled in. Creating a bare GameObject instead gives an
+        // UNCONFIGURED menu — slotSource null — and in a scene with no live
+        // WeaponRollController (i.e. MenuScene) ResolveSlots() then returns null and the
+        // screen renders zero tokens and "Discovered 0/0". That's the main-menu bug.
         if (_instance == null)
+            _instance = FindFirstObjectByType<WeaponBlueprintMenu>(FindObjectsInactive.Include);
+
+        if (_instance == null)
+        {
             _instance = new GameObject("WeaponBlueprintMenu").AddComponent<WeaponBlueprintMenu>();
+            Debug.LogWarning("[WeaponBlueprintMenu] No configured instance in the scene — created a " +
+                             "bare one. It can only show slots if a WeaponRollController exists in the " +
+                             "scene. Add a WeaponBlueprintMenu component to this scene and assign " +
+                             "'Slot Source' = your Player prefab.");
+        }
         _instance.OpenMenu();
     }
     public static void Close() { if (_instance != null) _instance.CloseMenu(); }
@@ -80,13 +94,30 @@ public class WeaponBlueprintMenu : MonoBehaviour
         Populate();
         Subscribe();               // live-refresh if a blueprint unlocks while open
         _root.SetActive(true);
-        Cursor.visible = true;
+
+        // Was a bare `Cursor.visible = true` with no restore, so the pointer stayed on
+        // after closing back into gameplay. UIModalStack owns the cursor now, and being
+        // on the stack means Esc closes THIS overlay instead of toggling the pause menu
+        // underneath it. freeze only in-run: this also opens from the main menu.
+        UIModalStack.Push(this, freeze: UIModalStack.GameplayActive);
     }
 
     public void CloseMenu()
     {
         Unsubscribe();
         if (_root != null) _root.SetActive(false);
+        UIModalStack.Pop(this);
+    }
+
+    private void Update()
+    {
+        if (_root != null && _root.activeSelf && MenuBackInput.ConsumeBack(this))
+            CloseMenu();
+    }
+
+    private void OnDisable()
+    {
+        if (UIModalStack.Contains(this)) UIModalStack.Pop(this);
     }
 
     public void ToggleMenu()
@@ -148,11 +179,13 @@ public class WeaponBlueprintMenu : MonoBehaviour
         if (_root == null) return;
 
         var slots = ResolveSlots();
-        if (slots == null)
+        if (!HasAny(slots))
         {
-            Debug.LogWarning("[WeaponBlueprintMenu] No slot data. Drag your Player prefab into " +
-                             "'Slot Source', fill the 'Weapon Slots' override, or open this while a " +
-                             "WeaponRollController exists in the scene.");
+            // Was `slots == null`, which missed an all-null array and reported nothing.
+            Debug.LogError("[WeaponBlueprintMenu] No slot data — the screen will be empty and show " +
+                           "'Discovered 0/0'. Assign 'Slot Source' (your Player PREFAB) on the " +
+                           "WeaponBlueprintMenu component in THIS scene. The prefab is read as an " +
+                           "asset, so it works with no player instantiated (main menu).");
         }
 
         // Partition slot indices into weapons / tools (skip empty slots).
@@ -393,3 +426,4 @@ public class WeaponBlueprintMenu : MonoBehaviour
         return _circle;
     }
 }
+

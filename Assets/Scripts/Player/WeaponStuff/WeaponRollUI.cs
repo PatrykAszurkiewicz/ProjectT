@@ -134,6 +134,20 @@ public class WeaponRollUI : MonoBehaviour
         if (_canvas != null) Destroy(_canvas.gameObject);
     }
 
+    /// <summary>
+    /// Show/hide this player's weapon-roll hotbar. Toggles the whole roll canvas so
+    /// nothing under it renders. Used to hide the hotbar on the Win/Lose screen.
+    /// </summary>
+    public void SetHudVisible(bool visible)
+    {
+        if (_canvas != null) _canvas.enabled = visible;
+    }
+
+    /// <summary>True if the hotbar canvas exists and is currently shown. Lets callers
+    /// (e.g. the boss-intro cinematic) capture the prior state and restore it exactly,
+    /// instead of force-revealing a hotbar that was intentionally hidden (e.g. a downed player).</summary>
+    public bool HudVisible => _canvas != null && _canvas.enabled;
+
     void BuildCanvas()
     {
         int idx = _playerRef != null ? _playerRef.PlayerIndex : 0;
@@ -920,5 +934,3 @@ public class WeaponRollUI : MonoBehaviour
     bool UsingRingSprites => (_activeRing != null || _inactiveRing != null);
 
 }
-
-

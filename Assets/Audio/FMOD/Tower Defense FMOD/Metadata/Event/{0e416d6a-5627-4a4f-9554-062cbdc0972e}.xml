@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{7becf4da-360e-44c4-abd5-1f465fafa467}">
 		<property name="volume">
-			<value>2.5</value>
+			<value>-3.5</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{a6f4be47-20a3-42ad-9e7f-9813c630c7e3}</destination>
@@ -99,6 +99,8 @@
 	<object class="MixerBusEffectChain" id="{a6f4be47-20a3-42ad-9e7f-9813c630c7e3}">
 		<relationship name="effects">
 			<destination>{42656c47-0e2d-4831-96af-9f49c6295946}</destination>
+			<destination>{57b5c9df-b4bc-4e02-a582-68e82d7d81ec}</destination>
+			<destination>{53162e89-80f5-4022-9698-d634a1808557}</destination>
 			<destination>{4ae99c93-e6e0-4042-bb06-63cd17a74045}</destination>
 		</relationship>
 	</object>
@@ -110,6 +112,31 @@
 	</object>
 	<object class="MixerBusFader" id="{f2982295-32d8-40ee-8e43-cce0f86a8a28}" />
 	<object class="MixerBusFader" id="{42656c47-0e2d-4831-96af-9f49c6295946}" />
+	<object class="DelayEffect" id="{57b5c9df-b4bc-4e02-a582-68e82d7d81ec}">
+		<property name="delay">
+			<value>6.20000029</value>
+		</property>
+		<property name="level">
+			<value>10</value>
+		</property>
+		<property name="dryLevel">
+			<value>-9</value>
+		</property>
+	</object>
+	<object class="PitchShifterEffect" id="{53162e89-80f5-4022-9698-d634a1808557}">
+		<property name="pitch">
+			<value>0.819999993</value>
+		</property>
+		<property name="fftSize">
+			<value>2640</value>
+		</property>
+		<property name="overlap">
+			<value>24.8000011</value>
+		</property>
+		<property name="maxChannels">
+			<value>2.79999995</value>
+		</property>
+	</object>
 	<object class="SFXReverbEffect" id="{4ae99c93-e6e0-4042-bb06-63cd17a74045}">
 		<property name="decayTime">
 			<value>450</value>

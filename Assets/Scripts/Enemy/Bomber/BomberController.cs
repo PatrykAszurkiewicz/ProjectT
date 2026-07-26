@@ -43,6 +43,16 @@ public class BomberController : MonoBehaviour
     [Tooltip("Blink interval when about to explode.")]
     [SerializeField] private float blinkIntervalEnd = 0.07f;
 
+    [Header("Fuse Warning Sound")]
+    [Tooltip("Play FMODEvents.bombWarning (the 'BombWarning' event) for the whole fuse " +
+             "window — it starts when the Bomber plants itself and arms, and is cut the " +
+             "instant it detonates so the explosion one-shot lands on silence rather than " +
+             "on top of a still-ticking warning. The audio counterpart of the blink, so " +
+             "the threat is readable off-screen too. Needs a loop region in FMOD Studio: " +
+             "the fuse can also be CANCELLED (target died / walked away), in which case " +
+             "the sound fades out instead.")]
+    [SerializeField] private bool playFuseWarningSound = true;
+
     [Header("Obstacle Avoidance")]
     [SerializeField] private float avoidDistance = 1f;
     [SerializeField] private LayerMask obstacleLayer;
@@ -62,6 +72,11 @@ public class BomberController : MonoBehaviour
 
     private bool isFuseActive = false;
     private bool hasExploded = false;
+
+    // Held instance for the fuse warning. Its lifetime is exactly the fuse's:
+    // started in FuseRoutine, stopped in Explode (hard cut) or RestoreFromFuse
+    // (fade, the fuse was cancelled), plus the disable/destroy safety nets.
+    private readonly SpatialLoopSfx fuseWarningSfx = new SpatialLoopSfx("Bomber fuse warning");
 
     // Fuse blink state — driven from LateUpdate so the blink color is the
     // LAST writer each frame and can't be overwritten by SmoothSpriteFlip's
@@ -354,6 +369,10 @@ public class BomberController : MonoBehaviour
         // Capture the resting color BEFORE we start blinking.
         fuseBaseColor = spriteRenderer != null ? spriteRenderer.color : Color.white;
 
+        // Arm the audio warning alongside the visual one.
+        if (playFuseWarningSound && FMODEvents.instance != null)
+            fuseWarningSfx.Play(FMODEvents.instance.bombWarning, transform.position);
+
         // Silence the systems that fight us for spriteRenderer.color while armed:
         //   - SmoothSpriteFlip rim flash (minimal mode disables its color writes)
         //   - EnemyAnimationController sprite/rotation churn that triggers flips
@@ -364,6 +383,10 @@ public class BomberController : MonoBehaviour
         while (elapsed < fuseTime)
         {
             elapsed = Time.time - fuseStartTime;
+
+            // The Bomber plants itself while armed, but knockback and shoving from
+            // other enemies still move it, so keep the warning on the body.
+            fuseWarningSfx.SetPosition(transform.position);
 
             // Killed by player/tower before detonation — abort, die normally (no boom).
             if (stats == null || stats.IsDead())
@@ -398,6 +421,11 @@ public class BomberController : MonoBehaviour
     private void RestoreFromFuse()
     {
         isFuseActive = false;
+
+        // Disarmed, not detonated — let the warning fade out rather than snapping
+        // off, which would read as a bug ("did it explode?").
+        fuseWarningSfx.Stop(immediate: false);
+
         RestoreColorOnly();
         if (animController != null) animController.enabled = true;
         // Leave SmoothSpriteFlip in minimal mode off again so normal flips resume.
@@ -415,6 +443,10 @@ public class BomberController : MonoBehaviour
         hasExploded = true;
 
         Vector3 pos = transform.position;
+
+        // Cut the warning FIRST, hard, and before the explosion one-shot goes out —
+        // the whole point of the warning is that it resolves into the bang.
+        fuseWarningSfx.Stop(immediate: true);
 
         var vfxRoot = new GameObject("Bomber_ExplosionVFX");
         vfxRoot.transform.position = pos;
@@ -494,8 +526,22 @@ public class BomberController : MonoBehaviour
         }
     }
 
-    // Minimal death wrap: notifies wave spawner, drops energy, destroys the GameObject.
+    // Safety nets for the fuse warning. The Bomber can leave the fuse window without
+    // going through either Explode or RestoreFromFuse — killed by a tower, pooled, or
+    // the scene unloaded mid-countdown — and a held instance would otherwise keep
+    // ticking with nothing on screen. Stop() is idempotent, so overlapping with the
+    // normal paths is harmless.
+    private void OnDisable()
+    {
+        fuseWarningSfx.Stop(immediate: true);
+    }
 
+    private void OnDestroy()
+    {
+        fuseWarningSfx.Stop(immediate: true);
+    }
+
+    // Minimal death wrap: notifies wave spawner, drops energy, destroys the GameObject.
     private void PerformExplosionDeath()
     {
         if (stats != null && stats.canDropEnergy)
@@ -720,3 +766,6 @@ public class BomberController : MonoBehaviour
         }
     }
 }
+
+
+

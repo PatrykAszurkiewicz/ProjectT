@@ -6,27 +6,48 @@ public enum ScrollTarget { None, Weapon, Tool }
 
 
 // Per-player weapon/tool hotbar controller. Lives on the PLAYER prefab (root).
-// Co-op changes vs. the old scene singleton:
-//   Binds to its OWN sibling Weapon (GetComponentInChildren) and sibling
-//    WeaponRollUI — not FindFirstObjectByType, which would grab P1's.
-//   Reads input from THIS player's PlayerInput devices (the paired gamepad,
-//    or keyboard+mouse) instead of the global Gamepad/Keyboard/Mouse.current,
-//    so each player cycles their own hotbar.
-//   The unlock POOL is still shared (WeaponUnlockRegistry) — both players see
-//    the same unlocked weapons — but each player independently SELECTS which
-//    one they hold (_weaponIndex/_toolIndex are per-instance).
-// Single player: with one player the bound devices are just the only ones, so
-// behaviour matches the old global polling exactly.
-
+//
+// Co-op: binds to its OWN sibling Weapon (GetComponentInChildren) and sibling
+// WeaponRollUI — not FindFirstObjectByType, which would grab P1's. The unlock POOL is
+// shared (WeaponUnlockRegistry), but each player independently SELECTS which entry
+// they hold (_weaponIndex/_toolIndex are per-instance).
+//
+// INPUT: every control here now goes through the "Player" action map, so all of it is
+// rebindable and shows up in ControlRebindScreen. Previously this script polled raw
+// device paths (pad.dpad.*, mouse.scroll, kb.digit1Key…kb.digit0Key, shift), which is
+// why rebinding Previous/Next in the controls screen did nothing — those actions
+// existed in the asset, bound to the very D-pad controls this script read directly,
+// and nothing consumed them.
+//
+//   PreviousWeapon / NextWeapon   D-pad left/right, wheel DOWN (next weapon)
+//   PreviousTool   / NextTool     D-pad up/down, Z / X, wheel UP (previous tool)
+//   Hotbar1..Hotbar10             number row 1..0  → weapon slot
+//   HotbarModifier (held)         + a cycle or Hotbar action → acts on TOOLS instead
+//
+// THE MOUSE WHEEL IS SPLIT ON PURPOSE: up cycles TOOLS, down cycles WEAPONS. It is not
+// an up/down pair for one list. This looks like an inconsistency and is not — do not
+// "normalise" it to prev/next weapon (that has been done once already and it removed
+// the only way to change tools with the mouse).
+//
+// Actions are POLLED rather than wired to PlayerInput UnityEvents on purpose: it needs
+// no inspector setup on the player prefab and cannot be broken by someone switching
+// the PlayerInput notification behaviour.
 public class WeaponRollController : MonoBehaviour
 {
     [Header("Slots 0-17: Melee, Ranged, GrapplingHook, Shield, ObstacleDrawer, Flamethrower, BombLauncher, Trap, Turret, Decoy, Boomerang, Book, BattleHammer, StealthCloak, Torch, TimeClock, Mortar, SmokeScreen")]
     public WeaponData[] allWeaponSlots = new WeaponData[18];
 
+    public const int HotbarSlots = 10;
+
     Weapon _weapon;
     WeaponRollUI _ui;
     PlayerInput _playerInput;
     int _playerIndex;   // this player's index, for the per-player unlock pool
+
+    // ---- Bound actions (resolved once, follow rebinds automatically) ------
+    InputAction _prevWeapon, _nextWeapon, _prevTool, _nextTool, _modifier;
+    readonly InputAction[] _hotbar = new InputAction[HotbarSlots];
+    bool _actionsResolved;
 
     readonly List<int> _activeWeapons = new List<int>();
     readonly List<int> _activeTools = new List<int>();
@@ -75,6 +96,8 @@ public class WeaponRollController : MonoBehaviour
 
     void Start()
     {
+        ResolveActions();
+
         // Sibling UI (on the same player). Fallback to scene search for the
         // single-player / legacy layout.
         _ui = GetComponent<WeaponRollUI>() ?? GetComponentInChildren<WeaponRollUI>();
@@ -99,94 +122,71 @@ public class WeaponRollController : MonoBehaviour
             WeaponUnlockRegistry.Instance.OnUnlocksChanged -= OnUnlocksChanged;
     }
 
-    // ---- This player's input devices (not the global *.current) -----------
-
-    Gamepad PlayerPad()
+    // ---- Action resolution -----------------------------------------------
+    // Rebinding mutates the SAME InputAction objects (it only changes their overrides),
+    // so these references stay valid for the lifetime of the player — no need to
+    // re-resolve when ControlRebindService fires OnRebindsChanged.
+    void ResolveActions()
     {
-        if (_playerInput == null) return null;
-        foreach (var d in _playerInput.devices) if (d is Gamepad g) return g;
-        return null;
+        if (_playerInput == null || _playerInput.actions == null)
+        {
+            Debug.LogWarning("[WeaponRollController] No PlayerInput/actions on this player — " +
+                             "hotbar input is disabled. Add a PlayerInput with PlayerInputActions.");
+            return;
+        }
+
+        _prevWeapon = PlayerAttack.FindAction(_playerInput, "PreviousWeapon");
+        _nextWeapon = PlayerAttack.FindAction(_playerInput, "NextWeapon");
+        _prevTool = PlayerAttack.FindAction(_playerInput, "PreviousTool");
+        _nextTool = PlayerAttack.FindAction(_playerInput, "NextTool");
+        _modifier = PlayerAttack.FindAction(_playerInput, "HotbarModifier");
+
+        for (int i = 0; i < HotbarSlots; i++)
+            _hotbar[i] = PlayerAttack.FindAction(_playerInput, $"Hotbar{i + 1}");
+
+        _actionsResolved = _nextWeapon != null || _prevWeapon != null || _hotbar[0] != null;
+
+        if (!_actionsResolved)
+            Debug.LogWarning("[WeaponRollController] The Player map has no hotbar actions " +
+                             "(NextWeapon / PreviousWeapon / Hotbar1…). Is PlayerInputActions " +
+                             "up to date on this PlayerInput?");
     }
 
-    Keyboard PlayerKeyboard()
-    {
-        if (_playerInput == null) return null;
-        foreach (var d in _playerInput.devices) if (d is Keyboard k) return k;
-        return null;
-    }
-
-    Mouse PlayerMouse()
-    {
-        if (_playerInput == null) return null;
-        foreach (var d in _playerInput.devices) if (d is Mouse m) return m;
-        return null;
-    }
+    // True while the tool modifier (Ctrl by default) is held. Reuses PlayerAttack's
+    // shared held-check so the modifier follows rebinds like everything else.
+    bool ToolModifierHeld => PlayerAttack.ActionPhysicallyHeld(_modifier);
 
     void Update()
     {
-        // Suspend ALL input handling when the game is paused (pause menu open).
-        if (Time.timeScale == 0f) return;
+        if (!_actionsResolved) return;
 
-        // Gamepad: D-pad cycles weapons (left/right) and tools (up/down).
-        var pad = PlayerPad();
-        if (pad != null)
+        // Suspend hotbar input while a menu owns input. Was `Time.timeScale == 0f`,
+        // which missed non-freezing overlays — the D-pad would still cycle weapons
+        // underneath them. UIModalStack is the same authority the menu cursor uses.
+        if (Time.timeScale == 0f || UIModalStack.MenuInputActive) return;
+
+        bool tools = ToolModifierHeld;
+
+        // Cycle. The dedicated tool actions always mean tools; the weapon actions mean
+        // tools while the modifier is held — so Ctrl+wheel-down cycles tools FORWARD,
+        // which is what shift+wheel-down used to do (on a control that isn't also Dash).
+        // Plain wheel-up is bound to PreviousTool, so tools are reachable without any
+        // modifier, exactly as before.
+        if (Triggered(_nextWeapon)) { if (tools) CycleTool(+1); else CycleWeapon(+1); }
+        if (Triggered(_prevWeapon)) { if (tools) CycleTool(-1); else CycleWeapon(-1); }
+        if (Triggered(_nextTool)) CycleTool(+1);
+        if (Triggered(_prevTool)) CycleTool(-1);
+
+        // Direct select: 1..0 picks a weapon, modifier+1..0 picks a tool.
+        for (int i = 0; i < HotbarSlots; i++)
         {
-            if (pad.dpad.right.wasPressedThisFrame) CycleWeapon(+1);
-            if (pad.dpad.left.wasPressedThisFrame) CycleWeapon(-1);
-            if (pad.dpad.down.wasPressedThisFrame) CycleTool(+1);
-            if (pad.dpad.up.wasPressedThisFrame) CycleTool(-1);
-        }
-
-        var kb = PlayerKeyboard();
-        bool shiftHeld = kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
-
-        // Mouse scroll: up = cycle tool, down = cycle weapon (shift = tool).
-        var mouse = PlayerMouse();
-        if (mouse != null)
-        {
-            float s = mouse.scroll.ReadValue().y;
-            if (s > 0f)
-            {
-                CycleTool(-1);
-            }
-            else if (s < 0f)
-            {
-                if (shiftHeld) CycleTool(+1);
-                else CycleWeapon(+1);
-            }
-        }
-
-        // Number keys: plain = weapon, shift = tool.
-        if (kb != null)
-        {
-            if (shiftHeld)
-            {
-                if (kb.digit1Key.wasPressedThisFrame) PickTool(0);
-                if (kb.digit2Key.wasPressedThisFrame) PickTool(1);
-                if (kb.digit3Key.wasPressedThisFrame) PickTool(2);
-                if (kb.digit4Key.wasPressedThisFrame) PickTool(3);
-                if (kb.digit5Key.wasPressedThisFrame) PickTool(4);
-                if (kb.digit6Key.wasPressedThisFrame) PickTool(5);
-                if (kb.digit7Key.wasPressedThisFrame) PickTool(6);
-                if (kb.digit8Key.wasPressedThisFrame) PickTool(7);
-                if (kb.digit9Key.wasPressedThisFrame) PickTool(8);
-                if (kb.digit0Key.wasPressedThisFrame) PickTool(9);
-            }
-            else
-            {
-                if (kb.digit1Key.wasPressedThisFrame) PickWeapon(0);
-                if (kb.digit2Key.wasPressedThisFrame) PickWeapon(1);
-                if (kb.digit3Key.wasPressedThisFrame) PickWeapon(2);
-                if (kb.digit4Key.wasPressedThisFrame) PickWeapon(3);
-                if (kb.digit5Key.wasPressedThisFrame) PickWeapon(4);
-                if (kb.digit6Key.wasPressedThisFrame) PickWeapon(5);
-                if (kb.digit7Key.wasPressedThisFrame) PickWeapon(6);
-                if (kb.digit8Key.wasPressedThisFrame) PickWeapon(7);
-                if (kb.digit9Key.wasPressedThisFrame) PickWeapon(8);
-                if (kb.digit0Key.wasPressedThisFrame) PickWeapon(9);
-            }
+            if (!Triggered(_hotbar[i])) continue;
+            if (tools) PickTool(i);
+            else PickWeapon(i);
         }
     }
+
+    static bool Triggered(InputAction a) => a != null && a.triggered;
 
     void OnUnlocksChanged()
     {
@@ -291,4 +291,3 @@ public class WeaponRollController : MonoBehaviour
         _ui?.Refresh(_weaponIndex, _toolIndex, scrollTarget);
     }
 }
-

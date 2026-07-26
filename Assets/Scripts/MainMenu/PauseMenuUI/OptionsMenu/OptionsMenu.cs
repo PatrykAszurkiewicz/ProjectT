@@ -37,6 +37,7 @@ public class OptionsMenu : MonoBehaviour
     private TMP_FontAsset _font;
 
     private TextMeshProUGUI _musicBtnLabel;
+    private TextMeshProUGUI _damageVigLabel;
     private readonly List<Button> _waveButtons = new List<Button>();
     private readonly WavePacingMode[] _waveModes = { WavePacingMode.Countdown, WavePacingMode.Immediate, WavePacingMode.ReadyUp };
     private readonly string[] _waveLabels = { "Countdown", "Immediate", "Ready" };
@@ -52,6 +53,7 @@ public class OptionsMenu : MonoBehaviour
 
     public static void Open()
     {
+        if (_instance == null) _instance = FindFirstObjectByType<OptionsMenu>(FindObjectsInactive.Include);
         if (_instance == null) _instance = new GameObject("OptionsMenu").AddComponent<OptionsMenu>();
         _instance.OpenMenu();
     }
@@ -63,14 +65,45 @@ public class OptionsMenu : MonoBehaviour
         if (_root == null) BuildUI();
         SyncFromState();
         _root.SetActive(true);
-        Cursor.visible = true;
+
+        // Options is a full-screen canvas with a raycast-blocking Dim image. If the
+        // pause menu underneath un-paused (old Esc double-handling) this canvas was
+        // left active over live gameplay, invisibly eating every click — "controls
+        // gone". Registering with UIModalStack makes it impossible for anything
+        // below to resume while we're open, and makes Esc close US first.
+        UIModalStack.Push(this, freeze: UIModalStack.GameplayActive);
     }
-    public void CloseMenu() { if (_root != null) _root.SetActive(false); }
+    public void CloseMenu()
+    {
+        // Never leave the blueprint overlay stranded on screen after Options closes.
+        if (GameObject.Find("BlueprintCanvas") != null) WeaponBlueprintMenu.Close();
+        if (_root != null) _root.SetActive(false);
+        UIModalStack.Pop(this);
+    }
     public void ToggleMenu()
     {
         if (_root != null && _root.activeSelf) CloseMenu(); else OpenMenu();
     }
-    public void OpenRebinding() => ControlRebindScreen.Open();
+
+    private void Update()
+    {
+        // Only the frontmost modal reacts to Esc/Start. While the Tutorial, the
+        // rebind screen or the blueprint overlay is open on top of us, they get it.
+        if (_root != null && _root.activeSelf && MenuBackInput.ConsumeBack(this))
+            CloseMenu();
+    }
+
+    private void OnDisable()
+    {
+        if (UIModalStack.Contains(this)) UIModalStack.Pop(this);
+    }
+
+    public void OpenRebinding()
+    {
+        // The press that opened us must not also close the child on its first frame.
+        MenuBackInput.Consume();
+        ControlRebindScreen.Open();
+    }
 
     //  STATE BINDING
     private RunConfig ResolveConfig()
@@ -93,6 +126,7 @@ public class OptionsMenu : MonoBehaviour
         // Reflect the persisted difficulty selection (its own PlayerPrefs key).
         HighlightDifficulty(EnemyStatModifierManager.SelectedMode);
         RefreshMusicLabel();
+        RefreshDamageVignetteLabel();
     }
 
     //  UI CONSTRUCTION
@@ -116,18 +150,21 @@ public class OptionsMenu : MonoBehaviour
         var pr = panel.GetComponent<RectTransform>();
         pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
         pr.pivot = new Vector2(0.5f, 0.5f);
-        // Grown 860 → 980 (DIFFICULTY) → 1075 (CAMERA shake slider). There is no scroll
-        // view, so the panel height must cover the fixed row heights below plus a little
-        // slack for the flexible spacer that pins Close to the bottom.
-        pr.sizeDelta = new Vector2(900, 1075);
+        // Height is now DERIVED, not grown by hand. The column below sums to ~932px
+        // (rows + 4px spacing) and the insets add 80, so 1020 fits inside the 1080
+        // reference height with margin to spare and leaves the flexible spacer at
+        // ~0 -- which is what keeps DIFFICULTY tight against the buttons under it.
+        // If you add a row, subtract its height from another row rather than growing
+        // this number past ~1030, or the panel will overflow the screen again.
+        pr.sizeDelta = new Vector2(900, 1020);
         MenuTheme.ApplySprite(panel.AddComponent<Image>(), MenuTheme.PanelSprite, MenuTheme.PanelSolid);
 
         var inner = MenuTheme.NewUI("Inner", panel.transform);
         var irt = inner.GetComponent<RectTransform>();
         irt.anchorMin = Vector2.zero; irt.anchorMax = Vector2.one;
-        irt.offsetMin = new Vector2(64, 58); irt.offsetMax = new Vector2(-64, -58);
+        irt.offsetMin = new Vector2(64, 40); irt.offsetMax = new Vector2(-64, -40);
         var v = inner.AddComponent<VerticalLayoutGroup>();
-        v.spacing = 8; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
+        v.spacing = 4; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
         v.childControlWidth = true; v.childControlHeight = true;
 
         // Title (sits high now that the top inset is smaller)
@@ -136,7 +173,7 @@ public class OptionsMenu : MonoBehaviour
         title.enableVertexGradient = true;
         var top = new Color(0.97f, 0.88f, 1f, 1f);
         title.colorGradient = new VertexGradient(top, top, MenuTheme.Magenta, MenuTheme.Magenta);
-        SetH(title, 50);
+        SetH(title, 46);
 
         AddDivider(inner.transform);
 
@@ -148,9 +185,88 @@ public class OptionsMenu : MonoBehaviour
         var spacer = MenuTheme.NewUI("Spacer", inner.transform);
         var sle = spacer.AddComponent<LayoutElement>(); sle.flexibleHeight = 1f; sle.minHeight = 0f;
 
+        // Weapon blueprints, then Tutorial + Lore Archive side by side, above Close.
+        var blueprints = MenuTheme.NewButton("Display Unlocked Weapons", inner.transform, 22, _font);
+        SetH(blueprints, 56);
+        blueprints.onClick.AddListener(OpenBlueprints);
+
+        BuildExtrasRow(inner.transform);
+
         var close = MenuTheme.NewButton("Close", inner.transform, 24, _font);
-        SetH(close, 60);
+        SetH(close, 54);
         close.onClick.AddListener(CloseMenu);
+    }
+
+    // Two side-by-side buttons (Tutorial | Lore Archive) sharing the full width —
+    // same horizontal-row pattern as the wave / difficulty selectors.
+    private void BuildExtrasRow(Transform parent)
+    {
+        var row = MenuTheme.NewUI("Row_Extras", parent);
+        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 56; rle.preferredHeight = 56; rle.flexibleHeight = 0;
+        var h = row.AddComponent<HorizontalLayoutGroup>();
+        h.spacing = 10; h.padding = new RectOffset(6, 6, 2, 2);
+        h.childControlWidth = true; h.childControlHeight = true;
+        h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+        h.childAlignment = TextAnchor.MiddleCenter;
+
+        var tutorial = MenuTheme.NewButton("Tutorial", row.transform, 22, _font);
+        var tle = tutorial.GetComponent<LayoutElement>(); tle.flexibleWidth = 1; tle.minWidth = 100;
+        tutorial.onClick.AddListener(OpenTutorial);
+
+        var lore = MenuTheme.NewButton("Lore Archive", row.transform, 22, _font);
+        var lle = lore.GetComponent<LayoutElement>(); lle.flexibleWidth = 1; lle.minWidth = 100;
+        lore.onClick.AddListener(OpenLoreArchive);
+    }
+
+    // Music on/off toggle + "Switch Track" side by side. Sharing one 48px row keeps
+    // the panel's height budget unchanged (the toggle used to be a full-width row of
+    // the same height) — see the sizing note in BuildUI.
+    private void BuildMusicRow(Transform parent)
+    {
+        var row = MenuTheme.NewUI("Row_Music", parent);
+        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 48; rle.preferredHeight = 48; rle.flexibleHeight = 0;
+        var h = row.AddComponent<HorizontalLayoutGroup>();
+        h.spacing = 10; h.padding = new RectOffset(6, 6, 2, 2);
+        h.childControlWidth = true; h.childControlHeight = true;
+        h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+        h.childAlignment = TextAnchor.MiddleCenter;
+
+        var musicBtn = MenuTheme.NewButton("Music: On", row.transform, 22, _font);
+        var mle = musicBtn.GetComponent<LayoutElement>(); mle.flexibleWidth = 1; mle.minWidth = 100;
+        _musicBtnLabel = musicBtn.GetComponentInChildren<TextMeshProUGUI>();
+        musicBtn.onClick.AddListener(ToggleMusic);
+
+        var switchBtn = MenuTheme.NewButton("Switch Track", row.transform, 22, _font);
+        var sle = switchBtn.GetComponent<LayoutElement>(); sle.flexibleWidth = 1; sle.minWidth = 100;
+        switchBtn.onClick.AddListener(SwitchMusicTrack);
+    }
+
+    private void OpenTutorial()
+    {
+        MenuBackInput.Consume();   // don't let this frame's input close the tutorial instantly
+        TutorialScreen.ShowTutorial();
+    }
+    private void OpenLoreArchive() => LoreArchiveMenu.Instance.Open();
+
+    /// <summary>
+    /// Open the permanent weapon-blueprint screen ("Display Unlocked Weapons")
+    /// on top of Options. Its own Back button returns here.
+    /// </summary>
+    private void OpenBlueprints()
+    {
+        WeaponBlueprintMenu.Open();
+
+        // BlueprintCanvas is built at sortingOrder 4850, which sits BELOW this menu
+        // (4900) — without a bump it opens behind Options and the button looks dead.
+        // Lift it just above whichever canvas we're currently on.
+        var bp = GameObject.Find("BlueprintCanvas");
+        if (bp != null)
+        {
+            var bpCanvas = bp.GetComponent<Canvas>();
+            var mine = _root != null ? _root.GetComponent<Canvas>() : null;
+            if (bpCanvas != null)
+                bpCanvas.sortingOrder = (mine != null ? mine.sortingOrder : 4900) + 10;
+        }
     }
 
     // Force an exact element height (min == preferred, no flexing) so the column
@@ -168,7 +284,7 @@ public class OptionsMenu : MonoBehaviour
         //  CONTROLS 
         AddHeader(body, "CONTROLS");
         var rebind = MenuTheme.NewButton("Keyboard / Gamepad Rebinding", body, 24, _font);
-        SetH(rebind, 62);
+        SetH(rebind, 54);
         rebind.onClick.AddListener(OpenRebinding);
 
         //  AUDIO 
@@ -179,14 +295,17 @@ public class OptionsMenu : MonoBehaviour
         AddSlider(body, "Ambience", am != null ? am.ambienceVolume : PlayerPrefs.GetFloat(KAmb, 1f), KAmb, v => { if (am) am.ambienceVolume = v; });
         AddSlider(body, "SFX", am != null ? am.SFXVolume : PlayerPrefs.GetFloat(KSfx, 1f), KSfx, v => { if (am) am.SFXVolume = v; });
 
-        var musicBtn = MenuTheme.NewButton("Music: On", body, 22, _font);
-        SetH(musicBtn, 54);
-        _musicBtnLabel = musicBtn.GetComponentInChildren<TextMeshProUGUI>();
-        musicBtn.onClick.AddListener(ToggleMusic);
+        BuildMusicRow(body);
 
         //  CAMERA 
         AddHeader(body, "CAMERA");
         AddCameraShakeSlider(body);
+
+        var vigBtn = MenuTheme.NewButton("Damage Vignette", body, 22, _font);
+        SetH(vigBtn, 44);
+        _damageVigLabel = vigBtn.GetComponentInChildren<TextMeshProUGUI>();
+        vigBtn.onClick.AddListener(ToggleDamageVignette);
+        RefreshDamageVignetteLabel();
 
         //  GAMEPLAY 
         AddHeader(body, "GAMEPLAY");
@@ -201,7 +320,7 @@ public class OptionsMenu : MonoBehaviour
     {
         var t = MenuTheme.NewText(text, parent, 20, TextAlignmentOptions.Left, _font);
         t.color = MenuTheme.Magenta; t.fontStyle = FontStyles.Bold; t.characterSpacing = 4f;
-        SetH(t, 22);
+        SetH(t, 20);
     }
 
     private void AddDivider(Transform parent)
@@ -221,7 +340,7 @@ public class OptionsMenu : MonoBehaviour
     private void AddSlider(Transform parent, string label, float value, string prefKey, System.Action<float> apply)
     {
         var row = MenuTheme.NewUI("Row_" + label, parent);
-        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 48; rle.preferredHeight = 48; rle.flexibleHeight = 0;
+        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 44; rle.preferredHeight = 44; rle.flexibleHeight = 0;
         var h = row.AddComponent<HorizontalLayoutGroup>();
         h.spacing = 14; h.padding = new RectOffset(6, 6, 2, 2);
         h.childControlWidth = true; h.childControlHeight = true;
@@ -261,7 +380,7 @@ public class OptionsMenu : MonoBehaviour
     private void AddCameraShakeSlider(Transform parent)
     {
         var row = MenuTheme.NewUI("Row_CameraShake", parent);
-        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 48; rle.preferredHeight = 48; rle.flexibleHeight = 0;
+        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 44; rle.preferredHeight = 44; rle.flexibleHeight = 0;
         var h = row.AddComponent<HorizontalLayoutGroup>();
         h.spacing = 14; h.padding = new RectOffset(6, 6, 2, 2);
         h.childControlWidth = true; h.childControlHeight = true;
@@ -305,7 +424,7 @@ public class OptionsMenu : MonoBehaviour
         // sliver and stack vertically.
         var caption = MenuTheme.NewText("Wave Start", parent, 22, TextAlignmentOptions.Left, _font);
         caption.color = MenuTheme.ValueCol;
-        SetH(caption, 22);
+        SetH(caption, 20);
 
         // Three mode buttons sharing the full width.
         var row = MenuTheme.NewUI("Row_Wave", parent);
@@ -335,7 +454,7 @@ public class OptionsMenu : MonoBehaviour
         // Nightmare = +30% enemy & boss HP and damage (stacked on the per-stage scaling).
         var caption = MenuTheme.NewText("Applies to your next run", parent, 22, TextAlignmentOptions.Left, _font);
         caption.color = MenuTheme.ValueCol;
-        SetH(caption, 22);
+        SetH(caption, 20);
 
         // Two mode buttons sharing the full width — same pattern as the wave selector.
         var row = MenuTheme.NewUI("Row_Difficulty", parent);
@@ -368,12 +487,37 @@ public class OptionsMenu : MonoBehaviour
         RefreshMusicLabel();
     }
 
+    // Jump to a different random background track mid-run. Does nothing audible if
+    // music is toggled off (the choice is still recorded for when it's turned back on).
+    private void SwitchMusicTrack()
+    {
+        var am = AudioManager.instance;
+        if (am != null) am.SwitchToRandomMusicTrack();
+    }
+
     private void RefreshMusicLabel()
     {
         if (_musicBtnLabel == null) return;
         var am = AudioManager.instance;
         bool on = am != null ? am.musicEnabled : (PlayerPrefs.GetInt(KMusOn, 1) == 1);
         _musicBtnLabel.text = on ? "Music: On" : "Music: Off";
+    }
+
+    private void ToggleDamageVignette()
+    {
+        PlayerDamageVignette.CycleMode();   // On → Low HP only → Off → On
+        RefreshDamageVignetteLabel();
+    }
+
+    private void RefreshDamageVignetteLabel()
+    {
+        if (_damageVigLabel == null) return;
+        switch (PlayerDamageVignette.Mode)
+        {
+            case PlayerDamageVignette.VignetteMode.On: _damageVigLabel.text = "Damage Vignette: On"; break;
+            case PlayerDamageVignette.VignetteMode.LowHealthOnly: _damageVigLabel.text = "Damage Vignette: Low HP Only"; break;
+            default: _damageVigLabel.text = "Damage Vignette: Off"; break;
+        }
     }
 
     private void SetWaveMode(WavePacingMode mode)

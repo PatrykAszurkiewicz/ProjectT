@@ -12,6 +12,13 @@ public class CharacterStats : MonoBehaviour
     public event Action<float, float> OnHealthChanged;
     // parametry: currentHealth, maxHealth
 
+    // Raised whenever this character actually LOSES health (argument = post-armor
+    // damage applied, always > 0). Fires from base TakeDamage, so it is the single
+    // choke-point for every damage source that reduces HP — melee, boss specials,
+    // poison DoT, hazards, etc. Blocked / immune / fully-armor-absorbed hits never
+    // reach here, so they correctly raise nothing. Used by PlayerDamageVignette.
+    public event Action<float> OnDamaged;
+
     // Animated capacity change support 
     // Tracks the running animation so a second augment pick replaces a still-tweening one cleanly.
     private Coroutine _maxHealthTween;
@@ -26,11 +33,19 @@ public class CharacterStats : MonoBehaviour
 
     public virtual void TakeDamage(float amount)
     {
+
+        // GodMode
+        if (DebugCheats.DamageBlocked(this)) return;
+
+
         float mitigated = Mathf.Max(amount - currentArmor, 0f);
         currentHealth -= mitigated;
         currentHealth = Mathf.Max(currentHealth, 0f);
 
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
+        if (mitigated > 0f)
+            OnDamaged?.Invoke(mitigated);
 
         if (IsDead())
         {
@@ -160,3 +175,5 @@ public class CharacterStats : MonoBehaviour
     }
 
 }
+
+

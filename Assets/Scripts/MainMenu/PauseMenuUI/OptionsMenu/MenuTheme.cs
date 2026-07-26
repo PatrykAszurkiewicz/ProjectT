@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -120,6 +121,9 @@ public static class MenuTheme
         var c = btn.colors;
         c.highlightedColor = new Color(1.15f, 1.05f, 1.2f, 1f);
         c.pressedColor = new Color(0.8f, 0.6f, 0.95f, 1f);
+        // Gamepad focus (MenuNavigator) shows through selectedColor. The default is
+        // barely distinguishable from normal, so the focused button looked unfocused.
+        c.selectedColor = new Color(1.30f, 1.05f, 1.45f, 1f);
         c.fadeDuration = 0.08f;
         btn.colors = c;
         go.AddComponent<LayoutElement>();
@@ -153,6 +157,13 @@ public static class MenuTheme
         }
         var fill = go.transform.Find("Fill Area/Fill")?.GetComponent<Image>();
         if (fill != null) fill.color = Magenta;
+        // Same focus tint as the buttons, so a focused slider is obvious.
+        var sc = slider.colors;
+        sc.selectedColor = new Color(1.30f, 1.05f, 1.45f, 1f);
+        sc.highlightedColor = new Color(1.15f, 1.05f, 1.2f, 1f);
+        sc.fadeDuration = 0.08f;
+        slider.colors = sc;
+
         var handle = go.transform.Find("Handle Slide Area/Handle")?.GetComponent<Image>();
         if (handle != null)
         {
@@ -186,6 +197,342 @@ public static class MenuTheme
     {
         if (EventSystem.current != null) return;
         var go = new GameObject("EventSystem", typeof(EventSystem));
-        go.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+        var module = go.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+
+        // Without an actions asset the module has no Move / Submit / Cancel, so gamepad
+        // navigation (MenuNavigator relies on the module to dispatch them) would do
+        // nothing on any runtime-created EventSystem.
+        if (module.actionsAsset == null) module.AssignDefaultActions();
     }
 }
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  UIModalStack — the SINGLE owner of "the game is paused by a menu".
+//
+//  Lives in MenuTheme.cs on purpose: this is the shared menu module, every menu
+//  already references it, and neither type is a MonoBehaviour so Unity does not
+//  require its own file. No new scripts to lose track of.
+//
+//  WHY IT EXISTS
+//  Every screen used to do this on open:
+//      _prev = Time.timeScale; Time.timeScale = 0f;
+//      Cursor.visible = true;  PlayerAttack.SetAllSuppressed(true);
+//  …and write _prev back on close. Correct only while exactly ONE screen is open.
+//  With two, the inner screen's *restore* overwrites the outer screen's state
+//  with a value snapshotted at the wrong moment:
+//
+//    • Pause menu up + wave ends → the orchestrator captures prevTimeScale = 0.
+//      You un-pause (1). You pick an augment → it restores 0.
+//      FROZEN GAME, NO MENU, NO INPUT.
+//    • Pause → Options → Tutorial → Esc. TutorialScreen.Close() and the Pause
+//      action both fire on that one press, in undefined order. Either the
+//      tutorial restores its captured 0 after pause set 1 (frozen), or pause
+//      resumes the game with the full-screen OptionsCanvas still active,
+//      invisibly eating every click.
+//
+//  Screens now Push(this) / Pop(this). This class recomputes the global state
+//  FROM THE STACK on every change — it never restores a caller's snapshot — so
+//  ordering and interleaving stop mattering.
+// ═════════════════════════════════════════════════════════════════════════════
+public static class UIModalStack
+{
+    private class Entry
+    {
+        public object Owner;
+        public bool Freeze;
+        public int Frame;      // Time.frameCount when pushed
+    }
+
+    private static readonly List<Entry> _stack = new List<Entry>();
+
+    // Captured only on the 0 → 1 transition and restored when the stack drains.
+    // Never on a nested push — that is exactly how a nested screen used to record
+    // "paused" as the resting state.
+    private static float _baseTimeScale = 1f;
+    private static bool _baseCursorVisible;
+    private static bool _hasBaseState;
+    private static bool _suppressed;
+
+    public static event System.Action OnChanged;
+
+    public static int Depth => _stack.Count;
+    public static bool IsOpen => _stack.Count > 0;
+
+    /// <summary>True while at least one open modal wants gameplay frozen.</summary>
+    public static bool IsFrozen
+    {
+        get
+        {
+            for (int i = 0; i < _stack.Count; i++)
+                if (_stack[i].Freeze) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Is there a run to freeze? Menus in the main-menu scene pass this as their
+    /// `freeze` argument: freezing there would stall the menu's own animations and
+    /// unscaled-time work for no benefit. In-run they freeze as expected.
+    /// </summary>
+    public static bool GameplayActive => GameOrchestrator.Instance != null;
+
+    /// <summary>
+    /// Should the gamepad drive the on-screen menu cursor right now? True whenever a
+    /// modal is open, the clock is frozen, OR we're in a scene with no run at all —
+    /// the whole main menu is a menu, even though nothing is "open" and timeScale is 1.
+    /// That last clause is why the pad couldn't move the cursor in MenuScene.
+    /// </summary>
+    public static bool MenuInputActive => IsOpen || !GameplayActive || Time.timeScale == 0f;
+
+    public static object Top => _stack.Count > 0 ? _stack[_stack.Count - 1].Owner : null;
+
+    /// <summary>Is <paramref name="owner"/> the frontmost modal?</summary>
+    public static bool IsTop(object owner) => owner != null && ReferenceEquals(Top, owner);
+
+    /// <summary>Frontmost, or nothing is open at all. The test a pause menu wants.</summary>
+    public static bool IsTopOrEmpty(object owner) => _stack.Count == 0 || IsTop(owner);
+
+    /// <summary>Frame on which <paramref name="owner"/> was pushed, or -1. Lets a
+    /// screen ignore the very key press that opened it.</summary>
+    public static int PushedFrame(object owner)
+    {
+        for (int i = 0; i < _stack.Count; i++)
+            if (ReferenceEquals(_stack[i].Owner, owner)) return _stack[i].Frame;
+        return -1;
+    }
+
+    public static bool Contains(object owner)
+    {
+        for (int i = 0; i < _stack.Count; i++)
+            if (ReferenceEquals(_stack[i].Owner, owner)) return true;
+        return false;
+    }
+
+    // ── lifetime ────────────────────────────────────────────────────────────
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        _stack.Clear();
+        _hasBaseState = false;
+        _baseTimeScale = 1f;
+        _baseCursorVisible = false;
+        _suppressed = false;          // MUST reset: with "no domain reload" a stale
+                                      // `true` makes the cache skip the un-suppress
+                                      // call and attacks stay dead for the session.
+        OnChanged = null;
+
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    // A scene load destroys every menu on the stack, but Time.timeScale and the
+    // attack-suppression flag survive it. Left alone, a menu-driven scene change
+    // (Quit to Main Menu, Continue Run, Start Co-op) drops you into a scene frozen
+    // at 0 with attacks off — the classic "black screen / dead controls after
+    // loading". Drain here so no caller has to remember `Time.timeScale = 1f`.
+    private static void OnSceneLoaded(UnityEngine.SceneManagement.Scene s,
+                                      UnityEngine.SceneManagement.LoadSceneMode m) => ForceClear();
+
+    // ── push / pop ──────────────────────────────────────────────────────────
+
+    public static void Push(object owner, bool freeze = true)
+    {
+        if (owner == null) return;
+        Prune();
+
+        // Re-opening an already-open screen must not stack twice — two pushes would
+        // need two pops and would strand the freeze on.
+        if (Contains(owner)) { Bump(owner, freeze); Apply(); return; }
+
+        if (_stack.Count == 0) CaptureBaseState();
+        _stack.Add(new Entry { Owner = owner, Freeze = freeze, Frame = Time.frameCount });
+        Apply();
+    }
+
+    public static void Pop(object owner)
+    {
+        if (owner == null) return;
+        for (int i = _stack.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_stack[i].Owner, owner)) { _stack.RemoveAt(i); break; }
+        }
+        Prune();
+        Apply();
+    }
+
+    /// <summary>
+    /// Re-assert the global state from the stack. Insurance for any legacy screen
+    /// that still writes Time.timeScale itself; changes nothing about the stack.
+    /// </summary>
+    public static void Reassert() => Apply();
+
+    /// <summary>
+    /// Close everything and unfreeze. Used when LEAVING for another scene.
+    ///
+    /// Deliberately does NOT restore Cursor.visible. We're mid-transition from an
+    /// open menu (cursor shown) to a scene that has not run yet; writing back the
+    /// gameplay baseline of `false` would land you in the main menu with no mouse
+    /// pointer — a hard lockout for mouse players. The destination scene owns the
+    /// cursor from here.
+    /// </summary>
+    public static void ForceClear()
+    {
+        _stack.Clear();
+        _hasBaseState = false;
+        _baseTimeScale = 1f;
+        Time.timeScale = 1f;
+        SetAttacksSuppressed(false);
+        OnChanged?.Invoke();
+    }
+
+    private static void Bump(object owner, bool freeze)
+    {
+        for (int i = 0; i < _stack.Count; i++)
+        {
+            if (ReferenceEquals(_stack[i].Owner, owner))
+            {
+                var e = _stack[i];
+                e.Freeze = freeze;
+                e.Frame = Time.frameCount;
+                _stack.RemoveAt(i);
+                _stack.Add(e);
+                return;
+            }
+        }
+    }
+
+    // A destroyed MonoBehaviour compares == null against UnityEngine.Object but
+    // never against a plain object reference, so it would pin the stack — and
+    // therefore timeScale at 0 — forever. Sweep on every mutation.
+    private static void Prune()
+    {
+        for (int i = _stack.Count - 1; i >= 0; i--)
+        {
+            var o = _stack[i].Owner;
+            if (o == null || (o is UnityEngine.Object uo && uo == null))
+                _stack.RemoveAt(i);
+        }
+    }
+
+    private static void CaptureBaseState()
+    {
+        // Never record a frozen clock as the resting state.
+        _baseTimeScale = Time.timeScale > 0.0001f ? Time.timeScale : 1f;
+        _baseCursorVisible = Cursor.visible;
+        _hasBaseState = true;
+    }
+
+    private static void Apply()
+    {
+        bool open = _stack.Count > 0;
+        bool freeze = IsFrozen;
+
+        if (open)
+        {
+            if (!_hasBaseState) CaptureBaseState();
+            Time.timeScale = freeze ? 0f : _baseTimeScale;
+            Cursor.visible = true;
+        }
+        else
+        {
+            Time.timeScale = _hasBaseState && _baseTimeScale > 0.0001f ? _baseTimeScale : 1f;
+            if (_hasBaseState) Cursor.visible = _baseCursorVisible;
+            _hasBaseState = false;
+        }
+
+        SetAttacksSuppressed(freeze);
+        OnChanged?.Invoke();
+    }
+
+    // Attacks are suppressed exactly while a freezing modal is up. Cached so the
+    // per-frame Reassert() doesn't hammer every PlayerAttack in the scene.
+    private static void SetAttacksSuppressed(bool value)
+    {
+        if (_suppressed == value) return;
+        _suppressed = value;
+        PlayerAttack.SetAllSuppressed(value);
+    }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  MenuBackInput — ONE "back" press = ONE reaction.
+//
+//  Esc / Start is read in several places (the Pause action, TutorialScreen,
+//  OptionsMenu, ControlRebindScreen, the pad-poll fallback). Unity delivers the
+//  same press to all of them in the same frame and Update order between them is
+//  undefined. This makes the press a CONSUMABLE resource: the frontmost modal
+//  takes it, everyone else sees false. Resets automatically each frame.
+// ═════════════════════════════════════════════════════════════════════════════
+public static class MenuBackInput
+{
+    private static int _readFrame = -1;
+    private static bool _pressed;
+    private static bool _pausePressed;
+    private static int _consumedFrame = -1;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        _readFrame = -1; _consumedFrame = -1; _pressed = false; _pausePressed = false;
+    }
+
+    /// <summary>Any back/cancel control this frame: Esc, gamepad Start, or gamepad B.</summary>
+    public static bool PressedThisFrame { get { Poll(); return _pressed; } }
+
+    /// <summary>Esc or gamepad Start only — never B. The pause menu's fallback poll uses
+    /// this, because B is a gameplay control (dodge/cancel) and must not open pause.</summary>
+    public static bool PausePressedThisFrame { get { Poll(); return _pausePressed; } }
+
+    public static bool ConsumedThisFrame => _consumedFrame == Time.frameCount;
+
+    /// <summary>
+    /// Claim this frame's back press for <paramref name="owner"/>. Succeeds only if a
+    /// press happened, nobody claimed it yet, and <paramref name="owner"/> is the
+    /// frontmost modal (or, with requireTop:false, at least isn't buried under one).
+    /// A press on the same frame the owner opened is ignored — that press opened it.
+    /// </summary>
+    public static bool ConsumeBack(object owner, bool requireTop = true)
+    {
+        if (ConsumedThisFrame) return false;
+        if (!PressedThisFrame) return false;
+
+        bool eligible = requireTop ? UIModalStack.IsTop(owner) : UIModalStack.IsTopOrEmpty(owner);
+        if (!eligible) return false;
+
+        if (UIModalStack.PushedFrame(owner) == Time.frameCount) return false;
+
+        _consumedFrame = Time.frameCount;
+        return true;
+    }
+
+    /// <summary>Burn this frame's press without acting on it — used by a screen that
+    /// opens a child on the same press, so the child can't close on its first frame.</summary>
+    public static void Consume()
+    {
+        if (PressedThisFrame) _consumedFrame = Time.frameCount;
+    }
+
+    private static void Poll()
+    {
+        if (_readFrame == Time.frameCount) return;   // Update order must not matter
+        _readFrame = Time.frameCount;
+        _pressed = false; _pausePressed = false;
+
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb != null && kb.escapeKey.wasPressedThisFrame) { _pressed = true; _pausePressed = true; }
+
+        // Every pad, not just `current`: in co-op either player's Start must work.
+        var pads = UnityEngine.InputSystem.Gamepad.all;
+        for (int i = 0; i < pads.Count; i++)
+        {
+            var p = pads[i];
+            if (p == null) continue;
+            if (p.startButton.wasPressedThisFrame) { _pressed = true; _pausePressed = true; }
+            if (p.bButton.wasPressedThisFrame) _pressed = true;
+        }
+    }
+}
+

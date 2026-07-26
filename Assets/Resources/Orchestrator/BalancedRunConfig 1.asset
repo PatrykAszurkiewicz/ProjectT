@@ -79,10 +79,19 @@ MonoBehaviour:
     minStageIndex: 4
   - enemyPrefab: {fileID: 3554655901426140020, guid: 63d38d2ff6e50234f9d628e78789a479, type: 3}
     weight: 1
-    minStageIndex: 4
+    minStageIndex: 5
   - enemyPrefab: {fileID: 3554655901426140020, guid: 62bc683d748b4494088b9bffdae64973, type: 3}
     weight: 1
     minStageIndex: 4
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 206632d8c910d944c8aeab7ac36537f6, type: 3}
+    weight: 2
+    minStageIndex: 3
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 960f292cc56a018489dc02f245ed4c0c, type: 3}
+    weight: 1
+    minStageIndex: 5
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 206632d8c910d944c8aeab7ac36537f6, type: 3}
+    weight: 1
+    minStageIndex: 6
   baseEnemiesPerWave: 5
   proceduralMinSpawnDelay: 0.5
   proceduralMaxSpawnDelay: 1.5
