@@ -26,6 +26,24 @@ public class SessionConfig : MonoBehaviour
             return;
         }
         Instance = this;
+
+        // FIX: DontDestroyOnLoad ONLY works on root GameObjects. Parented under a menu
+        // panel it logged
+        //     "DontDestroyOnLoad only works for root GameObjects..."
+        // and then did NOTHING — so this object died with the menu scene and the
+        // gameplay scene came up with SessionConfig.Instance == null. CoopManager then
+        // never learned that co-op had been requested and every run started solo, with
+        // no error beyond that one easily-missed warning.
+        //
+        // Detaching first makes persistence work regardless of where the object was
+        // authored in the menu hierarchy.
+        if (transform.parent != null)
+        {
+            Debug.Log($"[SessionConfig] Detaching from '{transform.parent.name}' so " +
+                      "DontDestroyOnLoad can actually persist this object across the scene load.");
+            transform.SetParent(null, true);
+        }
+
         DontDestroyOnLoad(gameObject);
     }
 

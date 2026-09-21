@@ -18,8 +18,58 @@ MonoBehaviour:
   moveSpeed: 2
   damage: 5
   mass: 20
-  spriteFolderPath: Sprites/EnemySprites/Pitcher
+  frames: []
+  idleFrames:
+  - {fileID: 21300000, guid: 7c2887bac8fc0aa429b732ff77c21176, type: 3}
+  - {fileID: 21300000, guid: 7ea7f3bb311e6a249812edf8f072e8ce, type: 3}
+  - {fileID: 21300000, guid: cadbe79461628ed428ad44880d19acca, type: 3}
+  - {fileID: 21300000, guid: 2d85b554b72ab2048bd34d6f22f96bc5, type: 3}
+  - {fileID: 21300000, guid: c42fa5c680cc3ab47beb33aeea30ef75, type: 3}
+  - {fileID: 21300000, guid: 788afcad7b3c0d24e82ccdc8c0f836bd, type: 3}
+  - {fileID: 21300000, guid: 120b90b739bd2564d8161f0531065bbb, type: 3}
+  - {fileID: 21300000, guid: c0581c140926dbf4b914831451bc57f3, type: 3}
+  attackFrames:
+  - {fileID: 21300000, guid: de9ae28446a9f6142a295c7db6337a14, type: 3}
+  - {fileID: 21300000, guid: 914bb3a7dd7972f4b8d24fb55fe96f29, type: 3}
+  - {fileID: 21300000, guid: b0e8eb703b57c0544baff9ce4cf03e08, type: 3}
+  - {fileID: 21300000, guid: 5c49906d4e8e60347bbf256c486a12c8, type: 3}
+  - {fileID: 21300000, guid: 4c6b7d3c3a1353441ba61eef2289af55, type: 3}
+  - {fileID: 21300000, guid: 5f800d1cd1d1c334aa375b805849468f, type: 3}
+  - {fileID: 21300000, guid: eeec227c31b112c4aaf367be2e9ef457, type: 3}
+  - {fileID: 21300000, guid: 99612e7bdda543842b1721122ac8ea51, type: 3}
+  - {fileID: 21300000, guid: 384b4d3288220074b99e7a5b5541b120, type: 3}
+  - {fileID: 21300000, guid: b1f9e5f5c5dfabb4ebc957cf8b09d02b, type: 3}
+  - {fileID: 21300000, guid: ae8cd00390e9d5347a62f9800663e5df, type: 3}
+  - {fileID: 21300000, guid: df107abf5a6290d4a8300a092eb71dcb, type: 3}
+  - {fileID: 21300000, guid: 6126f0fad64251a428ce2a6b427d4606, type: 3}
+  - {fileID: 21300000, guid: 0ab801b7ab69908488412254c68acbbd, type: 3}
+  - {fileID: 21300000, guid: 7b33013ead35b584dba38731310fa759, type: 3}
+  - {fileID: 21300000, guid: 0c37112571604cf4297991b727432e65, type: 3}
+  - {fileID: 21300000, guid: 4bb6b3437d63e6647977c705a13d8713, type: 3}
+  - {fileID: 21300000, guid: f1ec9bcbee11fbc49ae64a544c2b5747, type: 3}
+  - {fileID: 21300000, guid: 0c886839d83fd134b9e6f264815fa759, type: 3}
+  - {fileID: 21300000, guid: 8764b1a24329aa640a37b48e6a4bcd74, type: 3}
+  - {fileID: 21300000, guid: 71f3a91e56060574ba6b52e7eac5f770, type: 3}
+  - {fileID: 21300000, guid: 07adc7444c2d9ed42aa4825d766cf78c, type: 3}
+  - {fileID: 21300000, guid: 770e8d54a75974549b78d58e42ae8356, type: 3}
+  - {fileID: 21300000, guid: c7e42d50aaf2e4c448e265ebd40aa183, type: 3}
+  - {fileID: 21300000, guid: ed684bd0cfa227544b6d0887d44d8edb, type: 3}
+  - {fileID: 21300000, guid: 62f3a3b9f57e06f4e9bda96be885d602, type: 3}
+  - {fileID: 21300000, guid: 52a80b90fea2c4f45a360c4ecc2adf2d, type: 3}
+  - {fileID: 21300000, guid: d06c363974c0cf641ab87192d41542a5, type: 3}
+  - {fileID: 21300000, guid: 9922d181d5148eb42ad6b9bad80879bf, type: 3}
+  - {fileID: 21300000, guid: 12a3f05287855fe488e822c296a89994, type: 3}
+  - {fileID: 21300000, guid: 1e9ae2e147c0ba7439afcae7992266a6, type: 3}
+  - {fileID: 21300000, guid: b69a0d01d71587f40bd364441c983a5c, type: 3}
+  - {fileID: 21300000, guid: c3b9144d04ba5a2419a5824714220dce, type: 3}
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 1
   animationSpeed: 0.1
+  useAnimationFolders: 1
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 0
     frameCount: 0
@@ -37,6 +87,6 @@ MonoBehaviour:
     frameCount: 0
     speedOverride: 0
   deathAnimationDuration: 1.2
-  hitFrame: 0
+  hitFrame: 14
   parryFrameStart: 0
   parryFrameEnd: 0

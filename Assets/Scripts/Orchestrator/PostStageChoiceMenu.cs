@@ -123,11 +123,10 @@ public class PostStageChoiceMenu : MonoBehaviour
         // CameraShake uses unscaledDeltaTime and would keep shaking through the pause otherwise.
         CombatJuice.StopAllShake();
 
-        float prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-        Cursor.visible = true;
-        bool prevInputSuppressed = PlayerAttack.InputSuppressed;
-        PlayerAttack.InputSuppressed = true;
+        // Register as a modal (freeze + cursor + attack-suppression) instead of
+        // poking Time.timeScale / Cursor.visible by hand — otherwise GamepadMenuCursor
+        // hides the cursor out from under this screen every frame.
+        UIModalStack.Push(this);
 
         yield return StartCoroutine(PlayEntranceAnimation());
 
@@ -136,9 +135,7 @@ public class PostStageChoiceMenu : MonoBehaviour
             yield return null;
         }
 
-        Time.timeScale = prevTimeScale;
-        PlayerAttack.InputSuppressed = prevInputSuppressed;
-        Cursor.visible = false;
+        UIModalStack.Pop(this);
         root.SetActive(false);
         isOpen = false;
 
@@ -838,3 +835,5 @@ public class PostStageChoiceMenu : MonoBehaviour
         }
     }
 }
+
+

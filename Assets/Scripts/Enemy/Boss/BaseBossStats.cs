@@ -1,18 +1,23 @@
 ﻿using System.Collections;
 using UnityEngine;
 
-/// Base class for all boss enemies
+// Base class for all boss enemies
 public abstract class BaseBossStats : EnemyStats
 {
     [Header("Boss Armor System")]
     public float maxArmor = 1000f;
+
+    [Tooltip("Extra boss HP + armour per stage. 0.6 = stage 2 has 1.6x, stage 3 has 2.2x... " +
+             "Set to 0 to disable (identical to the old behaviour). Skipped automatically when " +
+             "EnemyStatModifierManager already stage-scales bosses, so it can never double-scale.")]
+    public float stageHealthGrowth = 0.6f;
     protected float bossArmor;
     protected bool armorDestroyed = false;
 
     public bool IsArmorDestroyed => armorDestroyed;
     public float CurrentArmor => bossArmor;
 
-    // ── Top-of-screen boss bar ────────────────────────────────────────────
+    // Top-of-screen boss bar 
     // Registration lives here rather than in Boss1/Boss2 so that EVERY boss —
     // including ones added later — gets the bar for free with no per-boss wiring.
     // BossHealthBarManager creates itself on demand, so a scene with no manager
@@ -28,25 +33,41 @@ public abstract class BaseBossStats : EnemyStats
              "BossHealthBarManager (or Resources/UI/BossBar).")]
     public GameObject bossBarPrefabOverride;
 
-    [Tooltip("Also hide the small world-space health bar that floats above this boss, " +
-             "since the big bar already shows the same pool. Off by default so nothing " +
-             "about the existing setup changes unless you ask for it.")]
-    public bool hideWorldHealthBarWhenTopBarShown = false;
+    [Tooltip("Hide the small world-space health bar that floats above this boss, since the big " +
+             "top-of-screen bar already shows the same pool. On by default now that every boss " +
+             "has the big bar. Turn OFF for a boss that has NO top bar (showTopScreenBossBar off) " +
+             "but should still show its floating bar.")]
+    public bool hideWorldHealthBarWhenTopBarShown = true;
 
-    /// Friendly name for UI (a boss-name label, kill feed, etc.).
+    [Header("Boss Name (UI)")]
+    [Tooltip("Name shown by the boss-intro flash, the wave counter and the top-of-screen boss " +
+             "bar. Type it here for bosses that have NO EnemyData asset (procedurally built " +
+             "bosses). Leave EMPTY for bosses that do have one - then EnemyData.enemyName wins " +
+             "and the name stays authored in a single place.")]
+    public string bossDisplayName = "";
+
+    /// Friendly name for UI (the top-of-screen boss bar, kill feed, etc.).
+    /// Priority: this component's bossDisplayName -> EnemyData.enemyName -> tidied
+    /// GameObject name (so the bar shows "Boss3", never "Boss3(Clone)").
+    /// Every source is serialized data, so this is readable on a PREFAB too - which is
+    /// what lets GameOrchestrator flash the name before the boss is instantiated.
     public string DisplayName =>
-        enemyData != null && !string.IsNullOrEmpty(enemyData.enemyName) ? enemyData.enemyName : name;
+        !string.IsNullOrWhiteSpace(bossDisplayName)
+            ? bossDisplayName.Trim()
+            : (enemyData != null && !string.IsNullOrEmpty(enemyData.enemyName)
+                ? enemyData.enemyName.Trim()
+                : name.Replace("(Clone)", "").Replace('_', ' ').Trim());
 
-    /// The full bar pool: armour and health as one continuous track. Matches what
-    /// Boss1/Boss2 already feed the small world-space bar (maxHealth + maxArmor).
+    // The full bar pool: armour and health as one continuous track. Matches what
+    // Boss1/Boss2 already feed the small world-space bar (maxHealth + maxArmor).
     public float TotalMaxPool => maxHealth + maxArmor;
 
     public float TotalCurrentPool =>
         Mathf.Max(0f, currentHealth) + (armorDestroyed ? 0f : Mathf.Max(0f, bossArmor));
 
     // Damage multiplier for a boss special-attack (laser, explosion, etc.), stacking:
-    //   • Difficulty (Normal/Nightmare) — ALWAYS applies to bosses.
-    //   • Per-stage scaling — only when scaleBossesWithStage is on (original opt-in).
+    //   Difficulty (Normal/Nightmare) — ALWAYS applies to bosses.
+    //   Per-stage scaling — only when scaleBossesWithStage is on (original opt-in).
     // Normal + boss-stage-scaling off → 1f, identical to before (no regression).
     protected float BossStageDamageMultiplier
     {
@@ -78,6 +99,21 @@ public abstract class BaseBossStats : EnemyStats
             maxArmor *= diffHp;
         }
 
+        // STAGE HEALTH for bosses. Bosses are drawn randomly per stage, so their pools
+        // must grow with the stage rather than being fixed per boss. Skipped when the
+        // modifier manager already stage-scales bosses (avoids double scaling).
+        // stageHealthGrowth = 0 → ×1, identical to before.
+        var statMgr = EnemyStatModifierManager.Instance;
+        bool alreadyStageScaled = statMgr != null && statMgr.StageScalingAffectsBosses;
+        int stage = GameOrchestrator.Instance != null ? GameOrchestrator.Instance.CurrentStageIndex : 0;
+        float stageHp = alreadyStageScaled ? 1f : 1f + Mathf.Max(0f, stageHealthGrowth) * Mathf.Max(0, stage);
+        if (stageHp != 1f)
+        {
+            maxHealth *= stageHp;
+            currentHealth *= stageHp;
+            maxArmor *= stageHp;
+        }
+
         bossArmor = maxArmor;
     }
 
@@ -93,16 +129,40 @@ public abstract class BaseBossStats : EnemyStats
         BossHealthBarManager.Show(this, bossBarPrefabOverride);
 
         if (hideWorldHealthBarWhenTopBarShown)
-            StartCoroutine(HideWorldBarNextFrame());
+            StartCoroutine(HideWorldBarRoutine());
     }
 
-    // Deferred by one frame so it lands after the subclass's own
-    // InitializeBossHealthBar() has finished configuring that bar.
-    private IEnumerator HideWorldBarNextFrame()
+
+    private IEnumerator HideWorldBarRoutine()
     {
+        // Wait one frame so the subclass's InitializeBossHealthBar() has run.
         yield return null;
-        var worldBar = GetHealthBar();
-        if (worldBar != null) worldBar.SetVisible(false);
+
+        CanvasGroup cg = null;
+
+        while (this != null && currentHealth > 0f)
+        {
+            var worldBar = GetHealthBar();
+            if (worldBar != null)
+            {
+                // Re-grab the CanvasGroup if the bar was rebuilt under a new object.
+                if (cg == null || cg.gameObject != worldBar.gameObject)
+                    cg = worldBar.EnsureCanvasGroup();
+
+                if (cg != null && cg.alpha != 0f)
+                {
+                    cg.alpha = 0f;
+                    cg.interactable = false;
+                    cg.blocksRaycasts = false;
+                }
+            }
+            else
+            {
+                cg = null;   // bar not up yet (or already gone); keep watching
+            }
+
+            yield return null;
+        }
     }
 
     public override void TakeDamage(float amount)
@@ -151,6 +211,20 @@ public abstract class BaseBossStats : EnemyStats
         UpdateBossHealthBar();
     }
 
+    /// Bosses initialise their world bar with the COMBINED pool
+    /// (maxHealth + maxArmor) and feed it health+armour together, so a plain
+    /// SetMaxHealth(maxHealth, currentHealth) would halve the denominator and make
+    /// the bar jump. Report the same combined pool the bar was built with.
+    public override void RefreshHealthBarCapacity()
+    {
+        var bar = GetHealthBar();
+        if (bar != null)
+            bar.SetMaxHealth(TotalMaxPool, TotalCurrentPool);
+
+        // The top-of-screen bar reads TotalMaxPool / TotalCurrentPool every frame,
+        // so it needs no push here.
+    }
+
     protected virtual void UpdateBossHealthBar()
     {
         if (HealthBar != null)
@@ -187,4 +261,6 @@ public abstract class BaseBossStats : EnemyStats
         BossBlueprintDropper.RollAndSpawn(deathPos, stageIdx);
     }
 }
+
+
 

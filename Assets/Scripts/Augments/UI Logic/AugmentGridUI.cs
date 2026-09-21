@@ -100,9 +100,19 @@ public class AugmentGridUI : MonoBehaviour
     [Tooltip("Offset from the cursor (x right, y up).")]
     public Vector2 tooltipOffset = new Vector2(18, 18);
     [Tooltip("Font size of the tooltip title (augment name).")]
-    public float tooltipTitleFontSize = 28f;
+    public float tooltipTitleFontSize = 24f;
     [Tooltip("Font size of the tooltip body (the description). Raise for readability.")]
-    public float tooltipBodyFontSize = 26f;
+    public float tooltipBodyFontSize = 22f;
+
+    [Header("Tooltip frame & padding")]
+    [Tooltip("Framed background corner size. HIGHER = smaller corners, LOWER = bigger.")]
+    public float tooltipFrameEdgeShrink = 2f;
+    [Tooltip("Text distance from the TOP edge, in px. Raise this for more top padding.")]
+    public float tooltipTextTopInset = 24f;
+    [Tooltip("Text distance from the LEFT/RIGHT edges, in px. Smaller = wider text column.")]
+    public float tooltipTextSideInset = 22f;
+    [Tooltip("Text distance from the BOTTOM edge, in px.")]
+    public float tooltipTextBottomInset = 20f;
 
     [Header("Refresh")]
     [Tooltip("How often the grid checks AugmentRegistry for changes (sec).")]
@@ -637,6 +647,7 @@ public class AugmentCellHover : MonoBehaviour, IPointerEnterHandler, IPointerExi
         var tt = TooltipUI.GetOrCreate(transform.root as RectTransform);
         tt.SetFont(owner.fontAsset);
         tt.SetFontSizes(owner.tooltipTitleFontSize, owner.tooltipBodyFontSize);
+        tt.SetFrameSettings(owner.tooltipFrameEdgeShrink, owner.tooltipTextSideInset, owner.tooltipTextTopInset, owner.tooltipTextBottomInset);
         tt.Show(cell.data, owner.tooltipWidth, AugmentRegistry.Instance?.GetRarityColors());
         tt.Follow(eventData.position, owner.tooltipOffset);
     }
@@ -672,6 +683,7 @@ public class AugmentCellHover : MonoBehaviour, IPointerEnterHandler, IPointerExi
         {
             tt.SetFont(owner.fontAsset);
             tt.SetFontSizes(owner.tooltipTitleFontSize, owner.tooltipBodyFontSize);
+            tt.SetFrameSettings(owner.tooltipFrameEdgeShrink, owner.tooltipTextSideInset, owner.tooltipTextTopInset, owner.tooltipTextBottomInset);
             tt.Show(cell.data, owner.tooltipWidth, AugmentRegistry.Instance?.GetRarityColors());
             tt.Follow(eventData.position, owner.tooltipOffset);
             tt.Pin(cell.data.ID);
@@ -726,6 +738,38 @@ public class TooltipUI : MonoBehaviour
     private TextMeshProUGUI _titleTmp;
     private TextMeshProUGUI _bodyTmp;
 
+    // -------------------------------------------------------------------------
+    //  Framed background (MenuPanel sprite) — all tunable.
+    // -------------------------------------------------------------------------
+    // Resources path (no extension, no "Assets/Resources/" prefix).
+    public static string PanelResourcePath =
+        "Sprites/HUD/PauseMenu/PauseMenuMiddlePanel/MenuPanel 1";
+    // Frame + text tuning. These are pushed in from the owner's Inspector
+    // fields on every hover (see SetFrameSettings), so edits react live and
+    // show up in the Inspector — unlike the old public-static values, which
+    // Unity never displays and only applied once at creation.
+    private float _edgeShrink = 2f;   // corner size (higher = smaller corners)
+    private float _sideInset = 22f;  // left/right text inset (smaller = wider)
+    private float _topInset = 24f;  // title distance below the top edge
+    private float _bottomInset = 20f;  // body distance above the bottom edge
+
+    // Multiple-mode sprite sheets don't resolve via Resources.Load<Sprite>, so
+    // fall back to LoadAll and pick the (first / named) sub-sprite.
+    private static Sprite LoadPanelSprite()
+    {
+        var s = Resources.Load<Sprite>(PanelResourcePath);
+        if (s != null) return s;
+
+        var all = Resources.LoadAll<Sprite>(PanelResourcePath);
+        if (all != null && all.Length > 0)
+        {
+            foreach (var sp in all)
+                if (sp != null && sp.name == "MenuPanel 1_0") return sp;
+            return all[0];
+        }
+        return null;
+    }
+
     public static TooltipUI GetOrCreate(RectTransform canvasRoot)
     {
         if (_instance != null) return _instance;
@@ -748,10 +792,31 @@ public class TooltipUI : MonoBehaviour
         cg.alpha = 0f;
 
         var bg = go.AddComponent<Image>();
-        bg.color = new Color(0.05f, 0.06f, 0.09f, 0.94f);
-        var outline = go.AddComponent<Outline>();
-        outline.effectDistance = new Vector2(2, 2);
-        outline.effectColor = new Color(0.6f, 0.6f, 0.7f, 1f);
+        var panelSprite = LoadPanelSprite();
+        if (panelSprite != null)
+        {
+            // Framed background. Sliced = 9-slice so the corners stay crisp and
+            // only the edges/centre stretch as the tooltip grows.
+            bg.sprite = panelSprite;
+            bg.type = Image.Type.Sliced;
+            bg.pixelsPerUnitMultiplier = 2f; // default; owner overrides via SetFrameSettings
+            bg.color = Color.white;
+            if (panelSprite.border == Vector4.zero)
+                Debug.LogWarning("[AugmentTooltip] '" + PanelResourcePath + "' has no 9-slice " +
+                    "border set, so the ornate corners will stretch. Open it in the Sprite Editor " +
+                    "and drag the green border guides inward, then Apply.");
+        }
+        else
+        {
+            // Fallback: the original solid dark panel + outline.
+            bg.color = new Color(0.05f, 0.06f, 0.09f, 0.94f);
+            var outline = go.AddComponent<Outline>();
+            outline.effectDistance = new Vector2(2, 2);
+            outline.effectColor = new Color(0.6f, 0.6f, 0.7f, 1f);
+            Debug.LogWarning("[AugmentTooltip] Could not load panel sprite at Resources/" +
+                PanelResourcePath + " — check the file is under a Resources folder and the path " +
+                "matches. Using a solid background for now.");
+        }
 
         // Title
         var titleGO = new GameObject("Title", typeof(RectTransform));
@@ -761,12 +826,12 @@ public class TooltipUI : MonoBehaviour
         trt.anchorMax = new Vector2(1, 1);
         trt.pivot = new Vector2(0.5f, 1);
         trt.sizeDelta = new Vector2(0, 46);
-        trt.anchoredPosition = new Vector2(0, -8);
-        trt.offsetMin = new Vector2(12, trt.offsetMin.y);
-        trt.offsetMax = new Vector2(-12, trt.offsetMax.y);
+        trt.anchoredPosition = new Vector2(0, -24f);
+        trt.offsetMin = new Vector2(22f, trt.offsetMin.y);
+        trt.offsetMax = new Vector2(-22f, trt.offsetMax.y);
         var title = titleGO.AddComponent<TextMeshProUGUI>();
         title.fontSize = 26f;
-        title.alignment = TextAlignmentOptions.TopLeft;
+        title.alignment = TextAlignmentOptions.Top;   // centred horizontally
         title.color = Color.white;
         title.raycastTarget = false;
         title.enableAutoSizing = false;
@@ -778,11 +843,11 @@ public class TooltipUI : MonoBehaviour
         brt.anchorMin = new Vector2(0, 0);
         brt.anchorMax = new Vector2(1, 1);
         brt.pivot = new Vector2(0.5f, 1);
-        brt.offsetMin = new Vector2(12, 12);
-        brt.offsetMax = new Vector2(-14, -60);
+        brt.offsetMin = new Vector2(22f, 20f);
+        brt.offsetMax = new Vector2(-22f, -60);
         var body = bodyGO.AddComponent<TextMeshProUGUI>();
         body.fontSize = 20f;
-        body.alignment = TextAlignmentOptions.TopLeft;
+        body.alignment = TextAlignmentOptions.Top;    // centred horizontally
         body.color = new Color(0.9f, 0.9f, 0.92f, 1f);
         body.raycastTarget = false;
 
@@ -821,6 +886,21 @@ public class TooltipUI : MonoBehaviour
         if (_bodyTmp != null) _bodyTmp.fontSize = bodySize;
     }
 
+    // Per-Show frame/text tuning from the owner's Inspector fields, so changes
+    // react live (the tooltip is a cached singleton, so applying these only at
+    // creation would ignore later edits). Corner size updates immediately; the
+    // text insets are stored and applied in Show().
+    public void SetFrameSettings(float edgeShrink, float sideInset, float topInset, float bottomInset)
+    {
+        _edgeShrink = Mathf.Max(0.01f, edgeShrink);
+        _sideInset = sideInset;
+        _topInset = topInset;
+        _bottomInset = bottomInset;
+
+        if (_bg != null && _bg.sprite != null)
+            _bg.pixelsPerUnitMultiplier = _edgeShrink; // corner size, live
+    }
+
     public void Show(AugmentData data, float width, Dictionary<string, Color> rarityColors)
     {
         if (data == null) return;
@@ -831,10 +911,35 @@ public class TooltipUI : MonoBehaviour
         // halo colour on the cell, so spelling it out here is redundant noise.
         _titleTmp.text = $"<b>{data.Name}</b>";
 
-        // Body: just the description. Category was also redundant noise.
-        _bodyTmp.text = string.IsNullOrEmpty(data.Description)
-            ? "<i>(no description)</i>"
-            : data.Description;
+        // Body: programmatically formatted rich text (colour-coded prose +
+        // data-driven stat chips). See AugmentTextFormatter.cs. Falls back to a
+        // placeholder only when there is genuinely nothing to show.
+        _bodyTmp.richText = true;
+        bool hasBody = !string.IsNullOrEmpty(data.Description) ||
+                       (data.ParsedModifications != null && data.ParsedModifications.Count > 0);
+        _bodyTmp.text = hasBody
+            ? AugmentTextFormatter.Format(data)
+            : "<i>(no description)</i>";
+        // (Body clearance from the frame is handled by the rect insets set in
+        // GetOrCreate — no extra TMP margin needed here.)
+
+        // Apply the current insets live (they come from the owner's Inspector
+        // fields via SetFrameSettings, so tweaks show up without recreating the
+        // tooltip). Title: top + sides. Body: sides + bottom; its top is set by
+        // the title-height block below.
+        if (_titleTmp != null)
+        {
+            var trt0 = _titleTmp.rectTransform;
+            trt0.anchoredPosition = new Vector2(trt0.anchoredPosition.x, -_topInset);
+            trt0.offsetMin = new Vector2(_sideInset, trt0.offsetMin.y);
+            trt0.offsetMax = new Vector2(-_sideInset, trt0.offsetMax.y);
+        }
+        if (_bodyTmp != null)
+        {
+            var brt0 = _bodyTmp.rectTransform;
+            brt0.offsetMin = new Vector2(_sideInset, _bottomInset);
+            brt0.offsetMax = new Vector2(-_sideInset, brt0.offsetMax.y);
+        }
 
         // Adjust the title rect to its actual rendered height so a two-line
         // title doesn't bleed into the body. ForceMeshUpdate makes preferredHeight
@@ -850,11 +955,10 @@ public class TooltipUI : MonoBehaviour
 
             // Body offsetMax.y is negative — it's the distance the body's TOP
             // edge sits BELOW the parent's top edge. So we want:
-            //   topInset = titleHeight + topPadding + gap
-            const float topPadding = 8f;
+            //   topInset = _topInset + titleHeight + gap
             const float gap = 6f;
             var brt = _bodyTmp.rectTransform;
-            brt.offsetMax = new Vector2(brt.offsetMax.x, -(titleHeight + topPadding + gap));
+            brt.offsetMax = new Vector2(brt.offsetMax.x, -(_topInset + titleHeight + gap));
         }
 
         _cg.alpha = 1f;
@@ -898,3 +1002,5 @@ public class TooltipUI : MonoBehaviour
         }
     }
 }
+
+

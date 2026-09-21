@@ -79,14 +79,14 @@ public class TowerPlacementManager : MonoBehaviour
 
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
+        // FIX: the duplicate branch fell THROUGH and re-initialised the fields of an
+        // object that was already being destroyed. Bail out properly instead.
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
+            return;
         }
+        Instance = this;
 
         // Initialize the Non-Serialized fields
         allSlots = new List<TowerSlot>();
@@ -186,9 +186,12 @@ public class TowerPlacementManager : MonoBehaviour
         if (shouldPlaySound)
         {
             // Position the loop near the supplier so the 3D event isn't muted.
-            // (playerTransform is player 1; see the co-op caveat below.)
-            if (playerTransform != null)
-                repairSound.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(playerTransform));
+            // FIX (co-op): was pinned to P1's transform, so P2 repairing on the far side
+            // of the map played the loop at P1's position (or silently, out of range).
+            Transform anchor = NearestPlayerTransform(
+                currentSupplyTarget != null ? currentSupplyTarget.GetPosition() : Vector3.zero);
+            if (anchor != null)
+                repairSound.set3DAttributes(FMODUnity.RuntimeUtils.To3DAttributes(anchor));
 
             PLAYBACK_STATE playbackState;
             repairSound.getPlaybackState(out playbackState);
@@ -438,13 +441,55 @@ public class TowerPlacementManager : MonoBehaviour
         return IsPlayerInRange(consumer.GetPosition());
     }
 
+    // FIX (co-op): this used to measure from `playerTransform` only — which is P1,
+    // resolved once in Start via FindFirstObjectByType<PlayerMovement>. In co-op that
+    // meant P2 could never satisfy any proximity gate: their repairs and legacy slot
+    // clicks were silently rejected based on where P1 happened to be standing.
+    // ANY registered player being in range now satisfies it, and playerTransform is
+    // only the single-player fallback.
     bool IsPlayerInRange(Vector3 targetPosition)
     {
-        if (!requirePlayerProximity || playerTransform == null || EnergyManager.Instance == null) return true;
-        float distance = Vector2.Distance(playerTransform.position, targetPosition);
-        bool inRange = distance <= EnergyManager.Instance.supplyRange;
-        //Debug.Log($"[IsPlayerInRange] Player distance: {distance:F2} vs supplyRange: {EnergyManager.Instance.supplyRange}, inRange: {inRange}");
-        return inRange;
+        if (!requirePlayerProximity || EnergyManager.Instance == null) return true;
+
+        float range = EnergyManager.Instance.supplyRange;
+
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0)
+        {
+            var all = reg.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var pr = all[i];
+                if (pr == null) continue;
+                if (Vector2.Distance(pr.transform.position, targetPosition) <= range) return true;
+            }
+            return false;
+        }
+
+        if (playerTransform == null) return true;   // no players known — don't block
+        return Vector2.Distance(playerTransform.position, targetPosition) <= range;
+    }
+
+    /// The player nearest `worldPos`, for 3D audio placement and legacy fallbacks.
+    /// Co-op aware; falls back to the cached P1 transform in single player.
+    private Transform NearestPlayerTransform(Vector3 worldPos)
+    {
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0)
+        {
+            Transform best = null;
+            float bestSqr = float.MaxValue;
+            var all = reg.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var pr = all[i];
+                if (pr == null) continue;
+                float d = ((Vector2)(pr.transform.position - worldPos)).sqrMagnitude;
+                if (d < bestSqr) { bestSqr = d; best = pr.transform; }
+            }
+            if (best != null) return best;
+        }
+        return playerTransform;
     }
 
     void HandleInput()
@@ -798,7 +843,15 @@ public class TowerPlacementManager : MonoBehaviour
 
     /// Rebuild a tower into a slot for a RESTORE — bypasses energy cost and the
     /// build animation, then applies tower augments. Returns the new Tower or null.
+    /// Back-compat overload: no saved maxEnergy (<= 0 means "keep the prefab's").
     public Tower RestoreTowerInto(TowerSlot slot, Tower.TowerType type, int upgradeLevel, float currentEnergy)
+        => RestoreTowerInto(slot, type, upgradeLevel, currentEnergy, 0f);
+
+    /// FIX: the saved maxEnergy was captured by RunPersistence/WaveCheckpointService but
+    /// never restored, so a tower whose max pool had been raised by an augment came back
+    /// at the prefab's base value. This overload applies it.
+    public Tower RestoreTowerInto(TowerSlot slot, Tower.TowerType type, int upgradeLevel,
+                                  float currentEnergy, float maxEnergy)
     {
         if (slot == null) return null;
         var prefab = FindPrefabForType(type);
@@ -807,7 +860,7 @@ public class TowerPlacementManager : MonoBehaviour
             Debug.LogWarning($"[TowerPlacement] No prefab for tower type {type}; cannot restore.");
             return null;
         }
-        return slot.PlaceTowerForRestore(prefab, upgradeLevel, currentEnergy);
+        return slot.PlaceTowerForRestore(prefab, upgradeLevel, currentEnergy, maxEnergy);
     }
 
     public void TogglePlacementMode()
@@ -950,7 +1003,13 @@ public class TowerPlacementManager : MonoBehaviour
 
     void RemoveTowerAtMousePosition()
     {
-        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+        // FIX: both of these could be null and threw an NRE. In split-screen co-op there
+        // is frequently no camera tagged "MainCamera" at all, and Mouse.current is null on
+        // a pad-only machine.
+        var cam = Camera.main;
+        if (cam == null || Mouse.current == null) return;
+
+        Vector3 mouseWorldPos = cam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
         mouseWorldPos.z = 0f;
 
         if (allSlots != null)
@@ -1031,7 +1090,15 @@ public class TowerPlacementManager : MonoBehaviour
         {
             repairSound.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
             repairSound.release();
+            isRepairSoundInitialized = false;
         }
+
+        // FIX: the static was never cleared. Every other singleton in the project
+        // (RunPersistence, WaveCheckpointService, GameOrchestrator) does this; without
+        // it a torn-down manager stayed referenced until the next Awake overwrote it.
+        if (Instance == this) Instance = null;
+
+        _activePlacers.Clear();
     }
 
     void OnDrawGizmos()
@@ -1043,4 +1110,7 @@ public class TowerPlacementManager : MonoBehaviour
         }
     }
 }
+
+
+
 

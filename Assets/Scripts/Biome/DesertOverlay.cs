@@ -284,6 +284,16 @@ public class DesertOverlay : MonoBehaviour
         GenerateSandRipples();
         GenerateCrackedEarth();
         GenerateDriedScrub();
+
+        // PERF: split the static layers into spatial cells with real bounds so the
+        // camera only draws the cells it can see. Previously every ground element on
+        // the whole 60-unit disc (120,000+ by default) was drawn every frame, because
+        // each combined mesh spanned the entire map and could never be culled.
+        SplitLayerIntoCells(groundObjects, groundMeshes);
+        SplitLayerIntoCells(rippleObjects, rippleMeshes);
+        SplitLayerIntoCells(crackObjects, crackMeshes);
+        SplitLayerIntoCells(scrubObjects, scrubMeshes);
+
         GenerateHeatShimmerWisps();
         GenerateSaltation();
         GenerateDustHaze();
@@ -1519,6 +1529,142 @@ public class DesertOverlay : MonoBehaviour
     }
 
 
+    //  STATIC LAYERS - spatial cells for frustum culling
+
+    private const float CULL_CELL_SIZE = 16f;
+    // Bounds padding for any vertex motion the sand shader adds (wind sway, shimmer).
+    private const float CULL_CELL_MARGIN = 1.5f;
+
+    // Rebuilds every mesh of one layer as several smaller meshes, one per grid cell,
+    // each with tight bounds. Vertices, colours, UVs, triangles, material, sorting
+    // layer and sorting order are copied unchanged, so it renders identically -
+    // the camera just skips the cells it can't see.
+    void SplitLayerIntoCells(List<GameObject> objects, List<Mesh> meshes)
+    {
+        if (objects.Count == 0) return;
+
+        var newObjects = new List<GameObject>();
+        var newMeshes = new List<Mesh>();
+        var cells = new Dictionary<long, CellBuilder>();
+        var srcV = new List<Vector3>();
+        var srcC = new List<Color>();
+        var srcUV = new List<Vector2>();
+        var srcUV2 = new List<Vector2>();
+        var srcT = new List<int>();
+
+        for (int o = 0; o < objects.Count; o++)
+        {
+            GameObject go = objects[o];
+            Mesh mesh = o < meshes.Count ? meshes[o] : null;
+            if (go == null || mesh == null) continue;
+            MeshRenderer srcMr = go.GetComponent<MeshRenderer>();
+            if (srcMr == null) continue;
+
+            mesh.GetVertices(srcV);
+            mesh.GetColors(srcC);
+            mesh.GetUVs(0, srcUV);
+            mesh.GetUVs(1, srcUV2);
+            mesh.GetTriangles(srcT, 0);
+            int n = srcV.Count;
+            bool hasC = srcC.Count == n, hasUV = srcUV.Count == n, hasUV2 = srcUV2.Count == n;
+
+            var remap = new int[n];
+            var remapCell = new long[n];
+            for (int i = 0; i < n; i++) remapCell[i] = long.MinValue;
+
+            cells.Clear();
+            for (int t = 0; t + 2 < srcT.Count; t += 3)
+            {
+                // A triangle goes to the cell of its first vertex; a vertex shared with
+                // a triangle in another cell is simply duplicated there.
+                Vector3 p = srcV[srcT[t]];
+                long key = CellKey(p);
+                if (!cells.TryGetValue(key, out CellBuilder cb))
+                {
+                    cb = new CellBuilder();
+                    cells[key] = cb;
+                }
+                for (int k = 0; k < 3; k++)
+                {
+                    int v = srcT[t + k];
+                    if (remapCell[v] != key)
+                    {
+                        remap[v] = cb.verts.Count;
+                        remapCell[v] = key;
+                        cb.verts.Add(srcV[v]);
+                        cb.cols.Add(hasC ? srcC[v] : Color.white);
+                        cb.uvs.Add(hasUV ? srcUV[v] : Vector2.zero);
+                        cb.uv2s.Add(hasUV2 ? srcUV2[v] : Vector2.zero);
+                    }
+                    cb.tris.Add(remap[v]);
+                }
+            }
+
+            int c = 0;
+            foreach (var kv in cells)
+            {
+                CellBuilder cb = kv.Value;
+                if (cb.tris.Count == 0) continue;
+
+                Mesh cm = new Mesh();
+                cm.name = mesh.name + "_cell" + c;
+                if (cb.verts.Count > 65535) cm.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                cm.SetVertices(cb.verts);
+                if (hasC) cm.SetColors(cb.cols);
+                if (hasUV) cm.SetUVs(0, cb.uvs);
+                if (hasUV2) cm.SetUVs(1, cb.uv2s);
+                cm.SetTriangles(cb.tris, 0);
+                cm.RecalculateNormals();
+                cm.RecalculateBounds();
+                Bounds b = cm.bounds;
+                b.Expand(CULL_CELL_MARGIN * 2f);
+                cm.bounds = b;
+
+                GameObject cg = new GameObject(go.name + "_cell" + c);
+                cg.layer = go.layer;
+                cg.transform.SetParent(go.transform.parent, false);
+                cg.transform.localPosition = go.transform.localPosition;
+                cg.transform.localRotation = go.transform.localRotation;
+                cg.transform.localScale = go.transform.localScale;
+                cg.AddComponent<MeshFilter>().sharedMesh = cm;
+                MeshRenderer mr = cg.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = srcMr.sharedMaterial;
+                mr.shadowCastingMode = srcMr.shadowCastingMode;
+                mr.receiveShadows = srcMr.receiveShadows;
+                mr.sortingLayerID = srcMr.sortingLayerID;
+                mr.sortingOrder = srcMr.sortingOrder;
+
+                newObjects.Add(cg);
+                newMeshes.Add(cm);
+                c++;
+            }
+
+            DestroyImmediate(go);
+            DestroyImmediate(mesh);
+        }
+
+        objects.Clear();
+        objects.AddRange(newObjects);
+        meshes.Clear();
+        meshes.AddRange(newMeshes);
+    }
+
+    static long CellKey(Vector3 p)
+    {
+        int ix = Mathf.FloorToInt(p.x / CULL_CELL_SIZE);
+        int iy = Mathf.FloorToInt(p.y / CULL_CELL_SIZE);
+        return ((long)ix << 32) ^ (uint)iy;
+    }
+
+    private class CellBuilder
+    {
+        public readonly List<Vector3> verts = new List<Vector3>();
+        public readonly List<Color> cols = new List<Color>();
+        public readonly List<Vector2> uvs = new List<Vector2>();
+        public readonly List<Vector2> uv2s = new List<Vector2>();
+        public readonly List<int> tris = new List<int>();
+    }
+
     //  HELPERS
 
     GameObject CreateMeshObject(string name, Mesh mesh, Material mat, int order)
@@ -1634,4 +1780,5 @@ public class DesertOverlay : MonoBehaviour
         T[] r = new T[len]; System.Array.Copy(src, r, len); return r;
     }
 }
+
 

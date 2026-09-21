@@ -47,6 +47,12 @@ public class GameOrchestrator : MonoBehaviour
     [Tooltip("Start a run automatically when the scene loads? Great for testing.")]
     public bool autoStartRun = true;
 
+    [Tooltip("Safety cap (seconds, unscaled) for the pre-wave \"screen is actually visible\" gate.\n" +
+             "A wave never spawns while the loading/transition cover is up; if the cover somehow\n" +
+             "never clears, the wave starts anyway after this long instead of stalling the run.")]
+    [Min(1f)]
+    public float waveRevealGateSeconds = 20f;
+
     [Header("═══ SCENE REFERENCES ═══")]
     [Tooltip("Drag your BiomeManager here (or leave empty — will auto-find).")]
     public BiomeManager biomeManager;
@@ -82,6 +88,40 @@ public class GameOrchestrator : MonoBehaviour
     [Min(0f)]
     public float pauseAfterLastKill = 1f;
 
+    [Header(" BOSS NAME FONT ")]
+    [Tooltip("Font used for the boss name flash, the boss wave counter and the final-boss " +
+             "banner. Drag your Cinzel .ttf straight in here. Leave empty to keep the default " +
+             "font. Forwarded to StageTransitionOverlay, which is created at runtime on this " +
+             "same GameObject and so has no Inspector of its own to drag onto.")]
+    public Font bossNameFont;
+
+    [Tooltip("Tint for boss names. Pale gold by default, which suits Cinzel's engraved look.")]
+    public Color bossNameColor = new Color(0.94f, 0.85f, 0.60f, 1f);
+
+    [Tooltip("Supersampling for transition text. 1 = Unity's default, which makes a big\n" +
+             "headline like 'Wave 1 Starts' look chunky. 3 rasterises glyphs at 3x and scales\n" +
+             "down, which is what keeps a serif face like Cinzel clean. Raise to 4 for 4K.")]
+    [Range(1f, 8f)]
+    public float uiTextSharpness = 3f;
+
+    [Tooltip("ON: draw the big centre-screen 'Wave N Starts' / boss-name flash with TextMeshPro\n" +
+             "instead of legacy UI.Text. TMP renders from a signed-distance field, so the headline\n" +
+             "stays razor sharp at any size. Needs a font in the slot above. This is the real fix\n" +
+             "for pixelated edges - leave it on.")]
+    public bool crispFlashText = true;
+
+    [Tooltip("Thickness of the black rim behind the flash headline, in pixels. The old fixed value\n" +
+             "of 3 stamps the glyph four times at whole-pixel offsets, which is itself a big part\n" +
+             "of the jagged look. 1-2 is clean, 0 removes it.")]
+    [Range(0f, 4f)]
+    public float flashOutlineThickness = 1.5f;
+
+    [Tooltip("ON: use the font above for EVERY transition text - the stage/biome banner, the\n" +
+             "wave counter, the 'Wave N Starts' flash, the stage counter and the 'Loading'\n" +
+             "caption - not just boss names. Only the typeface changes; sizes and colours stay\n" +
+             "as they are, and boss names keep their own tint and size on top.")]
+    public bool bossNameFontForAllText = false;
+
     // Auto-found references
     private StageTransitionOverlay transitionOverlay;
     private AugmentsMenu augmentsMenu;
@@ -90,6 +130,10 @@ public class GameOrchestrator : MonoBehaviour
     // Identity token for UIModalStack while an augment menu is open. A plain object
     // (not `this`) so the orchestrator can hold other stack entries independently.
     private readonly object _augmentModal = new object();
+
+    // True only while the orchestrator is actually holding the augment modal layer.
+    // Guards against popping a layer we never pushed (see RewindToCurrentWaveStart).
+    private bool _augmentModalHeld;
     private PostStageChoiceMenu postStageChoiceMenu;
     private StageClearScreenMenu stageClearMenu;   // Phase 8: prefab-based reward screen (single + co-op split)
 
@@ -111,6 +155,44 @@ public class GameOrchestrator : MonoBehaviour
 
     /// Current state of the run. Read from UI scripts to show banners etc.</summary>
     public RunState CurrentState { get; private set; } = RunState.Idle;
+
+    /// <summary>
+    /// TRUE once this orchestrator has taken ownership of wave pacing for the scene —
+    /// INCLUDING the boot / resume window BEFORE the first stage has started, while
+    /// CurrentState is still Idle.
+    ///
+    /// WHY THIS EXISTS (bug fix): WaveSpawner decided whether it was "orchestrator-driven"
+    /// by testing `CurrentState != Idle`. But the state is legitimately Idle from the
+    /// moment the gameplay scene loads until the run loop actually begins — which, on the
+    /// Continue path, is DeferredResume's wait for players/weapons (up to 15s), and on a
+    /// fresh run is any frame where StartRun is deferred or bails. During that window the
+    /// spawner fell back to STANDALONE mode, ticked its own countdown and dealt its own
+    /// waves from its inspector WaveConfig — behind the black boot cover. That is why
+    /// enemies (sometimes already killed by restored towers) existed before the biome had
+    /// finished loading and before the player could play.
+    ///
+    /// Ownership is claimed in Awake, not in StartRun, so the window is closed from frame
+    /// zero. It is deliberately NOT claimed when the orchestrator is configured to never
+    /// start a run (autoStartRun off and no resume intent) — that setup is a genuine
+    /// "standalone spawner with a dormant orchestrator" and keeps its old behaviour.
+    /// </summary>
+    public bool WillDriveWaves { get; private set; }
+
+    /// <summary>
+    /// The check WaveSpawner uses: is some orchestrator responsible for waves right now?
+    /// True during the boot/resume window as well as during an in-flight run.
+    /// </summary>
+    /// <summary>
+    /// TRUE while the loading / stage-transition cover is still hiding gameplay.
+    /// Read-only pass-through to StageTransitionOverlay.IsCovering, so other systems
+    /// (e.g. WaveSpawner's early-spawn tracer) can ask "can the player see the arena
+    /// yet?" without needing a reference to the overlay.
+    /// </summary>
+    public bool ScreenIsCovered =>
+        enableTransitions && transitionOverlay != null && transitionOverlay.IsCovering;
+
+    public static bool WavesAreOrchestrated =>
+        Instance != null && (Instance.WillDriveWaves || Instance.CurrentState != RunState.Idle);
 
     /// Which stage we're on (0-based).</summary>
     public int CurrentStageIndex { get; private set; }
@@ -182,8 +264,10 @@ public class GameOrchestrator : MonoBehaviour
     /// Fired when a new stage begins. Use for "Stage 2: Desert" banners.</summary>
     public event Action<StageData> OnStageStarted;
 
-    // Holds saved tower data during a crash/exit resume until the stage layout
-    // (and its slots) exist; applied once inside RunStage, then cleared.
+    // Holds the loaded save during a crash/exit resume until the stage layout (and its
+    // slots, and the rebuilt CentralCore) exist. Applied once inside RunStage, then
+    // cleared. Covers towers AND the core, because both are destroyed and recreated by
+    // TowerDefenseMap.GenerateMap during ApplyBiome.
     private RunSaveData _pendingTowerRestore;
 
     // Set true by a final-boss resume so the re-entered last stage rebuilds only its
@@ -213,11 +297,29 @@ public class GameOrchestrator : MonoBehaviour
 
     private List<StageData> currentRunPlan;
     private Coroutine runCoroutine;
+    // Handle to the current stage's heavy-prefab warm, so the reveal can wait on it.
+    private Coroutine _stageWarm;
     private int enemiesAlive;
     private int wavePickCursor; // advances across stages while GenerateRunPlan builds the plan
     private List<WaveData> runWaveDeck;   // flattened (optionally shuffled) wave pool for this run
     private List<GameObject> bossSequence; // resolved per-stage boss order for this run (null = fixed mapping)
     private GameObject currentBossInstance; // specific boss GO we're waiting on (null when no boss alive)
+    private Coroutine bossAddsRoutine;      // deals adds during a boss fight (null when none)
+
+    // The coming wave, FULLY rolled before the between-wave gap: exactly which enemy
+    // spawns, in which order, and from which side. The telegraph and the spawn loop both
+    // read this one plan, so every lit side really receives enemies and every enemy
+    // arrives from a side that was lit. (Previously only the FIRST enemy's side was
+    // rolled early; every later enemy re-rolled its side at spawn time, so the arc said
+    // "Left" and the second enemy walked in from the Top.)
+    private readonly List<GameObject> _wavePlanPrefabs = new List<GameObject>();
+    private readonly List<SpawnDirection> _wavePlanDirs = new List<SpawnDirection>();
+    // Enemies still to be dealt from each side, indexed by (int)SpawnDirection. A side
+    // stays lit while its count is > 0 and is allowed to fade once it reaches 0.
+    private static readonly int SpawnDirectionCount = System.Enum.GetValues(typeof(SpawnDirection)).Length;
+    private readonly int[] _wavePendingPerDir = new int[SpawnDirectionCount];
+    private WaveData _wavePlanFor;          // which WaveData the plan above was rolled for
+    private int _waveTelegraphToken;        // bumps per plan; stale telegraph loops exit
     private List<MapLayoutDefinition> usedLayouts = new List<MapLayoutDefinition>();
     private MapLayoutDefinition runWideLayout; // used when changeLayoutPerStage == false
 
@@ -225,6 +327,7 @@ public class GameOrchestrator : MonoBehaviour
 
     void Awake()
     {
+        BootProfiler.Mark("[PERF] Orchestrator.Awake (scene finished loading)");
         // Singleton
         if (Instance != null && Instance != this)
         {
@@ -232,15 +335,20 @@ public class GameOrchestrator : MonoBehaviour
             return;
         }
         Instance = this;
-        // DontDestroyOnLoad only works on ROOT GameObjects. This object is nested,
-        // so calling it unconditionally only logged a warning and did nothing. Call
-        // it solely when we ARE root — this silences the warning while preserving the
-        // original runtime behaviour (the orchestrator did NOT persist across scene
-        // loads). If you ever need true cross-scene persistence, move this object to
-        // the scene root in the editor AND re-resolve the Awake scene references on
-        // load, since they would otherwise dangle after a scene change.
-        if (transform.parent == null)
-            DontDestroyOnLoad(gameObject);
+
+        // Claim wave ownership NOW, before any other component's Start() runs, so the
+        // WaveSpawner can never fall back to its standalone countdown during the boot /
+        // resume window (see WillDriveWaves). Reading RunResumeIntent.Pending here is
+        // non-destructive — Start() is what consumes/clears it.
+        WillDriveWaves = autoStartRun || RunResumeIntent.Pending;
+
+        // FIX: this used to call DontDestroyOnLoad when (and only when) the object
+        // happened to be a scene root — so whether the orchestrator survived a scene
+        // load depended on where someone had parented it in the editor. When it DID
+        // persist, every scene reference it caches in Awake (biomeManager, waveSpawner,
+        // transitionOverlay, the augment menus) dangled after a menu round-trip, while
+        // the correctly-wired new orchestrator was destroyed by the singleton guard.
+        // The orchestrator is a GAMEPLAY-SCENE object; keep it that way unconditionally.
 
         // Auto-find scene references if not assigned
         if (biomeManager == null)
@@ -254,6 +362,16 @@ public class GameOrchestrator : MonoBehaviour
             transitionOverlay = GetComponent<StageTransitionOverlay>();
             if (transitionOverlay == null)
                 transitionOverlay = gameObject.AddComponent<StageTransitionOverlay>();
+
+            // Hand the boss-name styling to the overlay. Done here because the overlay is
+            // usually AddComponent'd at runtime, so it never appears in the Inspector for
+            // you to drag a font onto - the fields live on the orchestrator instead.
+            if (bossNameFont != null) transitionOverlay.bossNameFont = bossNameFont;
+            transitionOverlay.bossNameColor = bossNameColor;
+            transitionOverlay.useFontForAllText = bossNameFontForAllText;
+            transitionOverlay.textSharpness = uiTextSharpness;
+            transitionOverlay.useCrispFlashText = crispFlashText;
+            transitionOverlay.flashOutlineThickness = flashOutlineThickness;
 
             // Initialize AND force opaque black NOW, in Awake, before the first frame
             // renders. The stage-intro coroutine runs as a nested coroutine a frame or
@@ -295,6 +413,7 @@ public class GameOrchestrator : MonoBehaviour
 
     void Start()
     {
+        BootProfiler.Mark("[PERF] Orchestrator.Start");
         ValidateSetup();
 
         // timeScale persists across scene reloads; if the menu was opened while
@@ -326,6 +445,13 @@ public class GameOrchestrator : MonoBehaviour
     // can be replayed/shared). Consumed once in StartRun; null → fresh TickCount seed
     // (original behaviour). The run plan is already fully reproducible from the seed.
     private static int? s_queuedRunSeed;
+
+    // Clear the static between Play sessions when "Enter Play Mode without domain
+    // reload" is on — otherwise a seed queued in one session silently replayed the
+    // same run in the next. (PlayerRegistry / Tower / RunResumeIntent already do this.)
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetOrchestratorStatics() => s_queuedRunSeed = null;
+
     public static void QueueRunSeed(int seed) => s_queuedRunSeed = seed;
     public static void QueueRunSeed(string text)   // alphanumeric → stable seed
     {
@@ -346,8 +472,16 @@ public class GameOrchestrator : MonoBehaviour
         if (runConfig == null)
         {
             Debug.LogError("[Orchestrator] No RunConfig assigned! Create one via Create → Game → Run Config");
+            // We cannot drive a run without a blueprint. RELEASE wave ownership so the
+            // WaveSpawner's legacy standalone mode still works exactly as it did before
+            // this fix — a misconfigured scene must not end up with no waves at all.
+            WillDriveWaves = false;
             return;
         }
+
+        // A run is definitely ours from here on (covers manual/ContextMenu StartRun calls
+        // in a scene with autoStartRun off).
+        WillDriveWaves = true;
 
         // Stop any existing run
         if (runCoroutine != null)
@@ -371,9 +505,20 @@ public class GameOrchestrator : MonoBehaviour
         ParryUpgrades.ResetAll();
         ProjectileParry.Reset();
 
+        // Same reason, for the augment-334/338/340/346/348 multiplier holders. These
+        // were the one family of augment statics with NO reset anywhere, so tower
+        // damage / fire rate and the energy-gain multiplier compounded from run to run.
+        AugmentRuntimeModifiers.ResetAll();
+
+
+        // FIX: nothing ever cleared the wave/stage/final-boss snapshots, so a rewind
+        // early in a NEW run could restore state captured during the PREVIOUS one
+        // (same scene load, e.g. after a game over then Play again).
+        WaveCheckpointService.Instance?.ResetForNewRun();
 
         // Generate the run plan
         currentRunPlan = GenerateRunPlan();
+        BootProfiler.Mark("[PERF] RunPlan generated");
 
         if (debugLog)
         {
@@ -406,10 +551,30 @@ public class GameOrchestrator : MonoBehaviour
         if (runCoroutine != null)
             StopCoroutine(runCoroutine);
 
+        // FIX: stopping the run coroutine mid-augment-selection abandoned the modal
+        // layer it had pushed, so if the core died while a reward menu was open the
+        // game stayed frozen at timeScale 0 behind the game-over screen with no menu
+        // left to close. Release the layer and shut the menus.
+        if (_augmentModalHeld)
+        {
+            if (augmentsMenus != null)
+                foreach (var m in augmentsMenus)
+                    if (m != null) m.ForceClose();
+            if (augmentsMenu != null) augmentsMenu.ForceClose();
+
+            UIModalStack.Pop(_augmentModal);
+            _augmentModalHeld = false;
+        }
+
         SetState(RunState.GameOver);
         OnGameOver?.Invoke();
 
         RunPersistence.Instance?.OnSaveConsumed();
+        WaveCheckpointService.Instance?.ResetForNewRun();
+
+        // FIX: the stage-warm coroutine was left running when the run ended.
+        if (_stageWarm != null) { StopCoroutine(_stageWarm); _stageWarm = null; }
+        StopBossAdds();
 
 
         Debug.Log("[Orchestrator] ══ GAME OVER ══");
@@ -478,6 +643,20 @@ public class GameOrchestrator : MonoBehaviour
 
     private IEnumerator RunLoop()
     {
+        // Assert black + stand the boot reveal watchdog down the INSTANT the run
+        // begins. This covers the screen from frame 0 of the run (no scene-default /
+        // previous-session biome can show before the first stage builds) and, crucially,
+        // stops the overlay's soft failsafe from force-clearing the black mid-startup on
+        // a slow machine — which is what was uncovering the wrong biome and wiping the
+        // banner ("brief title"). Per-stage prewarming happens later, inside RunStage and
+        // behind this black, so this stays cheap and can't trip the hard 20s ceiling the
+        // way the earlier whole-run prewarm did. The first FadeIn disarms the watchdog.
+        if (enableTransitions && transitionOverlay != null)
+        {
+            transitionOverlay.NotifyIntroStarted();
+            transitionOverlay.SnapToBlack();
+        }
+
         // ── Play through each stage ──
         for (CurrentStageIndex = 0; CurrentStageIndex < currentRunPlan.Count; CurrentStageIndex++)
         {
@@ -496,8 +675,93 @@ public class GameOrchestrator : MonoBehaviour
 
     }
 
-    //  STAGE FLOW
+    //  SPRITE PREWARM (automatic — no wiring)
+    // Warms the sprite folders for ONE stage's enemies + its stage boss, spread over a
+    // few frames. Called from RunStage while the screen is ALREADY black (behind the
+    // fade-out / snap-to-black) AND after NotifyIntroStarted() has stood the boot
+    // watchdog down — so the load is hidden and neither the soft nor (in practice) the
+    // hard reveal failsafe can fire. Per-stage rather than whole-run keeps each load
+    // well under the overlay's hard ceiling on a cold first launch, which is what was
+    // aborting the intro (brief title flash + early wave indicators) before.
 
+    // Warms one prefab's folders: its EnemyData body frames (covers every standard
+    // enemy and boss), plus any custom-art components that warm themselves through
+    // ISpritePrewarm (Insect burrow, Parfumer body, …). Reads the prefab directly —
+    // no instantiation, so there are no spawn side effects.
+
+    /// Give a prefab's ISpritePrewarm components a chance to prepare themselves.
+    ///
+    /// ALL Resources-based sprite warming has been removed. Enemy art is now referenced
+    /// directly from EnemyData/prefabs, so Unity loads it during the scene load, off the
+    /// main thread — there is nothing left to warm. (For the record: the loading this
+    /// system existed to hide measured 20 ms across all 21 folders.)
+    ///
+    /// ISpritePrewarm itself is NOT dead and must stay. Its implementors do real work
+    /// that has nothing to do with Resources — BerserkVisual.PrewarmSpriteFolders()
+    /// kicks off a BACKGROUND COMPUTE that generates the Berserk's frames procedurally.
+    /// Drop this call and that cost moves to first spawn, as a visible hitch.
+    private static IEnumerator PrewarmProviders(GameObject prefab)
+    {
+        if (prefab == null) yield break;
+
+        var providers = prefab.GetComponentsInChildren<ISpritePrewarm>(true);
+        if (providers.Length == 0) yield break;
+
+        foreach (var p in providers)
+        {
+            p?.PrewarmSpriteFolders();
+            yield return null;   // still synchronous per call; breathe between them
+        }
+
+        BootProfiler.Mark($"[PERF] prewarm providers {prefab.name} ({providers.Length})");
+    }
+
+    //  STAGE FLOW
+    // Runs each stage's ISpritePrewarm providers behind the black intro, one per frame.
+    //
+    // This used to warm Resources sprite FOLDERS as well. That is all gone: enemy art is
+    // referenced directly now, so Unity loads it during the scene load. What remains is
+    // only the ISpritePrewarm opt-in, whose implementors do genuine non-Resources work
+    // (BerserkVisual generates its frames on a worker thread).
+    // Bounded to a few prefabs — the opposite of the old full-roster prewarm.
+    private IEnumerator WarmHeavyStagePrefabs(StageData stage)
+    {
+        if (stage == null) yield break;
+
+        if (stage.hasStageBoss && stage.stageBossPrefab != null)
+        {
+            yield return PrewarmProviders(stage.stageBossPrefab);
+        }
+
+        if (stage.waves == null) yield break;
+
+        var warmed = new HashSet<GameObject>();
+        foreach (var wave in stage.waves)
+        {
+            if (wave?.enemies == null) continue;
+
+            foreach (var group in wave.enemies)
+            {
+                var prefab = group?.enemyPrefab;
+                if (prefab == null || !warmed.Add(prefab)) continue;
+
+                // Only prefabs that actually opt in via ISpritePrewarm have anything to
+                // do now, so the old "first wave warms every type" rule is pointless —
+                // a prefab without a provider would just be a no-op call and a wasted
+                // frame yield. Skip it entirely.
+                if (prefab.GetComponentInChildren<ISpritePrewarm>(true) != null)
+                    yield return PrewarmProviders(prefab);
+            }
+        }
+
+        // END OF THE WARM. The report used to be attached to PrewarmStageSprites, which
+        // is DEAD CODE — declared but never called — so Summary() and SnapshotTextures()
+        // never executed once across three profiling runs. Both logs ended at
+        // "warmed Boss3" for exactly that reason. This is the method that actually runs.
+        BootProfiler.Mark("[PERF] Stage warm END");
+        BootProfiler.SnapshotTextures("after stage warm");
+        BootProfiler.Summary("BOOT");
+    }
     private IEnumerator RunStage(StageData stage, int startWaveIndex = 0, bool skipIntro = false)
     {
         if (debugLog)
@@ -514,6 +778,14 @@ public class GameOrchestrator : MonoBehaviour
             runConfig != null && runConfig.scaleBossesWithStage);
 
 
+
+        // Warm ONLY this stage's HEAVY prefabs (boss + ISpritePrewarm opt-ins like
+        // elites) in the background, behind the black intro. Scoped to a few prefabs —
+        // NOT the whole roster — so it doesn't reintroduce the boot freeze or stutter.
+        // This is what stops the 1-2s freeze when a boss/elite first appears (and, with
+        // Fix 1, keeps the boss zoom + audio intact).
+        //StartCoroutine(WarmHeavyStagePrefabs(stage));
+        _stageWarm = StartCoroutine(WarmHeavyStagePrefabs(stage));
         if (!skipIntro)
         {
 
@@ -538,10 +810,41 @@ public class GameOrchestrator : MonoBehaviour
                     // startBlack is off the freshly-built biome flashes for ~a second
                     // before the banner.
                     transitionOverlay.SnapToBlack();
+
+                    // Wait for the render thread to actually PAINT AND PRESENT the black before
+                    // the ~1-2s ApplyBiome block below. This is the crux of the intermittent flash:
+                    // coroutines run on the MAIN thread and can't see the GPU, so "yield return null"
+                    // only advances main-thread frames — it does NOT wait for the render thread,
+                    // which at startup lags extra while it compiles shaders. If the main thread
+                    // reaches ApplyBiome before the black has been painted, the last painted frame
+                    // (your scene) is frozen on screen for the whole block: the ~1-in-10 flash.
+                    //
+                    // WaitForEndOfFrame DOES wait for the render thread to finish the frame; the
+                    // following "yield return null" then guarantees that finished frame was actually
+                    // presented (we've entered the next frame's Update, which only happens after the
+                    // previous frame was displayed). Two such cycles make it virtually certain the
+                    // black is on the display before we block. Order matters: the block must come
+                    // AFTER the yield-null, never straight after WaitForEndOfFrame (that resumes just
+                    // BEFORE display, so blocking there would delay the black's own present).
+                    //
+                    // This is a strong probabilistic guard, not a proof — the only 100% fix is to
+                    // stop ApplyBiome hard-blocking the main thread (chunk the biome build across
+                    // frames). See the note in chat.
+                    BootProfiler.Mark("[PERF] black snapped, waiting for first paint");
+                    for (int _paintWait = 0; _paintWait < 2; _paintWait++)
+                    {
+                        yield return new WaitForEndOfFrame();
+                        yield return null;
+                    }
+                    BootProfiler.Mark("[PERF] first paint done (shaders compiled)");
                 }
 
-                // Swap biome while screen is black. Wrapped so a failure here can't
-                // abort the coroutine before FadeIn() and strand the player on black.
+                // Swap biome while the screen is black — SYNCHRONOUSLY, before any yield.
+                // Deliberately BEFORE the prewarm below: ApplyBiome runs with no yield, so
+                // the scene already shows the CORRECT biome by the time the prewarm hands
+                // frames back to Unity. Even if the black cover ever has a one-frame gap,
+                // the previous / scene-default biome can never flash through.
+                // Wrapped so a failure here can't abort the coroutine before FadeIn().
                 try
                 {
                     ApplyBiome(stage);
@@ -556,12 +859,20 @@ public class GameOrchestrator : MonoBehaviour
                 if (waveSpawner != null)
                     waveSpawner.enemySpawnCountMultiplier = stage.enemyCountMultiplier;
 
+                // Enemy sprites are NOT bulk-prewarmed here. Doing so was a multi-second
+                // synchronous Resources.LoadAll stall (freeze on black, or stutter if
+                // backgrounded). Instead each enemy type loads its folder ONCE on its
+                // first spawn (EnemyAnimationController.LoadSprites, cached for the run),
+                // spreading the cost into small one-time hitches instead of one big freeze.
+
                 // Let biome settle (particles, overlays, etc.)
                 yield return new WaitForSeconds(0.3f);
 
                 // Show "Stage 1: Frozen Tundra" banner over black
                 yield return transitionOverlay.ShowBanner(stage, runConfig.stageCount);
-
+                // Finish the heavy warm (boss/elite) BEFORE revealing, so its synchronous
+                // loads stay behind the title instead of freezing the first seconds of play.
+                if (_stageWarm != null) { yield return _stageWarm; _stageWarm = null; }
                 // Fade back in
                 yield return transitionOverlay.FadeIn();
             }
@@ -582,6 +893,8 @@ public class GameOrchestrator : MonoBehaviour
                 if (waveSpawner != null)
                     waveSpawner.enemySpawnCountMultiplier = stage.enemyCountMultiplier;
 
+                // (Sprites load lazily on first spawn — see note in the transitions path.)
+
                 yield return new WaitForSeconds(runConfig.timeBetweenStages);
             }
 
@@ -594,6 +907,11 @@ public class GameOrchestrator : MonoBehaviour
             // happened to default to instead of the planned one). Apply it now, then
             // reveal the screen, since Awake snapped it to black and the intro's
             // FadeIn (which normally reveals) didn't run.
+            // Stand the boot watchdog down BEFORE building the biome so the failsafe
+            // can't uncover a resumed stage mid-setup.
+            if (enableTransitions && transitionOverlay != null)
+                transitionOverlay.NotifyIntroStarted();
+
             try
             {
                 ApplyBiome(stage);
@@ -606,28 +924,38 @@ public class GameOrchestrator : MonoBehaviour
 
             if (waveSpawner != null) waveSpawner.enemySpawnCountMultiplier = stage.enemyCountMultiplier;
 
+            // Sprites load lazily on first spawn (see note in the transitions path).
+
             if (enableTransitions && transitionOverlay != null)
             {
-                transitionOverlay.NotifyIntroStarted(); // stand down the boot watchdog
-                yield return null;                      // let the biome build one frame
+                transitionOverlay.NotifyIntroStarted(); // idempotent — keep watchdog down
+                                                        //yield return null;                      // let the biome build one frame
+                yield return new WaitForSecondsRealtime(0.3f);
+                if (_stageWarm != null) { yield return _stageWarm; _stageWarm = null; }
                 yield return transitionOverlay.FadeIn();// reveal (no banner on resume)
             }
         }
 
-        // Deferred tower restore (crash/exit resume): slots only exist once the
-        // stage layout has been applied above, so we rebuild saved towers HERE,
-        // before the first wave. One-shot — cleared after it runs.
+        // Deferred tower + CORE restore (crash/exit resume). Both objects are destroyed
+        // and recreated by TowerDefenseMap.GenerateMap inside ApplyBiome above, so
+        // neither can be restored any earlier:
+        //   * slots (and therefore towers) only exist once the layout has been applied;
+        //   * the CentralCore that RestoreAbsolutes wrote to during TryResumeSavedRun has
+        //     already been destroyed by now, which is why every resume used to hand the
+        //     player a full-health core. RestoreCore re-seeds the REBUILT one.
+        // One-shot — cleared after it runs.
         if (_pendingTowerRestore != null)
         {
             // Give the layout a frame to register its slots with TowerPlacementManager.
             yield return null;
             try
             {
+                RunPersistence.Instance?.RestoreCore(_pendingTowerRestore);
                 RunPersistence.Instance?.RestoreTowers(_pendingTowerRestore);
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"[Orchestrator] Tower restore failed. {e}");
+                Debug.LogError($"[Orchestrator] Tower/core restore failed. {e}");
             }
             _pendingTowerRestore = null;
         }
@@ -640,6 +968,15 @@ public class GameOrchestrator : MonoBehaviour
         bool skipBossAndReward = _resumeSkipBossAndReward;
         _resumeSkipBossAndReward = false;
 
+        // The heavy-prefab warm is awaited on the two transition paths above, but the
+        // "no transitions" branch never did — it left the coroutine running and the
+        // handle set, so the NEXT stage's `yield return _stageWarm` could wait on a
+        // stale handle. Await it here so all three paths converge in the same state
+        // before waves begin. (Do NOT StopCoroutine here: that would abort the warm
+        // on the no-transitions path and reintroduce the boss/elite spawn freeze this
+        // whole system exists to prevent.)
+        if (_stageWarm != null) { yield return _stageWarm; _stageWarm = null; }
+
         //  2. WAVES: Play through each wave 
         for (CurrentWaveInStage = startWaveIndex; CurrentWaveInStage < stage.waves.Count; CurrentWaveInStage++)
         {
@@ -651,24 +988,42 @@ public class GameOrchestrator : MonoBehaviour
             // Brief countdown before wave
             SetState(RunState.WaveCountdown);
             OnWaveStarted?.Invoke(CurrentWaveInStage, stage.waves.Count);
-            WaveCheckpointService.Instance?.CaptureSnapshot(CurrentStageIndex, CurrentWaveInStage);
+
+            // FIX: WaveCheckpointService only promotes a snapshot to StageStartSnapshot
+            // when waveIndex == 0. A run resumed at wave 3 (or straight into the final
+            // boss) therefore never had one, and a STAGE-BOSS rewind was silently
+            // refused for the rest of that stage. Treat the first wave we actually run
+            // in this stage as the stage start.
+            WaveCheckpointService.Instance?.CaptureSnapshot(
+                CurrentStageIndex, CurrentWaveInStage,
+                forceStageStart: CurrentWaveInStage == startWaveIndex);
             RunPersistence.Instance?.AutoSaveWaveStart(CurrentStageIndex, CurrentWaveInStage);
             if (debugLog)
                 Debug.Log($"[Orchestrator] Wave {CurrentWaveInStage + 1}/{stage.waves.Count} starting...");
 
             // Update persistent wave counter at top of screen + center flash
+            // The persistent top-of-screen counter updates now; the centre-screen flash
+            // waits until the gap is over (below) so it announces the wave STARTING rather
+            // than competing with the countdown that precedes it.
             if (transitionOverlay != null)
-            {
                 transitionOverlay.SetWaveCounter(
                     $"Wave {CurrentWaveInStage + 1}/{stage.waves.Count}");
-                transitionOverlay.FlashWaveStart($"Wave {CurrentWaveInStage + 1} Starts", 1.5f);
-            }
+
+            // Roll the whole wave (who + from where), then telegraph EVERY side it will use
+            // for the whole gap and while enemies are still being dealt. Both must happen
+            // BEFORE the wait, or there is nothing to show.
+            PrepareWavePlan(wave, stage);
+            StartCoroutine(TelegraphWaveSides(_waveTelegraphToken));
 
             // Mode-aware pause before the wave spawns (countdown / ready-up / immediate).
             yield return WaitBeforeWave();
 
             // Spawn the wave
             SetState(RunState.WaveActive);
+
+            if (transitionOverlay != null)
+                transitionOverlay.FlashWaveStart($"Wave {CurrentWaveInStage + 1} Starts", 1.5f);
+
             PlayWaveStartCue();
             yield return SpawnAndWaitForWave(wave, stage);
 
@@ -702,15 +1057,21 @@ public class GameOrchestrator : MonoBehaviour
             if (debugLog)
                 Debug.Log($"[Orchestrator] STAGE BOSS spawning: {stage.stageBossPrefab.name}");
 
-            // Update counter and flash
+            // Update counter and flash with the boss's REAL name.
+            // Read off the prefab (this runs before SpawnBoss), which works because the
+            // name lives in serialized data - EnemyData.enemyName or the per-prefab
+            // override on BaseBossStats - not in anything Awake() computes.
             if (transitionOverlay != null)
             {
-                transitionOverlay.SetWaveCounter("BOSS");
-                transitionOverlay.FlashWaveStart("BOSS", 1.5f);
+                string bossName = ResolveBossName(stage.stageBossPrefab);
+                transitionOverlay.SetBossCounter(bossName);
+                transitionOverlay.FlashBossName(bossName, 1.5f);
             }
 
             SpawnBoss(stage.stageBossPrefab);
+            StartBossAdds(CurrentStageIndex, isFinalBoss: false);
             yield return WaitForBossDead();
+            StopBossAdds();
 
             if (CurrentState == RunState.GameOver) yield break;
 
@@ -755,20 +1116,45 @@ public class GameOrchestrator : MonoBehaviour
     // (including the 1s lead-in on the first wave of a stage), so the default is a no-op.
     private IEnumerator WaitBeforeWave()
     {
+        // HARD RULE: a wave never spawns while the screen is still covered. The stage
+        // intro already awaits FadeIn before reaching here, so in a healthy run this
+        // returns on the first check and costs nothing. It matters on the paths that do
+        // NOT go through the intro — a resumed stage, a watchdog-forced reveal, a
+        // transition that was interrupted — where waves could otherwise begin over black.
+        yield return WaitUntilScreenRevealed();
+
         bool isFirstWaveOfStage = (CurrentWaveInStage == 0);
         WavePacingMode mode = runConfig != null ? runConfig.wavePacingMode : WavePacingMode.Countdown;
         var gate = WaveReadyGate.Instance;
 
+        // The gap before THIS wave.
+        //   First wave of a stage → firstWaveDelay. This used to be a hardcoded 1f in all
+        //     three modes, which is exactly why Countdown and Immediate behaved
+        //     identically at the start of a stage: both waited the same literal second
+        //     and timeBetweenWaves never entered the picture.
+        //   Every later wave  → timeBetweenWaves.
+        float secs = isFirstWaveOfStage
+            ? (runConfig != null ? runConfig.firstWaveDelay : 1f)
+            : (runConfig != null ? runConfig.timeBetweenWaves : 0f);
+        secs = Mathf.Max(0f, secs);
+
         switch (mode)
         {
             case WavePacingMode.Immediate:
-                // Back-to-back waves. Keep only the small post-intro breath before the
-                // very first wave so spawns don't land during the stage-intro fade.
+                // Back-to-back waves: no between-wave gap at all. The stage's opening prep
+                // time is still honoured — an unexplained pause is worse than a visible
+                // one, so it ticks down on screen like any other wait. Set First Wave
+                // Delay to 0 for a truly instant stage opening.
                 if (isFirstWaveOfStage)
-                    yield return new WaitForSeconds(1f);
+                    yield return CountdownOrWait(gate, secs);
                 yield break;
 
             case WavePacingMode.ReadyUp:
+                // Prep time first, THEN the READY button — otherwise a player who readies
+                // instantly skips the tower-placement window the delay exists to give.
+                if (isFirstWaveOfStage)
+                    yield return CountdownOrWait(gate, secs);
+
                 if (gate != null)
                 {
                     yield return gate.WaitForAllReady(() => CurrentState == RunState.GameOver);
@@ -778,22 +1164,58 @@ public class GameOrchestrator : MonoBehaviour
                     // Gate somehow missing — fall back to a plain wait so a run can
                     // never stall waiting on a button that isn't there.
                     Debug.LogWarning("[Orchestrator] WaveReadyGate missing — falling back to a timed wait.");
-                    yield return new WaitForSeconds(isFirstWaveOfStage ? 1f : runConfig.timeBetweenWaves);
+                    if (!isFirstWaveOfStage) yield return new WaitForSeconds(secs);
                 }
                 yield break;
 
             case WavePacingMode.Countdown:
             default:
-                float secs = isFirstWaveOfStage ? 1f : runConfig.timeBetweenWaves;
-                if (gate != null)
-                    yield return gate.WaitForCountdown(secs);   // shows the ticking number
-                else
-                    yield return new WaitForSeconds(secs);
+                yield return CountdownOrWait(gate, secs);
                 yield break;
         }
     }
 
+    // The timed wait shared by the pacing modes. Shows WaveReadyGate's big ticking number
+    // whenever the gate exists (it is created in Awake, so in practice it always does);
+    // falls back to a silent wait only if something has destroyed it.
+    private IEnumerator CountdownOrWait(WaveReadyGate gate, float seconds)
+    {
+        if (seconds <= 0f) yield break;
 
+        if (gate != null)
+            yield return gate.WaitForCountdown(seconds);
+        else
+            yield return new WaitForSeconds(seconds);
+    }
+
+
+
+    // Blocks until the transition overlay has actually revealed gameplay, so enemies can
+    // never walk in (or be killed by towers) while the player is still looking at the
+    // loading cover.
+    //
+    // BOUNDED ON PURPOSE: if the cover somehow never clears, the run continues anyway
+    // after the cap rather than stalling forever — a late wave is recoverable, a dead run
+    // is not. Uses UNSCALED time so a paused timeScale can't extend the cap.
+    private IEnumerator WaitUntilScreenRevealed()
+    {
+        if (!enableTransitions || transitionOverlay == null) yield break;
+        if (!transitionOverlay.IsCovering) yield break;   // normal case — zero cost
+
+        float waited = 0f;
+        while (transitionOverlay.IsCovering && waited < waveRevealGateSeconds)
+        {
+            if (CurrentState == RunState.GameOver) yield break;
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (transitionOverlay.IsCovering)
+            Debug.LogWarning($"[Orchestrator] Screen still covered after {waveRevealGateSeconds:F1}s — " +
+                             "starting the wave anyway rather than stalling the run.");
+        else if (debugLog)
+            Debug.Log($"[Orchestrator] Held wave {CurrentWaveInStage + 1} for {waited:F2}s until the screen was revealed.");
+    }
 
     public bool RewindToCurrentWaveStart()
     {
@@ -832,7 +1254,15 @@ public class GameOrchestrator : MonoBehaviour
 
             // The coroutine that pushed this layer is about to be stopped, so pop it
             // here or the freeze outlives the menu.
-            UIModalStack.Pop(_augmentModal);
+            // FIX: RunState.AugmentSelect is ALSO set by ShowPostStageChoice BEFORE it
+            // pushes anything (the stage-clear screen reuses the state). Rewinding while
+            // that screen was up popped a layer that had never been pushed, unbalancing
+            // the stack. Only pop when we are actually holding it.
+            if (_augmentModalHeld)
+            {
+                UIModalStack.Pop(_augmentModal);
+                _augmentModalHeld = false;
+            }
         }
 
         // FINAL BOSS: rewind to the start of the final boss fight only (the final
@@ -871,6 +1301,7 @@ public class GameOrchestrator : MonoBehaviour
     private void RestartFinalBoss()
     {
         if (runCoroutine != null) StopCoroutine(runCoroutine);
+        StopBossAdds();
         Time.timeScale = 1f;
         enemiesAlive = 0;
         currentBossInstance = null;
@@ -897,6 +1328,7 @@ public class GameOrchestrator : MonoBehaviour
     {
         if (currentRunPlan == null || stageIndex < 0 || stageIndex >= currentRunPlan.Count) return;
         if (runCoroutine != null) StopCoroutine(runCoroutine);
+        StopBossAdds();
         Time.timeScale = 1f;
         enemiesAlive = 0;
         currentBossInstance = null;
@@ -980,9 +1412,15 @@ public class GameOrchestrator : MonoBehaviour
         }
         else
         {
+            // A surviving save means resume was only DEFERRED (players still seating, a controller
+            // dropped during the load, etc.). We must NOT start a fresh run — that would
+            // BeginRun→delete the save. But we must ALSO never leave the player on the Awake black
+            // cover: reveal the screen and reopen the Continue gate so they retry, save intact.
             Debug.LogError("[Orchestrator] Could not resume in time, but a SAVE EXISTS — keeping it intact " +
-                           "(NOT starting a fresh run). Return to the menu and press Continue again once both " +
-                           "controllers are connected.");
+                           "(NOT starting a fresh run). Revealing the screen and reopening the Continue gate to retry.");
+            if (enableTransitions && transitionOverlay != null)
+                yield return transitionOverlay.FadeIn();   // guarantee we never sit on black
+            ContinueRunMenu.Open();                          // let the player retry; save is intact
         }
     }
 
@@ -1114,6 +1552,15 @@ public class GameOrchestrator : MonoBehaviour
 
             Debug.Log($"[Orchestrator] Resume replay complete: augments {augOk}/{augTried} applied, blueprint unlocks {bpOk}/{bpTried} applied.");
 
+            // Equipped weapon/tool LAST, so an explicit mid-run swap beats whatever the
+            // augment replay above re-equipped. (These save fields existed but were
+            // never read back, so a manual swap silently reverted on every resume.)
+            try { p.RestoreEquipment(data); }
+            catch (System.Exception ee)
+            {
+                Debug.LogError($"[Orchestrator] Resume: restoring equipped weapon/tool failed (non-fatal) — {ee.Message}");
+            }
+
             // Towers can't be rebuilt yet — slots don't exist until the stage
             // layout is applied inside RunStage. Defer to there.
             _pendingTowerRestore = data;
@@ -1165,17 +1612,21 @@ public class GameOrchestrator : MonoBehaviour
     // WAVE SPAWNING (uses your existing WaveSpawner)
     // Spawns a wave and waits until all enemies are dead.
     // Uses WaveSpawner's existing SpawnEnemy logic but driven by the orchestrator.
-    private IEnumerator SpawnAndWaitForWave(WaveData wave, StageData stage)
+    // Rolls the coming wave completely: expands the groups (with the stage's count
+    // multiplier), shuffles the order, and assigns each enemy its side. The random rolls
+    // are the same ones the spawn loop used to make inline — they just happen once, up
+    // front, so the telegraph can show the real answer.
+    private void PrepareWavePlan(WaveData wave, StageData stage)
     {
-        // Extra delay before wave (from WaveData)
-        if (wave.extraDelayBeforeStart > 0)
-            yield return new WaitForSeconds(wave.extraDelayBeforeStart);
+        _wavePlanPrefabs.Clear();
+        _wavePlanDirs.Clear();
+        System.Array.Clear(_wavePendingPerDir, 0, _wavePendingPerDir.Length);
+        _wavePlanFor = wave;
+        _waveTelegraphToken++;
 
-        // Show wave direction indicators
-        waveSpawner.ShowWaveIndicatorsPublic(wave.spawnDirections);
+        if (wave == null) return;
 
-        // Build the list of enemies to spawn
-        List<GameObject> enemyPrefabsToSpawn = new List<GameObject>();
+        float countMul = stage != null ? stage.enemyCountMultiplier : 1f;
         if (wave.enemies != null)
         {
             foreach (var group in wave.enemies)
@@ -1183,41 +1634,130 @@ public class GameOrchestrator : MonoBehaviour
                 if (group == null || group.enemyPrefab == null || group.count <= 0)
                     continue;
 
-                int modifiedCount = Mathf.Max(1,
-                    Mathf.RoundToInt(group.count * stage.enemyCountMultiplier));
-
+                int modifiedCount = Mathf.Max(1, Mathf.RoundToInt(group.count * countMul));
                 for (int i = 0; i < modifiedCount; i++)
-                    enemyPrefabsToSpawn.Add(group.enemyPrefab);
+                    _wavePlanPrefabs.Add(group.enemyPrefab);
             }
         }
 
-        // Shuffle
-        Shuffle(enemyPrefabsToSpawn);
+        Shuffle(_wavePlanPrefabs);
+
+        bool hasList = wave.spawnDirections != null && wave.spawnDirections.Count > 0;
+
+        SpawnDirection shared = SpawnDirection.Top;
+        if (hasList && wave.oneDirectionForAllEnemies)
+            shared = wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
+
+        if (!hasList || wave.oneDirectionForAllEnemies)
+        {
+            for (int i = 0; i < _wavePlanPrefabs.Count; i++)
+                _wavePlanDirs.Add(shared);
+        }
+        else
+        {
+            // Every listed side gets at least one enemy (when there are enough enemies), so
+            // "this wave comes from 3 sides" really means 3 sides — not 3 sides on paper with
+            // one of them never rolled. The rest are rolled from the AUTHORED list exactly as
+            // before, so a list like [Top, Top, Left] still favours Top 2:1. The order is then
+            // shuffled so the guaranteed ones aren't always first.
+            var distinct = new List<SpawnDirection>();
+            foreach (var d in wave.spawnDirections)
+                if (!distinct.Contains(d)) distinct.Add(d);
+            Shuffle(distinct);
+
+            for (int i = 0; i < _wavePlanPrefabs.Count; i++)
+            {
+                SpawnDirection dir = i < distinct.Count
+                    ? distinct[i]
+                    : wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
+                _wavePlanDirs.Add(dir);
+            }
+
+            Shuffle(_wavePlanDirs);
+        }
+
+        foreach (var dir in _wavePlanDirs)
+            _wavePendingPerDir[(int)dir]++;
+
+        if (debugLog)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int d = 0; d < _wavePendingPerDir.Length; d++)
+                if (_wavePendingPerDir[d] > 0)
+                    sb.Append($"{(SpawnDirection)d}x{_wavePendingPerDir[d]} ");
+            Debug.Log($"[Orchestrator] Wave plan: {_wavePlanPrefabs.Count} enemies from {sb}");
+        }
+    }
+
+    // Keeps an arc lit on EVERY side the planned wave will use — through the between-wave
+    // gap and while enemies are still being dealt. A side stops being refreshed once its
+    // last enemy has spawned, and the arc then fades on its own (holdDuration). The arc's
+    // hold (~4s) is shorter than a countdown can be, so arcs are refreshed, not lit once.
+    //
+    // Self-terminating: exits when a newer plan replaces this one (token), when the run
+    // leaves the countdown/active states (game over, boss, rewind), or when every planned
+    // enemy has spawned. No handle or teardown needed.
+    private IEnumerator TelegraphWaveSides(int token)
+    {
+        const float refreshInterval = 1.5f;
+
+        while (token == _waveTelegraphToken
+               && (CurrentState == RunState.WaveCountdown || CurrentState == RunState.WaveActive))
+        {
+            bool anyPending = false;
+            for (int d = 0; d < _wavePendingPerDir.Length; d++)
+            {
+                if (_wavePendingPerDir[d] <= 0) continue;
+                anyPending = true;
+
+                // Never light an arc the player can't see yet (stage intro / loading cover).
+                if (!ScreenIsCovered && waveSpawner != null)
+                    waveSpawner.ShowWaveIndicatorPublic((SpawnDirection)d);
+            }
+
+            if (!anyPending) yield break;
+
+            yield return new WaitForSeconds(refreshInterval);
+        }
+    }
+
+    private IEnumerator SpawnAndWaitForWave(WaveData wave, StageData stage)
+    {
+        // Extra delay before wave (from WaveData)
+        if (wave.extraDelayBeforeStart > 0)
+            yield return new WaitForSeconds(wave.extraDelayBeforeStart);
+
+        // The plan is normally rolled by RunStage before the gap. If something reaches
+        // here without one (or with a plan for a different wave), roll it now so the
+        // spawn and its arcs still agree.
+        if (_wavePlanFor != wave)
+        {
+            PrepareWavePlan(wave, stage);
+            StartCoroutine(TelegraphWaveSides(_waveTelegraphToken));
+        }
+
+        // Local copies: a rewind / new plan mid-deal must not mutate the list we iterate.
+        int token = _waveTelegraphToken;
+        var prefabs = new List<GameObject>(_wavePlanPrefabs);
+        var dirs = new List<SpawnDirection>(_wavePlanDirs);
+        _wavePlanFor = null;   // consumed — the same WaveData object may be reused later
 
         // Track enemies
-        enemiesAlive += enemyPrefabsToSpawn.Count;
+        enemiesAlive += prefabs.Count;
 
         // Music is handled by MusicDirector, which reacts to SetState(RunState.WaveActive)
         // just above this call. Driving it from here too meant two owners for one
         // FMOD parameter.
 
-        // Pick a single direction if oneDirectionForAllEnemies
-        SpawnDirection chosenDir = SpawnDirection.Top;
-        if (wave.oneDirectionForAllEnemies && wave.spawnDirections != null && wave.spawnDirections.Count > 0)
-            chosenDir = wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
-
-        // Spawn each enemy with delay
-        foreach (var prefab in enemyPrefabsToSpawn)
+        // Spawn each enemy with delay, from the side the plan (and the arcs) promised.
+        for (int i = 0; i < prefabs.Count; i++)
         {
-            SpawnDirection dir;
-            if (wave.spawnDirections == null || wave.spawnDirections.Count == 0)
-                dir = chosenDir;
-            else
-                dir = wave.oneDirectionForAllEnemies
-                    ? chosenDir
-                    : wave.spawnDirections[UnityEngine.Random.Range(0, wave.spawnDirections.Count)];
+            waveSpawner.SpawnEnemyPublic(prefabs[i], dirs[i]);
 
-            waveSpawner.SpawnEnemyPublic(prefab, dir);
+            // One fewer pending from this side. When a side hits 0 the telegraph stops
+            // refreshing it; the real spawn just refreshed it, so it fades after holdDuration.
+            if (token == _waveTelegraphToken)
+                _wavePendingPerDir[(int)dirs[i]] = Mathf.Max(0, _wavePendingPerDir[(int)dirs[i]] - 1);
 
             // Apply stage scaling to spawn delay
             float baseDelay = UnityEngine.Random.Range(wave.minSpawnDelay, wave.maxSpawnDelay);
@@ -1238,10 +1778,13 @@ public class GameOrchestrator : MonoBehaviour
         {
             if (CurrentState == RunState.GameOver) yield break;
 
-            // Cross-check the counter against the actual scene state
-            int aliveInScene = CountLivingEnemiesInScene(excludeBoss: false);
-
-            if (enemiesAlive <= 0 && aliveInScene <= 0)
+            // Cross-check the counter against the actual scene state.
+            // PERF: CountLivingEnemiesInScene is a FindObjectsByType over every
+            // EnemyStats (array allocation + a GetComponent per enemy). It used to run
+            // EVERY frame for the whole wave, cost growing with enemy count. The exit
+            // needs BOTH conditions, so only pay for the scene scan once the cheap
+            // counter already says zero. Exit behaviour is identical.
+            if (enemiesAlive <= 0 && CountLivingEnemiesInScene(excludeBoss: false) <= 0)
                 yield break;
 
             yield return null;
@@ -1269,6 +1812,99 @@ public class GameOrchestrator : MonoBehaviour
             alive++;
         }
         return alive;
+    }
+
+    //  BOSS-PHASE ADDS
+    //
+    //  Deals procedural enemy batches from RunConfig's Enemy Pool for as long as the boss
+    //  is alive, then stops on its own. Nothing else about a boss fight changes:
+    //  WaitForBossDead still waits for the boss AND an empty arena, so whatever adds are
+    //  still standing when the boss drops simply have to be cleared before the stage ends.
+    //
+    //  This runs OUTSIDE runCoroutine, which is parked inside WaitForBossDead for the
+    //  whole fight — so every teardown path (game over, rewind) stops it explicitly.
+
+    private void StartBossAdds(int stageIndex, bool isFinalBoss)
+    {
+        StopBossAdds();
+
+        if (runConfig == null || waveSpawner == null) return;
+        if (!(isFinalBoss ? runConfig.bossAddsDuringFinalBoss : runConfig.bossAddsDuringStageBoss))
+            return;
+
+        var pool = BuildEligibleEnemyPool(stageIndex, out float totalWeight);
+        if (pool.Count == 0)
+        {
+            Debug.LogWarning($"[Orchestrator] Boss adds are ON but no Enemy Pool entry is eligible at " +
+                             $"stage {stageIndex + 1}. Check the prefabs, weights and Min Stage Index.");
+            return;
+        }
+
+        bossAddsRoutine = StartCoroutine(BossAddsLoop(pool, totalWeight, stageIndex));
+    }
+
+    private void StopBossAdds()
+    {
+        if (bossAddsRoutine != null) { StopCoroutine(bossAddsRoutine); bossAddsRoutine = null; }
+    }
+
+    private IEnumerator BossAddsLoop(List<EnemyPoolEntry> pool, float totalWeight, int stageIndex)
+    {
+        // Reuse the per-stage curves normal waves already ride, so adds scale in step
+        // with the rest of the run instead of needing a second set of dials.
+        StageData stage = (currentRunPlan != null && stageIndex >= 0 && stageIndex < currentRunPlan.Count)
+            ? currentRunPlan[stageIndex]
+            : null;
+        float countMul = stage != null ? stage.enemyCountMultiplier : 1f;
+        float delayMul = stage != null ? stage.spawnDelayMultiplier : 1f;
+
+        yield return new WaitForSeconds(runConfig.bossAddsFirstDelay);
+
+        while (CurrentState != RunState.GameOver && BossIsAlive())
+        {
+            // Same hard rule the wave path follows: nothing spawns behind the cover.
+            if (!ScreenIsCovered)
+            {
+                int batch = Mathf.Max(1, Mathf.RoundToInt(runConfig.bossAddsPerBatch * countMul));
+                SpawnDirection dir = (SpawnDirection)UnityEngine.Random.Range(0, 4);
+
+                for (int i = 0; i < batch; i++)
+                {
+                    // The ceiling HOLDS the batch rather than shrinking it, so the pressure
+                    // still arrives — just paced by how fast the players are clearing.
+                    while (runConfig.bossAddsMaxAlive > 0
+                           && CountLivingEnemiesInScene(excludeBoss: true) >= runConfig.bossAddsMaxAlive)
+                    {
+                        if (CurrentState == RunState.GameOver || !BossIsAlive()) yield break;
+                        yield return new WaitForSeconds(0.25f);   // polling, not per-frame
+                    }
+
+                    if (CurrentState == RunState.GameOver || !BossIsAlive()) yield break;
+
+                    waveSpawner.SpawnEnemyPublic(WeightedPick(pool, totalWeight), dir);
+
+                    // WaveEnemy.OnDisable decrements this for every wave-marked enemy, adds
+                    // included, so skipping the increment would desync the counter.
+                    enemiesAlive++;
+
+                    float d = UnityEngine.Random.Range(runConfig.proceduralMinSpawnDelay,
+                                                       runConfig.proceduralMaxSpawnDelay) * delayMul;
+                    yield return new WaitForSeconds(Mathf.Max(0.2f, d));
+                }
+            }
+
+            yield return new WaitForSeconds(Mathf.Max(0.5f, UnityEngine.Random.Range(
+                runConfig.bossAddsInterval.x, runConfig.bossAddsInterval.y)));
+        }
+    }
+
+    // Is the boss we're waiting on still up? Uses the same "WaveEnemy got disabled"
+    // signal WaitForBossDead does, so both agree on the moment of death.
+    private bool BossIsAlive()
+    {
+        if (currentBossInstance == null || !currentBossInstance.activeInHierarchy) return false;
+        var we = currentBossInstance.GetComponent<WaveEnemy>();
+        return we == null || we.enabled;
     }
 
     //  BOSS SPAWNING
@@ -1329,29 +1965,46 @@ public class GameOrchestrator : MonoBehaviour
             // Shared world heal happens once if ANYONE chose restore (core + towers are shared).
             if (anyHeal) HealSharedCoreAndTowers();
 
-            // Per-player application: heal that player's own health + grant the energy bonus.
+            // Per-player application: heal that player's own health.
+            // FIX: the energy bonus used to be granted INSIDE this loop, but the wallet
+            // (EnergyManager) is SHARED — so a 2-player co-op stage paid out twice the
+            // advertised reward, scaling with player count. Health is per-player and
+            // stays in the loop; the shared bonus is now granted once below, at the
+            // value of the most generous choice anyone made.
+            int sharedBonus = 0;
             for (int i = 0; i < choices.Length; i++)
             {
                 if (choices[i] == StageClearScreenMenu.Choice.Heal)
                 {
-                    if (debugLog) Debug.Log($"[Orchestrator] P{i} picked RESTORE + energy bonus");
+                    if (debugLog) Debug.Log($"[Orchestrator] P{i} picked RESTORE");
                     HealPlayerOnly(i);
-                    GiveEnergyBonus(scaledHealBonus);
+                    sharedBonus = Mathf.Max(sharedBonus, scaledHealBonus);
                 }
                 else if (choices[i] == StageClearScreenMenu.Choice.Augment)
                 {
-                    if (debugLog) Debug.Log($"[Orchestrator] P{i} picked EMPOWER + small energy");
-                    GiveEnergyBonus(scaledAugmentBonus);
+                    if (debugLog) Debug.Log($"[Orchestrator] P{i} picked EMPOWER");
+                    sharedBonus = Mathf.Max(sharedBonus, scaledAugmentBonus);
                 }
             }
+            GiveEnergyBonus(sharedBonus);
 
             // Augment menus for the players who chose Empower.
             if (augmentPlayers.Count > 0 && enableAugmentSelection)
             {
-                if (PlayerRegistry.Count > 1)
+                // FIX: ShowAugmentSelectionForPlayers matches menus by boundPlayerIndex.
+                // A co-op scene that only has the DEFAULT menu (boundPlayerIndex == -1)
+                // matched nothing, so both players silently lost the augment they had
+                // just traded their heal for. Fall back to the shared menu in that case.
+                bool haveBoundMenus = false;
+                for (int i = 0; i < augmentPlayers.Count; i++)
+                    if (FindAugmentMenuForPlayer(augmentPlayers[i]) != null) { haveBoundMenus = true; break; }
+
+                if (PlayerRegistry.Count > 1 && haveBoundMenus)
                     yield return ShowAugmentSelectionForPlayers(augmentPlayers);
                 else if (augmentsMenu != null)
                     yield return ShowAugmentSelection($"stage {stage.stageIndex + 1} post-stage choice");
+                else
+                    Debug.LogWarning("[Orchestrator] Empower was chosen but no AugmentsMenu exists — reward skipped.");
             }
 
             yield break;
@@ -1409,16 +2062,37 @@ public class GameOrchestrator : MonoBehaviour
             }
         }
 
-        // Player
-        var player = FindFirstObjectByType<PlayerStats>();
-        if (player != null)
+        // Players.
+        // FIX (co-op): this healed FindFirstObjectByType<PlayerStats>() — ONE arbitrary
+        // player. Reached through the legacy PostStageChoiceMenu fallback, it meant P2
+        // got nothing from a "Heal All" reward they had just paid a stage for.
+        int healed = 0;
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0)
         {
-            float missing = player.maxHealth - player.currentHealth;
-            if (missing > 0f) player.Heal(missing);
+            var all = reg.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var stats = all[i] != null ? all[i].Stats : null;
+                if (stats == null) continue;
+                float miss = stats.maxHealth - stats.currentHealth;
+                if (miss > 0f) stats.Heal(miss);
+                healed++;
+            }
+        }
+        else
+        {
+            var player = FindFirstObjectByType<PlayerStats>();
+            if (player != null)
+            {
+                float miss = player.maxHealth - player.currentHealth;
+                if (miss > 0f) player.Heal(miss);
+                healed = 1;
+            }
         }
 
         if (debugLog)
-            Debug.Log($"[Orchestrator] Healed: core={(core != null)}, towers={(towers?.Length ?? 0)}, player={(player != null)}");
+            Debug.Log($"[Orchestrator] Healed: core={(core != null)}, towers={(towers?.Length ?? 0)}, players={healed}");
     }
 
     // Heal the SHARED world objects only — core + all towers. Called once per post-stage choice
@@ -1486,6 +2160,7 @@ public class GameOrchestrator : MonoBehaviour
         // game with no menu on screen and no way to un-freeze. The stack recomputes
         // the correct state from whatever is actually open.
         UIModalStack.Push(_augmentModal);
+        _augmentModalHeld = true;
 
         // Resolve each chosen player's bound menu and open it.
         var opened = new System.Collections.Generic.List<AugmentsMenu>();
@@ -1522,6 +2197,7 @@ public class GameOrchestrator : MonoBehaviour
         UIModalStack.Reassert();
         yield return MenuInputGuard.WaitForGamepadTriggersReleased();
         UIModalStack.Pop(_augmentModal);
+        _augmentModalHeld = false;
 
         if (debugLog) Debug.Log("[Orchestrator] Per-player augment selection complete.");
     }
@@ -1564,6 +2240,7 @@ public class GameOrchestrator : MonoBehaviour
         // manage the clock alone, so opening it on top of the pause menu (the wave ends
         // on the same frame you press Esc) left the two fighting over Time.timeScale.
         UIModalStack.Push(_augmentModal);
+        _augmentModalHeld = true;
 
         var menus = (augmentsMenus != null && augmentsMenus.Length > 0)
             ? augmentsMenus
@@ -1586,6 +2263,7 @@ public class GameOrchestrator : MonoBehaviour
         UIModalStack.Reassert();
         yield return MenuInputGuard.WaitForGamepadTriggersReleased();
         UIModalStack.Pop(_augmentModal);
+        _augmentModalHeld = false;
 
         if (debugLog)
             Debug.Log($"[Orchestrator] Augment selected, continuing...");
@@ -1613,6 +2291,32 @@ public class GameOrchestrator : MonoBehaviour
         {
             yield return new WaitForSecondsRealtime(0.1f);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  BOSS NAME RESOLUTION
+    //  Reads a human-readable name off a boss PREFAB, before it is instantiated.
+    //    1. BaseBossStats.bossDisplayName  <- for bosses with no EnemyData asset
+    //    2. EnemyData.enemyName            <- for bosses that have one
+    //    3. the prefab's GameObject name, tidied ("Boss5_Prefab" -> "Boss5 Prefab")
+    //  Works for every boss - Boss1, Boss3, the final boss, anything added later - with
+    //  zero per-boss wiring here.
+    private static string ResolveBossName(GameObject bossPrefab, string fallback = "Boss")
+    {
+        if (bossPrefab == null) return fallback;
+
+        // BaseBossStats.DisplayName already walks all three tiers, so one call covers
+        // named-by-field bosses, EnemyData bosses and unnamed ones alike.
+        var boss = bossPrefab.GetComponentInChildren<BaseBossStats>(true);
+        if (boss != null) return boss.DisplayName;
+
+        // Not a BaseBossStats boss (a beefed-up regular enemy used as one, say).
+        var stats = bossPrefab.GetComponentInChildren<EnemyStats>(true);
+        if (stats != null && stats.enemyData != null
+            && !string.IsNullOrWhiteSpace(stats.enemyData.enemyName))
+            return stats.enemyData.enemyName.Trim();
+
+        return bossPrefab.name.Replace("(Clone)", "").Replace('_', ' ').Trim();
     }
 
     private void SpawnBoss(GameObject bossPrefab)
@@ -1655,9 +2359,20 @@ public class GameOrchestrator : MonoBehaviour
             BossZoomController.Instance.PlayIntro(currentBossInstance);
     }
 
+    // How long the boss-dead wait may spin with the boss at 0 HP before we assume its
+    // death teardown failed and force it. Boss death routines hand off to
+    // EnemyDeathVFX and never call Destroy(gameObject) themselves, so a VFX that
+    // throws or never completes used to hang WaitForBossDead — and therefore the whole
+    // run — forever. Generous, so a long legitimate disintegration can never trip it.
+    private const float BossDeathTimeoutSeconds = 30f;
+
     // Waits until the specific boss instance is dead AND no other enemies are alive.
     private IEnumerator WaitForBossDead()
     {
+        // Only starts counting once the boss has actually reached 0 HP, so a long
+        // fight is never affected — this measures the TEARDOWN, not the fight.
+        float deadButNotGoneTimer = 0f;
+
         while (true)
         {
             if (CurrentState == RunState.GameOver) yield break;
@@ -1672,12 +2387,46 @@ public class GameOrchestrator : MonoBehaviour
                 bossStillAlive = (we != null && we.enabled);
             }
 
-            // Cross-check the scene for ANY other living enemy
-            int otherEnemiesAlive = CountLivingEnemiesInScene(excludeBoss: true);
-            if (!bossStillAlive && otherEnemiesAlive == 0)
+            // Cross-check the scene for ANY other living enemy.
+            // PERF: short-circuit - the scene scan (FindObjectsByType) only matters once
+            // the boss is gone, so it no longer runs every frame of the boss fight.
+            if (!bossStillAlive && CountLivingEnemiesInScene(excludeBoss: true) == 0)
             {
                 currentBossInstance = null;
                 yield break;
+            }
+
+            // Fail-safe. If the boss object is still around but its health is gone, its
+            // death routine ran and the teardown stalled. Force the destroy so the run
+            // can continue instead of locking. This cannot fire during a live fight:
+            // it requires currentHealth <= 0.
+            if (bossStillAlive && currentBossInstance != null)
+            {
+                var bossStats = currentBossInstance.GetComponent<EnemyStats>();
+                if (bossStats != null && bossStats.currentHealth <= 0f)
+                {
+                    // FIX: was Time.deltaTime, which is 0 while paused — the failsafe
+                    // could never fire if the player paused during a stalled teardown.
+                    deadButNotGoneTimer += Time.unscaledDeltaTime;
+                    if (deadButNotGoneTimer >= BossDeathTimeoutSeconds)
+                    {
+                        Debug.LogError(
+                            "[Orchestrator] Boss reached 0 HP but its death teardown never " +
+                            $"completed after {BossDeathTimeoutSeconds}s. Forcing destroy so the " +
+                            "run can continue. Check the boss death VFX / EnemyDeathVFX.");
+                        Destroy(currentBossInstance);
+                        currentBossInstance = null;
+                        yield break;
+                    }
+                }
+                else
+                {
+                    deadButNotGoneTimer = 0f;
+                }
+            }
+            else
+            {
+                deadButNotGoneTimer = 0f;
             }
 
             yield return null;
@@ -1700,19 +2449,31 @@ public class GameOrchestrator : MonoBehaviour
         if (enableTransitions && transitionOverlay != null)
         {
             yield return transitionOverlay.FadeOut(0.4f);
-            yield return transitionOverlay.ShowMessage("FINAL BOSS", "", 2f);
+
+            // Warm the final boss's sprites while the screen is black. Async, so the
+            // overlay keeps rendering and its reveal watchdog cannot trip.
+            if (runConfig.finalBossPrefab != null)
+                yield return PrewarmProviders(runConfig.finalBossPrefab);
+
+            yield return transitionOverlay.ShowBossMessage(
+                ResolveBossName(runConfig.finalBossPrefab, "Final Boss"), "FINAL BOSS", 2f);
             yield return transitionOverlay.FadeIn(0.7f);
         }
 
-        // Update counter for final boss
+        // Update counter for final boss - its real name, not the generic label.
         if (transitionOverlay != null)
-            transitionOverlay.SetWaveCounter("FINAL BOSS");
+            transitionOverlay.SetBossCounter(ResolveBossName(runConfig.finalBossPrefab, "Final Boss"));
 
         OnBossSpawned?.Invoke(null);
 
         yield return new WaitForSecondsRealtime(1f);
 
         SpawnBoss(runConfig.finalBossPrefab);
+
+        // The final boss sits outside the stage loop, so CurrentStageIndex has already
+        // run past the end of the plan. Scale its adds off the LAST stage instead.
+        StartBossAdds(Mathf.Max(0, (currentRunPlan != null ? currentRunPlan.Count : 1) - 1),
+                      isFinalBoss: true);
 
         // Snapshot the start of the final boss fight so the clock can rewind to
         // exactly here (re-running only the final boss, not the last stage).
@@ -1725,6 +2486,7 @@ public class GameOrchestrator : MonoBehaviour
         WriteFinalBossAutoSave();
 
         yield return WaitForBossDead();
+        StopBossAdds();
 
         // Final boss down. Fire the SAME event the stage bosses use, with -1 as the
         // stage index to mean "this was the final boss" — mirroring the existing
@@ -1747,6 +2509,7 @@ public class GameOrchestrator : MonoBehaviour
 
     private void ApplyBiome(StageData stage)
     {
+        BootProfiler.Mark("[PERF] ApplyBiome START (biome+map build)");
         if (biomeManager == null)
         {
             Debug.LogWarning("[Orchestrator] No BiomeManager found — skipping biome switch.");
@@ -1779,7 +2542,7 @@ public class GameOrchestrator : MonoBehaviour
         {
             map.ApplyLayout(stage.layout);
         }
-
+        BootProfiler.Mark("[PERF] ApplyBiome END / Prewarm BEGIN");
         if (debugLog)
             Debug.Log($"[Orchestrator] Biome applied: {stage.biome}" +
                       $"{(stage.layout != null ? $" +Layout:{stage.layout.layoutName}" : "")}" +
@@ -1829,23 +2592,40 @@ public class GameOrchestrator : MonoBehaviour
                 if (layout != null) usedLayouts.Add(layout);
             }
 
+            // Roll weather, gated by each biome's allowed weather (single source of
+            // truth = BiomeWeatherDefaults). A biome only gets rain/snow if it supports
+            // it AND the chance roll passes. Snow biome always snows; Marsh can rain.
+            //
+            // These are hoisted out of the object initializer (they used to be inline)
+            // so balloonsEnabled can depend on nightMode. The ORDER and the
+            // short-circuiting of the Random.value calls are preserved exactly, so a
+            // given run seed still produces the identical run plan.
+            bool rollNight = UnityEngine.Random.value < runConfig.nightModeChance;
+            bool rollFog = UnityEngine.Random.value < runConfig.fogChance;
+            bool rollRain = BiomeWeatherDefaults.ForBiome(biome).rainEnabled
+                            && UnityEngine.Random.value < runConfig.rainChance;
+            bool rollSnow = BiomeWeatherDefaults.ForBiome(biome).snowEnabled
+                            && (biome == BiomeType.Snow
+                                || UnityEngine.Random.value < runConfig.snowChance);
+
+            // FIX: balloons were rolled independently of nightMode. RunConfig's own
+            // tooltip says lantern balloons are only visible at night, so a daylight
+            // stage still got [BALLOONS] in StageData.ToString() and in the stage
+            // banner, and the roll was wasted. Gate it on night.
+            bool rollBalloons = (UnityEngine.Random.value < runConfig.nightBalloonChance)
+                                && rollNight;
+
             var stage = new StageData
             {
                 stageIndex = i,
                 biome = biome,
                 layout = layout,
 
-                // Roll weather, gated by each biome's allowed weather (single source of
-                // truth = BiomeWeatherDefaults). A biome only gets rain/snow if it supports
-                // it AND the chance roll passes. Snow biome always snows; Marsh can rain.
-                nightMode = UnityEngine.Random.value < runConfig.nightModeChance,
-                fogEnabled = UnityEngine.Random.value < runConfig.fogChance,
-                rainEnabled = BiomeWeatherDefaults.ForBiome(biome).rainEnabled
-                              && UnityEngine.Random.value < runConfig.rainChance,
-                snowEnabled = BiomeWeatherDefaults.ForBiome(biome).snowEnabled
-                              && (biome == BiomeType.Snow
-                                  || UnityEngine.Random.value < runConfig.snowChance),
-                balloonsEnabled = UnityEngine.Random.value < runConfig.nightBalloonChance,
+                nightMode = rollNight,
+                fogEnabled = rollFog,
+                rainEnabled = rollRain,
+                snowEnabled = rollSnow,
+                balloonsEnabled = rollBalloons,
 
                 // Difficulty scaling
                 enemyCountMultiplier = Mathf.Pow(runConfig.enemyCountScalePerStage, i),
@@ -1881,8 +2661,14 @@ public class GameOrchestrator : MonoBehaviour
         {
             if (pool.Count == 0)
             {
-                // Refill if we need more stages than available biomes
+                // Refill if we need more stages than available biomes.
                 pool = new List<BiomeType>(runConfig.availableBiomes);
+
+                // FIX: a plain refill could deal the biome we JUST used again, so with
+                // allowRepeatBiomes = false you could still get Desert -> Desert across
+                // the refill boundary — which reads as the setting being broken.
+                if (!runConfig.allowRepeatBiomes && sequence.Count > 0 && pool.Count > 1)
+                    pool.Remove(sequence[sequence.Count - 1]);
             }
 
             int pick = UnityEngine.Random.Range(0, pool.Count);
@@ -1943,15 +2729,7 @@ public class GameOrchestrator : MonoBehaviour
         var result = new List<WaveData>();
 
         // Collect enemies eligible for this stage.
-        var eligible = new List<EnemyPoolEntry>();
-        float totalWeight = 0f;
-        if (runConfig.enemyPool != null)
-            foreach (var e in runConfig.enemyPool)
-                if (e != null && e.enemyPrefab != null && e.weight > 0f && stageIndex >= e.minStageIndex)
-                {
-                    eligible.Add(e);
-                    totalWeight += e.weight;
-                }
+        var eligible = BuildEligibleEnemyPool(stageIndex, out float totalWeight);
 
         if (eligible.Count == 0)
         {
@@ -1980,11 +2758,10 @@ public class GameOrchestrator : MonoBehaviour
             {
                 waveNumber = w,
                 extraDelayBeforeStart = 0f,
-                spawnDirections = new List<SpawnDirection>
-                {
-                    SpawnDirection.Top, SpawnDirection.Bottom,
-                    SpawnDirection.Left, SpawnDirection.Right
-                },
+                // How many sides this wave attacks from follows RunConfig.directionsPerStage
+                // (e.g. Stage 1: 1-2, Stage 2: 1-3, Stage 3: 2-3). Rolled here, inside the
+                // seeded plan generation, so a resumed run gets the same sides back.
+                spawnDirections = RollWaveDirections(stageIndex),
                 oneDirectionForAllEnemies = false,
                 minSpawnDelay = runConfig.proceduralMinSpawnDelay,
                 maxSpawnDelay = runConfig.proceduralMaxSpawnDelay,
@@ -1993,6 +2770,53 @@ public class GameOrchestrator : MonoBehaviour
         }
 
         return result;
+    }
+
+    // Picks which sides one procedural wave attacks from, using the stage's rule in
+    // RunConfig.directionsPerStage. Element 0 = Stage 1; stages past the end of the list
+    // reuse the last element. An empty list keeps the old behaviour (all four sides) and
+    // makes NO random calls, so runs without a rule roll exactly the same plan as before.
+    private List<SpawnDirection> RollWaveDirections(int stageIndex)
+    {
+        var all = new List<SpawnDirection>
+        {
+            SpawnDirection.Top, SpawnDirection.Bottom,
+            SpawnDirection.Left, SpawnDirection.Right
+        };
+
+        var rules = runConfig != null ? runConfig.directionsPerStage : null;
+        if (rules == null || rules.Count == 0) return all;
+
+        WaveDirectionRule rule = rules[Mathf.Clamp(stageIndex, 0, rules.Count - 1)];
+        if (rule == null) return all;
+
+        // Tolerate min/max entered the wrong way round, and keep both inside 1..4.
+        int lo = Mathf.Clamp(Mathf.Min(rule.minDirections, rule.maxDirections), 1, all.Count);
+        int hi = Mathf.Clamp(Mathf.Max(rule.minDirections, rule.maxDirections), 1, all.Count);
+        int count = UnityEngine.Random.Range(lo, hi + 1);   // int Range: max is exclusive
+
+        Shuffle(all);
+        all.RemoveRange(count, all.Count - count);
+        return all;
+    }
+
+    // Enemy Pool entries that may appear at this stage (0-based), plus their summed
+    // weight for WeightedPick. Lifted out of GenerateProceduralWaves unchanged so
+    // procedural waves and boss-phase adds draw from exactly the same filter.
+    private List<EnemyPoolEntry> BuildEligibleEnemyPool(int stageIndex, out float totalWeight)
+    {
+        var eligible = new List<EnemyPoolEntry>();
+        totalWeight = 0f;
+
+        if (runConfig.enemyPool != null)
+            foreach (var e in runConfig.enemyPool)
+                if (e != null && e.enemyPrefab != null && e.weight > 0f && stageIndex >= e.minStageIndex)
+                {
+                    eligible.Add(e);
+                    totalWeight += e.weight;
+                }
+
+        return eligible;
     }
 
     // Weighted random pick from the eligible enemy entries.
@@ -2073,9 +2897,19 @@ public class GameOrchestrator : MonoBehaviour
             Debug.LogWarning("[Orchestrator] ⚠ No BiomeManager found in scene. Biome switching will be skipped.");
         if (waveSpawner == null)
             Debug.LogError("[Orchestrator] ❌ No WaveSpawner found in scene! Enemy spawning won't work.");
-        else if (runConfig != null && (runConfig.waveConfigPool == null || runConfig.waveConfigPool.Count == 0))
+
+        // FIX: this was an `else if` off the spawner check, so the most useful warning
+        // in the file was suppressed in exactly the case where setup was most broken.
+        // Also skipped when procedural waves are on — the pool is genuinely unused then.
+        if (runConfig != null && !runConfig.useProceduralWaves
+            && (runConfig.waveConfigPool == null || runConfig.waveConfigPool.Count == 0))
             Debug.LogWarning("[Orchestrator] ⚠ RunConfig has no WaveConfigs in pool. " +
                              "Drag your existing WaveConfig.asset into Run Config → Wave Config Pool.");
+
+        if (runConfig != null && runConfig.useProceduralWaves
+            && (runConfig.enemyPool == null || runConfig.enemyPool.Count == 0))
+            Debug.LogError("[Orchestrator] ❌ Use Procedural Waves is ON but Enemy Pool is empty — " +
+                           "every stage will generate ZERO waves and jump straight to the boss.");
     }
 
     //  UTILITY
@@ -2094,4 +2928,20 @@ public class GameOrchestrator : MonoBehaviour
             Instance = null;
     }
 }
+
+
+// Implemented by components whose sprite art lives on the component itself (not on
+// EnemyData) — the Insect burrow animator, the Parfumer body, etc. Lets
+// GameOrchestrator warm those folders up front with no manual wiring: it finds every
+// implementer on each enemy/boss prefab and asks it to warm its own folders.
+//
+// IMPORTANT: PrewarmSpriteFolders() is called on the PREFAB (no instance is created),
+// so implementations must ONLY read their serialized fields and call the static
+// folder caches (EnemyAnimationController.LoadFolderCached / ParfumerController.Prewarm).
+// No scene work, no coroutines, no AddComponent — nothing that needs a live instance.
+public interface ISpritePrewarm
+{
+    void PrewarmSpriteFolders();
+}
+
 

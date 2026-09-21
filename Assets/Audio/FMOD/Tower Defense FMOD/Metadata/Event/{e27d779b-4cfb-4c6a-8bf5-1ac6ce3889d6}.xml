@@ -92,9 +92,13 @@
 			<destination>{ea87b449-9f58-472f-af77-30a04785d8a7}</destination>
 			<destination>{677c614f-2c91-4cf3-8fe9-7d77da68c4fd}</destination>
 			<destination>{16f1b58b-ebc0-413a-bdfc-76ef447e6522}</destination>
+			<destination>{a43d907d-bd75-4931-8373-49dad2296992}</destination>
 		</relationship>
 	</object>
 	<object class="EventMixerMaster" id="{8071ab5c-dc53-4c4e-842b-33b889477e4f}">
+		<property name="volume">
+			<value>1</value>
+		</property>
 		<relationship name="effectChain">
 			<destination>{52a0dc28-3f33-4982-9dfa-b91b545cb6ef}</destination>
 		</relationship>
@@ -184,7 +188,7 @@
 			<destination>{1135cd29-485f-418e-81e6-dd58cb097163}</destination>
 		</relationship>
 		<relationship name="destination">
-			<destination>{f1c6aef2-3239-4543-8567-bbf25872a6ff}</destination>
+			<destination>{a43d907d-bd75-4931-8373-49dad2296992}</destination>
 		</relationship>
 		<relationship name="triggerConditions">
 			<destination>{5a552577-0427-49e3-a5da-05835269c844}</destination>
@@ -334,6 +338,20 @@
 			<destination>{437e1e5a-e4f5-474c-8bc8-b23e93ff3a55}</destination>
 		</relationship>
 	</object>
+	<object class="NamedMarker" id="{a43d907d-bd75-4931-8373-49dad2296992}">
+		<property name="position">
+			<value>60</value>
+		</property>
+		<property name="name">
+			<value>Boss</value>
+		</property>
+		<relationship name="timeline">
+			<destination>{500ac405-667c-4004-9749-144fe96df2bd}</destination>
+		</relationship>
+		<relationship name="markerTrack">
+			<destination>{437e1e5a-e4f5-474c-8bc8-b23e93ff3a55}</destination>
+		</relationship>
+	</object>
 	<object class="MixerBusEffectChain" id="{52a0dc28-3f33-4982-9dfa-b91b545cb6ef}">
 		<relationship name="effects">
 			<destination>{15031ab0-d0cd-45f1-be43-51df81364534}</destination>
@@ -360,10 +378,10 @@
 	</object>
 	<object class="ParameterCondition" id="{5a552577-0427-49e3-a5da-05835269c844}">
 		<property name="minimum">
-			<value>5</value>
+			<value>8</value>
 		</property>
 		<property name="maximum">
-			<value>5</value>
+			<value>8</value>
 		</property>
 		<relationship name="parameter">
 			<destination>{fd41bdcc-13b0-4faa-9e6c-7de0146d23d9}</destination>

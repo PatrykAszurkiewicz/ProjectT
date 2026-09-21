@@ -32,6 +32,7 @@ public class GameStarter : MonoBehaviour
         Time.timeScale = 1f;   // a menu may have left it at 0; a frozen intro hangs on black.
 
         //Debug.Log($"[GameStarter] Fresh SOLO run → loading '{gameScene}'.");
+        BootProfiler.StartClock("SOLO button pressed");
         ScreenFade.LoadScene(gameScene);
     }
 

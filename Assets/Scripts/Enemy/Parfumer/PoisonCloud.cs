@@ -2,12 +2,7 @@ using UnityEngine;
 
 
 // A single green poison patch dropped by a Parfumer enemy.
-// Structurally the sibling of BufferFog, but its job is different:
-//   * It does NOT buff enemies (the Parfumer is a pure anti-player hazard).
-//   * It does NOT damage the player directly while inside. Instead, every
-//     frame the player is inside it (re)stamps a PoisonStatusEffect on them,
-//     which keeps ticking damage for `poisonDuration` seconds AFTER they leave
-//     the cloud.
+
 public class PoisonCloud : MonoBehaviour
 {
     private float radius = 2.5f;

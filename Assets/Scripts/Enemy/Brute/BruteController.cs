@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using FMODUnity;
 
 // BRUTE CONTROLLER
 [RequireComponent(typeof(EnemyStats))]
@@ -8,21 +9,26 @@ using UnityEngine;
 [RequireComponent(typeof(EnemyAnimationController))]
 public class BruteController : MonoBehaviour
 {
-    [Header("Slam Cadence")]
-    [Tooltip("Seconds between consecutive fist slams. Larger = slower, heavier " +
-             "rhythm. Each slam alternates to the other fist.")]
-    [SerializeField] private float slamInterval = 0.5f;
+    [Header("Slam Timing")]
+    [Tooltip("Frames of the ATTACK animation on which a fist lands, 0-based and " +
+             "relative to the first frame of the Attack folder. One slam fires per " +
+             "entry, per attack cycle, alternating fists in the order listed. Find " +
+             "these by scrubbing the Attack folder and noting each frame where a " +
+             "fist is planted on the ground.")]
+    [SerializeField] private int[] slamFrames = { 8, 15 };
 
-    [Tooltip("Delay before the FIRST slam after the Brute engages. Gives the " +
-             "player a beat to react / parry the wind-up before the ground hits " +
-             "begin.")]
-    [SerializeField] private float slamStartDelay = 0.3f;
+    [Tooltip("Frame of the ATTACK animation (0-based, same numbering as Slam " +
+             "Frames) on which the EnemyController's 'Attack Sound Override' " +
+             "(e.g. BruteWave) plays, once per attack cycle. 0 = the moment the " +
+             "attack animation starts. -1 disables it. The override is not played " +
+             "by EnemyController for the Brute because its AttackHandlerOverride " +
+             "replaces the default hit, so it is played from here instead.")]
+    [SerializeField] private int waveSoundFrame = 0;
 
-    [Tooltip("How long (seconds) the Brute can stop 'attacking' before the slam " +
-             "loop ends. Bridges the tiny gaps between EnemyController attack " +
-             "cycles so the rhythm stays smooth, while still stopping promptly " +
-             "when the Brute leaves range to chase.")]
-    [SerializeField] private float attackStateGrace = 0.4f;
+    // EnemyAnimationController.OnAttackFrame reports every frame of the attack as
+    // it is displayed, and it steps through frames a hitch skipped, so a slam can
+    // never be dropped. Driving off that hook puts the impact on the frame that
+    // draws the impact, by construction.
 
     [Header("Fist Placement (left / right of the Brute)")]
     [Tooltip("Sideways (left/right) distance from the Brute's body to each fist " +
@@ -37,9 +43,16 @@ public class BruteController : MonoBehaviour
              "the floor rather than at body height.")]
     [SerializeField] private float fistGroundOffset = -0.35f;
 
-    [Tooltip("If true the first slam of an engagement is the LEFT fist, then it " +
-             "alternates right/left/right...")]
+    [Tooltip("If true the first slam of a cycle is the LEFT fist, then it " +
+             "alternates right/left/right... Set this to match which fist the " +
+             "animation actually plants first.")]
     [SerializeField] private bool firstSlamIsLeft = true;
+
+    [Tooltip("Mirror the impact points when the sprite is flipped. The art's fists " +
+             "swap sides on screen when the Brute turns around, so the impacts have " +
+             "to swap with them or the dust lands under the wrong arm. Turn off only " +
+             "if you want the two impacts pinned to world left/right.")]
+    [SerializeField] private bool mirrorFistsWithFacing = true;
 
     [Header("Slam Damage")]
     [Tooltip("World radius of each slam's damage area. Everything damageable " +
@@ -73,11 +86,15 @@ public class BruteController : MonoBehaviour
     private EnemyStats stats;
     private EnemyController controller;
     private EnemyAnimationController animController;
+    private SmoothSpriteFlip smoothFlip;
 
-    // Slam loop state
-    private Coroutine slamLoop;
-    private float lastAttackingTime = -999f;
+    // Slam state
+    //
+    // lastFrameSeen starts at int.MaxValue so the very first reported frame counts
+    // as the start of a cycle and resets the alternation.
+    private int lastFrameSeen = int.MaxValue;
     private int slamParity = 0; // even = firstSlamIsLeft, odd = other fist
+    private bool subscribed = false;
 
     private void Awake()
     {
@@ -93,76 +110,84 @@ public class BruteController : MonoBehaviour
     {
         controller = GetComponent<EnemyController>();
         animController = GetComponent<EnemyAnimationController>();
+        smoothFlip = GetComponent<SmoothSpriteFlip>();
 
         // Suppress the default single-target melee hit. EnemyController.PerformHit
         // calls this override INSTEAD of dealing melee damage (and skips the
         // default attack sound), so the Brute's only damage source is its slams.
         if (controller != null)
             controller.AttackHandlerOverride = _ => { /* Brute damages via slams */ };
-    }
 
-    private void Update()
-    {
-        if (controller == null) return;
+        // Ascending order matters: the fire test below is a "did we pass it this
+        // frame" check, so an out-of-order list would alternate fists wrongly.
+        if (slamFrames != null && slamFrames.Length > 1)
+            System.Array.Sort(slamFrames);
 
-        // Track the most recent moment we were in an attack cycle. IsAttacking
-        // is true for (almost) the whole time the Brute is stopped at its target;
-        // the brief gaps between cycles are bridged by 'attackStateGrace'.
-        if (controller.IsAttacking)
-            lastAttackingTime = Time.time;
-
-        bool engaged = (Time.time - lastAttackingTime) <= attackStateGrace;
-
-        if (engaged && slamLoop == null)
-            slamLoop = StartCoroutine(SlamLoop());
-    }
-
-    private IEnumerator SlamLoop()
-    {
-        // Reset alternation so each engagement starts on the configured fist.
-        slamParity = 0;
-
-        // Wind-up beat before the first ground hit (also the parry window).
-        float waited = 0f;
-        while (waited < slamStartDelay)
+        if (animController != null)
         {
-            if (!IsEngaged()) { slamLoop = null; yield break; }
-            waited += Time.deltaTime;
-            yield return null;
+            animController.OnAttackFrame += HandleAttackFrame;
+            subscribed = true;
         }
-
-        while (IsEngaged())
-        {
-            // Don't slam while parry-stunned — wait it out, then resume.
-            if (GetComponent<ParryStunEffect>() != null)
-            {
-                yield return null;
-                continue;
-            }
-
-            bool leftFist = (slamParity % 2 == 0) ? firstSlamIsLeft : !firstSlamIsLeft;
-            slamParity++;
-
-            DoSlam(leftFist);
-
-            // Wait the interval (re-checking engagement so we stop promptly).
-            float t = 0f;
-            while (t < slamInterval)
-            {
-                if (!IsEngaged()) { slamLoop = null; yield break; }
-                t += Time.deltaTime;
-                yield return null;
-            }
-        }
-
-        slamLoop = null;
     }
 
-    private bool IsEngaged()
+    private void OnDestroy()
     {
-        if (controller == null) return false;
-        if (controller.IsAttacking) lastAttackingTime = Time.time;
-        return (Time.time - lastAttackingTime) <= attackStateGrace;
+        if (subscribed && animController != null)
+            animController.OnAttackFrame -= HandleAttackFrame;
+
+        // Don't leave a delegate pointing at a destroyed component.
+        if (controller != null)
+            controller.AttackHandlerOverride = null;
+    }
+
+    /// Called by EnemyAnimationController for every frame of the attack animation,
+    /// with the 0-based index into the Attack folder.
+    private void HandleAttackFrame(int frame)
+    {
+        // The animation coroutine is not stopped by disabling its component, so it
+        // keeps reporting frames after EnemyDeathVFX has disabled everything on the
+        // enemy. Without this the Brute would land a slam out of its own corpse.
+        if (!isActiveAndEnabled) return;
+
+        // A frame index that did not advance means a new attack cycle started, so
+        // the alternation restarts on the configured fist.
+        int previous = lastFrameSeen;
+        if (frame <= lastFrameSeen)
+        {
+            previous = -1;
+            slamParity = 0;
+        }
+        lastFrameSeen = frame;
+
+        // Tests IsStunActive, not mere component presence: EnemyController's own
+        // parry checks have always used IsStunActive, and bailing on the component
+        // merely existing would silence a Brute for the rest of its life once any
+        // ParryStunEffect outlived its freeze window.
+        // ParryStunEffect also freezes the animation, so in practice no frame is
+        // reported during a stun at all; this is the belt to that braces.
+        var parryStun = GetComponent<ParryStunEffect>();
+        if (parryStun != null && parryStun.IsStunActive) return;
+
+        // Wave sound: once per attack cycle, on its own frame, using the same
+        // "did we pass it this frame" range test as the slams below.
+        if (waveSoundFrame >= 0 && previous < waveSoundFrame && frame >= waveSoundFrame)
+            PlayWaveSound();
+
+        if (slamFrames == null || slamFrames.Length == 0) return;
+
+        // Fire every slam frame in (previous, frame]. The range test rather than an
+        // equality test is what makes a dropped render frame harmless — the
+        // animation controller replays skipped indices, and even if it did not, a
+        // slam frame stepped clean over would still land here.
+        foreach (int slamFrame in slamFrames)
+        {
+            if (previous < slamFrame && frame >= slamFrame)
+            {
+                bool leftFist = (slamParity % 2 == 0) ? firstSlamIsLeft : !firstSlamIsLeft;
+                slamParity++;
+                DoSlam(leftFist);
+            }
+        }
     }
 
     private void DoSlam(bool leftFist)
@@ -187,11 +212,23 @@ public class BruteController : MonoBehaviour
     private Vector3 GetSlamCenter(bool leftFist)
     {
         Vector3 origin = transform.position;
-        float side = leftFist ? -1f : 1f;
+        float side = (leftFist ? -1f : 1f) * FacingSign();
         return new Vector3(
             origin.x + side * fistLateralOffset,
             origin.y + fistGroundOffset,
             origin.z);
+    }
+
+    // -1 when the sprite is drawn mirrored, so "the fist on the Brute's left" stays
+    // the fist the player can see on that side.
+    // SmoothSpriteFlip.IsFacingLeft reports the ACTUAL mirrored state (see the note
+    // on EnemyAnimationController.ApplyFacingLeft), which is exactly what is needed
+    // here — art authored facing the other way is already accounted for.
+    private float FacingSign()
+    {
+        if (!mirrorFistsWithFacing) return 1f;
+        if (smoothFlip == null) smoothFlip = GetComponent<SmoothSpriteFlip>();
+        return (smoothFlip != null && smoothFlip.IsFacingLeft) ? -1f : 1f;
     }
 
     private void ApplySlamDamage(Vector3 center)
@@ -242,6 +279,18 @@ public class BruteController : MonoBehaviour
         // Reuse the generic enemy-attack sound, guarded so missing audio never throws.
         if (AudioManager.instance != null && FMODEvents.instance != null)
             AudioManager.instance.PlayOneShot(FMODEvents.instance.enemyAttack, at);
+    }
+
+    // Plays the Attack Sound Override assigned on this Brute's EnemyController
+    // (event:/BruteWave on the prefab). Silently does nothing if it is unassigned
+    // or audio isn't set up, so missing audio never throws.
+    private void PlayWaveSound()
+    {
+        if (controller == null || AudioManager.instance == null) return;
+
+        EventReference ev = controller.AttackSoundOverride;
+        if (!ev.IsNull)
+            AudioManager.instance.PlayOneShot(ev, transform.position);
     }
 
 #if UNITY_EDITOR
@@ -405,4 +454,6 @@ public class BruteSlamVFX : MonoBehaviour
         if (t != null) Destroy(t.gameObject);
     }
 }
+
+
 

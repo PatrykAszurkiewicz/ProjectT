@@ -15,6 +15,13 @@ using FMODUnity;
 [RequireComponent(typeof(EnemyStats))]
 public class Scarecrow : MonoBehaviour
 {
+    [Header("Sprites")]
+    [Tooltip("Emergency fallback frame, shown only if EnemyAnimationController failed " +
+             "to resolve any sprites. Assign this so the safety net survives the move " +
+             "of Scarecrow/ out of Resources — a hardcoded Resources path would go dead " +
+             "exactly when it is most needed.")]
+    [SerializeField] private Sprite fallbackSprite;
+
     [Header("Cycle Timing")]
     [Tooltip("Seconds the scarecrow stays visible & active (aura on, hittable).")]
     [SerializeField] private float visibleDuration = 6f;
@@ -144,6 +151,18 @@ public class Scarecrow : MonoBehaviour
     // Set true once death VFX has been triggered. Prevents firing twice if
     // OnHealthChanged is invoked multiple times in a single death frame.
     private bool deathVfxFired = false;
+
+    // Teleport-slash VFX ownership.
+    // TeleportFade() spawns the slash as a ROOT-LEVEL GameObject (deliberately:
+    // parenting it would make it inherit the scarecrow's scale/rotation
+    // animation). That means nothing destroys it for us — it is NOT a child, so
+    // it does not die with the scarecrow. Keeping the handles in fields instead
+    // of coroutine locals is what makes teardown possible from OnDisable /
+    // OnDestroy when the coroutine is killed mid-flight (e.g. a tower kills the
+    // scarecrow mid-teleport and EnemyDeathVFX.Trigger disables every
+    // MonoBehaviour on the object, which stops all of its coroutines dead).
+    private GameObject slashGO;
+    private Material slashMat;
 
     // ScarecrowScream FMOD instance
     private EventInstance screamInstance;
@@ -306,7 +325,13 @@ public class Scarecrow : MonoBehaviour
         // reason)
         if (spriteRenderer != null && spriteRenderer.sprite == null)
         {
-            Sprite fallback = Resources.Load<Sprite>("Sprites/EnemySprites/Scarecrow/00");
+            // FIX: this hardcoded a Resources path. It is a SAFETY NET for when the
+            // animator fails, so losing it to the Resources move would only bite when
+            // something else had already gone wrong — the worst possible time.
+            // Prefer a direct reference; keep the path as a last resort.
+            Sprite fallback = fallbackSprite != null
+                ? fallbackSprite
+                : Resources.Load<Sprite>("Sprites/EnemySprites/Scarecrow/00");
             if (fallback != null)
             {
                 spriteRenderer.sprite = fallback;
@@ -336,6 +361,11 @@ public class Scarecrow : MonoBehaviour
         // Also stop the scream — covers cases like EnemyDeathVFX disabling
         // all MonoBehaviours on the GameObject, or scene unload.
         StopScream(allowFadeOut: false);
+
+        // Being disabled kills TeleportFade() mid-run, so its own cleanup will
+        // never execute. The slash is not a child of this object and would
+        // otherwise be orphaned in the scene forever.
+        DestroyTeleportSlash();
     }
 
     private void OnDestroy()
@@ -345,6 +375,9 @@ public class Scarecrow : MonoBehaviour
 
         if (aura != null && aura.gameObject != null)
             Destroy(aura.gameObject);
+
+        // Backstop for the root-level teleport slash (see DestroyTeleportSlash).
+        DestroyTeleportSlash();
 
         // Stop & release the FMOD instance
         if (screamInstanceCreated)
@@ -479,7 +512,11 @@ public class Scarecrow : MonoBehaviour
         spriteRenderer.color = baseColor;
 
         //  Build the slash GameObject (LineRenderer with tapered ends) 
-        GameObject slashGO = new GameObject("ScarecrowTeleportSlash");
+        // Insurance: if a previous transition was cut short, make sure its
+        // slash is gone before we spawn a new one (never leak two).
+        DestroyTeleportSlash();
+
+        slashGO = new GameObject("ScarecrowTeleportSlash");
         slashGO.transform.position = new Vector3(startPosition.x, slashWorldY, startPosition.z);
 
         var lr = slashGO.AddComponent<LineRenderer>();
@@ -502,7 +539,7 @@ public class Scarecrow : MonoBehaviour
         // alpha-blending into a flat smudge.
         Shader sh = Shader.Find("Sprites/Default");
         if (sh == null) sh = Shader.Find("Unlit/Transparent");
-        var slashMat = new Material(sh);
+        slashMat = new Material(sh);
         slashMat.mainTexture = Texture2D.whiteTexture;
         slashMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
         slashMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
@@ -518,6 +555,11 @@ public class Scarecrow : MonoBehaviour
         float t = 0f;
         while (t < duration && !isDead)
         {
+            // The slash can be torn down from underneath us (DestroyTeleportSlash
+            // from OnDisable/OnDestroy). Unity's fake-null makes `lr` compare
+            // equal to null once that happens — bail instead of throwing.
+            if (lr == null) break;
+
             t += Time.deltaTime;
             float kRaw = Mathf.Clamp01(t / duration);
             // Disappear plays forward (k = kRaw), appear plays backward
@@ -624,8 +666,32 @@ public class Scarecrow : MonoBehaviour
         if (healthBarCanvasGroup != null)
             healthBarCanvasGroup.alpha = appearing ? 1f : 0f;
 
-        if (slashMat != null) Destroy(slashMat);
+        DestroyTeleportSlash();
+    }
+
+    // Single teardown point for the teleport-slash VFX.
+    //
+    // Safe to call at any time and any number of times. Called from:
+    //   * the end of TeleportFade()  — normal completion,
+    //   * the start of TeleportFade() — stale leftovers,
+    //   * OnDisable()  — the important one. EnemyDeathVFX.Trigger() does
+    //     `foreach (var mb in enemy.GetComponentsInChildren<MonoBehaviour>())
+    //      mb.enabled = false;`, and disabling a MonoBehaviour stops all of its
+    //     running coroutines *immediately* — TeleportFade never reaches its
+    //     cleanup. Because the slash is a root object, it then survived forever
+    //     as a glowing lens/"diamond" frozen at the scarecrow's old position.
+    //   * OnDestroy() — covers any path that skips OnDisable ordering
+    //     assumptions, plus direct Destroy(gameObject) (failsafe destroy,
+    //     wave cleanup, scene unload).
+    private void DestroyTeleportSlash()
+    {
         if (slashGO != null) Destroy(slashGO);
+        slashGO = null;
+
+        // Runtime-created materials are not garbage collected with their
+        // renderer — destroy explicitly or it leaks for the session.
+        if (slashMat != null) Destroy(slashMat);
+        slashMat = null;
     }
 
     /// <summary>Quadratic ease-out: fast start, slow end.</summary>
@@ -1053,8 +1119,13 @@ public class Scarecrow : MonoBehaviour
             radius: auraRadius,
             damageBuff: damageBuff,   // a multiplier on allies' already-scaled damage — not scaled here
             healPerSecond: healPerSecond,
-            // Nightmare's +30% reaches the aura's direct player damage too, matching melee.
-            playerDamagePerSecond: playerDamagePerSecond * EnemyStatModifierManager.DifficultyDamageMultiplier
+            // ScaleDamage gives the aura's DIRECT player damage the same augment x
+            // per-stage x difficulty multiplier melee gets. It previously applied
+            // difficulty ONLY, so the enemy-damage augment and per-stage scaling
+            // silently skipped it — the same gap Buffer fog and Parfumer poison had.
+            playerDamagePerSecond: stats != null
+                ? stats.ScaleDamage(playerDamagePerSecond)
+                : playerDamagePerSecond
         );
 
         // Visual layer
@@ -1088,3 +1159,7 @@ public class Scarecrow : MonoBehaviour
         }
     }
 }
+
+
+
+

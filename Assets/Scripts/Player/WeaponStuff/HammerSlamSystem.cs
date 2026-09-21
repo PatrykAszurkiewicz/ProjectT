@@ -762,9 +762,23 @@ public class HammerSlamRunner : MonoBehaviour
         // De-dupe: an enemy can carry several colliders; damage each once.
         var hitThisSlam = new HashSet<EnemyStats>();
 
+        // Boss3 tree-hands are destroyable but are deliberately not EnemyStats, so the
+        // GetComponentInParent lookup below would skip them. Same dedup reasoning: a
+        // hand hurtbox carries several colliders, so key on the branch itself.
+        var handsThisSlam = new HashSet<Boss3TreeHand>();
+
         foreach (var col in hits)
         {
             if (col == null) continue;
+
+            var handBox = col.GetComponent<Boss3HandHurtbox>();
+            if (handBox != null)
+            {
+                var hand = handBox.Hand;
+                if (hand != null && handsThisSlam.Add(hand) && slamDamage > 0f)
+                    hand.TakeHandDamage(slamDamage, col.ClosestPoint(center));
+                continue;   // a branch is not an enemy: no knockback, no parry bonus
+            }
 
             // Resolve the enemy from the collider or any of its parents.
             EnemyStats enemy = col.GetComponentInParent<EnemyStats>();
@@ -1586,4 +1600,7 @@ public class HammerSlamVFX : MonoBehaviour
         if (sr != null) Destroy(sr.gameObject);
     }
 }
+
+
+
 

@@ -37,6 +37,21 @@ public static class TowerKillAttribution
         if (enemy == null) return;
         lastTowerHitTime.Remove(enemy.GetInstanceID());
     }
+
+    /// Drop the whole attribution table. Called from AugmentRuntimeModifiers.ResetAll()
+    /// at run start and at the start of every Play session.
+    ///
+    /// Forget() is only reached from a NORMAL enemy death, so every other removal path
+    /// leaked an entry: the wave rewind's ClearLiveEnemies, scene teardown, a boss
+    /// despawn. The table therefore grew for the whole session. It is also a
+    /// correctness problem, not just memory: Unity RECYCLES GetInstanceID values, so a
+    /// leftover entry can make a freshly spawned enemy test positive for
+    /// WasRecentlyHitByTower and pay out a tower-kill bonus nothing earned.
+    public static void Reset() => lastTowerHitTime.Clear();
+
+    /// Live entry count — exposed so the verification harness can assert the table is
+    /// actually being pruned rather than silently growing.
+    public static int TrackedCount => lastTowerHitTime.Count;
 }
 
 
@@ -127,3 +142,6 @@ public static class EnemyDropAugments
         EnergyDropManager.TrySpawnEnergyDrop(position, finalChance, finalValue);
     }
 }
+
+
+

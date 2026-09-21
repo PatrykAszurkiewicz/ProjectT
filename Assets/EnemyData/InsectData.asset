@@ -13,13 +13,23 @@ MonoBehaviour:
   m_Name: InsectData
   m_EditorClassIdentifier: 
   enemyName: Insect
-  maxHealth: 8
+  maxHealth: 60
   maxArmor: 0
   moveSpeed: 3
   damage: 3
-  mass: 15
-  spriteFolderPath: Sprites/EnemySprites/Insect
+  mass: 600
+  frames:
+  - {fileID: -6184050716912831369, guid: f902652f97ec39b45b5e9c0f25cc0cad, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
   animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 0
     frameCount: 0

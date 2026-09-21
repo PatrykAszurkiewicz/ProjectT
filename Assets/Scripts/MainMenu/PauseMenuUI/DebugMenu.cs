@@ -33,7 +33,7 @@ public class DebugMenu : MonoBehaviour
     // Master switch — set false (or delete the file) to strip from builds.
     // static readonly (not const) so "if (!ENABLED) return;" isn't flagged as
     // unreachable code (IDE0035) when the value is true.
-    private static readonly bool ENABLED = true;
+    private static readonly bool ENABLED = false; //true;
 
     // Hide the button on menu scenes (anywhere without a gameplay singleton).
     private static readonly bool HIDE_ON_MENUS = true;
@@ -49,9 +49,7 @@ public class DebugMenu : MonoBehaviour
 
     private static DebugMenu _instance;
 
-    // -------------------------------------------------------------------------
     //  Bootstrap — no GameObject or prefab needed anywhere in your scenes.
-    // -------------------------------------------------------------------------
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetInstance() { _instance = null; }
 
@@ -181,6 +179,11 @@ public class DebugMenu : MonoBehaviour
             Cursor.lockState = _prevCursorLock;
         }
         _open = open;
+
+        // This IMGUI panel is mouse-only, so it needs the pointer even with a pad
+        // connected. GamepadMenuCursor now re-asserts the menu cursor at end of frame
+        // ("hidden while a pad is connected"), which would otherwise hide it here.
+        GamepadMenuCursor.MenuPointerRequired = open;
     }
 
     // Register as a modal. Pushing with freeze=true stops the clock and suppresses
@@ -209,6 +212,7 @@ public class DebugMenu : MonoBehaviour
         {
             Cursor.lockState = _prevCursorLock;
             _open = false;
+            GamepadMenuCursor.MenuPointerRequired = false;
         }
     }
 
@@ -698,5 +702,7 @@ public class DebugMenu : MonoBehaviour
         GUILayout.EndScrollView();
     }
 }
+
+
 
 

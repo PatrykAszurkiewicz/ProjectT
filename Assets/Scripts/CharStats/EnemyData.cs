@@ -13,12 +13,88 @@ public class EnemyData : ScriptableObject
     [Tooltip("Mass of the enemy in kilograms. Affects grappling hook behavior.")]
     public float mass = 50f;
 
-    [Header("Animation")]
-    public string spriteFolderPath; // e.g. "Sprites/EnemySprites/Goblin"
+    // ═══════════════════════════════════════════════════════════════════════
+    //  SPRITE REFERENCES  (direct references replace the old Resources paths)
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    //  WHY: the folder-path strings below feed Resources.LoadAll(). A string cannot
+    //  be statically analysed, so Unity force-includes EVERYTHING under Resources/
+    //  in the build and can never strip it. That is what made a sprite atlas a pure
+    //  duplicate here (sources AND atlas pages both shipped and both loaded), and it
+    //  is what forced the whole prewarm system to exist in the first place.
+    //
+    //  Direct Sprite[] references put the art back in the dependency graph:
+    //      Prefab → EnemyStats → EnemyData → Sprite → Texture
+    //  Unity then loads it during the scene load, off the main thread, and the atlas
+    //  packer can finally strip the originals.
+    //
+    //  MEASUREMENT NOTE, so nobody chases the wrong thing again: profiling showed all
+    //  21 sprite folders loading in 20 ms TOTAL (worst folder 2 ms). Loading was never
+    //  the bottleneck. Do this refactor for the BUILD SIZE, the memory, and to make
+    //  atlasing viable — not for boot speed.
+
+    [Header("Animation — Sprite Frames (direct references, preferred)")]
+    [Tooltip("Single-sequence frames, in order. When this has entries it is used and " +
+             "Sprite Folder Path below is ignored entirely. Populate via " +
+             "Tools ▸ Enemies ▸ Migrate Sprite Folders → Arrays.")]
+    public Sprite[] frames;
+
+    [Tooltip("Multi-folder mode: the looping movement/idle clip.")]
+    public Sprite[] idleFrames;
+
+    [Tooltip("Multi-folder mode: the attack clip. hitFrame and the parry frames are " +
+             "indices INTO this array (0 = its first frame).")]
+    public Sprite[] attackFrames;
+
+    [Tooltip("Multi-folder mode: optional death clip. Leave EMPTY for instant death.")]
+    public Sprite[] deathFrames;
+
+    /// True when this asset has been migrated and no longer needs Resources at all.
+    public bool HasDirectFrames =>
+        (frames != null && frames.Length > 0) ||
+        (idleFrames != null && idleFrames.Length > 0) ||
+        (attackFrames != null && attackFrames.Length > 0);
+
+    // ── LEGACY Resources paths ────────────────────────────────────────────────
+    // Kept ONLY as a fallback for assets that have not been migrated yet, and as the
+    // source of truth the migration tool reads from. Once every asset reports
+    // HasDirectFrames == true, delete these four fields, delete the fallback branches
+    // in EnemyAnimationController, and move the PNGs out of Resources/.
+
+    [Header("Animation — LEGACY Resources paths (fallback only)")]
+    [Tooltip("DEPRECATED. Used only when Frames above is empty. " +
+             "e.g. \"Sprites/EnemySprites/Goblin\"")]
+    public string spriteFolderPath;
+
+    [Tooltip("Tick this ONLY if the source art is drawn facing LEFT instead of the " +
+             "usual right. The flip system then mirrors it so the enemy faces its " +
+             "movement / target correctly, and the walk-lean stays the right way " +
+             "round. Leave OFF for right-facing art (every existing enemy).")]
+    public bool spriteFacesLeft = false;
 
     [Tooltip("Default seconds-per-frame for all animations. " +
              "Each animation range can override this with its own speed.")]
     public float animationSpeed = 0.1f;
+
+    [Header("Multi-Folder Animation (optional)")]
+    [Tooltip("When ON, sprites are loaded from the separate per-animation folders " +
+             "below INSTEAD of the single spriteFolderPath above. Each folder holds " +
+             "its own 0-based frames (e.g. Move/00000..00007, Shoot/00000..00032), " +
+             "so two clips can both start numbering at 00000 without colliding. " +
+             "The idle/attack/death frame RANGES below are then filled in " +
+             "AUTOMATICALLY from the folder contents — you only set hitFrame / parry " +
+             "frames, which stay 0-based relative to the ATTACK (Shoot) folder.")]
+    public bool useAnimationFolders = false;
+
+    [Tooltip("DEPRECATED — used only when Idle Frames is empty. " +
+             "Looping 'not attacking' animation (the walk / movement loop).")]
+    public string idleFolderPath;
+
+    [Tooltip("DEPRECATED — used only when Attack Frames is empty.")]
+    public string attackFolderPath;
+
+    [Tooltip("DEPRECATED — used only when Death Frames is empty.")]
+    public string deathFolderPath;
 
     public AnimationFrameRange laserAttack = new AnimationFrameRange(57, 11);
     public AnimationFrameRange idle = new AnimationFrameRange(0, 14);

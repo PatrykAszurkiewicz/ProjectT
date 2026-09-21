@@ -8,9 +8,12 @@ public class BerserkEnemy : MonoBehaviour
     private float duration;
     private float timer;
 
-    private EnemyController enemyController;
     private EnemyStats enemyStats;
     private Rigidbody2D rb;
+
+    // Exactly the behaviour components WE disabled — see the external-override
+    // helpers on EnemyStats.
+    private List<Behaviour> suspendedControllers;
 
     [Header("Attack Settings")]
     private float attackRange = 1.8f;
@@ -22,12 +25,24 @@ public class BerserkEnemy : MonoBehaviour
     private Color originalColor;
     private Coroutine glowCoroutine;
 
+    /// True if berserk can meaningfully be applied to `enemy`. Callers should check
+    /// this BEFORE adding the component; Initialize() self-destructs if they don't.
+    public static bool CanAffect(GameObject enemy) => EnemyStats.CanBeExternallyControlled(enemy);
+
     public void Initialize(float duration)
     {
+        // Refuse enemies we cannot actually steer (bosses, non-dynamic bodies,
+        // already-dead enemies). Bail BEFORE touching the sprite colour so we leave
+        // no trace at all. See EnemyStats.CanBeExternallyControlled for the rationale.
+        if (!EnemyStats.CanBeExternallyControlled(gameObject))
+        {
+            Destroy(this);
+            return;
+        }
+
         this.duration = duration;
         this.timer = 0f;
 
-        enemyController = GetComponent<EnemyController>();
         enemyStats = GetComponent<EnemyStats>();
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -41,11 +56,9 @@ public class BerserkEnemy : MonoBehaviour
             //Debug.Log($"[BERSERK] {gameObject.name} started RED GLOW effect");
         }
 
-        if (enemyController != null)
-        {
-            enemyController.enabled = false;
-            //Debug.Log($"[BERSERK] {gameObject.name} disabled normal controller");
-        }
+        // Silence EVERY self-driving controller, not just EnemyController — see
+        // ConfusedEnemy.Initialize for why the single-field version was insufficient.
+        suspendedControllers = EnemyStats.SuspendBehaviourControllers(gameObject);
     }
 
     private IEnumerator GlowEffect()
@@ -64,6 +77,13 @@ public class BerserkEnemy : MonoBehaviour
 
     private void Update()
     {
+        // The berserker can die mid-effect. Stop steering a corpse and tear down.
+        if (enemyStats == null || enemyStats.IsDead())
+        {
+            EndBerserk();
+            return;
+        }
+
         timer += Time.deltaTime;
 
         if (timer >= duration)
@@ -96,6 +116,24 @@ public class BerserkEnemy : MonoBehaviour
                 MoveTowardTarget();
             }
         }
+        else
+        {
+            // NO TARGET -> STOP. Without this the body keeps whatever velocity
+            // MoveTowardTarget last wrote, forever.
+            //
+            // This is not cosmetic. Several enemies (the Insect forces
+            // RigidbodyType2D.Kinematic in its controller) run on a Kinematic body:
+            // no drag, no collision response, so a leftover velocity carries them
+            // straight off the map, through obstacles, still alive. They then keep
+            // CountLivingEnemiesInScene() above zero and the wave never completes —
+            // it looks exactly like "I killed everything and it froze".
+            //
+            // ConfusedEnemy has always zeroed velocity in this case; BerserkEnemy
+            // never did. Targets can vanish at any moment (the berserker kills the
+            // last other enemy), and excluding bosses from UpdateTarget makes the
+            // no-target state more common, so this branch is required.
+            if (rb != null) rb.linearVelocity = Vector2.zero;
+        }
     }
 
     private void MoveTowardTarget()
@@ -110,7 +148,11 @@ public class BerserkEnemy : MonoBehaviour
     private void UpdateTarget()
     {
         var otherEnemies = FindObjectsByType<EnemyStats>(FindObjectsSortMode.None)
-            .Where(e => e != null && !e.IsDead() && e.gameObject != gameObject)
+            // Bosses are excluded. A berserked minion used to beeline for the boss and
+            // chip its armour pool for free, which was never the intent of the augment
+            // (it is about turning the horde on itself) and trivialised armour phases.
+            .Where(e => e != null && !e.IsDead() && e.gameObject != gameObject
+                        && !(e is BaseBossStats))
             .ToList();
 
         if (otherEnemies.Count == 0)
@@ -164,10 +206,8 @@ public class BerserkEnemy : MonoBehaviour
             spriteRenderer.color = originalColor;
         }
 
-        if (enemyController != null)
-        {
-            enemyController.enabled = true;
-        }
+        // Re-enable exactly the controllers we suspended.
+        EnemyStats.RestoreBehaviourControllers(gameObject, suspendedControllers);
 
         //Debug.Log($"[BERSERK] {gameObject.name} returned to normal behavior");
 
@@ -182,10 +222,8 @@ public class BerserkEnemy : MonoBehaviour
         if (rb != null)
             rb.linearVelocity = Vector2.zero;
 
-        if (enemyController != null && !enemyController.enabled)
-        {
-            enemyController.enabled = true;
-        }
+        // Idempotent — see the matching comment in ConfusedEnemy.OnDestroy.
+        EnemyStats.RestoreBehaviourControllers(gameObject, suspendedControllers);
 
         if (spriteRenderer != null)
         {
@@ -193,3 +231,4 @@ public class BerserkEnemy : MonoBehaviour
         }
     }
 }
+

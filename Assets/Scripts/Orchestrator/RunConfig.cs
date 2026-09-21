@@ -63,8 +63,19 @@ public class RunConfig : ScriptableObject
     public WavePacingMode wavePacingMode = WavePacingMode.Countdown;
 
     [Tooltip("Time between waves (seconds). Used by the Countdown pacing mode. " +
-             "Overrides WaveConfig.timeBetweenWaves during a run.")]
+             "Overrides WaveConfig.timeBetweenWaves during a run.\n" +
+             "Does NOT apply to the first wave of a stage — that has its own dial below.")]
     public float timeBetweenWaves = 3f;
+
+    [Tooltip("Prep time (seconds) before the FIRST wave of each stage, measured from the\n" +
+             "moment the arena is actually visible. This is the gap that used to be a\n" +
+             "hardcoded 1 second, which is why Countdown and Immediate felt identical at\n" +
+             "the start of a stage.\n" +
+             "Applies in EVERY pacing mode, including Immediate and Ready Up, so there is\n" +
+             "always time to place towers before the first enemy walks in. Set to 0 for no\n" +
+             "prep time at all.")]
+    [Min(0f)]
+    public float firstWaveDelay = 3f;
 
     [Tooltip("Delay between stages (seconds). Player sees biome transition.")]
     public float timeBetweenStages = 3f;
@@ -195,6 +206,44 @@ public class RunConfig : ScriptableObject
     public float proceduralMinSpawnDelay = 0.5f;
     public float proceduralMaxSpawnDelay = 1.5f;
 
+    [Tooltip("How many SIDES a procedural wave attacks from, per stage. Element 0 = Stage 1,\n" +
+             "Element 1 = Stage 2, etc. Each wave rolls a count between Min and Max, picks that\n" +
+             "many random sides, and sends at least one enemy from each.\n" +
+             "Stages past the end of the list reuse the LAST element.\n" +
+             "Leave EMPTY for the original behaviour: every wave uses all four sides.\n" +
+             "Example progression: Stage 1 = 1-2, Stage 2 = 1-3, Stage 3 = 2-3.\n" +
+             "Ignored when Use Procedural Waves is off (authored waves keep their own directions).")]
+    public List<WaveDirectionRule> directionsPerStage = new List<WaveDirectionRule>();
+
+    [Header(" BOSS-PHASE ADDS ")]
+    [Tooltip("Keep spawning enemies WHILE a stage boss fight is running, drawn procedurally\n" +
+             "from the Enemy Pool above (same weights and Min Stage Index). OFF = the boss\n" +
+             "fights alone, the original behaviour.")]
+    public bool bossAddsDuringStageBoss = false;
+
+    [Tooltip("Same, for the FINAL boss.")]
+    public bool bossAddsDuringFinalBoss = false;
+
+    [Tooltip("How many enemies a boss-fight batch contains at Stage 1. Enemy Count Scale\n" +
+             "Per Stage is applied on top automatically, so adds grow with the run.")]
+    [Min(1)]
+    public int bossAddsPerBatch = 3;
+
+    [Tooltip("Seconds between batches (X = min, Y = max). Spawn delay WITHIN a batch reuses\n" +
+             "the Procedural Min/Max Spawn Delay above.")]
+    public Vector2 bossAddsInterval = new Vector2(9f, 14f);
+
+    [Tooltip("Seconds after the boss appears before the FIRST batch, so the boss intro\n" +
+             "(camera zoom, name flash) lands before the arena starts filling.")]
+    [Min(0f)]
+    public float bossAddsFirstDelay = 6f;
+
+    [Tooltip("Never have more than this many non-boss enemies alive at once during a boss\n" +
+             "fight. A batch that hits the ceiling WAITS for room rather than being dropped.\n" +
+             "0 = no ceiling (a long fight can then bury the arena).")]
+    [Min(0)]
+    public int bossAddsMaxAlive = 10;
+
     [Header(" AUGMENT SELECTION ")]
     [Tooltip("Show augment selection popup every N waves (within each stage).\n" +
              "1 = after every wave, 2 = every other wave, 0 = only after stage boss.\n" +
@@ -217,3 +266,19 @@ public class EnemyPoolEntry
     [Min(0)]
     public int minStageIndex = 0;
 }
+
+// How many sides a procedural wave may attack from during one stage.
+// Used by RunConfig.directionsPerStage, read by GameOrchestrator.RollWaveDirections.
+[System.Serializable]
+public class WaveDirectionRule
+{
+    [Tooltip("Fewest sides a wave in this stage attacks from.")]
+    [Range(1, 4)]
+    public int minDirections = 1;
+
+    [Tooltip("Most sides a wave in this stage attacks from.")]
+    [Range(1, 4)]
+    public int maxDirections = 4;
+}
+
+

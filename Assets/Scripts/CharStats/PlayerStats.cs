@@ -98,6 +98,18 @@ public class PlayerStats : CharacterStats
             return;
         }
 
+        // RESPAWNABLE MODE (menu option, default ON). Ask the respawn controller
+        // to absorb this death. It puts the player into the SAME downed state the
+        // co-op revive uses — object, camera, weapons and augments all stay alive —
+        // and brings them back after a back-off delay (8s, then 10s, 12s …).
+        //
+        // Deliberately BEFORE the co-op branch below: in co-op it routes through
+        // PlayerDownedState too, so a teammate can still revive you the moment you
+        // go down, and that revive cancels the pending respawn. Returns false in
+        // Non-Respawnable mode, so the original paths below run untouched.
+        if (PlayerRespawnController.TryBeginRespawn(this))
+            return;
+
         // Phase 7 (co-op): don't die — enter a revivable downed state. Gated on
         // Count > 1 so single player keeps the original destroy path byte-for-byte.
         if (PlayerRegistry.Count > 1)
@@ -111,6 +123,12 @@ public class PlayerStats : CharacterStats
         // No Quick Revive available - proceed with normal death
         // Debug.Log("[PLAYER] Player has died permanently");
 
+        // NON-RESPAWNABLE MODE: this death is final, so it ends the run exactly
+        // like losing the central core. Raised BEFORE the object is destroyed,
+        // while this player is still registered at 0 HP, so the AllDead() guard
+        // inside can see the true roster.
+        NotifyPermanentDeathGameOver();
+
         // Play death animation if available
         var movement = GetComponent<PlayerMovement>();
         if (movement != null)
@@ -119,6 +137,24 @@ public class PlayerStats : CharacterStats
         }
 
         base.Die();
+    }
+
+    // Permanent death of the LAST standing player is a run-ending loss. Mirrors
+    // the team-wipe path in PlayerDownedState so both routes end the run the same
+    // way: EnergyManager drives the game-over UI, GameOrchestrator handles run
+    // state and save cleanup. Both calls are guarded / idempotent.
+    private void NotifyPermanentDeathGameOver()
+    {
+        // A teammate still on their feet means the run continues — only the last
+        // one down ends it. In single player this player IS the roster, and it is
+        // already at 0 HP here, so AllDead() is true and the run ends.
+        var reg = PlayerRegistry.Instance;
+        if (reg != null && PlayerRegistry.Count > 0 && !reg.AllDead())
+            return;
+
+        if (EnergyManager.Instance != null && !EnergyManager.Instance.IsGameOver())
+            EnergyManager.Instance.TriggerGameOver();
+        GameOrchestrator.Instance?.TriggerGameOver();
     }
     public void SetHealthAndNotify(float newHealth)
     {
@@ -460,4 +496,5 @@ public class PlayerStats : CharacterStats
         _maxManaTween = null;
     }
 }
+
 

@@ -24,6 +24,13 @@ public class WeaponData : ScriptableObject
     [Header("Weapon Size Settings")]
     public Vector2 size = Vector2.one;
 
+    [Header("Melee Blade Slash FX")]
+    [Tooltip("Draw the hand-drawn BladeSlash arc (PlayerProceduralAnimFx) on each swing " +
+             "of this weapon. Only PLAIN melee weapons ever reach this flag: ranged, " +
+             "mortar, boomerang, flamethrower and hammer take other branches of " +
+             "Weapon.ExecuteWeaponAttack and never draw an arc whatever it is set to.")]
+    public bool useBladeSlashFx = false;
+
 
 
 
@@ -63,6 +70,11 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isTrap")] public float trapBossHoldDuration = 3f;
     [ConditionalField("isTrap")] public float trapProximityRadius = 1.2f;
     [ConditionalField("isTrap")] public float trapArmDelay = 0.4f;
+    // Re-placement cooldown: after EACH trap is placed the player must wait
+    // this many seconds before placing the next one. The cooldown lives on
+    // PlayerToolCooldownStore so it survives un-equipping. If left at 0 it
+    // falls back to attackCooldown, then a 2s default.
+    [ConditionalField("isTrap")] public float trapCooldown = 2f;
 
     [Header("Turret Settings")]
     public bool isTurret = false;
@@ -71,6 +83,15 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isTurret")] public float turretProjectileSpeed = 12f;
     [ConditionalField("isTurret")] public float turretArmDelay = 0.4f;
     [ConditionalField("isTurret")] public float turretRotationSpeed = 300f;
+    // Two-phase timing (mirrors the book). The turret stays deployed for
+    // turretActiveDuration seconds, then disappears and a turretCooldown
+    // recharge must elapse before it can be re-deployed. Re-placing while it's
+    // still active just RELOCATES it — the active countdown continues from
+    // where it was rather than restarting. Both live on PlayerToolCooldownStore
+    // so they survive un-equipping. If left at 0 they fall back to sane
+    // defaults (active 15s; cooldown → attackCooldown, then 7s).
+    [ConditionalField("isTurret")] public float turretActiveDuration = 15f;
+    [ConditionalField("isTurret")] public float turretCooldown = 7f;
 
     [Header("Flamethrower Settings")]
     public bool isFlamethrower = false;
@@ -93,6 +114,15 @@ public class WeaponData : ScriptableObject
     [ConditionalField("isDecoy")] public float decoyBossDuration = 3f;
     [ConditionalField("isDecoy")] public float decoyArmDelay = 0.3f;
     [ConditionalField("isDecoy")] public Vector2 decoyBossVFXOffset = new Vector2(-1f, 2f);
+    // Two-phase timing (mirrors the book). The decoy stays deployed for
+    // decoyActiveDuration seconds, then disappears and a decoyCooldown recharge
+    // must elapse before it can be re-deployed. Re-placing while it's still
+    // active just RELOCATES it — the active countdown continues from where it
+    // was rather than restarting. Both live on PlayerToolCooldownStore so they
+    // survive un-equipping. If left at 0 they fall back to sane defaults
+    // (active → decoyDuration, then 10s; cooldown → attackCooldown, then 6s).
+    [ConditionalField("isDecoy")] public float decoyActiveDuration = 10f;
+    [ConditionalField("isDecoy")] public float decoyCooldown = 6f;
 
     [Header("Boomerang Settings")]
     public bool isBoomerang = false;
@@ -304,6 +334,7 @@ public class WeaponData : ScriptableObject
         copy.projectilePrefab = this.projectilePrefab;
         copy.projectileSpeed = this.projectileSpeed;
         copy.size = this.size;
+        copy.useBladeSlashFx = this.useBladeSlashFx;
         copy.isGrapplingHook = this.isGrapplingHook;
         copy.hookRange = this.hookRange;
         copy.hookSpeed = this.hookSpeed;
@@ -335,6 +366,7 @@ public class WeaponData : ScriptableObject
         copy.trapBossHoldDuration = this.trapBossHoldDuration;
         copy.trapProximityRadius = this.trapProximityRadius;
         copy.trapArmDelay = this.trapArmDelay;
+        copy.trapCooldown = this.trapCooldown;
 
         copy.isTurret = this.isTurret;
         copy.turretRange = this.turretRange;
@@ -342,6 +374,8 @@ public class WeaponData : ScriptableObject
         copy.turretProjectileSpeed = this.turretProjectileSpeed;
         copy.turretArmDelay = this.turretArmDelay;
         copy.turretRotationSpeed = this.turretRotationSpeed;
+        copy.turretActiveDuration = this.turretActiveDuration;
+        copy.turretCooldown = this.turretCooldown;
 
         copy.isFlamethrower = this.isFlamethrower;
         copy.flameRange = this.flameRange;
@@ -362,6 +396,8 @@ public class WeaponData : ScriptableObject
         copy.decoyBossDuration = this.decoyBossDuration;
         copy.decoyArmDelay = this.decoyArmDelay;
         copy.decoyBossVFXOffset = this.decoyBossVFXOffset;
+        copy.decoyActiveDuration = this.decoyActiveDuration;
+        copy.decoyCooldown = this.decoyCooldown;
 
         copy.isBoomerang = this.isBoomerang;
         copy.boomerangRange = this.boomerangRange;
@@ -566,4 +602,5 @@ public class ConditionalFieldAttribute : PropertyAttribute
         this.conditionalSourceField = conditionalSourceField;
     }
 }
+
 

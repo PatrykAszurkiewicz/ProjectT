@@ -1,0 +1,102 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d404aaced1bb082458b2e93b3b2a103d, type: 3}
+  m_Name: SmallSlimeDataV2
+  m_EditorClassIdentifier: 
+  enemyName: Slime
+  maxHealth: 8
+  maxArmor: 0
+  moveSpeed: 2.5
+  damage: 6
+  mass: 18
+  frames:
+  - {fileID: 21300000, guid: 2f25a371036a88942b2b9eb83d364be4, type: 3}
+  - {fileID: 21300000, guid: fddb28cc9bd1e164c9fdd178638ce2d2, type: 3}
+  - {fileID: 21300000, guid: 7cfb3ae534b409845b5f2be119325494, type: 3}
+  - {fileID: 21300000, guid: 934e4c5fe6ff61c41aad57a8fa325408, type: 3}
+  - {fileID: 21300000, guid: dcd56f0ee141ca5458f74fb75410fcbb, type: 3}
+  - {fileID: 21300000, guid: 259345f1c4ff5fa4d9c48f22fde811c2, type: 3}
+  - {fileID: 21300000, guid: d35fc331fb91dc8469915bbe65628e7a, type: 3}
+  - {fileID: 21300000, guid: b74574a91a38ab348961c6adaaed73d2, type: 3}
+  - {fileID: 21300000, guid: 50b917fc17dd6564a89e8c942206c5a6, type: 3}
+  - {fileID: 21300000, guid: f6803553b604518419bad0d680909d7c, type: 3}
+  - {fileID: 21300000, guid: e0deab6b2f47d604590a36638a4be3c4, type: 3}
+  - {fileID: 21300000, guid: 1b5ee5fcff34c944893a5e6994997748, type: 3}
+  - {fileID: 21300000, guid: 479b33021e099d647a403441d85660ee, type: 3}
+  - {fileID: 21300000, guid: a8ea906953aa23148a42c32328a972eb, type: 3}
+  - {fileID: 21300000, guid: 1c5b895806d854d4a8497804e9df96e5, type: 3}
+  - {fileID: 21300000, guid: e093bed114466b24796eea058fec18d0, type: 3}
+  - {fileID: 21300000, guid: efe9f0017fd049546ad291d18ce400ed, type: 3}
+  - {fileID: 21300000, guid: 100e71fd6783c524483c6a16fd355285, type: 3}
+  - {fileID: 21300000, guid: eef0fc4c7a7176d4db465201a2b77eb0, type: 3}
+  - {fileID: 21300000, guid: 35e7b10a0d86fe54485c6de073e2c5a0, type: 3}
+  - {fileID: 21300000, guid: a252e0605b6b86d47a7e4245d4a94f62, type: 3}
+  - {fileID: 21300000, guid: 3c0450e1c99eb864bb23c48ddfa25703, type: 3}
+  - {fileID: 21300000, guid: b81ce7adf7d867943875ecb62d66daab, type: 3}
+  - {fileID: 21300000, guid: 263de9cb21a5eac44ad2a65f7e6573ed, type: 3}
+  - {fileID: 21300000, guid: c11cae4369fc6c84c9a21fc01b3819bf, type: 3}
+  - {fileID: 21300000, guid: fb436e73bba58e74fab479d61104faf8, type: 3}
+  - {fileID: 21300000, guid: 51aa273d5fa0ee341b55dd65294667fd, type: 3}
+  - {fileID: 21300000, guid: 6ce594c358be6774e95d4961b899b815, type: 3}
+  - {fileID: 21300000, guid: b09d27566cbcd9844ad8e41560aedc8e, type: 3}
+  - {fileID: 21300000, guid: 74f6fd5cf4a69a243b2b52bb10d581bb, type: 3}
+  - {fileID: 21300000, guid: 420d2b026e7e6a14fa9773b4df727455, type: 3}
+  - {fileID: 21300000, guid: c8db5ad05d5e44142bd879be8ab8f191, type: 3}
+  - {fileID: 21300000, guid: cc71e12b5e17fd948a282d1d04750329, type: 3}
+  - {fileID: 21300000, guid: 1eab0d5958106394b9e10fa6bf66290a, type: 3}
+  - {fileID: 21300000, guid: 414f826a3da1eab4fa927ccf7baabc84, type: 3}
+  - {fileID: 21300000, guid: cfa23b9f42a342c4b81aa6934d3a7068, type: 3}
+  - {fileID: 21300000, guid: 05d3d95e302e82545a759e349c13dcef, type: 3}
+  - {fileID: 21300000, guid: 02ea03401f86bfb44ae2693fa2a70961, type: 3}
+  - {fileID: 21300000, guid: 141944295bd40c04f832b4cdbe365d90, type: 3}
+  - {fileID: 21300000, guid: 8d37629a1b49e514092b75e8b3281f2e, type: 3}
+  - {fileID: 21300000, guid: 7f44d75cd7e5cac4cb2dfbba29c93624, type: 3}
+  - {fileID: 21300000, guid: d2e07e31d264ca94a8274382a42c08c4, type: 3}
+  - {fileID: 21300000, guid: 5af692c383fdefc4d9f66627987ea541, type: 3}
+  - {fileID: 21300000, guid: 511e6155cc4a9454690aac76b6fa09d0, type: 3}
+  - {fileID: 21300000, guid: 8ac1aa5d3b215664f92dd3da5519ee44, type: 3}
+  - {fileID: 21300000, guid: 28498c93103cbcd46a0a2e02351080c9, type: 3}
+  - {fileID: 21300000, guid: 1d9f8ac4cebdec14681848a415f8141a, type: 3}
+  - {fileID: 21300000, guid: bc728c28a5ae2ba40895e1b28df5153e, type: 3}
+  - {fileID: 21300000, guid: 92e7e37cd82aa9647ad78cbd642aca07, type: 3}
+  - {fileID: 21300000, guid: 7cc8d603a9565ba45956b6466e76e883, type: 3}
+  - {fileID: 21300000, guid: 1a6716676d512384aa5901be63a56440, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
+  animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
+  laserAttack:
+    startFrame: 0
+    frameCount: 0
+    speedOverride: 0
+  idle:
+    startFrame: 0
+    frameCount: 12
+    speedOverride: 0
+  attack:
+    startFrame: 13
+    frameCount: 23
+    speedOverride: 0
+  death:
+    startFrame: 33
+    frameCount: 12
+    speedOverride: 0
+  deathAnimationDuration: 1.2
+  hitFrame: 12
+  parryFrameStart: 9
+  parryFrameEnd: 12

@@ -29,11 +29,20 @@ public class RunPersistence : MonoBehaviour
 
     //  Running ledger (the replay inputs) 
     private int runSeed;
-    private int runDifficulty;   // 0 = Normal, 1 = Nightmare — written into every autosave
+    // The difficulty the run STARTED on. Kept for diagnostics only: every autosave
+    // writes EnemyStatModifierManager.ActiveMode (the difficulty actually in force at
+    // the stage being saved), which is what resume restores. The old comment claimed
+    // this field was written into the save; it never was.
+    private int runStartDifficulty;
     private bool seedSet;
     private readonly List<AugmentSaveEntry> augmentLedger = new List<AugmentSaveEntry>();
     private readonly List<BlueprintUnlockSaveEntry> blueprintUnlockLedger = new List<BlueprintUnlockSaveEntry>();
     private string runConfigName;
+
+    // Last tool asset equipped this run (Resources/Weapons/<name>). Fed by
+    // RecordEquippedTool from every tool-swap site; written into the save and replayed
+    // by RestoreEquipment so a MANUAL swap survives a resume.
+    private string equippedToolName;
 
     //  STATIC, INSTANCE-FREE SAVE ACCESS 
     // The save is just a file in persistentDataPath. RunPersistence is a GameScene
@@ -102,11 +111,12 @@ public class RunPersistence : MonoBehaviour
     public void BeginRun(int seed, string configName, int difficulty)
     {
         runSeed = seed;
-        runDifficulty = difficulty;
+        runStartDifficulty = difficulty;
         seedSet = true;
         runConfigName = configName;
         augmentLedger.Clear();
         blueprintUnlockLedger.Clear();
+        equippedToolName = null;
         DeleteSave();
 
         // Fresh run → clear the previous run's combat telemetry. Resume goes through
@@ -125,6 +135,46 @@ public class RunPersistence : MonoBehaviour
 
     // Back-compat: single-player path records for player 0.
     public void RecordAugment(int augmentId, string rarity) => RecordAugment(augmentId, rarity, 0);
+
+    /// Find a player's Weapon without assuming it is parented under the player.
+    /// Order: under the player (the intended layout) -> anywhere under the player's
+    /// ROOT (covers a Weapon that is a sibling rather than a child) -> the only Weapon
+    /// in the scene. Returns null only if the scene genuinely has none.
+    private Weapon ResolveWeapon(int playerIndex)
+    {
+        var stats = ResolveStats(playerIndex);
+
+        if (stats != null)
+        {
+            var w = stats.GetComponentInChildren<Weapon>(true);
+            if (w != null) return w;
+
+            // Sibling layout: Weapon lives beside the player under a shared root.
+            w = stats.transform.root.GetComponentInChildren<Weapon>(true);
+            if (w != null)
+            {
+                Debug.Log($"[Persistence] Weapon for P{playerIndex} found under root " +
+                          $"'{stats.transform.root.name}' rather than under the player itself.");
+                return w;
+            }
+        }
+
+        // Last resort — unambiguous only in single player, so say so if it is not.
+        var all = FindObjectsByType<Weapon>(FindObjectsSortMode.None);
+        if (all.Length == 1) return all[0];
+        if (all.Length > 1)
+            Debug.LogWarning($"[Persistence] {all.Length} Weapons in the scene and none resolvable " +
+                             $"from P{playerIndex} — cannot decide which to restore onto. " +
+                             "Parent each Weapon under its own player.");
+        return null;
+    }
+
+    /// Record the tool asset the player just equipped (the Resources/Weapons asset
+    /// name, e.g. "ShieldTest"). Call this from every tool-swap site.
+    public void RecordEquippedTool(string assetName)
+    {
+        if (!string.IsNullOrEmpty(assetName)) equippedToolName = assetName;
+    }
 
     /// Record an in-run weapon/tool unlock that came from collecting a boss BLUEPRINT
     /// DROP (not from an augment). Re-applied on resume so the picked-up weapon stays in
@@ -179,6 +229,25 @@ public class RunPersistence : MonoBehaviour
 
         // Players (per-player; single player = one entry at index 0).
         data.players = CapturePlayers();
+
+        // GUARD: refuse to overwrite a good save with a PLAYERLESS snapshot.
+        //
+        // CapturePlayers() returns an empty list when the registry is empty AND no
+        // PlayerStats exists in the scene — i.e. the run is executing with no player at
+        // all. That happened for real: a persisted CoopManager stopped seating players
+        // after a scene reload, the orchestrator ran its waves regardless, and every
+        // wave start wrote a save whose players[] was empty. Resuming such a save
+        // restores no health/armour/mana/stamina and silently hands back a default-stat
+        // player. Keeping the previous (valid) save is strictly better.
+        if (data.players.Count == 0)
+        {
+            Debug.LogError("[Persistence] AutoSave SKIPPED at stage " + stageIndex + " wave " + waveIndex +
+                           " — no player found in the scene (PlayerRegistry empty and no PlayerStats). " +
+                           "The existing save was left untouched rather than overwritten with a " +
+                           "playerless snapshot. Something failed to spawn the player for this run.");
+            return;
+        }
+
         data.runPlayerCount = Mathf.Max(1, data.players.Count);
 
         // Combat telemetry (damage dealt/received + DPS clock). Written after the
@@ -205,8 +274,19 @@ public class RunPersistence : MonoBehaviour
             data.loreFragmentIds = LoreCodex.Instance.GetDiscoveredSnapshot();
 
         // Equipped weapon/tool (best effort; usually also emergent from augment replay).
-        if (WeaponSelectionManager.Instance != null && WeaponSelectionManager.Instance.SelectedWeapon != null)
-            data.equippedWeaponAsset = WeaponSelectionManager.Instance.SelectedWeapon.name;
+        // FIX: equippedToolAsset was declared in RunSaveData but never written, and
+        // equippedWeaponAsset was written but never read back. Both are now round-tripped
+        // by RestoreEquipment() below, so a MANUAL mid-run swap survives a resume
+        // (augment replay alone cannot reproduce one).
+        var wsm = WeaponSelectionManager.Instance;
+        if (wsm != null && wsm.SelectedWeapon != null)
+            data.equippedWeaponAsset = wsm.SelectedWeapon.name;
+
+        // The tool slot has no global "selected tool" manager, so we keep a small
+        // ledger instead: AugmentEffectHandler.ApplyToolSwap (and any other swap site)
+        // reports the asset name here via RecordEquippedTool.
+        if (!string.IsNullOrEmpty(equippedToolName))
+            data.equippedToolAsset = equippedToolName;
 
         // Towers: capture what we can. Slot identity + recreation needs TowerDefenseMap
         // / TowerSlot / the build script — see CaptureTowers().
@@ -274,7 +354,7 @@ public class RunPersistence : MonoBehaviour
     public void AdoptLoadedRun(RunSaveData data)
     {
         runSeed = data.runSeed;
-        runDifficulty = data.difficulty;
+        runStartDifficulty = data.difficulty;
         seedSet = true;
         runConfigName = data.runConfigName;
 
@@ -286,6 +366,52 @@ public class RunPersistence : MonoBehaviour
         if (data.augments != null) augmentLedger.AddRange(data.augments);
         blueprintUnlockLedger.Clear();
         if (data.blueprintUnlocks != null) blueprintUnlockLedger.AddRange(data.blueprintUnlocks);
+        equippedToolName = data.equippedToolAsset;
+    }
+
+    /// FIX: equippedWeaponAsset was written to disk and never read; equippedToolAsset
+    /// was neither written nor read. A manual mid-run weapon/tool swap therefore did NOT
+    /// survive a resume — the augment replay put back whatever the last augment granted.
+    /// Call this AFTER the augment replay so it wins over it, which is the whole point.
+    public void RestoreEquipment(RunSaveData data)
+    {
+        if (data == null) return;
+
+        // FIX: this used to be a bare stats.GetComponentInChildren<Weapon>(). Your own
+        // WeaponRollController logs
+        //     "No sibling Weapon found under this player. This controller should live on
+        //      the Player prefab root, with the Weapon as a child."
+        // which proves the Weapon is NOT always parented under the player. When it isn't,
+        // the lookup returned null and the whole equipment restore no-opped SILENTLY —
+        // the resume looked fine and just quietly reverted your weapon.
+        // Search widens progressively and says so when it has to fall back.
+        var weapon = ResolveWeapon(0);
+        if (weapon == null)
+        {
+            Debug.LogWarning("[Persistence] No Weapon found anywhere in the scene — the saved " +
+                             "weapon/tool could not be restored. (Ideally the Weapon is a child " +
+                             "of the player root; see WeaponRollController's warning.)");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(data.equippedWeaponAsset))
+        {
+            var wd = Resources.Load<WeaponData>("Weapons/" + data.equippedWeaponAsset);
+            if (wd != null)
+            {
+                weapon.HotSwapWeapon(wd);
+                if (WeaponSelectionManager.Instance != null)
+                    WeaponSelectionManager.Instance.SelectedWeapon = wd;
+            }
+            else Debug.LogWarning($"[Persistence] Saved weapon '{data.equippedWeaponAsset}' not found under Resources/Weapons.");
+        }
+
+        if (!string.IsNullOrEmpty(data.equippedToolAsset))
+        {
+            var td = Resources.Load<WeaponData>("Weapons/" + data.equippedToolAsset);
+            if (td != null) weapon.HotSwapTool(td);
+            else Debug.LogWarning($"[Persistence] Saved tool '{data.equippedToolAsset}' not found under Resources/Weapons.");
+        }
     }
 
     /// Apply the absolute player/core/economy values. Call this LAST (after augment
@@ -310,15 +436,13 @@ public class RunPersistence : MonoBehaviour
             }
         }
 
-        if (data.hasCore)
-        {
-            var core = FindFirstObjectByType<CentralCore>();
-            if (core != null)
-            {
-                core.SetMaxEnergy(data.coreMaxEnergy);
-                core.SetEnergy(data.coreEnergy);
-            }
-        }
+        // NOTE: the CORE is deliberately NOT restored here — see RestoreCore().
+        // Applying it at this point was the bug: TowerDefenseMap.GenerateMap() (run a
+        // moment later, when the stage layout is applied) DESTROYS the CentralCore and
+        // builds a fresh one at coreStartingEnergy, wiping whatever we set. RestoreCore
+        // seeds the map instead, so the rebuilt core comes up already holding the saved
+        // value.
+        RestoreCore(data);
 
         if (data.hasEconomy && EnergyManager.Instance != null)
             EnergyManager.Instance.SetPlayerEnergy(data.playerEnergy);
@@ -330,6 +454,39 @@ public class RunPersistence : MonoBehaviour
         // Combat telemetry — resume keeps counting from the saved totals (a fresh
         // run resets these separately via StartRun → ResetForNewRun).
         CombatStats.Instance?.RestoreFrom(data);
+    }
+
+    /// Restore the Central Core's energy in a way that SURVIVES the map rebuild.
+    ///
+    /// The bug this fixes: resume ran
+    ///     RestoreAbsolutes()  ->  JumpToWave()  ->  RunStage()  ->  ApplyBiome()
+    ///     ->  TowerDefenseMap.ApplyLayout()  ->  GenerateMap()  ->  ClearExistingMap()
+    /// and ClearExistingMap destroys the core while CreateCentralCore makes a new one at
+    /// coreStartingEnergy. On a freshly loaded scene ApplyLayout can never short-circuit
+    /// (sourceLayoutCaptured is false), so the rebuild ALWAYS happened and the restored
+    /// core energy was ALWAYS discarded — every resume handed you a full-health core.
+    ///
+    /// TowerDefenseMap.SeedCoreEnergy() stashes the values and applies them inside
+    /// CreateCentralCore, so the rebuild produces a correctly-damaged core. If the core
+    /// already exists and no rebuild is pending, SeedCoreEnergy applies them immediately.
+    public void RestoreCore(RunSaveData data)
+    {
+        if (data == null || !data.hasCore) return;
+
+        var map = FindFirstObjectByType<TowerDefenseMap>();
+        if (map != null)
+        {
+            map.SeedCoreEnergy(data.coreEnergy, data.coreMaxEnergy);
+            return;
+        }
+
+        // No map in the scene (shouldn't happen) — fall back to the direct write.
+        var core = FindFirstObjectByType<CentralCore>();
+        if (core != null)
+        {
+            core.SetMaxEnergy(data.coreMaxEnergy);
+            core.SetEnergy(data.coreEnergy);
+        }
     }
 
     //  PLAYERS (Phase 7c) — per-player capture / resolve, mirroring the in-memory
@@ -422,7 +579,8 @@ public class RunPersistence : MonoBehaviour
             if (slot.IsOccupied) { skipped++; continue; } // already there (shouldn't happen on fresh resume)
 
             var tower = placement.RestoreTowerInto(
-                slot, (Tower.TowerType)entry.towerType, entry.upgradeLevel, entry.currentEnergy);
+                slot, (Tower.TowerType)entry.towerType, entry.upgradeLevel,
+                entry.currentEnergy, entry.maxEnergy);
             if (tower != null) restored++; else skipped++;
         }
 
@@ -446,4 +604,5 @@ public static class RunResumeIntent
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() => Clear();
 }
+
 

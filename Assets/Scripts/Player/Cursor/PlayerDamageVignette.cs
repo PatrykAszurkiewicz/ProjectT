@@ -166,8 +166,8 @@ public class PlayerDamageVignette : MonoBehaviour
     public static void SetEnabled(bool on) => SetMode(on ? VignetteMode.On : VignetteMode.Off);
 
     //  Debug 
-    public static bool ProofOfLifeOnStart = true;
-    public static bool VerboseDebug = true;
+    public static bool ProofOfLifeOnStart = false;
+    public static bool VerboseDebug = false;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() { _mode = -1; _instance = null; }

@@ -46,7 +46,7 @@ public class EnergyManager : MonoBehaviour
 
     [Header("Resource Generation")]
     public float globalResourceMultiplier = 1.0f;
-    public float bonusResourceDropChance = 0.0f;
+    public float bonusResourceDropChance = 0.08f; //0.0f;
     public float bonusResourceMultiplier = 2.0f;
 
     #region Configuration
@@ -73,6 +73,13 @@ public class EnergyManager : MonoBehaviour
     public float towerCriticalEnergyThreshold = 0.2f;
     public float towerDeadEnergyThreshold = 0.0f;
 
+    [Tooltip("Generator towers lose NO energy to natural decay — a built generator " +
+             "only ever produces. Its generation self-consumption is a separate knob " +
+             "(Tower.generatorSelfConsumption, also zeroed by GeneratorEnergyNetwork " +
+             "when 'Generator Zero Self Consumption' is on). Turn this off to restore " +
+             "the old behaviour where generators bled like any other tower.")]
+    public bool generatorsHaveZeroDecay = true;
+
     [Header("Central Core Energy Settings")]
     public float coreMaxEnergy = 100f;
     public float coreEnergyDecayRate = 0.7f;
@@ -82,7 +89,7 @@ public class EnergyManager : MonoBehaviour
     [Header("Player Currency Settings")]
     public int playerStartingEnergy = 300;
     public int towerBuildCost = 100;
-    public float towerSellRefundPercentage = 0.1f;
+    public float towerSellRefundPercentage = 0.5f;// 0.1f;
     public bool enableCurrencyEarnedFromEnemyKills = false;
     public int energyPerEnemyKill = 0;
 
@@ -590,7 +597,7 @@ public class EnergyManager : MonoBehaviour
     #region Enemy Damage System
     public bool DamageEnergyConsumer(IEnergyConsumer consumer, float damage, GameObject damageSource = null)
     {
-        if (consumer == null || damage <= 0) return false;
+        if (IsConsumerDead(consumer) || damage <= 0) return false;
 
         if (destroyedConsumers.Contains(consumer)) return false;
 
@@ -643,7 +650,7 @@ public class EnergyManager : MonoBehaviour
 
         foreach (var consumer in energyConsumers)
         {
-            if (consumer == null) continue;
+            if (IsConsumerDead(consumer)) continue;
 
             float distance = Vector3.Distance(position, consumer.GetPosition());
             if (distance < nearestDistance)
@@ -662,7 +669,7 @@ public class EnergyManager : MonoBehaviour
 
         foreach (var consumer in energyConsumers)
         {
-            if (consumer == null) continue;
+            if (IsConsumerDead(consumer)) continue;
 
             float distance = Vector3.Distance(position, consumer.GetPosition());
             if (distance <= range)
@@ -793,7 +800,7 @@ public class EnergyManager : MonoBehaviour
 
         foreach (var consumer in energyConsumers)
         {
-            if (consumer == null) continue;
+            if (IsConsumerDead(consumer)) continue;
 
             // Skip destroyed Central Core only
             if (consumer is CentralCore core && core.IsDestroyed())
@@ -839,7 +846,7 @@ public class EnergyManager : MonoBehaviour
 
         foreach (var consumer in energyConsumers)
         {
-            if (consumer == null) continue;
+            if (IsConsumerDead(consumer)) continue;
 
             float distance = Vector3.Distance(position, consumer.GetPosition());
             if (distance < closestDistance)
@@ -992,6 +999,18 @@ public class EnergyManager : MonoBehaviour
         }
     }
 
+    // A consumer is backed by a MonoBehaviour (CentralCore/Tower). Once Unity destroys the
+    // GameObject, the interface reference is NOT reference-null, but the underlying
+    // UnityEngine.Object compares == null via Unity's overloaded operator. A plain
+    // `consumer == null` on the INTERFACE type misses this (it uses reference equality),
+    // which is how destroyed consumers reached ConsumeEnergy() during teardown. Catches both.
+    static bool IsConsumerDead(IEnergyConsumer consumer)
+    {
+        if (consumer == null) return true;                        // true reference-null
+        if (consumer is UnityEngine.Object uo) return uo == null; // Unity "fake null" (destroyed)
+        return false;
+    }
+
     void ProcessEnergyDecay()
     {
         // Debug every 60 frames
@@ -1001,7 +1020,8 @@ public class EnergyManager : MonoBehaviour
         }
         for (int i = energyConsumers.Count - 1; i >= 0; i--)
         {
-            if (energyConsumers[i] == null)
+            // IsConsumerDead (not `== null`) so Unity-destroyed consumers are pruned too.
+            if (IsConsumerDead(energyConsumers[i]))
             {
                 energyConsumers.RemoveAt(i);
                 continue;
@@ -1021,6 +1041,12 @@ public class EnergyManager : MonoBehaviour
         float finalRate = baseRate * globalEnergyDecayRate;
         if (consumer is Tower tower)
         {
+            // A built GENERATOR does not bleed. Returning early (rather than
+            // multiplying by 0) keeps the intent obvious and skips the rest of the
+            // multiplier chain, which cannot make 0 anything other than 0 anyway.
+            if (generatorsHaveZeroDecay && tower.IsGenerator())
+                return 0f;
+
             // Check for Tower Commander boost (energy decay reduction)
             var commanderBoost = tower.GetComponent<TowerCommanderBoost>();
             if (commanderBoost != null)
@@ -1042,6 +1068,12 @@ public class EnergyManager : MonoBehaviour
             if (tetherDecayBoost != null)
                 finalRate *= tetherDecayBoost.GetDecayMultiplier();
 
+            // Generator energy network: a tower wired to a live generator has its
+            // natural decay cancelled for as long as the link holds. Same multiplier
+            // pattern as the boosts above, so augments still compose normally.
+            var linkReceiver = tower.GetComponent<GeneratorLinkReceiver>();
+            if (linkReceiver != null)
+                finalRate *= linkReceiver.GetDecayMultiplier();
         }
 
         return finalRate;
@@ -1085,17 +1117,49 @@ public class EnergyManager : MonoBehaviour
         destroyedConsumers.Remove(consumer);
     }
 
+    // Establish a consumer's energy pool when it registers.
+    //
+    // FIX: this used to stamp BOTH max and current unconditionally, which made it
+    // the last writer in every spawn path and therefore the silent destroyer of:
+    //   * TowerDefenseMap's carried core energy across a stage rebuild (the
+    //     "a rebuild must NOT reset the core to full" FIX in CreateCentralCore),
+    //   * RunSaveData.coreEnergy / TowerSaveEntry.currentEnergy on resume,
+    //   * WaveCheckpointService's rebuilt-tower branch (RestoreTowerInto),
+    //   * and, by consequence, the post-stage "Heal All" reward -- the next stage
+    //     healed everything for free anyway, so the choice bought nothing.
+    //
+    // Split of responsibility now:
+    //   MAX     -- owned here. For the core that is final. For a tower it is the
+    //              BASE only; Tower.Start re-derives upgrade scaling and augments
+    //              on top immediately after this returns.
+    //   CURRENT -- full pool for a freshly built consumer; a restore path seeds
+    //              the exact value instead (Tower.SeedEnergyForSpawn /
+    //              CentralCore.SeedEnergyState).
     void InitializeConsumerEnergy(IEnergyConsumer consumer)
     {
-        if (consumer is CentralCore)
+        if (consumer is CentralCore core)
         {
-            consumer.SetMaxEnergy(coreMaxEnergy);
-            consumer.SetEnergy(coreMaxEnergy);
+            // A seeded core already holds the pool it must come online with, and
+            // nothing re-derives the core's max afterwards, so the seed is final.
+            if (core.HasSeededEnergy)
+            {
+                core.ConsumeEnergySeed();
+                return;
+            }
+
+            core.SetMaxEnergy(coreMaxEnergy);
+            core.SetEnergy(coreMaxEnergy);
+            return;
         }
-        else if (consumer is Tower)
+
+        if (consumer is Tower tower)
         {
-            consumer.SetMaxEnergy(towerMaxEnergy);
-            consumer.SetEnergy(towerMaxEnergy);
+            // Base pool only. Tower.Start applies RefreshUpgradeHealthScaling()
+            // and ApplyGlobalAugments() after this, then consumes any spawn seed,
+            // so a restored tower ends at (base x upgrade x augments) holding its
+            // saved current energy -- neither multiplier counted twice.
+            tower.SetMaxEnergy(towerMaxEnergy);
+            tower.SetEnergy(towerMaxEnergy);
         }
     }
     #endregion
@@ -1654,3 +1718,6 @@ public class EnergyUI : MonoBehaviour
     }
 }
 #endregion
+
+
+

@@ -47,6 +47,12 @@ public class WaveCheckpointService : MonoBehaviour
         Instance = this;
     }
 
+    /// Drop snapshots that belong to a run that has ended. GameOrchestrator calls this
+    /// from StartRun() and TriggerGameOver(). FIX: nothing called ClearSnapshot(),
+    /// so after a game over inside the same scene load a rewind could restore state
+    /// from the PREVIOUS run.
+    public void ResetForNewRun() => ClearSnapshot();
+
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
@@ -54,6 +60,13 @@ public class WaveCheckpointService : MonoBehaviour
 
     //  CAPTURE  — called by GameOrchestrator at the start of every wave.
     public void CaptureSnapshot(int stageIndex, int waveIndex)
+        => CaptureSnapshot(stageIndex, waveIndex, waveIndex == 0);
+
+    /// `forceStageStart` lets the orchestrator mark the first wave it actually RUNS in a
+    /// stage as the stage start. Without it a resumed run (which enters mid-stage) never
+    /// captured a StageStartSnapshot, so a stage-boss rewind was refused for that whole
+    /// stage — the one place a rewind is most likely to be wanted.
+    public void CaptureSnapshot(int stageIndex, int waveIndex, bool forceStageStart)
     {
         var snap = BuildSnapshot(stageIndex, waveIndex);
         CurrentSnapshot = snap;
@@ -61,7 +74,7 @@ public class WaveCheckpointService : MonoBehaviour
         // The first wave of a stage IS the stage start. Hold a copy so a boss
         // rewind (later in the stage) can return here even after CurrentSnapshot
         // has been overwritten by subsequent waves.
-        if (waveIndex == 0)
+        if (waveIndex == 0 || forceStageStart)
         {
             StageStartSnapshot = snap;
             if (debugLog)
@@ -192,14 +205,18 @@ public class WaveCheckpointService : MonoBehaviour
         //    enemy/boss drops as well as lore-chest orbs.
         DestroyAllOfType<EnergyDrop>();
 
-        // 4) Lingering poison ON the player. The Parfumer's poison keeps ticking
+        // 4) Lingering poison ON the players. The Parfumer's poison keeps ticking
         //    ~20s after exposure via a PoisonStatusEffect. The rewind restores
         //    wave-start HP, so a poison from the rewound timeline must not survive.
-        var playerGO = GameObject.FindGameObjectWithTag("Player");
-        if (playerGO != null)
+        //    FIX (co-op): this used FindGameObjectWithTag("Player"), which returns ONE
+        //    arbitrary tagged object — so P2 kept ticking down from a timeline that no
+        //    longer existed, and could die after a "successful" rewind. Sweeping every
+        //    live PoisonStatusEffect also catches effects parented to a child object.
+        foreach (var poison in FindObjectsByType<PoisonStatusEffect>(FindObjectsSortMode.None))
         {
-            var poison = playerGO.GetComponent<PoisonStatusEffect>();
-            if (poison != null) Destroy(poison);
+            if (poison == null) continue;
+            if (poison.GetComponentInParent<PlayerStats>() == null) continue;   // enemies keep theirs
+            Destroy(poison);
         }
 
         if (debugLog) Debug.Log("[Checkpoint] Cleared transient wave objects.");
@@ -334,8 +351,8 @@ public class WaveCheckpointService : MonoBehaviour
                 // damage is derived live), so a mid-wave upgrade is undone here.
                 if (t.upgradeLevel != ts.upgradeLevel) t.SetUpgradeLevel(ts.upgradeLevel);
 
-                // Restoring its energy past zero auto-re-enables a disabled tower.
-                RestoreTowerEnergy(t, ts.currentEnergy);
+                // Restoring its energy past zero auto-re-enables a disabled/destroyed tower.
+                RestoreTowerEnergy(t, ts.currentEnergy, ts.maxEnergy);
                 matchedSlots.Add(slot);
             }
             else
@@ -360,19 +377,22 @@ public class WaveCheckpointService : MonoBehaviour
                 continue;
             }
             if (kv.Key.IsOccupied) continue; // something is already there
-            var rebuilt = placement.RestoreTowerInto(kv.Key, ts.towerType, ts.upgradeLevel, ts.currentEnergy);
+            var rebuilt = placement.RestoreTowerInto(kv.Key, ts.towerType, ts.upgradeLevel,
+                                                     ts.currentEnergy, ts.maxEnergy);
             if (debugLog && rebuilt != null)
                 Debug.Log($"[Checkpoint] Rebuilt removed tower in slot '{kv.Key.name}'.");
         }
     }
 
-    private void RestoreTowerEnergy(Tower t, float target)
+    // FIX: this used SupplyEnergy() upward (which early-returns on a DESTROYED tower,
+    // so a tower killed during the rewound wave stayed dead) and a raw field write
+    // downward (which skipped OnEnergyChanged/UpdateVisuals, leaving the energy bar
+    // showing the pre-rewind value). Tower.RestoreEnergyState does both correctly and
+    // also re-applies the saved max pool.
+    private void RestoreTowerEnergy(Tower t, float target, float max)
     {
-        float delta = target - t.currentEnergy;
-        if (delta > 0.01f)
-            t.SupplyEnergy(delta);          // crossing 0 upward re-enables a disabled tower
-        else if (delta < -0.01f)
-            t.currentEnergy = target;       // simple downward correction; no re-enable needed
+        if (t == null) return;
+        t.RestoreEnergyState(target, max);
     }
 }
 
@@ -417,3 +437,6 @@ public class TowerSnapshot
     public float currentEnergy;
     public float maxEnergy;
 }
+
+
+

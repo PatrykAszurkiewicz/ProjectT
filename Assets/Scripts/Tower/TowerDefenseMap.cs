@@ -3,8 +3,33 @@ using UnityEngine;
 
 public class TowerDefenseMap : MonoBehaviour
 {
+    [Header("Central Core Sprites")]
+    [Tooltip("Central Core animation frames IN ORDER (00 … 23). Handed to the Core, " +
+             "which is created at runtime and therefore has no prefab of its own.\n\n" +
+             "Do NOT include the old 'central_core_sprite' sheet — that is the 2048x2048 " +
+             "/ 32 MB asset the Core's loader has to filter out at runtime.")]
+    public Sprite[] coreSpriteFrames;
+
     [Header("Map Configuration")]
     public float mapRadius = 10f;
+
+    //  Enemy clearance contract 
+    [Header("Enemy Clearance (must match the layout spacing contract)")]
+    [Tooltip("Radius of the largest enemy that has to reach the core — usually a boss, " +
+             "not a basic enemy. Read it off the prefab's non-trigger collider.")]
+    public float enemyClearanceRadius = 0.75f;
+
+    [Tooltip("How much space a built tower occupies. Runtime placement keeps a full " +
+             "lane clear of this, so a tower next to an obstacle never pinches.")]
+    public float towerFootprintRadius = 0.75f;
+
+    [Tooltip("Minimum clear width an enemy needs to walk through. Should be at least " +
+             "2 x enemyClearanceRadius, with a little margin so they don't scrape both sides.")]
+    public float laneWidth = 2.0f;
+
+    /// Clearance a runtime obstacle must keep from a TOWER SLOT: a tower may be
+    /// built there later, and an enemy still has to get past it.
+    public float SlotClearance => towerFootprintRadius + laneWidth;
     public GameObject backgroundGameObject; // Manual background GameObject reference
 
     [Tooltip("World-radius the VISIBLE ground texture must cover. Decoupled from mapRadius " +
@@ -26,8 +51,102 @@ public class TowerDefenseMap : MonoBehaviour
     [Header("Central Core Configuration")]
     public bool enableCentralCore = true;
     public float coreSize = 2f;
-    public float coreMaxEnergy = 100f;
-    public float coreStartingEnergy = 100f;
+    [Tooltip("OVERRIDE ONLY. 0 = use EnergyManager.coreMaxEnergy, which is the single " +
+             "source of truth for the core's pool. Set above 0 only if THIS map needs a " +
+             "core different from the global one. (Was a duplicate that fought with " +
+             "EnergyManager and always lost, because registration runs last.)")]
+    public float coreMaxEnergy = 0f;
+
+    [Tooltip("OVERRIDE ONLY. 0 = the core starts at full. Set above 0 to have a fresh " +
+             "run's core come online below its max.")]
+    public float coreStartingEnergy = 0f;
+
+    /// The core pool this map should use: its own override if one is set, else the
+    /// global value on EnergyManager. Single place to ask, so the two declarations
+    /// can never silently disagree again.
+    public float ResolvedCoreMaxEnergy =>
+        coreMaxEnergy > 0f ? coreMaxEnergy
+        : (EnergyManager.Instance != null ? EnergyManager.Instance.coreMaxEnergy : 100f);
+
+    // -- Core augment carry-over ---------------------------------------------
+    // Shield Matrix (73), Repair Systems (74) and Energy Siphon are components that
+    // AugmentRegistry attaches to the CORE GameObject -- which ClearExistingMap
+    // destroys at every stage transition. Towers survive this because Tower.Start
+    // calls ApplyGlobalAugments(); the core had no equivalent, so from stage 2
+    // onward those three augments quietly did nothing for the rest of the run.
+    //
+    // Re-attaching components with their captured values (rather than replaying the
+    // augments through AugmentRegistry) is deliberate: the registry's core branches
+    // STACK onto an existing component, so a replay would double them.
+    private struct CoreAugmentCarry
+    {
+        public bool hasSiphon; public float siphonPercentage;
+        public bool hasRepair; public float regenerationRate; public float activationDelay;
+        public bool hasShield; public float maxShieldStrength;
+    }
+    [System.NonSerialized] private CoreAugmentCarry carriedCoreAugments;
+    [System.NonSerialized] private bool carryCoreAugments = false;
+
+    private void CaptureCoreAugments(CentralCore core)
+    {
+        carriedCoreAugments = default;
+        if (core == null) return;
+
+        var siphon = core.GetComponent<CoreEnergySiphonEffect>();
+        if (siphon != null)
+        {
+            carriedCoreAugments.hasSiphon = true;
+            carriedCoreAugments.siphonPercentage = siphon.siphonPercentage;
+        }
+
+        var repair = core.GetComponent<CoreRepairSystems>();
+        if (repair != null)
+        {
+            carriedCoreAugments.hasRepair = true;
+            carriedCoreAugments.regenerationRate = repair.regenerationRate;
+            carriedCoreAugments.activationDelay = repair.activationDelay;
+        }
+
+        var shield = core.GetComponent<CoreShieldMatrix>();
+        if (shield != null)
+        {
+            carriedCoreAugments.hasShield = true;
+            carriedCoreAugments.maxShieldStrength = shield.maxShieldStrength;
+        }
+
+        carryCoreAugments = carriedCoreAugments.hasSiphon
+                         || carriedCoreAugments.hasRepair
+                         || carriedCoreAugments.hasShield;
+    }
+
+    private void RestoreCoreAugments(CentralCore core)
+    {
+        if (!carryCoreAugments || core == null) return;
+        carryCoreAugments = false;
+
+        if (carriedCoreAugments.hasSiphon && core.GetComponent<CoreEnergySiphonEffect>() == null)
+        {
+            var c = core.gameObject.AddComponent<CoreEnergySiphonEffect>();
+            c.siphonPercentage = carriedCoreAugments.siphonPercentage;
+        }
+
+        if (carriedCoreAugments.hasRepair && core.GetComponent<CoreRepairSystems>() == null)
+        {
+            var c = core.gameObject.AddComponent<CoreRepairSystems>();
+            c.regenerationRate = carriedCoreAugments.regenerationRate;
+            c.activationDelay = carriedCoreAugments.activationDelay;
+        }
+
+        if (carriedCoreAugments.hasShield && core.GetComponent<CoreShieldMatrix>() == null)
+        {
+            var c = core.gameObject.AddComponent<CoreShieldMatrix>();
+            // Design choice: the shield comes back FULL each stage. To carry the
+            // depleted value instead, store currentShieldStrength in
+            // CaptureCoreAugments and assign it here.
+            c.maxShieldStrength = carriedCoreAugments.maxShieldStrength;
+            c.currentShieldStrength = carriedCoreAugments.maxShieldStrength;
+        }
+    }
 
     [Header("Layout Override")]
     [Tooltip("Set by the orchestrator each stage. When non-null, this layout's slot\n" +
@@ -45,7 +164,8 @@ public class TowerDefenseMap : MonoBehaviour
              "  Breached Fortress, Crossroads, The Gauntlet, The Arena,\n" +
              "  Ghost Town, Maze Hallways, Diamond Formation, Pincer Grip,\n" +
              "  Stonehenge, Crossroads Pillars,\n" +
-             "  Asteroid Belt, Pinwheel.")]
+             "  Asteroid Belt, Pinwheel,\n" +
+             "  Broken Crown, The Ford, Crescent Bastion.")]
     public string testLayoutName = "";
 
     [Tooltip("If true and Test Layout Name is set, the named built-in layout\n" +
@@ -106,6 +226,91 @@ public class TowerDefenseMap : MonoBehaviour
     private float lastAppliedSpreadScale = 1f;
     [System.NonSerialized]
     private bool sourceLayoutCaptured = false;
+
+    // ── FIX: core energy must survive a map rebuild ───────────────────────────
+    // ClearExistingMap() destroys the CentralCore and CreateCentralCore() makes a
+    // fresh one at coreStartingEnergy. Every stage that changes layout therefore
+    // silently full-healed the core, and on RESUME the saved core energy restored by
+    // RunPersistence was wiped by the very next ApplyLayout.
+    // We now carry the live values across the rebuild, and expose SeedCoreEnergy()
+    // so a resume can pre-seed them BEFORE the map is ever built.
+    [System.NonSerialized] private bool carryCoreEnergy = false;
+    [System.NonSerialized] private float carriedCoreEnergy;
+    [System.NonSerialized] private float carriedCoreMaxEnergy;
+
+    [Tooltip("Keep the Central Core's CURRENT energy when the map is rebuilt for a new " +
+             "stage/layout. OFF reproduces the old behaviour (core resets to " +
+             "'Core Starting Energy' on every layout change), which made difficulty depend " +
+             "on whether Change Layout Per Stage happened to be on.")]
+    public bool preserveCoreEnergyAcrossRebuild = true;
+
+    // ── FIX: bonus slots must survive a map rebuild ───────────────────────────
+    // CreateTowerSlots() reset bonusSlotsAdded to 0 and the slots themselves were
+    // destroyed with slotsContainer, so the "additional_tower_slots" augment was a
+    // one-stage effect, and towers saved into a bonus slot (ringIndex 99) could never
+    // be restored because FindSlot(99, n) returned null.
+    [System.NonSerialized] private int carriedBonusSlots = 0;
+
+    [Tooltip("Re-create augment-revealed bonus slots after a map rebuild. OFF reproduces " +
+             "the old behaviour, where the 'additional_tower_slots' augment was lost at the " +
+             "next stage and saved towers in those slots could not be restored.")]
+    public bool preserveBonusSlotsAcrossRebuild = true;
+
+    /// Pre-seed the Central Core's energy for the NEXT build of the map. Called by
+    /// GameOrchestrator/RunPersistence on resume, before the stage layout is applied,
+    /// so the core comes out of CreateCentralCore() already holding the saved values.
+    public void SeedCoreEnergy(float current, float max)
+    {
+        carryCoreEnergy = true;
+        carriedCoreMaxEnergy = max > 0f ? max : ResolvedCoreMaxEnergy;
+        carriedCoreEnergy = Mathf.Clamp(current, 0f, carriedCoreMaxEnergy);
+
+        // If the core already exists (no rebuild pending) apply it immediately too.
+        // SeedEnergyState rather than SetMaxEnergy/SetEnergy: a core that has not yet
+        // registered with EnergyManager would otherwise have these values stamped
+        // over with a full pool the moment registration lands.
+        if (centralCore != null)
+        {
+            centralCore.SeedEnergyState(carriedCoreEnergy, carriedCoreMaxEnergy);
+        }
+    }
+
+    /// Runtime-safe destroy. DestroyImmediate is an EDITOR call: using it in play mode
+    /// (this map rebuilds mid-run) can tear objects down inside a physics callback and
+    /// corrupt collider state. Route every teardown through here instead.
+    private static void SafeDestroy(UnityEngine.Object obj)
+    {
+        if (obj == null) return;
+        if (Application.isPlaying) Destroy(obj);
+        else DestroyImmediate(obj);
+    }
+
+    /// Destroy a GameObject that something in the SAME FRAME might otherwise find again.
+    ///
+    /// THIS EXISTS BECAUSE OF A REAL BUG. ClearExistingMap used to call
+    /// DestroyImmediate, so a torn-down object was gone before CreateTerrain ran.
+    /// Switching to the runtime-correct Destroy() defers teardown to END OF FRAME, and
+    /// CreateTerrain re-adopts the shared background BY NAME:
+    ///     var shared = GameObject.Find("Background");
+    /// so it could hand back the very object that was already doomed. backgroundGameObject
+    /// then held a destroyed reference forever, every later rebuild took the
+    /// "background already assigned" branch on a dead object, and the map rendered as a
+    /// flat uniform fill with no background for the rest of the session.
+    ///
+    /// Deactivating and renaming first makes the corpse un-findable: GameObject.Find only
+    /// returns ACTIVE objects, and the name no longer matches either.
+    private static void RetireAndDestroy(GameObject go)
+    {
+        if (go == null) return;
+        if (Application.isPlaying)
+        {
+            go.name = "~doomed_" + go.name;
+            go.SetActive(false);
+            go.transform.SetParent(null, true);
+            Destroy(go);
+        }
+        else DestroyImmediate(go);
+    }
 
     [System.Serializable]
     public class RingConfiguration
@@ -186,6 +391,11 @@ public class TowerDefenseMap : MonoBehaviour
     [ContextMenu("Test: Asteroid Belt")] void _TestAsteroidBelt() { ApplyTestLayoutByName("Asteroid Belt"); }
     [ContextMenu("Test: Pinwheel")] void _TestPinwheel() { ApplyTestLayoutByName("Pinwheel"); }
 
+    // Asymmetric layouts — the core is exposed from one flank.
+    [ContextMenu("Test: Broken Crown")] void _TestBrokenCrown() { ApplyTestLayoutByName("Broken Crown"); }
+    [ContextMenu("Test: The Ford")] void _TestTheFord() { ApplyTestLayoutByName("The Ford"); }
+    [ContextMenu("Test: Crescent Bastion")] void _TestCrescentBastion() { ApplyTestLayoutByName("Crescent Bastion"); }
+
     // Helper used by the [ContextMenu("Test: …")] shortcuts.
     void ApplyTestLayoutByName(string name)
     {
@@ -203,6 +413,7 @@ public class TowerDefenseMap : MonoBehaviour
     public void GenerateMap()
     {
         ClearExistingMap();
+        FitMapRadiusToLayout();
         CreateTerrain();
         CreateCentralCore();
         CreateLayoutObstacles();
@@ -219,37 +430,229 @@ public class TowerDefenseMap : MonoBehaviour
         // this can't double-spawn during first-frame startup ordering.
         var obstacleGen = FindFirstObjectByType<ObstacleGenerator>();
         if (obstacleGen != null) obstacleGen.NotifyLayoutChanged();
+
+        // The player prefab is seated at scene start, but the layout is chosen and
+        // built HERE, during the stage intro — so a blocking obstacle can land
+        // directly on top of a player who is already standing there, and a dynamic
+        // body that starts fully inside a static collider wedges. Same story for a
+        // mid-run rebuild (per-stage layout change, extra-ring augment).
+        //
+        // Only players actually INSIDE solid geometry are moved; standing next to a
+        // wall is untouched, so this is a no-op in every normal case.
+        if (Application.isPlaying) PlayerSpawnSafety.EvacuateAllPlayers();
+    }
+
+    /// Every non-trigger collider that belongs to the CURRENT layout obstacles or
+    /// the augment arches — i.e. the solid geometry a player can get wedged in.
+    ///
+    /// Read from the container fields rather than by physics layer, deliberately:
+    ///   * CreateLayoutObstacles falls back to layer 0 (Default) when the project
+    ///     has no "Obstacle" layer, and a mask query on Default would sweep up half
+    ///     the scene.
+    ///   * ClearExistingMap destroys the previous container with Destroy(), which
+    ///     Unity defers to end of frame. A layer query run during a rebuild would
+    ///     still see the OLD walls; these fields already point at the new ones.
+    public void CollectBlockingObstacleColliders(List<Collider2D> results)
+    {
+        if (results == null) return;
+        results.Clear();
+
+        AppendColliders(obstaclesContainer, results);
+        AppendColliders(augmentArchContainer, results);
+    }
+
+    private static void AppendColliders(GameObject container, List<Collider2D> results)
+    {
+        if (container == null) return;
+
+        var found = container.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < found.Length; i++)
+        {
+            var c = found[i];
+            if (c == null || c.isTrigger) continue;   // decorative-only obstacles have no collider at all
+            results.Add(c);
+        }
+    }
+
+    /// Grows mapRadius so it actually covers the layout that's about to be built.
+    ///
+    /// The layouts reach further out than the authored default (outer bonus rings sit
+    /// around 14.6 while mapRadius ships at 10). Everything that clamps against
+    /// mapRadius — the terrain disc, the boundary collider, the debug circles, and the
+    /// arch augment's placement ring — was therefore working from a radius smaller than
+    /// the map it described. The arch augment is the visible casualty: it clamps its
+    /// ring to mapRadius - 1.4, which drops arches INSIDE the layout's obstacle band
+    /// instead of outside the outer slots, where it intends to put them.
+    ///
+    /// Only ever grows, never shrinks below the authored value, and recomputes from
+    /// scratch each build so repeated calls can't compound.
+    void FitMapRadiusToLayout()
+    {
+        if (!baseMapRadiusCaptured)
+        {
+            baseMapRadius = mapRadius;
+            baseMapRadiusCaptured = true;
+        }
+
+        float scale = Mathf.Approximately(layoutSpreadScale, 0f) ? 1f : layoutSpreadScale;
+        float required = baseMapRadius * scale;
+
+        void Cover(Vector2 p, float extent)
+        {
+            float r = p.magnitude + extent;
+            if (r > required) required = r;
+        }
+
+        if (activeLayout != null)
+        {
+            if (activeLayout.layoutType == MapLayoutDefinition.LayoutType.Custom &&
+                activeLayout.customSlotPositions != null)
+            {
+                foreach (var p in activeLayout.customSlotPositions)
+                    Cover(p, activeLayout.customSlotSize * 0.5f);
+            }
+
+            if (activeLayout.rings != null)
+                foreach (var ring in activeLayout.rings)
+                    if (ring != null && ring.enabled)
+                        Cover(new Vector2(ring.radius, 0f), ring.slotSize * 0.5f);
+
+            if (activeLayout.bonusSlotPositions != null)
+                foreach (var p in activeLayout.bonusSlotPositions)
+                    Cover(p, activeLayout.bonusSlotSize * 0.5f);
+
+            if (activeLayout.obstacles != null)
+                foreach (var o in activeLayout.obstacles)
+                    Cover(o.position, Mathf.Max(o.size.x, o.size.y) * 0.5f);
+        }
+        else if (rings != null)
+        {
+            foreach (var ring in rings)
+                if (ring != null && ring.enabled)
+                    Cover(new Vector2(ring.radius, 0f), ring.slotSize * 0.5f);
+        }
+
+        // Leave a lane of walkable ground outside the outermost thing, so enemies
+        // can still round the outside of the map instead of clipping the border.
+        required += laneWidth;
+
+        if (required > mapRadius + 0.01f)
+        {
+            Debug.Log($"[TowerDefenseMap] mapRadius {mapRadius:F1} → {required:F1} " +
+                      $"to fit layout '{(activeLayout != null ? activeLayout.layoutName : "default rings")}'.");
+            mapRadius = required;
+        }
+    }
+
+    /// Rebuild the map (e.g. after the "additional_tower_rings" augment adds a ring)
+    /// WITHOUT losing the towers the player has already built.
+    ///
+    /// GenerateMap() destroys slotsContainer, and every tower is parented to its slot,
+    /// so a bare GenerateMap() call silently deleted the whole board. This snapshots
+    /// each live tower by its stable (ringIndex, slotIndex) identity, rebuilds, and
+    /// then re-places them cost-free through TowerPlacementManager. Existing ring
+    /// coordinates are stable across an ADDED ring (new rings append at the end), so
+    /// every tower lands back where it was.
+    public void RebuildPreservingTowers()
+    {
+        var saved = new List<(int ring, int slot, Tower.TowerType type, int level, float energy, float maxEnergy)>();
+
+        foreach (var s in allTowerSlots)
+        {
+            if (s == null || !s.IsOccupied || s.currentTower == null) continue;
+            var t = s.currentTower.GetComponent<Tower>();
+            if (t == null) continue;
+            saved.Add((s.ringIndex, s.slotIndex, t.towerType, t.upgradeLevel, t.currentEnergy, t.maxEnergy));
+        }
+
+        GenerateMap();   // core energy + bonus slots are carried over by ClearExistingMap
+
+        if (saved.Count == 0) return;
+
+        var placement = TowerPlacementManager.Instance;
+        if (placement == null)
+        {
+            Debug.LogError($"[TowerDefenseMap] Rebuilt the map but no TowerPlacementManager exists — " +
+                           $"{saved.Count} tower(s) could not be restored.");
+            return;
+        }
+
+        int restored = 0;
+        foreach (var e in saved)
+        {
+            var slot = placement.FindSlot(e.ring, e.slot);
+            if (slot == null || slot.IsOccupied) continue;
+            if (placement.RestoreTowerInto(slot, e.type, e.level, e.energy, e.maxEnergy) != null) restored++;
+        }
+
+        if (restored != saved.Count)
+            Debug.LogWarning($"[TowerDefenseMap] Rebuild preserved {restored}/{saved.Count} towers " +
+                             "(a slot coordinate no longer exists in the new layout).");
     }
 
     void ClearExistingMap()
     {
+        // FIX: remember how many bonus slots the augment had revealed so
+        // CreateTowerSlots() can put them back after the rebuild.
+        carriedBonusSlots = preserveBonusSlotsAcrossRebuild ? bonusSlotsAdded : 0;
+
+        // Retire the old slots BEFORE destroying them.
+        //
+        // CRITICAL ORDERING NOTE. This teardown used DestroyImmediate, so every slot's
+        // OnDestroy — and therefore TowerPlacementManager.UnregisterSlot — ran
+        // synchronously. Now that we correctly use Destroy() at runtime, OnDestroy is
+        // deferred to end of frame, which means the hub's slot list would still contain
+        // these dying slots for the rest of THIS frame. Anything calling FindSlot()
+        // straight after a rebuild (RebuildPreservingTowers does exactly that) would
+        // match an old slot, place a tower into it, and watch that tower disappear when
+        // the slot was destroyed moments later.
+        //
+        // So: unregister explicitly, and deactivate the container so the towers parented
+        // under it fire OnDisable now and drop out of Tower.ActiveTowers immediately
+        // instead of lingering as targetable ghosts for a frame.
+        var hub = TowerPlacementManager.Instance;
+        if (hub != null)
+        {
+            for (int i = 0; i < allTowerSlots.Count; i++)
+                if (allTowerSlots[i] != null) hub.UnregisterSlot(allTowerSlots[i]);
+        }
+        if (slotsContainer != null) slotsContainer.SetActive(false);
+
         // Clear existing slots
         allTowerSlots.Clear();
 
         // Destroy existing terrain, but preserve manually assigned background
         if (terrainObject != null && terrainObject != backgroundGameObject)
         {
-            DestroyImmediate(terrainObject);
+            // RetireAndDestroy, not SafeDestroy: CreateTerrain runs later THIS SAME FRAME
+            // and looks the background up by name. See RetireAndDestroy's comment.
+            RetireAndDestroy(terrainObject);
         }
         terrainObject = null;
+
+        // If the shared background was itself destroyed by something else, drop the stale
+        // reference so CreateTerrain rebuilds instead of binding to a dead object.
+        if (backgroundGameObject == null) backgroundGameObject = null;
 
         // Destroy existing slots container
         if (slotsContainer != null)
         {
-            DestroyImmediate(slotsContainer);
+            SafeDestroy(slotsContainer);
+            slotsContainer = null;
         }
 
         // Destroy existing obstacles container
         if (obstaclesContainer != null)
         {
-            DestroyImmediate(obstaclesContainer);
+            SafeDestroy(obstaclesContainer);
+            obstaclesContainer = null;
         }
 
         // Destroy augment-added arches and reset the augment wave counter.
         // A fresh map (new stage / layout) starts with no augment arches.
         if (augmentArchContainer != null)
         {
-            DestroyImmediate(augmentArchContainer);
+            SafeDestroy(augmentArchContainer);
             augmentArchContainer = null;
         }
         augmentArchWaves = 0;
@@ -261,12 +664,30 @@ public class TowerDefenseMap : MonoBehaviour
             if (child.name.StartsWith("Debug_Ring_") || child.name.StartsWith("LayoutLine_"))
                 toDelete.Add(child.gameObject);
         }
-        foreach (var go in toDelete) DestroyImmediate(go);
+        foreach (var go in toDelete) SafeDestroy(go);
 
-        // Destroy existing central core
+        // Destroy existing central core.
+        // FIX: capture its live energy first so the replacement core built by
+        // CreateCentralCore() resumes from the same value instead of snapping back to
+        // coreStartingEnergy. A core that was actually DESTROYED (game over) is not
+        // carried over — that state belongs to a run that already ended.
         if (centralCore != null)
         {
-            DestroyImmediate(centralCore.gameObject);
+            if (preserveCoreEnergyAcrossRebuild && !centralCore.IsDestroyed())
+            {
+                carryCoreEnergy = true;
+                carriedCoreEnergy = centralCore.currentEnergy;
+                carriedCoreMaxEnergy = centralCore.maxEnergy;
+            }
+
+            // Outside the preserve-energy branch on purpose: a core that was
+            // DESTROYED does not carry its energy, but the run's augments are still
+            // the player's and belong on whatever core comes next.
+            CaptureCoreAugments(centralCore);
+
+            centralCore.OnEnergyChanged -= OnCoreEnergyChanged;
+            centralCore.OnEnergyDepleted -= OnCoreEnergyDepleted;
+            SafeDestroy(centralCore.gameObject);
             centralCore = null;
         }
     }
@@ -392,17 +813,72 @@ public class TowerDefenseMap : MonoBehaviour
         if (!enableCentralCore) return;
 
         GameObject coreObject = new GameObject("CentralCore");
-        coreObject.transform.parent = transform;
+        coreObject.transform.SetParent(transform, false);
         coreObject.transform.position = Vector3.zero;
 
+        // DEACTIVATE BEFORE AddComponent.
+        //
+        // Awake does NOT run on an inactive GameObject. This matters because
+        // CentralCore.Awake() → InitializeComponents() → LoadCoreSprites() runs
+        // IMMEDIATELY inside AddComponent<CentralCore>() on an active object — so any
+        // configuration written on the following lines arrives too late. An earlier
+        // version handed over the sprite frames after AddComponent and the Core loaded
+        // ZERO frames every time, falling back to a Resources folder that no longer
+        // exists: invisible Core, and an emergency collider because setup had failed.
+        //
+        // Configuring while inactive and activating at the end means Awake sees the
+        // finished object. It also fixes the energy assignment below, which had the same
+        // ordering problem in a less visible form.
+        coreObject.SetActive(false);
+
         centralCore = coreObject.AddComponent<CentralCore>();
-        centralCore.maxEnergy = coreMaxEnergy;
-        centralCore.currentEnergy = coreStartingEnergy;
         centralCore.coreSize = coreSize;
 
-        // Subscribe to core events
+        // The Core is built in code and has no prefab, so its sprite references cannot
+        // live on it — they live on this component (a scene object) and are handed over
+        // here, before the object is activated and LoadCoreSprites() resolves.
+        if (coreSpriteFrames != null && coreSpriteFrames.Length > 0)
+            centralCore.SetCoreFrames(coreSpriteFrames);
+        else
+            Debug.LogWarning("[TowerDefenseMap] No Core Sprite Frames assigned — the Central Core " +
+                             "will fall back to Resources/Sprites/Buildings/Towers/Core, which breaks " +
+                             "once that art leaves the Resources folder. Assign frames 00–23 on this " +
+                             "component (and leave out the old 'central_core_sprite' sheet).");
+
+        // FIX: a rebuild (new stage layout) or a resume must NOT reset the core to
+        // full. carryCoreEnergy is set either by ClearExistingMap (mid-run rebuild) or
+        // by SeedCoreEnergy (save resume, called before the map is built).
+        // Raw field writes here were pointless: CentralCore.Start registers with
+        // EnergyManager moments later, and registration stamped a full pool over the
+        // top. Everything now goes through SeedEnergyState, which survives
+        // registration (see EnergyManager.InitializeConsumerEnergy).
+        float resolvedMax = ResolvedCoreMaxEnergy;
+
+        if (carryCoreEnergy)
+        {
+            float carriedMax = carriedCoreMaxEnergy > 0f ? carriedCoreMaxEnergy : resolvedMax;
+            centralCore.SeedEnergyState(Mathf.Clamp(carriedCoreEnergy, 0f, carriedMax), carriedMax);
+            carryCoreEnergy = false;   // one-shot; a genuinely fresh run seeds nothing
+        }
+        else if (coreMaxEnergy > 0f || coreStartingEnergy > 0f)
+        {
+            // A per-map override is in play. Seeding (rather than writing the fields)
+            // is what stops registration resetting a deliberate sub-full start.
+            float start = coreStartingEnergy > 0f ? coreStartingEnergy : resolvedMax;
+            centralCore.SeedEnergyState(Mathf.Clamp(start, 0f, resolvedMax), resolvedMax);
+        }
+        // else: no override and nothing carried -- let EnergyManager fill it.
+
+        // Put back the augment components that lived on the core we just destroyed.
+        RestoreCoreAugments(centralCore);
+
+        // Subscribe to core events BEFORE activation, so nothing raised during Awake or
+        // Start is missed.
         centralCore.OnEnergyChanged += OnCoreEnergyChanged;
         centralCore.OnEnergyDepleted += OnCoreEnergyDepleted;
+
+        // Fully configured — now let Awake/Start run.
+        coreObject.SetActive(true);
     }
 
     void CreateTowerSlots()
@@ -443,6 +919,21 @@ public class TowerDefenseMap : MonoBehaviour
 
                 CreateRingSlots(ring);
             }
+        }
+
+        // FIX: put back the bonus slots the "additional_tower_slots" augment had
+        // revealed before this rebuild. Without this the augment silently expired at
+        // every stage transition and towers saved into a bonus slot (ringIndex 99)
+        // could never be found by TowerPlacementManager.FindSlot on resume.
+        if (carriedBonusSlots > 0)
+        {
+            int want = carriedBonusSlots;
+            carriedBonusSlots = 0;               // consume before AddBonusSlots re-enters
+            int restored = AddBonusSlots(want);
+            if (restored < want)
+                Debug.LogWarning($"[TowerDefenseMap] Only {restored}/{want} augment bonus slot(s) could be " +
+                                 "re-created on this layout — the new layout defines fewer bonusSlotPositions. " +
+                                 "Any tower saved in a missing slot will be skipped on restore.");
         }
     }
 
@@ -1637,6 +2128,152 @@ public class TowerDefenseMap : MonoBehaviour
         // TODO: Handle regeneration after augmentation
     }
 
+    /// Handles the "additional_tower_rings" augment.
+    ///
+    /// The old implementation (in AugmentRegistry) appended to `rings`, this component's
+    /// own list. But CreateTowerSlots reads activeLayout.rings whenever the layout
+    /// defines any, and takes the CreateCustomSlots branch entirely for Custom layouts.
+    /// Every built-in layout falls into one of those two branches, so the augment
+    /// silently did nothing at all — the player paid for a ring that was never built.
+    ///
+    /// This writes to the list that actually gets read, sizes the ring so its towers
+    /// keep a full lane from everything already on the map, and falls back to revealing
+    /// bonus slots on Custom layouts, where "another ring" has no meaning.
+    ///
+    /// Returns the number of new slots the player actually gained.
+    public int AddAugmentRings(int ringsToAdd)
+    {
+        if (ringsToAdd <= 0) return 0;
+
+        // ---- Custom layouts: no rings to add to, so grant slots instead ----
+        if (activeLayout != null &&
+            activeLayout.layoutType == MapLayoutDefinition.LayoutType.Custom)
+        {
+            const int slotsPerRing = 4;
+            int granted = AddBonusSlots(ringsToAdd * slotsPerRing);
+            if (granted == 0)
+            {
+                Debug.LogWarning("[TowerDefenseMap] additional_tower_rings on Custom layout " +
+                                 $"'{activeLayout.layoutName}': no bonus slots left to reveal.");
+                return 0;
+            }
+            Debug.Log($"[TowerDefenseMap] additional_tower_rings on Custom layout " +
+                      $"'{activeLayout.layoutName}' → revealed {granted} bonus slot(s) instead.");
+            return granted;
+        }
+
+        // ---- Concentric layouts: append to the list CreateTowerSlots reads ----
+        // Never mutate the source asset. When layoutSpreadScale is 1 the active layout
+        // IS the project asset, so clone it first or the extra ring would be baked into
+        // the .asset file and persist into every future run.
+        if (activeLayout != null && ReferenceEquals(activeLayout, sourceLayout))
+            activeLayout = CreateScaledLayout(activeLayout, 1f);
+
+        List<RingConfiguration> target =
+            (activeLayout != null && activeLayout.rings != null && activeLayout.rings.Count > 0)
+            ? activeLayout.rings
+            : rings;
+
+        int slotsGained = 0;
+
+        for (int i = 0; i < ringsToAdd; i++)
+        {
+            if (target.Count >= maxTotalRings)
+            {
+                Debug.LogWarning($"[TowerDefenseMap] Cannot add more rings: at maximum ({maxTotalRings}).");
+                break;
+            }
+
+            // Copy the outermost ring's shape, as the original did.
+            float outerR = 2.3f;
+            int slotCount = 8;
+            float slotSize = 1.9f;
+            foreach (var ring in target)
+            {
+                if (ring == null || !ring.enabled || ring.radius <= outerR) continue;
+                outerR = ring.radius;
+                slotCount = ring.slotCount;
+                slotSize = ring.slotSize;
+            }
+
+            // Radial spacing between two rings of towers: a tower on each plus a lane
+            // between them. The old +1.8 left 0.3 — a wedge, not a lane.
+            float minStep = towerFootprintRadius * 2f + laneWidth;
+
+            // CreateTowerSlots half-steps the rotation of odd-indexed rings, so the new
+            // ring's offset depends on where it lands in the list.
+            int newIndex = target.Count;
+            float offsetDeg = (newIndex % 2 == 1) ? (180f / Mathf.Max(1, slotCount)) : 0f;
+
+            // Walk outward until the ring clears the bonus slots and any obstacles.
+            // Bonus positions are checked whether or not they're revealed yet — the
+            // slots augment can turn them on at any point afterwards.
+            float radius = outerR + minStep;
+            float limit = outerR + minStep + 12f;
+            while (radius < limit && !RingPositionIsClear(radius, slotCount, offsetDeg))
+                radius += 0.25f;
+
+            if (radius >= limit)
+            {
+                Debug.LogWarning("[TowerDefenseMap] additional_tower_rings: couldn't find a radius " +
+                                 "with enough clearance from existing slots/obstacles. Ring not added.");
+                break;
+            }
+
+            target.Add(new RingConfiguration
+            {
+                radius = radius,
+                slotCount = slotCount,
+                slotSize = slotSize,
+                rotationOffset = offsetDeg,
+                enabled = true,
+            });
+
+            slotsGained += slotCount;
+            Debug.Log($"[TowerDefenseMap] additional_tower_rings: added ring at r={radius:F2} " +
+                      $"with {slotCount} slot(s).");
+        }
+
+        if (slotsGained == 0) return 0;
+
+        // GenerateMap() destroys slotsContainer and every tower parented to it, so the
+        // rebuild has to be the tower-preserving one.
+        RebuildPreservingTowers();
+        return slotsGained;
+    }
+
+    /// True when every slot on a candidate ring keeps a full lane from the layout's
+    /// bonus slot positions and from its obstacles.
+    bool RingPositionIsClear(float radius, int slotCount, float offsetDeg)
+    {
+        if (activeLayout == null || slotCount <= 0) return true;
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            float a = Mathf.Deg2Rad * (i * 360f / slotCount + offsetDeg);
+            Vector2 p = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius;
+
+            if (activeLayout.bonusSlotPositions != null)
+            {
+                foreach (var b in activeLayout.bonusSlotPositions)
+                    if (Vector2.Distance(b, p) < towerFootprintRadius * 2f + laneWidth)
+                        return false;
+            }
+
+            if (activeLayout.obstacles != null)
+            {
+                foreach (var o in activeLayout.obstacles)
+                {
+                    if (!o.blocksMovement) continue;
+                    float bound = Mathf.Max(o.size.x, o.size.y) * 0.5f;
+                    if (Vector2.Distance(o.position, p) < bound + towerFootprintRadius + laneWidth)
+                        return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public void RemoveRing(int ringIndex)
     {
         if (ringIndex >= 0 && ringIndex < rings.Count)
@@ -1662,11 +2299,15 @@ public class TowerDefenseMap : MonoBehaviour
         if (obstacleLayerIndex < 0) obstacleLayerIndex = 0;
         int obstacleMask = 1 << obstacleLayerIndex;
 
-        // Each application places a fresh ring. Push successive rings outward a
-        // little and rotate them so they interleave with earlier arches.
+        // Each application places a fresh ring. Push successive rings outward and
+        // rotate them so they interleave with earlier arches.
         int wave = augmentArchWaves;
 
-        // --- Choose a placement radius between the outer slots and the edge ---
+        // Anything spawned from here on can be rolled back if the finished ring
+        // turns out to choke the map (see the reachability check at the end).
+        int childCountBefore = augmentArchContainer.transform.childCount;
+
+        // --- Choose a placement radius OUTSIDE the outer slots ---
         float outerSlotR = 0f;
         foreach (var s in allTowerSlots)
         {
@@ -1676,22 +2317,48 @@ public class TowerDefenseMap : MonoBehaviour
         }
         float coreSafe = (enableCentralCore ? coreSize : 0f) + 1.0f;
 
-        // Ring radius
-        float baseR = Mathf.Max(outerSlotR + 2.5f, mapRadius * 0.65f);
-        float ringR = Mathf.Min(baseR + wave * 1.4f, mapRadius - 1.4f);
+        // Ring radius. Arches belong OUTSIDE the outermost tower slot, in the corridor
+        // enemies walk in through — which is where this augment always meant to put
+        // them ("between the outer slots and the edge").
+        //
+        // The old bound was mapRadius - 1.4, and mapRadius (10) was smaller than the
+        // layouts themselves (outer slots reach 11–16). That forced the entire ring
+        // INWARD, on top of the layout's own obstacles, which is the opposite of the
+        // intent. The outer bound is now the visible ground rather than the playable
+        // radius, so there's somewhere legal to stand.
+        const float archWidthMax = 3.2f;                  // matches the clamp below
+        float archRadiusMax = archWidthMax * 0.5f;
+        float archStep = laneWidth + 1.0f;                // waves step out by a full lane
+
+        // Clear the outermost slot by an arch's own footprint PLUS a lane, so a tower
+        // built on that slot still has room to be walked past.
+        float baseR = outerSlotR + archRadiusMax + SlotClearance;
+        float ringR = baseR + wave * archStep;
+        float outerLimit = EffectiveBackgroundCoverage() - 1.0f;
+
+        if (ringR > outerLimit)
+        {
+            Debug.LogWarning($"[AUGMENT/Arches] No room outside the outer slots for wave {wave} " +
+                             $"(ring would sit at {ringR:F1}, ground ends at {outerLimit:F1}). " +
+                             $"Nothing placed.");
+            return 0;
+        }
         if (ringR <= coreSafe + 1.0f)
         {
             Debug.LogWarning("[AUGMENT/Arches] No room between core and map edge for arches.");
             return 0;
         }
 
-        // Arch sizing scales gently with the ring. Kept modest so five arches
-        // leave wide (~45°+) angular gaps between them for enemy approach lanes.
-        float archWidth = Mathf.Clamp(ringR * 0.42f, 2.0f, 3.2f);
-        float archHeight = archWidth * 0.45f;
+        // Arch sizing scales gently with the ring. The HEIGHT cap is the important
+        // one: a crescent is a C, and once its bowl is deeper than an enemy is
+        // wide it becomes an alcove the enemy noses into and then has to reverse
+        // out of. Measured threshold is about 1.2 — the old formula reached 1.44
+        // at the width clamp, just over the line.
+        float archWidth = Mathf.Clamp(ringR * 0.42f, 2.0f, archWidthMax);
+        float archHeight = Mathf.Min(archWidth * 0.45f, 1.2f);
 
         Debug.Log($"[AUGMENT/Arches] wave={wave} outerSlotR={outerSlotR:F1} " +
-                  $"mapRadius={mapRadius:F1} ringR={ringR:F1} " +
+                  $"mapRadius={mapRadius:F1} ringR={ringR:F1} outerLimit={outerLimit:F1} " +
                   $"archSize=({archWidth:F1}x{archHeight:F1}) coreSafe={coreSafe:F1}");
 
         // Per-wave angular phase so successive augments interleave their arches
@@ -1705,14 +2372,15 @@ public class TowerDefenseMap : MonoBehaviour
         const int angleSamples = 24;              // every 15° around the ring
         float minSeparationDeg = 360f / (maxArches + 1); // ~60° apart minimum
 
-        // Try the primary ring first, then nudge in/out if nothing fit, so a
-        // crowded band never leaves the player with zero arches.
+        // Fallback radii step OUTWARD only, a full lane at a time. Nudging inward (as
+        // this used to) now just walks back into the slot rings, and each step has to
+        // be a lane so a fallback ring can't land a wedge-width from the first.
         float[] radiusAttempts =
         {
             ringR,
-            Mathf.Min(ringR + 1.2f, mapRadius - 1.2f),
-            Mathf.Max(ringR - 1.2f, coreSafe + 1.5f),
-            Mathf.Min(ringR + 2.4f, mapRadius - 1.1f),
+            ringR + laneWidth,
+            ringR + laneWidth * 2f,
+            ringR + laneWidth * 3f,
         };
 
         int placed = 0;
@@ -1722,6 +2390,7 @@ public class TowerDefenseMap : MonoBehaviour
         foreach (float tryR in radiusAttempts)
         {
             if (placed >= maxArches) break;
+            if (tryR > outerLimit) continue;   // off the visible ground
             // Rotate the sample start per wave so successive augments interleave.
             float startDeg = baseOffsetDeg + (tryR * 7.13f) % 15f; // small per-radius phase
 
@@ -1774,16 +2443,35 @@ public class TowerDefenseMap : MonoBehaviour
             return 0;
         }
 
-        // Sanity check: confirm the core still has open radial approach lanes.
+        // Sanity check: confirm an ENEMY-SIZED body still has open lanes to the core.
+        // This used to be advisory — it logged a warning and kept the arches anyway,
+        // which meant a bad roll could leave the map unwinnable. Now it's binding: if
+        // the ring closed the map down, the arches from this wave are removed and the
+        // augment reports that it placed nothing.
 
         if (!CoreHasOpenApproach(coreSafe, obstacleMask))
         {
-            Debug.LogWarning("[AUGMENT/Arches] Core approach looks tight after placement. " +
-                             "Arches kept, but consider reducing arch count/size if enemies struggle.");
+            int removed = 0;
+            for (int i = augmentArchContainer.transform.childCount - 1; i >= childCountBefore; i--)
+            {
+                var child = augmentArchContainer.transform.GetChild(i).gameObject;
+                if (Application.isPlaying) Destroy(child); else DestroyImmediate(child);
+                removed++;
+            }
+            Debug.LogWarning($"[AUGMENT/Arches] Placement left too few open lanes to the core — " +
+                             $"rolled back {removed} arch(es) from wave {wave}. " +
+                             $"The map is unchanged.");
+            return 0;
         }
 
         augmentArchWaves++;
         Debug.Log($"[AUGMENT/Arches] Added {placed} arches (wave {wave}) at radius {ringR:F1}.");
+
+        // Arch placement only avoids obstacles and slots, not people — a crescent
+        // can land on a player standing on the ring. Same rule as a map rebuild:
+        // only someone genuinely inside the new geometry is moved.
+        if (Application.isPlaying) PlayerSpawnSafety.EvacuateAllPlayers();
+
         return placed;
     }
 
@@ -1791,18 +2479,27 @@ public class TowerDefenseMap : MonoBehaviour
     bool IsArchPlacementClear(Vector2 pos, float width, float height, float coreSafe,
                               List<Vector2> placedThisWave)
     {
-        // Bounding radius of the crescent footprint (convex outer rim).
+        // Bounding radius of the crescent footprint (convex outer rim). The real
+        // collider chain reaches 0.44*width + ~0.2, so max(w,h)*0.5 is a close and
+        // slightly conservative stand-in.
         float archRadius = Mathf.Max(width, height) * 0.5f;
 
-        // 1) Core clearance.
-        if (pos.magnitude < coreSafe + archRadius)
+        // 1) Core clearance — enemies must still be able to stand next to the core
+        //    and swing at it.
+        if (pos.magnitude < coreSafe + archRadius + laneWidth)
         {
             Debug.Log($"[AUGMENT/Arches]   reject {pos} — too close to core.");
             return false;
         }
 
-        // Existing obstacles — biome decorations (trees/rocks) AND layout obstacles (walls/stones/crescents). 
-        float pad = 0.4f;
+        // 2) Existing obstacles — biome decorations (trees/rocks) AND layout obstacles
+        //    (walls/stones/crescents).
+        //
+        //    The pad used to be 0.4, which let an arch land within half an enemy's
+        //    width of a wall: exactly the wedge geometry the layouts were rewritten to
+        //    eliminate. It's now a full lane, so an arch either leaves room to walk
+        //    past or isn't placed at all.
+        float pad = laneWidth;
         Collider2D[] hits = Physics2D.OverlapCircleAll(pos, archRadius + pad, Physics2D.AllLayers);
         foreach (var hit in hits)
         {
@@ -1811,11 +2508,6 @@ public class TowerDefenseMap : MonoBehaviour
             // Trigger colliders (terrain boundary, tower slots, pickups) are not
             // solid terrain — never block on them.
             if (hit.isTrigger) continue;
-
-            // Skip our own arches from prior waves (per-wave spacing keeps them tidy).
-            if (augmentArchContainer != null &&
-                hit.transform.IsChildOf(augmentArchContainer.transform))
-                continue;
 
             // Skip the central core itself (core clearance handled in step 1).
             if (centralCore != null && hit.transform.IsChildOf(centralCore.transform))
@@ -1832,40 +2524,54 @@ public class TowerDefenseMap : MonoBehaviour
                 hit.GetComponentInParent<EnemyController>() != null)
                 continue;
 
+            // NOTE: arches from EARLIER waves are deliberately NOT skipped any more.
+            // They used to be, on the theory that per-wave spacing kept things tidy —
+            // but per-wave spacing is angular, and successive waves only stepped out
+            // 1.4 units, so wave 2 could land a fraction of a lane from wave 1. They
+            // are solid obstacles like any other and get the same lane of clearance.
+
             // Anything else with a SOLID collider here is real terrain → block.
-            Debug.Log($"[AUGMENT/Arches]   reject {pos} — overlaps solid collider " +
+            Debug.Log($"[AUGMENT/Arches]   reject {pos} — too close to solid collider " +
                       $"'{hit.name}' (layer {LayerMask.LayerToName(hit.gameObject.layer)}).");
             return false;
         }
 
-        // 3) Tower slots — keep arches off buildable ground.
+        // 3) Tower slots — an arch must leave room for a tower to be built here AND
+        //    for an enemy to get past that tower. The old 1.1 covered the slot
+        //    footprint but nothing else, so an arch could sit a wedge-width from a
+        //    future tower.
         foreach (var s in allTowerSlots)
         {
             if (s == null) continue;
             Vector2 sp = s.transform.position;
-            // Slot footprint radius ~ customSlotSize*0.5; use a safe constant.
-            float slotR = 1.1f;
-            if (Vector2.Distance(sp, pos) < archRadius + slotR)
+            if (Vector2.Distance(sp, pos) < archRadius + SlotClearance)
             {
                 Debug.Log($"[AUGMENT/Arches]   reject {pos} — too close to a tower slot.");
                 return false;
             }
         }
 
-        // 4) Other arches placed this wave (defensive — spacing already handles it).
+        // 4) Other arches placed this wave.
         foreach (var p in placedThisWave)
         {
-            if (Vector2.Distance(p, pos) < archRadius * 2f + 0.5f)
+            if (Vector2.Distance(p, pos) < archRadius * 2f + laneWidth)
                 return false;
         }
 
         return true;
     }
 
-    // Casts a handful of rays from the map edge straight toward the core. If at
-    // least two of them reach the core without hitting an obstacle collider,
-    // the core is considered reachable. Cheap, conservative reachability proxy
-    // that matches how enemies actually approach (radially inward).
+    // Sweeps an ENEMY-SIZED circle from the map edge straight toward the core. If at
+    // least two sweeps get through without hitting an obstacle, the core is considered
+    // reachable.
+    //
+    // This used to cast zero-width rays, which answer the wrong question entirely: a
+    // ray slips through a 1-unit gap that a 1.5-wide enemy cannot. Sweeping a circle of
+    // enemyClearanceRadius asks whether an actual enemy fits.
+    //
+    // Still a conservative proxy — it only tests straight radial lines, so a map with
+    // only curved routes reads as blocked and the augment declines to place. Failing
+    // that direction is the right one: worst case the player doesn't get their arches.
     bool CoreHasOpenApproach(float coreSafe, int obstacleMask)
     {
         const int probeCount = 24;            // every 15°
@@ -1877,9 +2583,11 @@ public class TowerDefenseMap : MonoBehaviour
             float ang = (360f / probeCount) * i * Mathf.Deg2Rad;
             Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
             Vector2 from = dir * startR;
-            // Ray inward toward the core; stop just outside the core safe disc.
+            // Sweep inward toward the core; stop just outside the core safe disc.
             float rayLen = startR - coreSafe;
-            RaycastHit2D rh = Physics2D.Raycast(from, -dir, rayLen, obstacleMask);
+            if (rayLen <= 0f) continue;
+
+            RaycastHit2D rh = Physics2D.CircleCast(from, enemyClearanceRadius, -dir, rayLen, obstacleMask);
             if (rh.collider == null)
             {
                 clearLanes++;
@@ -1946,7 +2654,8 @@ public class TowerDefenseMap : MonoBehaviour
         useBackgroundImage = true;
         if (terrainObject != null)
         {
-            DestroyImmediate(terrainObject);
+            if (terrainObject != backgroundGameObject) RetireAndDestroy(terrainObject);
+            terrainObject = null;
         }
         CreateTerrain();
     }
@@ -1956,7 +2665,8 @@ public class TowerDefenseMap : MonoBehaviour
         useBackgroundImage = false;
         if (terrainObject != null)
         {
-            DestroyImmediate(terrainObject);
+            if (terrainObject != backgroundGameObject) RetireAndDestroy(terrainObject);
+            terrainObject = null;
         }
         CreateTerrain();
     }
@@ -2012,4 +2722,7 @@ public class TowerDefenseMap : MonoBehaviour
         }
     }
 }
+
+
+
 

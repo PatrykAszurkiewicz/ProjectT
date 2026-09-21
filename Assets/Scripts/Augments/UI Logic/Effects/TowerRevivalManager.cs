@@ -12,7 +12,7 @@ public class TowerRevivalManager : MonoBehaviour
 
     public int RevivesPerStage = 1;
 
-    private int lastStageIndex = -1;
+    internal int lastStageIndex = -1;
 
     public static void Configure(int revivesPerStage)
     {
@@ -25,6 +25,20 @@ public class TowerRevivalManager : MonoBehaviour
         Enabled = true;
         Instance.RevivesPerStage = Mathf.Max(1, revivesPerStage);
         Debug.Log($"[AUGMENT] Phoenix Protocol armed — {Instance.RevivesPerStage} revive(s)/stage.");
+    }
+
+    /// Hard disable, for a run reset. Configure() cannot be used for this: it clamps
+    /// to a minimum of 1 and ARMS the augment, so Configure(0) was granting every run
+    /// a free revive per stage. Called from AugmentRuntimeModifiers.ResetAll().
+    public static void ResetForNewRun()
+    {
+        Enabled = false;
+        if (Instance != null)
+        {
+            Instance.RevivesPerStage = 0;
+            Instance.lastStageIndex = GameOrchestrator.Instance != null
+                ? GameOrchestrator.Instance.CurrentStageIndex : 0;
+        }
     }
 
     private void Awake()
@@ -91,4 +105,5 @@ public class TowerRevivalManager : MonoBehaviour
             Debug.Log("[AUGMENT] Phoenix Protocol — dead towers found but none could be refilled.");
     }
 }
+
 

@@ -27,16 +27,30 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     #region Singleton (can be replaced by orchestrator injection)
     void Awake()
     {
-        if (Instance == null)
+        if (Instance != null && Instance != this)
         {
-            Instance = this;
-            // Don't use DontDestroyOnLoad if using orchestrator
-            // DontDestroyOnLoad(gameObject);
+            // FIX: this used to Destroy(gameObject). SetStageScaling() creates this
+            // manager on a bare GameObject, but designers also drop it onto a shared
+            // "Systems" object — in which case a duplicate took every other system on
+            // that object down with it. Destroy only the duplicate COMPONENT, matching
+            // RunPersistence / WaveCheckpointService.
+            Destroy(this);
+            return;
         }
-        else
-        {
-            Destroy(gameObject);
-        }
+        Instance = this;
+        // Don't use DontDestroyOnLoad if using orchestrator
+        // DontDestroyOnLoad(gameObject);
+    }
+
+    // Clear run-scoped statics between Play sessions when "Enter Play Mode without
+    // domain reload" is on. Without this the ACTIVE difficulty of the previous session
+    // leaked into the first frames of the next one, before StartRun re-locked it.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        Instance = null;
+        ActiveMode = DifficultyMode.Normal;
+        _selectedMode = null;
     }
     #endregion
 
@@ -50,7 +64,13 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     public void Shutdown()
     {
         trackedEnemies.Clear();
-        Instance = null;
+
+        // Only the live singleton may clear the static handle. Without this guard a
+        // duplicate instance being torn down would null out the REAL Instance, after
+        // which SetStageScaling() would silently build a second manager and every
+        // Instance-based read (BaseBossStats.BossStageDamageMultiplier, ...) would
+        // fall back to 1x for the rest of the run.
+        if (Instance == this) Instance = null;
     }
     #endregion
 
@@ -59,14 +79,122 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     {
         if (enemy != null)
         {
+            // Skip throwaway EDITOR/TEST fixtures.
+            //
+            // AugmentBossRegressionHarness builds live probe objects (~bossNormal,
+            // ~bossNightmare, ~seed_Boss1..3) under a root flagged HideAndDontSave,
+            // lets their Awake run so real components initialise, then destroys the
+            // root. Five of them registered here on every suite run, and the harness's
+            // own 'tracked_enemies_no_destroyed_entries' invariant then reported them
+            // as a leak — it was detecting its own fixtures, five more per F5 press.
+            //
+            // A DontSave root means "not part of the running game", which is exactly
+            // the objects this set should ignore: they are never damaged, so a
+            // retroactive health rescale has nothing to do to them either. Real
+            // spawned enemies are parented into the scene and never carry this flag.
+            if (IsEditorFixture(enemy)) return;
+
             trackedEnemies.Add(enemy);
+#if UNITY_EDITOR
+            _trackedNames[enemy] = enemy.name;
+#endif
         }
+    }
+
+    // True for objects living under a HideAndDontSave root — harness fixtures and
+    // other editor-only scaffolding, never gameplay enemies.
+    private static bool IsEditorFixture(EnemyStats enemy)
+    {
+        var root = enemy.transform.root;
+        if (root == null) return false;
+        return (root.gameObject.hideFlags & HideFlags.DontSave) != 0;
     }
 
     public void UnregisterEnemy(EnemyStats enemy)
     {
         trackedEnemies.Remove(enemy);
+#if UNITY_EDITOR
+        if (enemy != null) _trackedNames.Remove(enemy);
+#endif
     }
+
+#if UNITY_EDITOR
+    // DIAGNOSTIC for the 'tracked_enemies_no_destroyed_entries' invariant.
+    //
+    // A destroyed Unity object throws on .name, so once an entry has leaked you can
+    // no longer ask it what it was. The only way to identify a leaker is to record
+    // the name at REGISTER time, which is what this map does. Editor-only, so it
+    // costs a build nothing.
+    //
+    // Right-click the component header -> "Log Leaked Tracked Enemies" and it names
+    // every prefab still in the set whose object is gone. Run it after the invariant
+    // trips; whatever it names is the type whose OnDestroy is not reaching
+    // UnregisterEnemy.
+    private readonly Dictionary<EnemyStats, string> _trackedNames =
+        new Dictionary<EnemyStats, string>();
+
+    // Scans itself every couple of seconds and prints the moment the leak count
+    // CHANGES, so the answer lands in the Console with no clicking. Silent while the
+    // count is unchanged (including zero), so it will not spam.
+    private float _leakScanTimer;
+    private int _lastReportedLeakCount = 0;
+
+    private void Update()
+    {
+        _leakScanTimer += Time.unscaledDeltaTime;
+        if (_leakScanTimer < 2f) return;
+        _leakScanTimer = 0f;
+        ReportLeaksIfChanged();
+    }
+
+    private void ReportLeaksIfChanged()
+    {
+        int leaked = 0;
+        foreach (var kv in _trackedNames) if (kv.Key == null) leaked++;
+
+        if (leaked == _lastReportedLeakCount) return;
+        _lastReportedLeakCount = leaked;
+
+        if (leaked == 0)
+        {
+            Debug.Log($"[ENEMY_MODIFIER_LEAK] Clean again — 0 destroyed entries, " +
+                      $"{trackedEnemies.Count} live enemy/enemies tracked.");
+            return;
+        }
+
+        LogLeakedTrackedEnemies();
+    }
+
+    [ContextMenu("Log Leaked Tracked Enemies")]
+    private void LogLeakedTrackedEnemies()
+    {
+        var counts = new Dictionary<string, int>();
+        int total = 0;
+        foreach (var kv in _trackedNames)
+        {
+            if (kv.Key != null) continue;
+            total++;
+            counts[kv.Value] = (counts.TryGetValue(kv.Value, out int c) ? c : 0) + 1;
+        }
+
+        if (total == 0)
+        {
+            Debug.Log($"[ENEMY_MODIFIER_LEAK] No leaked entries. Tracking {trackedEnemies.Count} enemy/enemies.");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"[ENEMY_MODIFIER_LEAK] {total} destroyed enemy/enemies still in trackedEnemies. ");
+        sb.Append($"Live count = {trackedEnemies.Count}. Culprits by prefab name:");
+        foreach (var kv in counts) sb.Append($"\n    {kv.Value}x  {kv.Key}");
+        sb.Append($"\n  Scene='{gameObject.scene.name}'  t={Time.timeSinceLevelLoad:F1}s");
+        sb.Append("\n  (COPY THE LINES ABOVE.) Their OnDestroy is not reaching " +
+                  "UnregisterEnemy — most likely an EnemyStats subclass declaring its own " +
+                  "OnDestroy() without 'override' + base.OnDestroy(), or they were destroyed " +
+                  "while Instance pointed at a different manager than the one they registered with.");
+        Debug.LogWarning(sb.ToString());
+    }
+#endif
 
     private void ApplyHealthChangeToExistingEnemies(float oldMultiplier, float newMultiplier)
     {
@@ -75,17 +203,33 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
         float ratio = newMultiplier / oldMultiplier;
         int affectedCount = 0;
 
-        foreach (var enemy in trackedEnemies)
+        // Snapshot: an enemy whose health rescale kills it can unregister mid-iteration,
+        // which would throw InvalidOperationException on the live HashSet.
+        var snapshot = new List<EnemyStats>(trackedEnemies);
+        foreach (var enemy in snapshot)
         {
             if (enemy == null || enemy.IsDead()) continue;
 
             // Scale both max and current health proportionally
             float oldMaxHealth = enemy.maxHealth;
+
+            // Guard the division. An enemy with maxHealth <= 0 has nothing to
+            // rescale and would produce NaN/Infinity here, which then propagates
+            // into currentHealth and makes IsDead() permanently false.
+            if (oldMaxHealth <= 0f) continue;
+
             float oldCurrentHealth = enemy.currentHealth;
             float healthPercentage = oldCurrentHealth / oldMaxHealth;
 
             enemy.maxHealth *= ratio;
             enemy.currentHealth = enemy.maxHealth * healthPercentage;
+
+            // Re-push the CAPACITY to the world-space bar. The bar's maximum is
+            // baked in at Initialize() time, so without this the bar keeps reading
+            // against the pre-augment denominator and shows the wrong fill for the
+            // rest of the fight. Bosses override this to report their combined
+            // armour+health pool, matching how they initialised their bar.
+            enemy.RefreshHealthBarCapacity();
 
             affectedCount++;
         }
@@ -106,15 +250,21 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     {
         float oldValue = damageMultiplier;
         damageMultiplier *= multiplier;
+        // Editor-only: every other log in this file is already commented out, so
+        // these two were shipping leftovers rather than deliberate telemetry.
+#if UNITY_EDITOR
         Debug.Log($"[ENEMY_MODIFIER] Damage: {oldValue:F3}x -> {damageMultiplier:F3}x (applied {multiplier:F2}x)");
+#endif
     }
 
     public void ApplyHealthMultiplier(float multiplier)
     {
         float oldValue = healthMultiplier;
         healthMultiplier *= multiplier;
-        // Apply to existing enemies retroactively
+#if UNITY_EDITOR
         Debug.Log($"[ENEMY_MODIFIER] Health: {oldValue:F3}x -> {healthMultiplier:F3}x (applied {multiplier:F2}x)");
+#endif
+        // Apply to existing enemies retroactively.
         ApplyHealthChangeToExistingEnemies(oldValue, healthMultiplier);
     }
 
@@ -148,7 +298,8 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
 
     #region Difficulty (Normal / Nightmare)
     // A run-wide, CONSTANT HP/damage factor that stacks MULTIPLICATIVELY on top of the
-    // per-stage scaling above. Nightmare = +30% to EVERY enemy AND boss; Normal = ×1
+    // per-stage scaling above. Nightmare = +40% to EVERY enemy AND boss (see the two
+    // constants below — the comment used to say +30% and disagreed with them); Normal = ×1
     // (identical to the original behaviour → no regression). Kept here as a small static
     // block so it needs no extra script: enemies/bosses read the two multipliers where
     // they already read their other scaling, the Options menu calls SelectNormal/
@@ -237,3 +388,7 @@ public class EnemyStatModifierManager : MonoBehaviour, IGameSystem, IEnemyStatPr
     }
 #endif
 }
+
+
+
+

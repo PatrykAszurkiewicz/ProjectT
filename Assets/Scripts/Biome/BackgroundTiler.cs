@@ -21,6 +21,17 @@ public class BackgroundTiler : MonoBehaviour
     //Patryk
     public static float TileWorldSize { get; private set; }
     //P
+
+    // PERF: ONE runtime material instance shared by the centre sprite and every tile.
+    // Previously each tile called `sr.material.SetFloat(...)`, and reading
+    // `.material` silently clones the material per renderer: ~100+ identical
+    // material copies per biome, one draw call each, and none of them were ever
+    // destroyed, so every biome switch leaked another full set. All tiles need the
+    // same _BackgroundScale value, so one shared instance renders identically.
+    private Material runtimeMaterial;
+    private Material baseMaterial; // what the renderer had before we took over
+    private static readonly int BackgroundScaleId = Shader.PropertyToID("_BackgroundScale");
+
     void Awake()
     {
         sourceSR = GetComponent<SpriteRenderer>();
@@ -38,11 +49,45 @@ public class BackgroundTiler : MonoBehaviour
         //P
         GenerateTiles();
     }
+
+    // Returns the shared material every background renderer should use. At runtime
+    // this is a single instance owned by this component; in edit mode (ContextMenu)
+    // the renderer's own shared material is used so no instances leak into the scene.
+    private Material GetSharedBackgroundMaterial()
+    {
+        if (sourceSR == null) return null;
+        Material baseMat = sourceSR.sharedMaterial;
+        if (baseMat == null) return null;
+        if (!Application.isPlaying) return baseMat;
+
+        if (runtimeMaterial == null)
+        {
+            baseMaterial = baseMat;
+            runtimeMaterial = new Material(baseMat) { name = baseMat.name + " (BackgroundTiler)" };
+            sourceSR.sharedMaterial = runtimeMaterial;
+        }
+        else if (sourceSR.sharedMaterial != runtimeMaterial)
+        {
+            // Something assigned a different material to the source since (e.g. a
+            // biome swap): rebuild the shared instance from it.
+            Destroy(runtimeMaterial);
+            baseMaterial = baseMat;
+            runtimeMaterial = new Material(baseMat) { name = baseMat.name + " (BackgroundTiler)" };
+            sourceSR.sharedMaterial = runtimeMaterial;
+        }
+        return runtimeMaterial;
+    }
+
     //Patryk
     void SetBackgroundScale(float scale)
     {
-        if (sourceSR.material != null)
-            sourceSR.material.SetFloat("_BackgroundScale", scale);
+        // Edit mode: leave the material asset untouched (the old code would have
+        // cloned it via .material, which Unity warns about outside Play Mode).
+        if (!Application.isPlaying) return;
+
+        Material mat = GetSharedBackgroundMaterial();
+        if (mat != null && mat.HasProperty(BackgroundScaleId))
+            mat.SetFloat(BackgroundScaleId, scale);
     }
     //P
     [ContextMenu("Generate Tiles")]
@@ -65,6 +110,7 @@ public class BackgroundTiler : MonoBehaviour
 
         TileWorldSize = tileWorldSize.x;
         SetBackgroundScale(TileWorldSize);
+        Material tileMaterial = Application.isPlaying ? GetSharedBackgroundMaterial() : sourceSR.sharedMaterial;
 
         // Auto-calculate how many tiles we need
         if (autoCalculateGrid)
@@ -110,7 +156,7 @@ public class BackgroundTiler : MonoBehaviour
                 //tileSR.sortingOrder = sourceSR.sortingOrder;
                 tileSR.sortingOrder = -100;
                 tileSR.drawMode = sourceSR.drawMode;
-                tileSR.sharedMaterial = sourceSR.sharedMaterial;
+                tileSR.sharedMaterial = tileMaterial; // shared - never .material
 
                 totalTiles++;
             }
@@ -119,13 +165,30 @@ public class BackgroundTiler : MonoBehaviour
         //Debug.Log($"[BackgroundTiler] Generated {totalTiles} tiles ({2 * tilesPerDirection + 1}x{2 * tilesPerDirection + 1} grid). " +
         //          $"Tile size: {tileWorldSize.x:F1}x{tileWorldSize.y:F1} world units.");
         //Patryk
-        float tileW = sourceSR.sprite.bounds.size.x * transform.lossyScale.x;
-        foreach (Transform child in transform)
-        {
-            var sr = child.GetComponent<SpriteRenderer>();
-            if (sr != null && sr.material != null)
-                sr.material.SetFloat("_BackgroundScale", tileW);
-        }
+        // (_BackgroundScale is already set on the shared material above; every tile
+        //  uses that same material, so no per-tile write is needed.)
         //P
     }
+
+    void OnDestroy()
+    {
+        if (runtimeMaterial == null) return;
+
+        // If only this component is removed (the sprite stays), hand the renderers
+        // back their original material so nothing is left pointing at a destroyed
+        // one. When the whole GameObject is going away this is harmless.
+        if (sourceSR != null && sourceSR.sharedMaterial == runtimeMaterial)
+            sourceSR.sharedMaterial = baseMaterial;
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            var sr = transform.GetChild(i).GetComponent<SpriteRenderer>();
+            if (sr != null && sr.sharedMaterial == runtimeMaterial)
+                sr.sharedMaterial = baseMaterial;
+        }
+
+        Destroy(runtimeMaterial);
+        runtimeMaterial = null;
+    }
 }
+
+

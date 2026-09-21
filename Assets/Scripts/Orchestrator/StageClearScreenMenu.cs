@@ -167,13 +167,14 @@ public class StageClearScreenMenu : MonoBehaviour
             TrySetChildText(inst, empowerValueChildName, empowerValueFormat, augmentEnergyBonus);
         }
 
-        // Freeze gameplay and suppress input while the menu is up.
+        // Freeze gameplay, suppress attacks and show the cursor through the shared
+        // modal stack — the SAME owner the pause / options / augment screens use.
+        // Doing it by hand (Time.timeScale / Cursor.visible / SetAllSuppressed) left
+        // this screen invisible to GamepadMenuCursor, which then hid the cursor out
+        // from under it every frame. Registering as a modal fixes that and lets the
+        // "hide the cursor when a pad is connected" rule apply here too.
         CombatJuice.StopAllShake();
-        float prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-        bool prevCursor = Cursor.visible;
-        Cursor.visible = true;
-        PlayerAttack.SetAllSuppressed(true);
+        UIModalStack.Push(this);
 
         // Entrance fade (unscaled so it runs while paused).
         float t = 0f;
@@ -222,10 +223,10 @@ public class StageClearScreenMenu : MonoBehaviour
         // the player lets go (see MenuInputGuard). Still paused here, so no gameplay runs.
         yield return MenuInputGuard.WaitForGamepadTriggersReleased();
 
-        // Restore gameplay state.
-        Time.timeScale = prevTimeScale;
-        Cursor.visible = prevCursor;
-        PlayerAttack.SetAllSuppressed(false);
+        // Hand freeze / cursor / attack-suppression back to the stack. Popping AFTER
+        // the trigger-release wait above keeps the game frozen until the confirming
+        // trigger is let go (see MenuInputGuard), exactly as before.
+        UIModalStack.Pop(this);
 
         // Tear down.
         if (canvasObj != null) Destroy(canvasObj);
@@ -529,3 +530,5 @@ public class StageClearButtonFeedbackFx : MonoBehaviour,
             _rt.localScale = Vector3.Lerp(_rt.localScale, _baseScale * s, 1f - Mathf.Exp(-FadeRate * dt));
     }
 }
+
+

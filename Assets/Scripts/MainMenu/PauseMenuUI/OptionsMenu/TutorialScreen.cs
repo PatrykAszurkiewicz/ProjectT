@@ -21,6 +21,12 @@ public class TutorialScreen : MonoBehaviour
     [SerializeField] private TMP_FontAsset titleFont;
     [SerializeField] private Font titleFontTtf;
 
+    [Header("Section header font (optional - auto-loads Cinzel-Tutorial from Resources)")]
+    [Tooltip("Font used for section titles (YOUR MISSION, MOVEMENT...). If both are empty, " +
+             "Cinzel-Tutorial is loaded from Resources; if that fails, the title font is used.")]
+    [SerializeField] private TMP_FontAsset headerFont;
+    [SerializeField] private Font headerFontTtf;
+
     [Header("Input (optional - auto-resolved if left empty)")]
     [Tooltip("Drag your PlayerInputActions asset here for exact, rebind-aware " +
              "control hints. If empty, the screen tries a PlayerInput in the " +
@@ -37,6 +43,13 @@ public class TutorialScreen : MonoBehaviour
     [Tooltip("Freeze the game (Time.timeScale = 0) while open. Harmless on the " +
              "main menu; useful if you open it mid-run.")]
     public bool pauseGameWhileOpen = true;
+
+    // 9-slice border for MenuPanel 1, in SOURCE pixels. The corner ornament (magenta
+    // flame + silver bevel diagonal) reaches ~170 px in from each edge, so a 140 border
+    // sliced through the bevel and Unity smeared it along the stretched edges. 180
+    // contains the whole ornament. Applied in code below so it works regardless of the
+    // sprite asset's import border.
+    private const float PanelBorder = 180f;
 
     [Tooltip("Which control scheme to show first. Auto = most recently used device.")]
     public DefaultScheme defaultScheme = DefaultScheme.Auto;
@@ -302,7 +315,7 @@ public class TutorialScreen : MonoBehaviour
                  "Explore"),
             Fallback("Open the Chest", "Walk Into It", "Walk Into It",
                  "A scroll unfurls with a piece of the story. The game pauses while you read."),
-            Fallback("Dismiss the Scroll", "Click / Space / Esc", "Any Button",
+            Fallback("Close the Scroll", "Click / Esc", "Any Button",
                  "The fragment is saved permanently."),
             Fallback("Lore Archive", "J", "Options Menu",
                  "Read every fragment you have collected. It carries across runs.")
@@ -1216,7 +1229,7 @@ public class TutorialScreen : MonoBehaviour
 
     private void BuildUI()
     {
-        _font = MenuTheme.ResolveFont(titleFont, titleFontTtf);
+        _font = ResolveBodyFont();
 
         _root = new GameObject("TutorialCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = _root.GetComponent<Canvas>();
@@ -1236,7 +1249,19 @@ public class TutorialScreen : MonoBehaviour
         pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
         pr.pivot = new Vector2(0.5f, 0.5f);
         pr.sizeDelta = new Vector2(1480, 1030);
-        MenuTheme.ApplySprite(panel.AddComponent<Image>(), MenuTheme.PanelSprite, MenuTheme.PanelSolid);
+        var panelImg = panel.AddComponent<Image>();
+        MenuTheme.ApplySprite(panelImg, MenuTheme.PanelSprite, MenuTheme.PanelSolid);
+        // 9-slice fix: bake the 180 px border so the corner ornament sits inside the
+        // fixed corner slices instead of smearing along the stretched edges. This panel
+        // is 1480×1030 (landscape), so the top/bottom frame bars stretch — but they're
+        // plain, only the corners must stay fixed. 180 / 1.3 ≈ 138 px corners here;
+        // raise the multiplier to shrink the corners, lower it to enlarge them.
+        if (panelImg.sprite != null)
+        {
+            panelImg.sprite = WithBorder(panelImg.sprite, PanelBorder);
+            panelImg.type = Image.Type.Sliced;
+            panelImg.pixelsPerUnitMultiplier = 1.8f;
+        }
 
         // inner column, inset clear of the decorative frame. Smaller TOP inset
         // pulls the title up and hands the freed space to the scroll body.
@@ -1267,6 +1292,8 @@ public class TutorialScreen : MonoBehaviour
         th.childForceExpandWidth = true; th.childForceExpandHeight = true;
         _kbTab = MenuTheme.NewButton("Keyboard & Mouse", tabs.transform, 24, _font);
         _padTab = MenuTheme.NewButton("Gamepad", tabs.transform, 24, _font);
+        SkinButton(_kbTab, false, 62);
+        SkinButton(_padTab, false, 62);
         _kbTab.onClick.AddListener(() => { _showGamepad = false; RefreshAllChips(); UpdateSchemeTabs(); });
         _padTab.onClick.AddListener(() => { _showGamepad = true; RefreshAllChips(); UpdateSchemeTabs(); });
 
@@ -1278,6 +1305,7 @@ public class TutorialScreen : MonoBehaviour
 
         var back = MenuTheme.NewButton("Back", inner.transform, 24, _font);
         SetH(back, 56);
+        SkinButton(back, true, 56);
         back.onClick.AddListener(Close);
 
         OptimizeRaycasts();
@@ -1347,11 +1375,7 @@ public class TutorialScreen : MonoBehaviour
 
         foreach (var section in BuildContent())
         {
-            var head = MenuTheme.NewText(section.title, content.transform, 27,
-                                         TextAlignmentOptions.Left, _font);
-            head.color = MenuTheme.Magenta; head.fontStyle = FontStyles.Bold; head.characterSpacing = 5f;
-            head.margin = new Vector4(2, 10, 0, 2);
-            SetH(head, 40);
+            BuildSectionHeader(content.transform, section.title);
 
             for (int i = 0; i < section.entries.Count; i++)
                 BuildRow((RectTransform)content.transform, section.entries[i], i % 2 == 1);
@@ -1378,7 +1402,8 @@ public class TutorialScreen : MonoBehaviour
         var chip = MenuTheme.NewUI("Chip", row.transform);
         var chipImg = chip.AddComponent<Image>();
         MenuTheme.ApplySprite(chipImg, MenuTheme.ButtonSprite, MenuTheme.BtnSolid);
-        if (isInfo) chipImg.color = MenuTheme.ButtonSprite != null
+        SkinImage(chipImg, false, 66);
+        if (isInfo) chipImg.color = HasButtonArt(chipImg)
             ? new Color(MenuTheme.Magenta.r, MenuTheme.Magenta.g, MenuTheme.Magenta.b, 1f)
             : MenuTheme.Violet;
         var cle = chip.GetComponent<LayoutElement>() ?? chip.AddComponent<LayoutElement>();
@@ -1433,6 +1458,370 @@ public class TutorialScreen : MonoBehaviour
         img.color = new Color(MenuTheme.Magenta.r, MenuTheme.Magenta.g, MenuTheme.Magenta.b, 0.8f);
     }
 
+    //  SECTION HEADERS
+    // The old headers were mid-tone magenta sitting directly on the light stone
+    // panel, and they inherited the font asset's default outline, which made the
+    // letters look muddy. Now each header gets:
+    //   - a dark banner that fades out to the right (guaranteed contrast on any texture)
+    //   - a magenta accent bar on the left and a thin magenta rule underneath
+    //   - pale lilac lettering with a crisp dark outline and a soft drop shadow,
+    //     using ONE shared material so all headers still batch together.
+    private static readonly Color HeaderTextTop = new Color(1.00f, 0.97f, 1.00f, 1f);
+    private static readonly Color HeaderTextBottom = new Color(0.95f, 0.78f, 1.00f, 1f);
+    private static readonly Color HeaderOutline = new Color(0.07f, 0.02f, 0.11f, 1f);
+    private static readonly Color HeaderShadow = new Color(0f, 0f, 0f, 0.70f);
+    private static readonly Color HeaderBanner = new Color(0.09f, 0.04f, 0.14f, 0.88f);
+
+    private Material _headerMat;
+    private static Sprite _fadeRight;
+
+    private void BuildSectionHeader(Transform parent, string text)
+    {
+        var holder = MenuTheme.NewUI("Header_" + text, parent);
+        SetH(holder, 66);
+
+        // dark banner, 12 px of breathing room above it
+        var banner = MenuTheme.NewUI("Banner", holder.transform);
+        var brt = banner.GetComponent<RectTransform>();
+        brt.anchorMin = Vector2.zero; brt.anchorMax = Vector2.one;
+        brt.offsetMin = Vector2.zero; brt.offsetMax = new Vector2(0f, -12f);
+        var bImg = banner.AddComponent<Image>();
+        bImg.sprite = FadeRightSprite();
+        bImg.color = HeaderBanner;
+
+        // magenta accent bar on the left edge
+        var accent = MenuTheme.NewUI("Accent", banner.transform);
+        var art = accent.GetComponent<RectTransform>();
+        art.anchorMin = new Vector2(0f, 0f); art.anchorMax = new Vector2(0f, 1f);
+        art.pivot = new Vector2(0f, 0.5f);
+        art.sizeDelta = new Vector2(6f, 0f); art.anchoredPosition = Vector2.zero;
+        accent.AddComponent<Image>().color = MenuTheme.Magenta;
+
+        // thin underline that fades out with the banner
+        var rule = MenuTheme.NewUI("Rule", banner.transform);
+        var rrt = rule.GetComponent<RectTransform>();
+        rrt.anchorMin = new Vector2(0f, 0f); rrt.anchorMax = new Vector2(1f, 0f);
+        rrt.pivot = new Vector2(0.5f, 0f);
+        rrt.sizeDelta = new Vector2(0f, 2f); rrt.anchoredPosition = Vector2.zero;
+        var rImg = rule.AddComponent<Image>();
+        rImg.sprite = FadeRightSprite();
+        rImg.color = new Color(MenuTheme.Magenta.r, MenuTheme.Magenta.g, MenuTheme.Magenta.b, 0.9f);
+
+        // the title itself
+        var headFont = HeaderFont();
+        var head = MenuTheme.NewText(text, banner.transform, 28, TextAlignmentOptions.Left, headFont);
+        // Assign explicitly so fontSharedMaterial (copied by HeaderMaterial) is
+        // Cinzel-Tutorial's own material and points at ITS atlas, not the title font's.
+        if (headFont != null && head.font != headFont) head.font = headFont;
+        head.fontStyle = FontStyles.Bold;
+        head.characterSpacing = 6f;
+        head.textWrappingMode = TextWrappingModes.NoWrap;
+        head.color = Color.white;   // vertex gradient below multiplies with this
+        head.enableVertexGradient = true;
+        head.colorGradient = new VertexGradient(HeaderTextTop, HeaderTextTop, HeaderTextBottom, HeaderTextBottom);
+
+        var mat = HeaderMaterial(head);
+        if (mat != null) head.fontSharedMaterial = mat;
+        head.extraPadding = true;   // keeps the drop shadow from being clipped by the glyph quad
+
+        var trt = head.rectTransform;
+        trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+        trt.pivot = new Vector2(0.5f, 0.5f);
+        trt.offsetMin = new Vector2(24f, 0f); trt.offsetMax = new Vector2(-12f, 2f);
+    }
+
+    // One material shared by every header. Copied from the font's own material (so it
+    // points at the same atlas), then the outline/shadow are set explicitly. Any glow or
+    // bevel baked into the font's default preset is switched off - that preset is what
+    // produced the smudgy border.
+    private Material HeaderMaterial(TMP_Text sample)
+    {
+        if (_headerMat != null) return _headerMat;
+
+        var src = sample.fontSharedMaterial;
+        // Not an SDF shader (e.g. bitmap font): leave it alone, the banner still gives contrast.
+        if (src == null || !src.HasProperty("_OutlineWidth")) return null;
+
+        var m = new Material(src) { name = src.name + " (Tutorial Header)" };
+
+        m.DisableKeyword("GLOW_ON");
+        m.DisableKeyword("BEVEL_ON");
+        m.DisableKeyword("UNDERLAY_INNER");
+
+        m.EnableKeyword("OUTLINE_ON");
+        SetMatFloat(m, "_FaceDilate", 0.06f);
+        SetMatFloat(m, "_OutlineWidth", 0.22f);
+        SetMatFloat(m, "_OutlineSoftness", 0f);
+        SetMatColor(m, "_OutlineColor", HeaderOutline);
+
+        if (m.HasProperty("_UnderlayColor"))
+        {
+            m.EnableKeyword("UNDERLAY_ON");
+            SetMatColor(m, "_UnderlayColor", HeaderShadow);
+            SetMatFloat(m, "_UnderlayOffsetX", 0.40f);
+            SetMatFloat(m, "_UnderlayOffsetY", -0.40f);
+            SetMatFloat(m, "_UnderlayDilate", 0.20f);
+            SetMatFloat(m, "_UnderlaySoftness", 0.25f);
+        }
+
+        // Recompute the SDF scale ratios so the outline/shadow render at the intended
+        // thickness and never exceed the atlas padding.
+        ShaderUtilities.UpdateShaderRatios(m);
+
+        _headerMat = m;
+        return m;
+    }
+
+    private static void SetMatFloat(Material m, string prop, float v) { if (m.HasProperty(prop)) m.SetFloat(prop, v); }
+    private static void SetMatColor(Material m, string prop, Color c) { if (m.HasProperty(prop)) m.SetColor(prop, c); }
+
+    // Solid on the left ~45%, then a smooth fade to transparent on the right.
+    private static Sprite FadeRightSprite()
+    {
+        if (_fadeRight != null) return _fadeRight;
+        const int W = 256, H = 4;
+        var tex = new Texture2D(W, H, TextureFormat.RGBA32, false)
+        { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+        var px = new Color32[W * H];
+        for (int x = 0; x < W; x++)
+        {
+            float t = x / (W - 1f);
+            float a = t < 0.45f ? 1f : 1f - Mathf.SmoothStep(0f, 1f, (t - 0.45f) / 0.55f);
+            var c = new Color32(255, 255, 255, (byte)(255 * a));
+            for (int y = 0; y < H; y++) px[y * W + x] = c;
+        }
+        tex.SetPixels32(px); tex.Apply();
+        _fadeRight = Sprite.Create(tex, new Rect(0, 0, W, H), new Vector2(0.5f, 0.5f), 100f,
+                                   0, SpriteMeshType.FullRect);
+        return _fadeRight;
+    }
+
+    private void OnDestroy()
+    {
+        if (_headerMat != null) Destroy(_headerMat);
+        if (_headerFontCreated && _headerFont != null) Destroy(_headerFont);
+    }
+
+    //  FONT RESOLUTION
+    // Cinzel-Tutorial lives OUTSIDE a Resources folder, so Resources.Load never finds
+    // it. And when IntroTutorial's "Full Guide" button opens this screen, there is
+    // usually no scene-placed TutorialScreen, so a bare one is created with EMPTY font
+    // slots - which is why every label fell back to TMP's default sans font.
+    // Both fonts are therefore resolved in code, trying in order:
+    //   1. this component's Inspector slots
+    //   2. Resources paths (in case the asset is ever moved there)
+    //   3. the font slots of menus already in the scene (IntroTutorial, OptionsMenu...)
+    //   4. any matching font asset already loaded in memory (works in builds)
+    //   5. Editor only: a project-wide AssetDatabase search by name
+    private const string TutorialFontName = "Cinzel-Tutorial";
+    private const string MenuFontName = "Cinzel";
+
+    private static readonly string[] HeaderFontPaths =
+    {
+        "Fonts/Cinzel-Tutorial", "Cinzel-Tutorial",
+        "Fonts/Cinzel/static/Cinzel-Tutorial", "Fonts/Cinzel/Cinzel-Tutorial",
+    };
+
+    // Menus that carry the same font slots as this screen.
+    private static readonly string[] FontDonorTypes = { "IntroTutorial", "OptionsMenu", "ContinueRunMenu", "TutorialScreen" };
+
+    private TMP_FontAsset _headerFont;
+    private bool _headerFontResolved, _headerFontCreated;
+
+    //  body / chips / buttons 
+    private TMP_FontAsset ResolveBodyFont()
+    {
+        TMP_FontAsset tmp = titleFont;
+        Font ttf = titleFontTtf;
+
+        if (tmp == null && ttf == null)
+            foreach (var donor in FontDonors())
+            {
+                tmp = ReadField<TMP_FontAsset>(donor, "titleFont");
+                ttf = ReadField<Font>(donor, "titleFontTtf");
+                if (tmp == null && ttf == null) tmp = ReadField<TMP_FontAsset>(donor, "_font");
+                if (IsRealFont(tmp) || ttf != null) break;
+                tmp = null; ttf = null;
+            }
+
+        var resolved = MenuTheme.ResolveFont(tmp, ttf);
+        if (IsRealFont(resolved) || tmp != null || ttf != null) return resolved;
+
+        // MenuTheme had nothing either: find the menu Cinzel (not the Tutorial cut) by name.
+        var found = FindFontAsset<TMP_FontAsset>(MenuFontName, TutorialFontName);
+        if (found != null) return found;
+
+        var foundTtf = FindFontAsset<Font>(MenuFontName, TutorialFontName);
+        if (foundTtf != null) return MenuTheme.ResolveFont(null, foundTtf);
+
+        Debug.LogWarning("[TutorialScreen] No Cinzel font found for body text; using the default font.");
+        return resolved;
+    }
+
+    //  section headers 
+    private TMP_FontAsset HeaderFont()
+    {
+        if (_headerFontResolved) return _headerFont != null ? _headerFont : _font;
+        _headerFontResolved = true;
+
+        _headerFont = headerFont;
+        Font ttf = headerFontTtf;
+
+        // Resources
+        if (_headerFont == null && ttf == null)
+            foreach (var path in HeaderFontPaths)
+            {
+                _headerFont = Resources.Load<TMP_FontAsset>(path);
+                if (_headerFont != null) break;
+                ttf = Resources.Load<Font>(path);
+                if (ttf != null) break;
+            }
+
+        // IntroTutorial already has it (Inspector slot, or resolved at runtime)
+        if (_headerFont == null && ttf == null)
+            foreach (var donor in FontDonors())
+            {
+                var f = ReadField<TMP_FontAsset>(donor, "tutorialTitleFont");
+                if (f == null)
+                {
+                    f = ReadField<TMP_FontAsset>(donor, "_titleFont");
+                    if (!NameHas(f, TutorialFontName)) f = null;   // that one may be a fallback
+                }
+                if (f != null) { _headerFont = f; break; }
+            }
+
+        // loaded in memory / project search
+        if (_headerFont == null && ttf == null)
+        {
+            _headerFont = FindFontAsset<TMP_FontAsset>(TutorialFontName, null);
+            if (_headerFont == null) ttf = FindFontAsset<Font>(TutorialFontName, null);
+        }
+
+        // only a .ttf/.otf was found: build a dynamic SDF asset from it once
+        if (_headerFont == null && ttf != null)
+        {
+            try
+            {
+                _headerFont = TMP_FontAsset.CreateFontAsset(ttf);
+                if (_headerFont != null)
+                {
+                    _headerFont.name = ttf.name + " SDF (Tutorial Header)";
+                    _headerFontCreated = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[TutorialScreen] Could not build a TMP font from '{ttf.name}': {ex.Message}");
+                _headerFont = null;
+            }
+        }
+
+        if (_headerFont == null)
+            Debug.LogWarning("[TutorialScreen] Cinzel-Tutorial not found (Inspector, Resources, " +
+                             "scene menus, loaded assets). Section headers use the body font.");
+        else
+            Debug.Log($"[TutorialScreen] Section header font: {_headerFont.name}");
+
+        return _headerFont != null ? _headerFont : _font;
+    }
+
+    //  helpers 
+    private IEnumerable<MonoBehaviour> FontDonors()
+    {
+        var all = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (var name in FontDonorTypes)            // keep the priority order above
+            foreach (var mb in all)
+                if (mb != null && mb != this && mb.GetType().Name == name)
+                    yield return mb;
+    }
+
+    private static T ReadField<T>(object obj, string field) where T : UnityEngine.Object
+    {
+        if (obj == null) return null;
+        const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        for (var t = obj.GetType(); t != null && t != typeof(MonoBehaviour); t = t.BaseType)
+        {
+            var fi = t.GetField(field, F);
+            if (fi != null && typeof(T).IsAssignableFrom(fi.FieldType))
+            {
+                var v = fi.GetValue(obj) as T;
+                return v != null ? v : null;       // Unity "fake null" -> real null
+            }
+        }
+        return null;
+    }
+
+    private static bool NameHas(UnityEngine.Object o, string part) =>
+        o != null && o.name.IndexOf(part, StringComparison.OrdinalIgnoreCase) >= 0;
+
+    // "Real" = not missing and not TMP's built-in default (LiberationSans).
+    private static bool IsRealFont(TMP_FontAsset f)
+    {
+        if (f == null) return false;
+        var def = TMP_Settings.instance != null ? TMP_Settings.defaultFontAsset : null;
+        return f != def && !NameHas(f, "LiberationSans");
+    }
+
+    /// Finds a font asset whose name contains `contains` (and not `excludes`).
+    /// Checks everything already loaded first - that is what works in a build - then,
+    /// in the Editor only, the whole project. Exact names ("X" / "X SDF") win,
+    /// otherwise the shortest matching name.
+    private static T FindFontAsset<T>(string contains, string excludes) where T : UnityEngine.Object
+    {
+        T best = PickBest(Resources.FindObjectsOfTypeAll<T>(), contains, excludes);
+        if (best != null) return best;
+
+#if UNITY_EDITOR
+        var list = new List<T>();
+        foreach (var guid in UnityEditor.AssetDatabase.FindAssets($"{MenuFontName} t:{typeof(T).Name}"))
+        {
+            var a = UnityEditor.AssetDatabase.LoadAssetAtPath<T>(UnityEditor.AssetDatabase.GUIDToAssetPath(guid));
+            if (a != null) list.Add(a);
+        }
+        best = PickBest(list, contains, excludes);
+#endif
+        return best;
+    }
+
+    private static T PickBest<T>(IEnumerable<T> items, string contains, string excludes) where T : UnityEngine.Object
+    {
+        T best = null;
+        foreach (var a in items)
+        {
+            if (a == null || !NameHas(a, contains)) continue;
+            if (!string.IsNullOrEmpty(excludes) && NameHas(a, excludes)) continue;
+            if (a.name.IndexOf("(Tutorial Header)", StringComparison.Ordinal) >= 0) continue;
+
+            string n = a.name.Trim();
+            bool exact = n.Equals(contains, StringComparison.OrdinalIgnoreCase) ||
+                         n.Equals(contains + " SDF", StringComparison.OrdinalIgnoreCase);
+            if (exact) return a;
+            if (best == null || n.Length < best.name.Length) best = a;
+        }
+        return best;
+    }
+
+#if UNITY_EDITOR
+    // Fill the header slot in the Editor so the reference is saved with the scene and
+    // the font is guaranteed to ship in builds. Deferred: AssetDatabase calls are not
+    // allowed directly inside OnValidate during imports.
+    private void OnValidate()
+    {
+        if (Application.isPlaying || headerFont != null || headerFontTtf != null) return;
+        UnityEditor.EditorApplication.delayCall += () =>
+        {
+            if (this == null || headerFont != null || headerFontTtf != null) return;
+            var f = FindFontAsset<TMP_FontAsset>(TutorialFontName, null);
+            if (f == null) return;
+            UnityEditor.Undo.RecordObject(this, "Assign Cinzel-Tutorial header font");
+            headerFont = f;
+            UnityEditor.PrefabUtility.RecordPrefabInstancePropertyModifications(this);
+            UnityEditor.EditorUtility.SetDirty(this);
+        };
+    }
+#endif
+
     private static void SetH(Component c, float hgt) => SetH(c.gameObject, hgt);
     private static void SetH(GameObject go, float hgt)
     {
@@ -1452,7 +1841,7 @@ public class TutorialScreen : MonoBehaviour
         if (btn == null) return;
         if (btn.targetGraphic is Image img)
             img.color = active ? MenuTheme.BtnActive
-                               : (MenuTheme.ButtonSprite != null ? Color.white : MenuTheme.BtnSolid);
+                               : (HasButtonArt(img) ? Color.white : MenuTheme.BtnSolid);
         var lbl = btn.GetComponentInChildren<TextMeshProUGUI>();
         if (lbl != null) lbl.color = active ? Color.white : MenuTheme.ValueCol;
     }
@@ -1636,5 +2025,109 @@ public class TutorialScreen : MonoBehaviour
     }
 
     private class ChipBinding { public Entry entry; public TextMeshProUGUI label; }
+
+    //  NEW BUTTON ART
+    // Button3Wider = normal buttons (split rows, chips), GigaWaski = full-width buttons.
+    // Only the graphic changes -- every size/LayoutElement set above stays untouched.
+    // The sprite is 9-sliced in code (import settings don't matter): the crack ornaments
+    // on each end never stretch, only the plain middle does. The multiplier scales the
+    // ornaments to the button's height. *Scale trims the thick outer glow a bit so the
+    // text sits inside the dark body (1.0 = art exactly as drawn).
+    private const string BtnSpriteDir = "Sprites/HUD/PauseMenu/PauseMenuMiddlePanel/";
+    private const float NormalBtnScale = 1.2f;
+    private const float WideBtnScale = 1.3f;
+    private static Sprite _btnNormal, _btnWide;
+    private static bool _btnWarned;
+
+    // Null-checked (not a "tried once" flag) so a sprite destroyed by an asset unload
+    // or a play-mode restart without domain reload is simply rebuilt.
+    private static Sprite ButtonArt(bool wide)
+    {
+        if (wide)
+        {
+            // GigaWaski 890x126 -- border (left, bottom, right, top)
+            if (_btnWide == null) _btnWide = LoadSliced("GigaWaski", new Vector4(200, 48, 280, 48));
+            return _btnWide;
+        }
+        // Button3Wider 648x181
+        if (_btnNormal == null) _btnNormal = LoadSliced("Button3Wider", new Vector4(120, 50, 188, 50));
+        return _btnNormal;
+    }
+
+    // True when the image shows real button art (old MenuTheme sprite or the new one),
+    // i.e. exactly the cases where the original code tinted with white, not BtnSolid.
+    private static bool HasButtonArt(Image img)
+    {
+        if (img == null || img.sprite == null) return false;
+        var s = img.sprite;
+        return s == MenuTheme.ButtonSprite || s == _btnNormal || s == _btnWide;
+    }
+
+    private static Sprite LoadSliced(string file, Vector4 border)
+    {
+        var src = Resources.Load<Sprite>(BtnSpriteDir + file);
+        if (src == null)
+        {
+            if (!_btnWarned) Debug.LogWarning("Button sprite not found: Resources/" + BtnSpriteDir + file);
+            _btnWarned = true;
+            return null;
+        }
+        try
+        {
+            float ppu = src.pixelsPerUnit > 0 ? src.pixelsPerUnit : 100f;
+            return Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), ppu, 0,
+                                 SpriteMeshType.FullRect, border);
+        }
+        catch { return src; }
+    }
+
+    // height = the button's final on-screen height (same number the layout gives it).
+    private static void SkinImage(Image img, bool wide, float height)
+    {
+        var art = ButtonArt(wide);
+        if (img == null || art == null) return;   // falls back to the MenuTheme look
+        img.sprite = art;
+        img.type = Image.Type.Sliced;
+        img.fillCenter = true;
+        img.preserveAspect = false;
+        img.pixelsPerUnitMultiplier = art.rect.height * (wide ? WideBtnScale : NormalBtnScale) / height;
+    }
+
+    private static void SkinButton(Button btn, bool wide, float height)
+    {
+        if (btn == null) return;
+        var img = btn.targetGraphic as Image;
+        if (img == null) img = btn.GetComponent<Image>();
+        SkinImage(img, wide, height);
+        // Old hover/pressed Button 1 sprites would come back on hover -- tint instead.
+        if (btn.transition == Selectable.Transition.SpriteSwap)
+        {
+            btn.spriteState = default;
+            btn.transition = Selectable.Transition.ColorTint;
+            var cb = ColorBlock.defaultColorBlock;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = cb.selectedColor = new Color(1f, 0.85f, 1f, 1f);
+            cb.pressedColor = new Color(0.75f, 0.65f, 0.8f, 1f);
+            btn.colors = cb;
+        }
+    }
+
+    // Rebuilds a sprite with a 9-slice border baked in, so a Sliced Image keeps its
+    // corners fixed while the edges/center stretch. Border is in source-texture pixels.
+    // The texture does NOT need Read/Write enabled — Sprite.Create only references a
+    // rect of the existing texture, it never reads pixels.
+    private static Sprite WithBorder(Sprite src, float border)
+    {
+        if (src == null) return null;
+        try
+        {
+            float ppu = src.pixelsPerUnit > 0 ? src.pixelsPerUnit : 100f;
+            return Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), ppu, 0,
+                                 SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+        }
+        catch { return src; }
+    }
 }
+
+
 

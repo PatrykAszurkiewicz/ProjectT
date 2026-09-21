@@ -13,13 +13,23 @@ MonoBehaviour:
   m_Name: WolfData
   m_EditorClassIdentifier: 
   enemyName: Wolf
-  maxHealth: 8
+  maxHealth: 16
   maxArmor: 0
   moveSpeed: 3.2
   damage: 2
   mass: 34
-  spriteFolderPath: Sprites/EnemySprites/Wolf
+  frames:
+  - {fileID: 21300000, guid: 0c509b7f9d3af744a8a72580c49c234d, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
   animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 0
     frameCount: 0

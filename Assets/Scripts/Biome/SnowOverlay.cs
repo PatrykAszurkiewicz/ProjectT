@@ -143,7 +143,6 @@ public class SnowOverlay : MonoBehaviour
     private float[] flakeRotation;
     private float[] flakeRotSpeed;
     private Vector3[] flakeVerts;
-    private float killHeight;
 
 
     private bool _generated;
@@ -173,20 +172,39 @@ public class SnowOverlay : MonoBehaviour
         _extMinX = float.MaxValue; _extMaxX = float.MinValue;
         _extMinY = float.MaxValue; _extMaxY = float.MinValue; _extSamples = 0;
         ApplyFullMapCoverage();   // expand every layer to the whole map BEFORE generating
+
+        // PERF: remember the full-map falling-snow DENSITY (flakes per square unit)
+        // and the full-map count as an upper bound. The airborne layer now simulates
+        // only a box around the camera(s) at this same density - see
+        // GenerateAirborneSnow / Update.
+        _flakeCountCap = Mathf.Max(1, particleCount);
+        _flakeDensity = particleCount / Mathf.Max(0.01f, 4f * spawnRadius * spawnHeight);
+
         Cleanup();
         CreateMaterials();
         GenerateGroundSnow();
         GenerateSnowdrifts();
         GenerateIceCrystals();
         GenerateFrostVegetation();
+
+        // PERF: split the static layers into spatial cells with real bounds so the
+        // camera only draws the cells it can see (was: every patch on the whole map,
+        // every frame - several hundred thousand patches).
+        SplitLayerIntoCells(groundObjects, groundMeshes);
+        SplitLayerIntoCells(driftObjects, driftMeshes);
+        SplitLayerIntoCells(iceObjects, iceMeshes);
+        SplitLayerIntoCells(frostVegObjects, frostVegMeshes);
+
         GenerateAirborneSnow();
 
-        // Co-op: make EVERY active orthographic camera (both split-screen halves)
-        // use an oversized culling matrix so these large combined meshes are not
-        // frustum-culled in the camera that isn't Camera.main. Without this the
-        // snow renders in only one player's view, leaving a hard divide at screen
-        // center — right next to the core. Same fix GrassCartoonOverlay uses.
-        ApplyOversizedCullingToAllCameras();
+        // The oversized camera culling override is now opt-in (applyOversizedCulling).
+        // Each spatial cell has correct bounds, so every camera - both split-screen
+        // halves included - culls it correctly on its own.
+        if (applyOversizedCulling)
+        {
+            ApplyOversizedCullingToAllCameras();
+            _cullingOverrideActive = true;
+        }
 
         LogGeneratedExtent();
     }
@@ -776,7 +794,23 @@ public class SnowOverlay : MonoBehaviour
 
     void GenerateAirborneSnow()
     {
-        killHeight = -spawnHeight;
+
+        // PERF: size the flake pool for the area around the camera(s) instead of the
+        // whole map, at the same density. The full-map version simulated and uploaded
+        // up to ~14,000 flakes every frame for a view that shows a few percent of them.
+        Vector2 boxCenter, boxHalf;
+        if (!TryGetFlakeViewBox(out boxCenter, out boxHalf))
+        {
+            // Cameras not live yet during biome load: start with a typical view and
+            // let Update grow the pool once the real camera size is known.
+            boxCenter = Vector2.zero;
+            boxHalf = new Vector2(FLAKE_DEFAULT_HALF_W, FLAKE_DEFAULT_HALF_H);
+        }
+        boxHalf *= FLAKE_BOX_HEADROOM; // room to zoom out a little without a rebuild
+        _flakeBoxHalf = boxHalf;
+        _flakeBoxCenter = boxCenter;
+        particleCount = Mathf.Clamp(
+            Mathf.CeilToInt(_flakeDensity * 4f * boxHalf.x * boxHalf.y), 1, _flakeCountCap);
 
         flakePos = new Vector2[particleCount];
         flakeSpeed = new float[particleCount];
@@ -810,8 +844,8 @@ public class SnowOverlay : MonoBehaviour
             flakeType[i] = type;
 
             flakePos[i] = new Vector2(
-                Random.Range(-spawnRadius, spawnRadius),
-                Random.Range(killHeight, spawnHeight)
+                Random.Range(boxCenter.x - boxHalf.x, boxCenter.x + boxHalf.x),
+                Random.Range(boxCenter.y - boxHalf.y, boxCenter.y + boxHalf.y)
             );
 
             float speedMult, sizeMult;
@@ -886,6 +920,7 @@ public class SnowOverlay : MonoBehaviour
 
         flakeMesh = new Mesh();
         flakeMesh.name = "SnowFlakeMesh";
+        flakeMesh.MarkDynamic(); // vertices are rewritten every frame
         flakeMesh.vertices = flakeVerts;
         flakeMesh.colors = cols;
         flakeMesh.uv = uvs;
@@ -917,7 +952,30 @@ public class SnowOverlay : MonoBehaviour
 
         float dt = Time.deltaTime;
         float t = Time.time;
-        float spawnW = spawnRadius * 1.2f;
+
+        // PERF: flakes live in a box that follows the camera(s) and wrap around it,
+        // so the visible density matches the old full-map layer with a fraction of
+        // the flakes. If the view grows past the pool's box (zoom-out, split-screen
+        // players separating), rebuild the pool once for the bigger box.
+        Vector2 boxCenter, viewHalf;
+        if (TryGetFlakeViewBox(out boxCenter, out viewHalf))
+        {
+            if ((viewHalf.x > _flakeBoxHalf.x || viewHalf.y > _flakeBoxHalf.y)
+                && particleCount < _flakeCountCap)
+            {
+                RebuildAirborneSnow();
+                return;
+            }
+            // Already at the full-map flake count: keep covering the whole view
+            // (slightly thinner) rather than leaving part of it without snow.
+            _flakeBoxHalf = Vector2.Max(_flakeBoxHalf, viewHalf);
+            _flakeBoxCenter = boxCenter;
+        }
+        Vector2 wrapHalf = _flakeBoxHalf;
+        float boxMinX = _flakeBoxCenter.x - wrapHalf.x;
+        float boxMinY = _flakeBoxCenter.y - wrapHalf.y;
+        float boxW = wrapHalf.x * 2f;
+        float boxH = wrapHalf.y * 2f;
 
         for (int i = 0; i < particleCount; i++)
         {
@@ -976,54 +1034,351 @@ public class SnowOverlay : MonoBehaviour
             flakePos[i].x += totalX * dt;
             flakePos[i].y += totalY * dt;
 
-            // 7. RESPAWN
-            bool respawn = false;
+            // 7. WRAP around the camera box (replaces the full-map respawn).
+            float oldY = flakePos[i].y;
+            float nx = boxMinX + Mathf.Repeat(flakePos[i].x - boxMinX, boxW);
+            float ny = boxMinY + Mathf.Repeat(oldY - boxMinY, boxH);
 
-            if (flakePos[i].x < -spawnW)
+            // A vertical wrap is the equivalent of the old "fell out, respawn at the
+            // top": re-roll x and the phase so the field never visibly repeats.
+            if (Mathf.Abs(ny - oldY) > wrapHalf.y)
             {
-                flakePos[i].x = spawnW - Random.Range(0f, 2f);
-                respawn = true;
-            }
-            else if (flakePos[i].x > spawnW)
-            {
-                flakePos[i].x = -spawnW + Random.Range(0f, 2f);
-                respawn = true;
-            }
-
-            if (flakePos[i].y < killHeight)
-            {
-                flakePos[i].y = spawnHeight + Random.Range(0f, 3f);
-                flakePos[i].x = Random.Range(-spawnW, spawnW);
-                respawn = true;
-            }
-            else if (flakePos[i].y > spawnHeight + 4f)
-            {
-                flakePos[i].y = killHeight + Random.Range(0f, 2f);
-                respawn = true;
-            }
-
-            if (respawn)
-            {
+                nx = boxMinX + Random.value * boxW;
                 flakePhase[i] = Random.Range(0f, Mathf.PI * 2f);
             }
+
+            flakePos[i].x = nx;
+            flakePos[i].y = ny;
         }
 
         RefreshFlakeVerts();
         flakeMesh.vertices = flakeVerts;
+        flakeMesh.bounds = new Bounds(
+            new Vector3(_flakeBoxCenter.x, _flakeBoxCenter.y, 0f),
+            new Vector3(boxW + 4f, boxH + 4f, 10f));
+    }
+
+    //  AIRBORNE SNOW - camera box helpers
+
+    private const float FLAKE_DEFAULT_HALF_W = 16f;
+    private const float FLAKE_DEFAULT_HALF_H = 10f;
+    private const float FLAKE_BOX_HEADROOM = 1.15f;
+    private float _flakeDensity;
+    private int _flakeCountCap = 1;
+    private Vector2 _flakeBoxHalf = new Vector2(FLAKE_DEFAULT_HALF_W, FLAKE_DEFAULT_HALF_H);
+    private Vector2 _flakeBoxCenter;
+    private Camera[] _flakeCamBuffer;
+
+    // Union of every enabled orthographic camera that renders this layer, in this
+    // component's local space, plus a margin so flakes wrap off-screen.
+    bool TryGetFlakeViewBox(out Vector2 center, out Vector2 half)
+    {
+        center = Vector2.zero;
+        half = Vector2.zero;
+
+        int count = Camera.allCamerasCount;
+        if (count == 0) return false;
+        if (_flakeCamBuffer == null || _flakeCamBuffer.Length < count)
+            _flakeCamBuffer = new Camera[count];
+        int filled = Camera.GetAllCameras(_flakeCamBuffer);
+
+        // The snow renderers are created with new GameObject(), i.e. on the Default
+        // layer, not this component's layer - filter cameras by what they draw.
+        int layerBit = 1 << (flakeObject != null ? flakeObject.layer : 0);
+        float minX = float.MaxValue, minY = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue;
+        bool any = false;
+
+        for (int i = 0; i < filled; i++)
+        {
+            var cam = _flakeCamBuffer[i];
+            if (cam == null || !cam.orthographic) continue;
+            if ((cam.cullingMask & layerBit) == 0) continue; // e.g. UI-only cameras
+
+            float h = cam.orthographicSize;
+            float w = h * cam.aspect;
+            Vector3 lc = transform.InverseTransformPoint(cam.transform.position);
+            minX = Mathf.Min(minX, lc.x - w); maxX = Mathf.Max(maxX, lc.x + w);
+            minY = Mathf.Min(minY, lc.y - h); maxY = Mathf.Max(maxY, lc.y + h);
+            any = true;
+        }
+        if (!any) return false;
+
+        center = new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+        half = new Vector2((maxX - minX) * 0.5f, (maxY - minY) * 0.5f);
+        // Margin: flakes must leave and enter off-screen, and the biggest flakes
+        // (clumps) must be fully outside before they wrap.
+        half += new Vector2(2f, 2f) + half * 0.1f;
+        return true;
+    }
+
+    // Grows the flake pool for a bigger view WITHOUT a visible pop: every flake
+    // that already exists keeps its exact position and look, and the new flakes are
+    // only placed in the area the old box did not cover.
+    void RebuildAirborneSnow()
+    {
+        // Keep whatever sorting FixSortingOrder() (Start) gave the old renderer.
+        MeshRenderer oldMr = flakeObject != null ? flakeObject.GetComponent<MeshRenderer>() : null;
+        bool hadSorting = oldMr != null;
+        int oldLayerId = hadSorting ? oldMr.sortingLayerID : 0;
+        int oldOrder = hadSorting ? oldMr.sortingOrder : 0;
+
+        // Snapshot the live flakes.
+        int oldCount = flakePos != null ? flakePos.Length : 0;
+        Vector2[] oPos = flakePos;
+        float[] oSpeed = flakeSpeed, oPhase = flakePhase, oSize = flakeSize, oDepth = flakeDepth;
+        float[] oRot = flakeRotation, oRotSpeed = flakeRotSpeed;
+        int[] oType = flakeType;
+        Color[] oCols = flakeMesh != null ? flakeMesh.colors : null;
+        Vector2[] oUv2 = flakeMesh != null ? flakeMesh.uv2 : null;
+        Vector2 oldCenter = _flakeBoxCenter;
+        Vector2 oldHalf = _flakeBoxHalf;
+
+        if (flakeObject != null) DestroyImmediate(flakeObject);
+        if (flakeMesh != null) DestroyImmediate(flakeMesh);
+        flakeObject = null;
+        flakeMesh = null;
+        GenerateAirborneSnow();
+
+        if (hadSorting && flakeObject != null)
+        {
+            var mr = flakeObject.GetComponent<MeshRenderer>();
+            mr.sortingLayerID = oldLayerId;
+            mr.sortingOrder = oldOrder;
+        }
+
+        bool canCarryOver = oldCount > 0 && flakeMesh != null
+            && oCols != null && oCols.Length == oldCount * FLAKE_VERTS
+            && oUv2 != null && oUv2.Length == oldCount * FLAKE_VERTS;
+        if (!canCarryOver) return;
+
+        Color[] cols = flakeMesh.colors;
+        Vector2[] uv2 = flakeMesh.uv2;
+        int next = 0;
+
+        for (int i = 0; i < particleCount; i++)
+        {
+            if (!InsideBox(flakePos[i], oldCenter, oldHalf)) continue; // new area: keep the fresh flake
+
+            if (next < oldCount)
+            {
+                // Inside the old box: put an existing flake back exactly as it was.
+                flakePos[i] = oPos[next];
+                flakeSpeed[i] = oSpeed[next];
+                flakePhase[i] = oPhase[next];
+                flakeSize[i] = oSize[next];
+                flakeDepth[i] = oDepth[next];
+                flakeRotation[i] = oRot[next];
+                flakeRotSpeed[i] = oRotSpeed[next];
+                flakeType[i] = oType[next];
+                for (int v = 0; v < FLAKE_VERTS; v++)
+                {
+                    cols[i * FLAKE_VERTS + v] = oCols[next * FLAKE_VERTS + v];
+                    uv2[i * FLAKE_VERTS + v] = oUv2[next * FLAKE_VERTS + v];
+                }
+                next++;
+            }
+            else
+            {
+                // More fresh flakes landed in the old area than there were old flakes:
+                // move this one into the new area so the old area's density is unchanged.
+                flakePos[i] = RandomPointOutside(oldCenter, oldHalf);
+            }
+        }
+
+        flakeMesh.colors = cols;
+        flakeMesh.uv2 = uv2;
+        RefreshFlakeVerts();
+        flakeMesh.vertices = flakeVerts;
+    }
+
+    static bool InsideBox(Vector2 p, Vector2 center, Vector2 half)
+    {
+        return Mathf.Abs(p.x - center.x) <= half.x && Mathf.Abs(p.y - center.y) <= half.y;
+    }
+
+    // Uniform point in the current flake box that is outside the given (old) box.
+    Vector2 RandomPointOutside(Vector2 oldCenter, Vector2 oldHalf)
+    {
+        Vector2 p = _flakeBoxCenter;
+        for (int tries = 0; tries < 20; tries++)
+        {
+            p = new Vector2(
+                Random.Range(_flakeBoxCenter.x - _flakeBoxHalf.x, _flakeBoxCenter.x + _flakeBoxHalf.x),
+                Random.Range(_flakeBoxCenter.y - _flakeBoxHalf.y, _flakeBoxCenter.y + _flakeBoxHalf.y));
+            if (!InsideBox(p, oldCenter, oldHalf)) break;
+        }
+        return p;
+    }
+
+    //  STATIC LAYERS - spatial cells for frustum culling
+
+    private const float CULL_CELL_SIZE = 16f;
+    // Bounds padding for any vertex motion the snow shader adds (wind sway, shimmer).
+    private const float CULL_CELL_MARGIN = 1.5f;
+
+    // Rebuilds every mesh of one layer as several smaller meshes, one per grid cell,
+    // each with tight bounds. Vertices, colours, UVs, triangles, material, sorting
+    // layer and sorting order are copied unchanged, so it renders identically -
+    // the camera just skips the cells it can't see.
+    void SplitLayerIntoCells(List<GameObject> objects, List<Mesh> meshes)
+    {
+        if (objects.Count == 0) return;
+
+        var newObjects = new List<GameObject>();
+        var newMeshes = new List<Mesh>();
+        var cells = new Dictionary<long, CellBuilder>();
+        var srcV = new List<Vector3>();
+        var srcC = new List<Color>();
+        var srcUV = new List<Vector2>();
+        var srcUV2 = new List<Vector2>();
+        var srcT = new List<int>();
+
+        for (int o = 0; o < objects.Count; o++)
+        {
+            GameObject go = objects[o];
+            Mesh mesh = o < meshes.Count ? meshes[o] : null;
+            if (go == null || mesh == null) continue;
+            MeshRenderer srcMr = go.GetComponent<MeshRenderer>();
+            if (srcMr == null) continue;
+
+            mesh.GetVertices(srcV);
+            mesh.GetColors(srcC);
+            mesh.GetUVs(0, srcUV);
+            mesh.GetUVs(1, srcUV2);
+            mesh.GetTriangles(srcT, 0);
+            int n = srcV.Count;
+            bool hasC = srcC.Count == n, hasUV = srcUV.Count == n, hasUV2 = srcUV2.Count == n;
+
+            var remap = new int[n];
+            var remapCell = new long[n];
+            for (int i = 0; i < n; i++) remapCell[i] = long.MinValue;
+
+            cells.Clear();
+            for (int t = 0; t + 2 < srcT.Count; t += 3)
+            {
+                // A triangle goes to the cell of its first vertex; a vertex shared with
+                // a triangle in another cell is simply duplicated there.
+                Vector3 p = srcV[srcT[t]];
+                long key = CellKey(p);
+                if (!cells.TryGetValue(key, out CellBuilder cb))
+                {
+                    cb = new CellBuilder();
+                    cells[key] = cb;
+                }
+                for (int k = 0; k < 3; k++)
+                {
+                    int v = srcT[t + k];
+                    if (remapCell[v] != key)
+                    {
+                        remap[v] = cb.verts.Count;
+                        remapCell[v] = key;
+                        cb.verts.Add(srcV[v]);
+                        cb.cols.Add(hasC ? srcC[v] : Color.white);
+                        cb.uvs.Add(hasUV ? srcUV[v] : Vector2.zero);
+                        cb.uv2s.Add(hasUV2 ? srcUV2[v] : Vector2.zero);
+                    }
+                    cb.tris.Add(remap[v]);
+                }
+            }
+
+            int c = 0;
+            foreach (var kv in cells)
+            {
+                CellBuilder cb = kv.Value;
+                if (cb.tris.Count == 0) continue;
+
+                Mesh cm = new Mesh();
+                cm.name = mesh.name + "_cell" + c;
+                if (cb.verts.Count > 65535) cm.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                cm.SetVertices(cb.verts);
+                if (hasC) cm.SetColors(cb.cols);
+                if (hasUV) cm.SetUVs(0, cb.uvs);
+                if (hasUV2) cm.SetUVs(1, cb.uv2s);
+                cm.SetTriangles(cb.tris, 0);
+                cm.RecalculateNormals();
+                cm.RecalculateBounds();
+                Bounds b = cm.bounds;
+                b.Expand(CULL_CELL_MARGIN * 2f);
+                cm.bounds = b;
+
+                GameObject cg = new GameObject(go.name + "_cell" + c);
+                cg.layer = go.layer;
+                cg.transform.SetParent(go.transform.parent, false);
+                cg.transform.localPosition = go.transform.localPosition;
+                cg.transform.localRotation = go.transform.localRotation;
+                cg.transform.localScale = go.transform.localScale;
+                cg.AddComponent<MeshFilter>().sharedMesh = cm;
+                MeshRenderer mr = cg.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = srcMr.sharedMaterial;
+                mr.shadowCastingMode = srcMr.shadowCastingMode;
+                mr.receiveShadows = srcMr.receiveShadows;
+                mr.sortingLayerID = srcMr.sortingLayerID;
+                mr.sortingOrder = srcMr.sortingOrder;
+
+                newObjects.Add(cg);
+                newMeshes.Add(cm);
+                c++;
+            }
+
+            DestroyImmediate(go);
+            DestroyImmediate(mesh);
+        }
+
+        objects.Clear();
+        objects.AddRange(newObjects);
+        meshes.Clear();
+        meshes.AddRange(newMeshes);
+    }
+
+    static long CellKey(Vector3 p)
+    {
+        int ix = Mathf.FloorToInt(p.x / CULL_CELL_SIZE);
+        int iy = Mathf.FloorToInt(p.y / CULL_CELL_SIZE);
+        return ((long)ix << 32) ^ (uint)iy;
+    }
+
+    private class CellBuilder
+    {
+        public readonly List<Vector3> verts = new List<Vector3>();
+        public readonly List<Color> cols = new List<Color>();
+        public readonly List<Vector2> uvs = new List<Vector2>();
+        public readonly List<Vector2> uv2s = new List<Vector2>();
+        public readonly List<int> tris = new List<int>();
     }
 
     // Co-op camera culling — keep the oversized culling matrix in sync each frame
     // (cameras move and change size). Applies to EVERY active orthographic camera
     // so the baked snow meshes aren't frustum-culled in any split-screen view.
     [Header("Debug")]
-    [Tooltip("Turn OFF to disable the oversized-culling override (isolation test).")]
-    public bool applyOversizedCulling = true;
+    // PERF: default is now OFF. The static snow layers are split into spatial cells
+    // with correct bounds and the falling snow follows the camera(s), so every
+    // camera - split-screen halves included - culls snow correctly on its own. The
+    // override was also NOT scoped to snow: it disabled frustum culling for EVERY
+    // renderer and 2D light in a ~100x screen-area region (enemies, health bars,
+    // towers, obstacles). Turn it back on only if you ever see snow vanish.
+    [Tooltip("Oversized camera culling override. Not needed for snow any more, and " +
+             "expensive: it disables frustum culling for the whole scene.")]
+    public bool applyOversizedCulling = false;
     private bool _camLogged;
+    private bool _cullingOverrideActive;
 
     void LateUpdate()
     {
         if (applyOversizedCulling && (groundObjects.Count > 0 || flakeObject != null))
+        {
             ApplyOversizedCullingToAllCameras();
+            _cullingOverrideActive = true;
+        }
+        else if (_cullingOverrideActive)
+        {
+            // Toggled off at runtime: the cameras keep the last matrix until told
+            // otherwise, so hand normal culling back explicitly.
+            var resetCams = Camera.allCameras;
+            for (int i = 0; i < resetCams.Length; i++)
+                if (resetCams[i] != null) resetCams[i].ResetCullingMatrix();
+            _cullingOverrideActive = false;
+        }
 
         // One-time dump of the LIVE gameplay cameras (generation happened before they
         // existed — orthoCams was 0). cullingMask + rect reveal split-screen / layer
@@ -1230,8 +1585,6 @@ public class SnowOverlay : MonoBehaviour
         return r;
     }
 }
-
-
 
 
 

@@ -18,3 +18,34 @@ MonoBehaviour:
   moveSpeed: 2
   damage: 6
   mass: 50
+  frames: []
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
+  animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
+  laserAttack:
+    startFrame: 57
+    frameCount: 11
+    speedOverride: 0
+  idle:
+    startFrame: 0
+    frameCount: 14
+    speedOverride: 0
+  attack:
+    startFrame: 14
+    frameCount: 19
+    speedOverride: 0
+  death:
+    startFrame: 33
+    frameCount: 12
+    speedOverride: 0
+  deathAnimationDuration: 1.2
+  hitFrame: 0
+  parryFrameStart: 0
+  parryFrameEnd: 0

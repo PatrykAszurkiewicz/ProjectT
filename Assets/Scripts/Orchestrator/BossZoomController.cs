@@ -252,7 +252,11 @@ public class BossZoomController : MonoBehaviour
         while (t < 1f)
         {
             if (nl == null) yield break;
-            t += Time.unscaledDeltaTime / dur;
+            // Clamp the step so one stalled frame (e.g. a boss's heavy first-spawn load)
+            // can't fast-forward the whole cinematic — that spike was collapsing the zoom
+            // and Play()->Stop()'ing its sound in the same frame, so you heard nothing.
+            t += Mathf.Min(Time.unscaledDeltaTime, 0.05f) / dur;
+            //t += Time.unscaledDeltaTime / dur;
             nl.intensity = Mathf.Lerp(0f, target, Mathf.Clamp01(t));
             yield return null;
         }
@@ -307,7 +311,7 @@ public class BossZoomController : MonoBehaviour
             _cineCam.gameObject.SetActive(true);
 
             onIntroStarted?.Invoke();
-
+            Debug.Log($"[BossZoom] play={playZoomSound} fmod={(FMODEvents.instance != null)}");
             // Start on the boss, on the frame the cinematic camera goes live — the
             // sound and the cut to the boss are the same beat.
             if (playZoomSound && FMODEvents.instance != null)
@@ -556,7 +560,11 @@ public class BossZoomController : MonoBehaviour
         float t = 0f;
         while (t < 1f)
         {
-            t += Time.unscaledDeltaTime / dur;
+            // Clamp the step so one stalled frame (e.g. a boss's heavy first-spawn load)
+            // can't fast-forward the whole cinematic — that spike was collapsing the zoom
+            // and Play()->Stop()'ing its sound in the same frame, so you heard nothing.
+            t += Mathf.Min(Time.unscaledDeltaTime, 0.05f) / dur;
+            //t += Time.unscaledDeltaTime / dur;
             step(Mathf.Clamp01(t));
             yield return null;
         }

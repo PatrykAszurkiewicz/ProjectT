@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 494122911128716204}
   - component: {fileID: -3501980684853243431}
   - component: {fileID: -440603725985727301}
+  - component: {fileID: 6156437810362800569}
   m_Layer: 0
   m_Name: Scarecrow
   m_TagString: Enemy
@@ -171,6 +172,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -197,6 +200,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &-3501980684853243431
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -209,6 +213,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 55277dcb4aa4d1e42a470e94778d30cf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  fallbackSprite: {fileID: 21300000, guid: ed0968dc0c1b4514897259a04340bfcc, type: 3}
   visibleDuration: 5
   hiddenDuration: 6
   initialHiddenDelay: 2
@@ -245,8 +250,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7675be329f8933a4194dd8d05615ae68, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
-  currentHealth: 100
+  maxHealth: 30
+  currentHealth: 30
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -257,6 +262,42 @@ MonoBehaviour:
   canDropEnergy: 1
   damageFlashDuration: 0.1
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  baseDeathVfxDuration: 0
+  baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
   deathVfxDuration: 0.6
   destroyHealthBarBeforeVfx: 1
+--- !u!114 &6156437810362800569
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

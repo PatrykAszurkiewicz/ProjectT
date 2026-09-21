@@ -18,8 +18,19 @@ MonoBehaviour:
   moveSpeed: 1
   damage: 1
   mass: 50
-  spriteFolderPath: Sprites/EnemySprites/Eye
+  frames:
+  - {fileID: 21300000, guid: 6830347bc1126484983f4732f4988886, type: 3}
+  - {fileID: 1998108985380050715, guid: 1fc4445fb5b300a45bb6ab6d92da061d, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
   animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 57
     frameCount: 11

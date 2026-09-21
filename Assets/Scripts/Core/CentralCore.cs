@@ -203,8 +203,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     #region Configuration
     [Header("Core Configuration")]
-    public float maxEnergy = 100f;
-    public float currentEnergy = 100f;
+    public float maxEnergy = 300f;
+    public float currentEnergy = 300f;
     public float coreSize = 2f;
 
     [Header("Animation")]
@@ -214,7 +214,33 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
              "Overridden at runtime by the energy state (see CalculateAnimationSpeed).")]
     public float animationSpeed = 0.1f;
 
-    [Tooltip("Resources folder holding the loose numbered frames (00.png ... 23.png).\n" +
+    // ── Direct sprite references (preferred) ─────────────────────────────────
+    // The Core has NO PREFAB — TowerDefenseMap.CreateCentralCore() builds it in code
+    // with AddComponent<CentralCore>(). So these are assigned on TowerDefenseMap (a
+    // scene object) and handed over via SetCoreFrames() right after AddComponent.
+    //
+    // The old 'central_core_sprite' sheet is deliberately NOT in this array. That stray
+    // asset is why LoadCoreSprites still carries all the "ignore non-numbered sprites"
+    // filtering below — with an explicit array that problem cannot occur. It is also
+    // the 2048x2048 / 32 MB texture that was the single largest entry in the memory
+    // snapshot; once nothing references it, it stops shipping entirely.
+    [Tooltip("Core animation frames in order (00 … 23).\n" +
+             "When set, Core Sprite Folder below is ignored completely.")]
+    public Sprite[] coreFrames;
+
+    /// True once the Core no longer needs Resources for its frames.
+    public bool HasDirectFrames => coreFrames != null && coreFrames.Length > 0;
+
+    /// Hand frames to a Core built at runtime. Called by
+    /// TowerDefenseMap.CreateCentralCore() before Start() resolves the sprites.
+    public void SetCoreFrames(Sprite[] frames)
+    {
+        if (frames == null || frames.Length == 0) return;
+        coreFrames = frames;
+    }
+
+    [Tooltip("DEPRECATED fallback — used only when Core Frames above is empty.\n" +
+             "Resources folder holding the loose numbered frames (00.png ... 23.png).\n" +
              "Frames are ordered by the leading number in the file name, not by import order.")]
     public string coreSpriteFolder = "Sprites/Buildings/Towers/Core";
 
@@ -322,7 +348,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         public bool show = true;
         public float height = 0.15f;
         public float width = 1.5f;
-        public float offset = 0.45f;
+        public float offset = 0.9f; // 0.45f;
         public bool showText = true;
     }
     #endregion
@@ -345,6 +371,12 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     private float currentAnimationSpeed = -1f;
     private bool isEnergyDepleted, isEnergyLow;
     private bool isDestroyed = false;
+
+    // Unity destroys the native object during scene teardown / editor Stop while the C#
+    // wrapper still lives. MonoBehaviour overloads ==, so a destroyed object == null.
+    // This is intentionally SEPARATE from the game-logic 'isDestroyed' flag above, which
+    // is only set by DestroyCore(). Use this before touching transform / renderers.
+    private bool IsUnityObjectAlive => this != null;
     private Coroutine damageFlashCoroutine;
     private Coroutine shakeCoroutine;
 
@@ -352,6 +384,60 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     private bool isHighlighted = false;
     private Color highlightColor = Color.cyan;
     private bool isRegisteredWithEnergyManager = false;
+
+    // -- Energy seed ---------------------------------------------------------
+    // Set by TowerDefenseMap.CreateCentralCore when a core is carried across a
+    // stage rebuild or restored from a save. Registration with EnergyManager used
+    // to overwrite both values with a full pool; the seed is what it now honours
+    // instead. Unlike a tower, nothing re-derives the core's max, so the seeded
+    // max is final.
+    [System.NonSerialized] private bool _hasEnergySeed = false;
+    [System.NonSerialized] private float _seedEnergy = 0f;
+    [System.NonSerialized] private float _seedMaxEnergy = 0f;
+
+    public bool HasSeededEnergy => _hasEnergySeed;
+
+    /// Pre-load the exact pool this core must come online with. Applied straight
+    /// away so anything reading the core before registration (the energy bar's
+    /// first frame) sees the right numbers, and again when registration lands.
+    public void SeedEnergyState(float energy, float max)
+    {
+        _hasEnergySeed = true;
+        _seedMaxEnergy = max;
+        _seedEnergy = energy;
+
+        // CreateCentralCore() seeds while the core GameObject is still INACTIVE, so
+        // Awake/InitializeComponents has NOT run: originalScale is zero and
+        // spriteRenderer is null. Going through SetMaxEnergy/SetEnergy there would
+        // fire events and UpdateVisualState() against uninitialised fields. Raw
+        // writes are correct at that point -- ConsumeEnergySeed() re-applies them
+        // through the real setters once registration lands.
+        if (max > 0f) maxEnergy = max;
+        currentEnergy = Mathf.Clamp(energy, 0f, maxEnergy);
+
+        // Already registered (SeedCoreEnergy called on a live core): nothing will
+        // consume the seed later, so drive the proper setters now for the events and
+        // the energy bar.
+        if (isRegisteredWithEnergyManager) ConsumeEnergySeed();
+    }
+
+    /// Consumed once by EnergyManager.InitializeConsumerEnergy.
+    public void ConsumeEnergySeed()
+    {
+        if (!_hasEnergySeed) return;
+        _hasEnergySeed = false;
+
+        if (_seedMaxEnergy > 0f) SetMaxEnergy(_seedMaxEnergy);
+        SetEnergy(_seedEnergy);
+
+        // SeedEnergyState already wrote the raw fields (it has to -- it runs before
+        // Awake), so the two setters above see no delta and fire nothing. Listeners
+        // subscribe to OnEnergyChanged AFTER the seed but BEFORE this runs, so without
+        // an unconditional notification here they never receive an initial value and
+        // any event-driven core UI renders against a stale number until the first hit.
+        OnEnergyChanged?.Invoke(currentEnergy);
+        UpdateVisualState();
+    }
 
     // Events
     public System.Action<float> OnEnergyChanged;
@@ -818,8 +904,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             Debug.LogError("CentralCore: outline collider build threw; falling back to the circle. " +
                            "Set useFullOutlineCollider = false to skip this path entirely.\n" + e);
 
-            var partial = GetComponent<PolygonCollider2D>();
-            if (partial != null) { partial.enabled = false; Destroy(partial); }
+            var partialCollider = GetComponent<PolygonCollider2D>();
+            if (partialCollider != null) { partialCollider.enabled = false; Destroy(partialCollider); }
             return false;
         }
     }
@@ -1440,6 +1526,23 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     // else in the folder is ignored.
     void LoadCoreSprites()
     {
+        // PREFERRED: direct references. Already in order, already excluding the stray
+        // sheet — no Resources call, no filtering, no sort.
+        if (HasDirectFrames)
+        {
+            coreSprites = coreFrames;
+            if (verboseLogging)
+                Debug.Log($"CentralCore: using {coreSprites.Length} direct frame reference(s).");
+            if (spriteRenderer != null)
+                spriteRenderer.sprite = coreSprites[Mathf.Clamp(spriteStartIndex, 0, coreSprites.Length - 1)];
+            return;
+        }
+
+        if (!warnedAboutStrayCoreSprites)
+            Debug.LogWarning($"[CentralCore] Still loading frames from Resources/'{coreSpriteFolder}'. " +
+                             "Assign Core Sprite Frames on the TowerDefenseMap component so this art " +
+                             "can leave the Resources folder.");
+
         //coreSprites = Resources.LoadAll<Sprite>("Sprites/Buildings/central_core_spritesheet2");
         var loaded = Resources.LoadAll<Sprite>(coreSpriteFolder) ?? System.Array.Empty<Sprite>();
 
@@ -1905,6 +2008,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     #region Visual Updates
     void UpdateVisualState()
     {
+        if (!IsUnityObjectAlive) return;
         UpdateEnergyVisuals();
         UpdateScaleEffect();
     }
@@ -1920,7 +2024,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
     void UpdateScaleEffect()
     {
         // Add NaN protection and validation
-        if (isDestroyed) return;
+        // Also bail if Unity destroyed the object (transform access below would throw).
+        if (isDestroyed || !IsUnityObjectAlive) return;
 
         if (isEnergyDepleted)
         {
@@ -1986,6 +2091,10 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             return;
         }
 
+        // Unity may have destroyed the GameObject during teardown while EnergyManager's
+        // decay coroutine still holds a reference to us. Bail before touching transform.
+        if (!IsUnityObjectAlive) return;
+
         if (isDestroyed)
         {
             Debug.LogWarning("CentralCore: Trying to consume energy on destroyed core, ignoring");
@@ -2020,6 +2129,8 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
             return;
         }
 
+        if (!IsUnityObjectAlive) return;
+
         if (isDestroyed)
         {
             Debug.LogWarning("CentralCore: Trying to supply energy to destroyed core, ignoring");
@@ -2048,6 +2159,12 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
     public void SetEnergy(float amount)
     {
+        if (float.IsNaN(amount) || float.IsInfinity(amount))
+        {
+            Debug.LogWarning($"CentralCore: Ignoring invalid energy: {amount}");
+            return;
+        }
+
         float previousEnergy = currentEnergy;
         currentEnergy = Mathf.Clamp(amount, 0f, maxEnergy);
 
@@ -2055,14 +2172,40 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
         {
             OnEnergyChanged?.Invoke(currentEnergy);
             UpdateVisualState();
+
+            // FIX: SetEnergy is the SAVE-RESTORE / REWIND entry point and it never fired
+            // OnEnergyDepleted. Restoring a snapshot whose core was already at 0 left a
+            // core that looked dead, took no damage path, and never triggered game over —
+            // the run just continued with an inert core. It also never fired
+            // OnEnergyRestored, so a rewind that brought the core back from 0 left every
+            // listener still believing it was depleted.
+            if (currentEnergy <= 0f && previousEnergy > 0f)
+                OnEnergyDepleted?.Invoke();
+            else if (previousEnergy <= 0f && currentEnergy > 0f)
+                OnEnergyRestored?.Invoke();
         }
     }
 
     public void SetMaxEnergy(float amount)
     {
+        // FIX: guard the value and FIRE OnEnergyChanged. This is called by the save
+        // restore and the rewind; without the event the core's health bar kept
+        // rendering against the previous denominator for the rest of the run.
+        if (float.IsNaN(amount) || float.IsInfinity(amount) || amount <= 0f)
+        {
+            Debug.LogWarning($"CentralCore: Ignoring invalid maxEnergy: {amount}");
+            return;
+        }
+
+        float previousEnergy = currentEnergy;
         maxEnergy = amount;
         currentEnergy = Mathf.Min(currentEnergy, maxEnergy);
         UpdateVisualState();
+
+        OnEnergyChanged?.Invoke(currentEnergy);
+
+        if (currentEnergy <= 0f && previousEnergy > 0f)
+            OnEnergyDepleted?.Invoke();
     }
 
     public float GetEnergy() => currentEnergy;
@@ -2085,7 +2228,7 @@ public class CentralCore : MonoBehaviour, IEnergyConsumer, IDamageable
 
         return maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
     }
-    public Vector3 GetPosition() => transform.position;
+    public Vector3 GetPosition() => IsUnityObjectAlive ? transform.position : Vector3.zero;
 
     public bool IsEnergyDepleted() =>
         EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetCoreDeadThreshold();

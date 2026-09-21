@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   weaponName: Boomerang
   sprite: {fileID: 602707080448879991, guid: 8fc8a9c5ad0e26a4c9dfb65dd62c8fd0, type: 3}
-  damage: 18
+  damage: 15
   attackCooldown: 0.8
   armorBonus: 0
   knockBack: 1
@@ -23,6 +23,7 @@ MonoBehaviour:
   projectilePrefab: {fileID: 0}
   projectileSpeed: 10
   size: {x: 1, y: 1}
+  useBladeSlashFx: 0
   isGrapplingHook: 0
   hookRange: 12
   hookSpeed: 20
@@ -51,12 +52,15 @@ MonoBehaviour:
   trapBossHoldDuration: 3
   trapProximityRadius: 1.2
   trapArmDelay: 0.4
+  trapCooldown: 2
   isTurret: 0
   turretRange: 5
   turretFireRate: 3
   turretProjectileSpeed: 12
   turretArmDelay: 0.4
   turretRotationSpeed: 300
+  turretActiveDuration: 15
+  turretCooldown: 7
   isFlamethrower: 0
   flameRange: 4.5
   flameConeAngle: 45
@@ -75,6 +79,8 @@ MonoBehaviour:
   decoyBossDuration: 3
   decoyArmDelay: 0.3
   decoyBossVFXOffset: {x: -1, y: 2}
+  decoyActiveDuration: 10
+  decoyCooldown: 6
   isBoomerang: 1
   boomerangRange: 6
   boomerangCurve: 2.5
@@ -87,6 +93,7 @@ MonoBehaviour:
   hammerShakeJolt: 0.42
   hammerShakeRumble: 0.16
   hammerShakeRumbleDuration: 0.55
+  hammerHitSfxLead: 0
   hammerShockwaveColor: {r: 0.93, g: 0.74, b: 0.45, a: 1}
   hammerCrackColor: {r: 0.16, g: 0.12, b: 0.09, a: 1}
   hammerDebrisCount: 14

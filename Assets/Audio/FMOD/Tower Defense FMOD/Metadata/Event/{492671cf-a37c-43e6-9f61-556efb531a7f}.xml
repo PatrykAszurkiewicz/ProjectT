@@ -99,17 +99,41 @@
 	<object class="MixerBusEffectChain" id="{9189977d-23e0-4f86-8969-c9ad806d4601}">
 		<relationship name="effects">
 			<destination>{502a3ec0-4236-4bb5-a80c-d4ff8f0d6966}</destination>
+			<destination>{c59c1675-0a3a-4f7c-a38a-1013d3c2ddec}</destination>
+			<destination>{4f658fed-db81-4f8d-b946-413f9aeb2c72}</destination>
 			<destination>{5246af6f-70dc-4eda-bb04-45df737ebead}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{72c35291-bd63-4e12-b836-2886a60e902e}" />
 	<object class="SingleSound" id="{7ddb4576-5871-4798-9f4a-05ee5191a501}">
+		<property name="pitch">
+			<value>-1.39999998</value>
+		</property>
 		<relationship name="audioFile">
 			<destination>{138b51f8-86f4-436b-aad8-10c94d31c8d8}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusFader" id="{a1519ef8-7ae4-4b93-9917-23aa2aa11eeb}" />
 	<object class="MixerBusFader" id="{502a3ec0-4236-4bb5-a80c-d4ff8f0d6966}" />
+	<object class="DelayEffect" id="{c59c1675-0a3a-4f7c-a38a-1013d3c2ddec}">
+		<property name="bypass">
+			<value>true</value>
+		</property>
+		<property name="delay">
+			<value>5.20000029</value>
+		</property>
+		<property name="feedback">
+			<value>100</value>
+		</property>
+		<property name="level">
+			<value>-22.5</value>
+		</property>
+	</object>
+	<object class="SFXReverbEffect" id="{4f658fed-db81-4f8d-b946-413f9aeb2c72}">
+		<property name="bypass">
+			<value>true</value>
+		</property>
+	</object>
 	<object class="SpatialiserEffect" id="{5246af6f-70dc-4eda-bb04-45df737ebead}">
 		<property name="minimumDistance">
 			<value>4</value>

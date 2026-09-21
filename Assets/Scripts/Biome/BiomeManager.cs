@@ -852,6 +852,75 @@ public class BiomeManager : MonoBehaviour
     private Light2D activeGlobalLight;
 
     // Map background paths per biome 
+    // ── Direct background references (preferred) ─────────────────────────────
+    // Assign these on the BiomeManager component. When a slot is filled, the matching
+    // Resources path below is ignored.
+    //
+    // WHY: GetBackgroundPath() returns a STRING that feeds Resources.Load<Texture2D>().
+    // A string cannot be statically analysed, so Unity force-includes every background
+    // in the build whether it is reachable or not, and can never strip one. Direct
+    // references put them in the dependency graph instead.
+    //
+    // NOTE ON SIZE: these are full-screen art, so they legitimately need resolution —
+    // but check them. A texture snapshot found central_core_sprite at 2048x2048 / 32 MB
+    // and circletest1 at 2048x1694 / 26.5 MB. Capping oversized textures is a bigger
+    // and far cheaper win than this migration.
+    [Header("Biome Backgrounds (direct references — preferred)")]
+    [Tooltip("Leave a slot empty to fall back to the legacy Resources path for that biome.")]
+    public Texture2D grassBackground;
+    public Texture2D snowBackground;
+    public Texture2D desertBackground;
+    public Texture2D wastelandBackground;
+    public Texture2D stonesBackground;
+    public Texture2D grassCartoonBackground;
+    public Texture2D marshBackground;
+    public Texture2D nightBackground;
+    public Texture2D corruptionBackground;
+    public Texture2D pitchBlackBackground;
+
+    /// Direct texture for a biome, or null if that slot has not been assigned.
+    private Texture2D GetBackgroundTexture(BiomeType biome)
+    {
+        switch (biome)
+        {
+            case BiomeType.Grass: return grassBackground;
+            case BiomeType.Snow: return snowBackground;
+            case BiomeType.Desert: return desertBackground;
+            case BiomeType.Wasteland: return wastelandBackground;
+            case BiomeType.Stones: return stonesBackground;
+            case BiomeType.GrassCartoon: return grassCartoonBackground;
+            case BiomeType.Marsh: return marshBackground != null ? marshBackground : grassBackground;
+            case BiomeType.Night: return nightBackground != null ? nightBackground : grassCartoonBackground;
+            case BiomeType.Corruption: return corruptionBackground != null ? corruptionBackground : grassCartoonBackground;
+            case BiomeType.PitchBlack: return pitchBlackBackground != null ? pitchBlackBackground : grassCartoonBackground;
+            default: return grassBackground;
+        }
+    }
+
+    /// Resolve a biome's background, preferring the direct reference and falling back
+    /// to the legacy Resources path. Returns null only if neither is available.
+    private Texture2D ResolveBackground(BiomeType biome)
+    {
+        var direct = GetBackgroundTexture(biome);
+        if (direct != null) return direct;
+
+        string path = GetBackgroundPath(biome);
+        var tex = Resources.Load<Texture2D>(path);
+
+        if (tex != null && _warnedBackgrounds.Add(path))
+            Debug.LogWarning($"[BiomeManager] Background for {biome} still loading from " +
+                             $"Resources/'{path}'. Assign it on the BiomeManager component so " +
+                             "the art can leave the Resources folder.");
+        else if (tex == null)
+            Debug.LogWarning($"[BiomeManager] No background for {biome}: no direct reference " +
+                             $"assigned and nothing at Resources/'{path}'.");
+        return tex;
+    }
+
+    private static readonly System.Collections.Generic.HashSet<string> _warnedBackgrounds
+        = new System.Collections.Generic.HashSet<string>();
+
+    // DEPRECATED — fallback only, and the source the direct slots were filled from.
     private string GetBackgroundPath(BiomeType biome)
     {
         switch (biome)
@@ -1794,18 +1863,13 @@ public class BiomeManager : MonoBehaviour
         SpriteRenderer sr = bg.GetComponent<SpriteRenderer>();
         if (sr != null)
         {
-            string path = GetBackgroundPath(activeBiome);
-            Texture2D tex = Resources.Load<Texture2D>(path);
+            Texture2D tex = ResolveBackground(activeBiome);
             if (tex != null)
             {
                 Sprite spr = Sprite.Create(tex,
                     new Rect(0, 0, tex.width, tex.height),
                     Vector2.one * 0.5f, 100f);
                 sr.sprite = spr;
-            }
-            else
-            {
-                Debug.LogWarning($"[BiomeManager] Background texture not found at '{path}'.");
             }
         }
 
@@ -1824,6 +1888,8 @@ public class BiomeManager : MonoBehaviour
         TowerDefenseMap map = FindFirstObjectByType<TowerDefenseMap>();
         if (map == null) return;
 
+        // backgroundImagePath is still set for any legacy consumer that reads it, but
+        // the texture itself now comes through ResolveBackground.
         string biomeBackgroundPath = GetBackgroundPath(activeBiome);
         map.backgroundImagePath = biomeBackgroundPath;
 
@@ -1832,7 +1898,7 @@ public class BiomeManager : MonoBehaviour
             SpriteRenderer sr = map.backgroundGameObject.GetComponent<SpriteRenderer>();
             if (sr != null)
             {
-                Texture2D tex = Resources.Load<Texture2D>(biomeBackgroundPath);
+                Texture2D tex = ResolveBackground(activeBiome);
                 if (tex != null)
                 {
                     sr.sprite = Sprite.Create(tex,
@@ -2712,5 +2778,6 @@ public class BiomeManager : MonoBehaviour
         night.GenerateNight();
     }
 }
+
 
 

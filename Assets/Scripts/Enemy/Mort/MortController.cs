@@ -416,7 +416,21 @@ public class MortController : MonoBehaviour
             if (animController != null && animController.IsDying) { hasDied = true; return true; }
 
             // DelayedDeath() has disabled the controller.
-            if (enemyController != null && !enemyController.enabled) { hasDied = true; return true; }
+            //
+            // DELIBERATELY NON-LATCHING (this used to set hasDied = true). Death is not
+            // the only thing that disables the controller: ConfusedEnemy.Initialize()
+            // and BerserkEnemy.Initialize() both do it to take over movement, and both
+            // re-enable it when they expire. Latching here meant a Mort that survived a
+            // confusion/berserk augment was permanently flagged dead and never fired
+            // another shell for the rest of its life — it kept walking and playing the
+            // attack animation with nothing coming out.
+            //
+            // Suppressing the shot WHILE the controller is off is still correct and is
+            // preserved; we simply do not remember it. The genuine death signals above
+            // (currentHealth <= 0, animController.IsDying) latch as before and are set
+            // strictly earlier than DelayedDeath's controller.enabled = false, so a real
+            // death is still caught at every point in the attack cycle.
+            if (enemyController != null && !enemyController.enabled) return true;
 
             return false;
         }

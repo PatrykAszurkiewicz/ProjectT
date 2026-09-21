@@ -24,8 +24,21 @@ public class AdrenalineRushEffect : MonoBehaviour
     private bool isEffectActive = false;
     private bool isOnCooldown = false;
     private float originalAttackCooldown;
-    private float originalMoveSpeed;
     private Color originalColor;
+
+    // The exact WeaponData we boosted, and the exact cooldown value we wrote into
+    // it. Both are needed because a weapon hot-swap (augments 2 / 66 / 93 / 318 /
+    // 327) replaces the runtime WeaponData object mid-effect: RemoveBoosts used to
+    // write weapon A's original cooldown onto weapon B, permanently corrupting B.
+    // We now only restore the object we actually boosted, and only if it still holds
+    // the value we wrote.
+    private WeaponData boostedWeaponData;
+    private float writtenAttackCooldown = float.NaN;
+
+    // Movement is restored MULTIPLICATIVELY rather than by re-assigning a saved
+    // absolute. Saving an absolute meant any move-speed augment picked during the
+    // 15s rush was silently reverted when the rush ended.
+    private float appliedMoveSpeedFactor = 1f;
 
     private Coroutine effectCoroutine;
     private Coroutine cooldownCoroutine;
@@ -87,7 +100,6 @@ public class AdrenalineRushEffect : MonoBehaviour
         {
             originalAttackCooldown = weaponData.attackCooldown;
         }
-        originalMoveSpeed = playerStats.moveSpeed;
 
         //Debug.Log($"[ADRENALINE_RUSH] Effect initialized from CSV:");
         //Debug.Log($"  Threshold: {healthThreshold * 100}% health");
@@ -110,6 +122,9 @@ public class AdrenalineRushEffect : MonoBehaviour
                 Debug.Log($"[ADRENALINE_RUSH] Status Check - Health: {currentHealthPercent * 100:F1}%, Active: {isEffectActive}, Cooldown: {isOnCooldown}, Can Trigger: {ShouldTriggerEffect()}");
             }
         }
+
+        // Keep the boost pointed at the weapon that is actually equipped.
+        RetargetBoostIfWeaponSwapped();
 
         // Check if we should trigger the effect
         if (!isEffectActive && !isOnCooldown && ShouldTriggerEffect())
@@ -209,45 +224,80 @@ public class AdrenalineRushEffect : MonoBehaviour
 
     private void ApplyBoosts()
     {
-        // Boost attack speed (reduce cooldown)
-        var weaponData = weapon.GetWeaponData();
-        if (weaponData != null)
-        {
-            originalAttackCooldown = weaponData.attackCooldown;
-            weaponData.attackCooldown *= attackSpeedMultiplier;
+        // Boost attack speed (reduce cooldown) on the weapon that is live RIGHT NOW.
+        ApplyAttackBoostTo(weapon != null ? weapon.GetWeaponData() : null);
 
-            if (showDebugLogs)
-            {
-                Debug.Log($"[ADRENALINE_RUSH] Applied attack boost: {originalAttackCooldown}s → {weaponData.attackCooldown}s cooldown");
-            }
-        }
-
-        // Boost movement speed (additive bonus)
-        originalMoveSpeed = playerStats.moveSpeed;
-        playerStats.moveSpeed = originalMoveSpeed * (1f + movementSpeedMultiplier);
+        // Boost movement speed (multiplicative, so it composes with other sources).
+        appliedMoveSpeedFactor = 1f + movementSpeedMultiplier;
+        float beforeMoveSpeed = playerStats.moveSpeed;
+        playerStats.moveSpeed *= appliedMoveSpeedFactor;
 
         if (showDebugLogs)
         {
-            Debug.Log($"[ADRENALINE_RUSH] Applied move boost: {originalMoveSpeed} → {playerStats.moveSpeed}");
+            Debug.Log($"[ADRENALINE_RUSH] Applied move boost: {beforeMoveSpeed} → {playerStats.moveSpeed}");
         }
+    }
+
+    private void ApplyAttackBoostTo(WeaponData weaponData)
+    {
+        boostedWeaponData = weaponData;
+        writtenAttackCooldown = float.NaN;
+        if (weaponData == null) return;
+
+        originalAttackCooldown = weaponData.attackCooldown;
+        weaponData.attackCooldown *= attackSpeedMultiplier;
+        writtenAttackCooldown = weaponData.attackCooldown;
+
+        if (showDebugLogs)
+        {
+            Debug.Log($"[ADRENALINE_RUSH] Applied attack boost: {originalAttackCooldown}s → {weaponData.attackCooldown}s cooldown");
+        }
+    }
+
+    /// Undo the cooldown boost on the weapon we actually boosted — never on whatever
+    /// happens to be equipped now — and only if that field still holds our value.
+    private void RemoveAttackBoost()
+    {
+        if (boostedWeaponData != null
+            && (float.IsNaN(writtenAttackCooldown)
+                || Mathf.Approximately(boostedWeaponData.attackCooldown, writtenAttackCooldown)))
+        {
+            boostedWeaponData.attackCooldown = originalAttackCooldown;
+
+            if (showDebugLogs)
+            {
+                Debug.Log($"[ADRENALINE_RUSH] Restored attack cooldown: {boostedWeaponData.attackCooldown}s");
+            }
+        }
+
+        boostedWeaponData = null;
+        writtenAttackCooldown = float.NaN;
+    }
+
+    /// Called each frame while the rush is active. If the player swapped weapons
+    /// mid-rush, hand the boost over to the new WeaponData so the rush keeps working
+    /// AND the old weapon gets its own value back.
+    private void RetargetBoostIfWeaponSwapped()
+    {
+        if (!isEffectActive || weapon == null) return;
+
+        WeaponData live = weapon.GetWeaponData();
+        if (live == null || ReferenceEquals(live, boostedWeaponData)) return;
+
+        RemoveAttackBoost();
+        ApplyAttackBoostTo(live);
     }
 
     private void RemoveBoosts()
     {
-        // Restore attack speed
-        var weaponData = weapon.GetWeaponData();
-        if (weaponData != null)
-        {
-            weaponData.attackCooldown = originalAttackCooldown;
+        // Restore attack speed on the weapon we boosted.
+        RemoveAttackBoost();
 
-            if (showDebugLogs)
-            {
-                Debug.Log($"[ADRENALINE_RUSH] Restored attack cooldown: {weaponData.attackCooldown}s");
-            }
-        }
-
-        // Restore movement speed
-        playerStats.moveSpeed = originalMoveSpeed;
+        // Restore movement speed by dividing OUR factor back out, so a move-speed
+        // augment picked during the rush survives instead of being reverted.
+        if (appliedMoveSpeedFactor > 0.0001f)
+            playerStats.moveSpeed /= appliedMoveSpeedFactor;
+        appliedMoveSpeedFactor = 1f;
 
         if (showDebugLogs)
         {
@@ -309,3 +359,4 @@ public class AdrenalineRushEffect : MonoBehaviour
     public float GetEffectDuration() => effectDuration;
     public float GetCooldownDuration() => cooldownDuration;
 }
+

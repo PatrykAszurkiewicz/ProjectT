@@ -97,6 +97,10 @@ MonoBehaviour:
   fireRate: 0.66
   cost: 120
   towerType: 6
+  spriteFrames:
+  - {fileID: -5926695927602585757, guid: c2d39e7edaa30de48a2466f65e33e5f9, type: 3}
+  - {fileID: 1845056556133917918, guid: c2d39e7edaa30de48a2466f65e33e5f9, type: 3}
+  - {fileID: 3612953414888160611, guid: c2d39e7edaa30de48a2466f65e33e5f9, type: 3}
   spriteResourcePath: Sprites/Buildings/Towers/tower_hammer_sprite
   spriteIndex: 0
   spriteScale: 0.25
@@ -157,7 +161,7 @@ MonoBehaviour:
       m_RotationOrder: 4
   rotationSpeed: 180
   smoothRotation: 1
-  currentEnergy: 120
+  currentEnergy: 220
   requiresEnergyToFunction: 1
   showEnergyBar: 1
   energyBarOffsetOverride: 0
@@ -165,6 +169,7 @@ MonoBehaviour:
   immuneToEnemyDamage: 0
   damageFlashDuration: 0.15
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  targetRescanInterval: 0.25
 --- !u!114 &907965507239455590
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -177,6 +182,76 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36d9dfa73295f5c408ad605e055ef10c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  frameSprites:
+  - {fileID: 21300000, guid: a716363a082dd874c8c86e04c62551bd, type: 3}
+  - {fileID: 21300000, guid: e3f77c4bf3b84e745b22b98d4296249a, type: 3}
+  - {fileID: 21300000, guid: f31d016f50f65aa42978d90c85e6e043, type: 3}
+  - {fileID: 21300000, guid: f57e4bce5b58fb34c9173f13f77fe6dc, type: 3}
+  - {fileID: 21300000, guid: afcc202d5cf53b34c9db7b99d1e70aa8, type: 3}
+  - {fileID: 21300000, guid: 896710b0bb880e74bad1a43872698af2, type: 3}
+  - {fileID: 21300000, guid: 576e643c8dba4034c9124ed5372e66c7, type: 3}
+  - {fileID: 21300000, guid: 36b6e64eb65e14c4f86dcc57da4790f0, type: 3}
+  - {fileID: 21300000, guid: 3e038ddf441f40b41b5d87595ab7eca9, type: 3}
+  - {fileID: 21300000, guid: aaa332788b2c6284c8a60c5e9a0de17f, type: 3}
+  - {fileID: 21300000, guid: 29ccbe8012565e54ea618b2087ded7c5, type: 3}
+  - {fileID: 21300000, guid: 27290e390ea20cd4fb167ba073b18609, type: 3}
+  - {fileID: 21300000, guid: b883c519223f3e3499766f54dcf6c25e, type: 3}
+  - {fileID: 21300000, guid: f2465c0ca4941064a8b9cae9d71a2165, type: 3}
+  - {fileID: 21300000, guid: 6a7c2f5f1ff4d424c9f1263dff237792, type: 3}
+  - {fileID: 21300000, guid: ad7e49b7ae5d388449ec0ab8c96cfd3f, type: 3}
+  - {fileID: 21300000, guid: b3103c1463bf01a4d90bbb373d71193d, type: 3}
+  - {fileID: 21300000, guid: 74f641f7be0948c408f685579ee6a839, type: 3}
+  - {fileID: 21300000, guid: db4b0fdd8f3094944b4ab39afabbf761, type: 3}
+  - {fileID: 21300000, guid: b45e19d912e926f488c615f93fc99e9b, type: 3}
+  - {fileID: 21300000, guid: c028041d2fd9e154a8e6a184acb6f849, type: 3}
+  - {fileID: 21300000, guid: 29a968dc8ab7ae647ad4161515afed09, type: 3}
+  - {fileID: 21300000, guid: d183783ef480d7e47bb779887ba7c079, type: 3}
+  - {fileID: 21300000, guid: 40efba94537e06f429b8179983741ca8, type: 3}
+  - {fileID: 21300000, guid: fc3120c3e5ad5644f9c9a62c17db0440, type: 3}
+  - {fileID: 21300000, guid: 2fb7fd3216e674043abd3216c9df4b7e, type: 3}
+  - {fileID: 21300000, guid: f73854e384612af4fa954ed18bb00c09, type: 3}
+  - {fileID: 21300000, guid: f2622e2f47ad3474796552bc55c016dc, type: 3}
+  - {fileID: 21300000, guid: 02acf59d406b6244a9701c122b46e711, type: 3}
+  - {fileID: 21300000, guid: 2bb5a7ce5d903134bab7bd599b03c18f, type: 3}
+  - {fileID: 21300000, guid: 815e121350254a548879c42caa7573a1, type: 3}
+  - {fileID: 21300000, guid: a1f01d6af12d4064cb35c92cce99012d, type: 3}
+  - {fileID: 21300000, guid: dd5a457bb1d1e9b41b01a0691a07c46b, type: 3}
+  - {fileID: 21300000, guid: 34da12d6033e9d6499c0eff784821c1e, type: 3}
+  - {fileID: 21300000, guid: 5ee90b2ed29db7b4aa30d14cf62ff066, type: 3}
+  - {fileID: 21300000, guid: e09e7a2b4ecddff4b925da3e575a1e04, type: 3}
+  - {fileID: 21300000, guid: 8f4f917907bca2e43a15148b26af0118, type: 3}
+  - {fileID: 21300000, guid: c0ddef3dcacb92e45babe7aaee635a9b, type: 3}
+  - {fileID: 21300000, guid: 794d81b977b7d2e4db5febbab15212b2, type: 3}
+  - {fileID: 21300000, guid: 3e4c9c2d04172444b9dcde0804166ea6, type: 3}
+  - {fileID: 21300000, guid: c9f5db2b25d2c694985f4791c02050f4, type: 3}
+  - {fileID: 21300000, guid: 3b755ff2438d20349a7fe6155adda2c7, type: 3}
+  - {fileID: 21300000, guid: 88d0f3356bfadf4449c7224e09f410ae, type: 3}
+  - {fileID: 21300000, guid: 04363de771b195b4d9acb462d3c428c6, type: 3}
+  - {fileID: 21300000, guid: 51fcc16cddf8f4c4bafe3005b4bfb601, type: 3}
+  - {fileID: 21300000, guid: 6206b4c66c717f446865d831e3375622, type: 3}
+  - {fileID: 21300000, guid: e2da8dba20cd5f14e82a2fdf4bd7845f, type: 3}
+  - {fileID: 21300000, guid: 2a59fe6b56c9f3549a55c0ce59153522, type: 3}
+  - {fileID: 21300000, guid: 4806ab15b08b39343aff739754e734a8, type: 3}
+  - {fileID: 21300000, guid: b63d6aac76e45184aa29857e3dd42fc5, type: 3}
+  - {fileID: 21300000, guid: 2a77ae4a2f962864c907d7cee9ec02f6, type: 3}
+  - {fileID: 21300000, guid: 10f5d25750499cb45adbfb2f35b6c9ef, type: 3}
+  - {fileID: 21300000, guid: dba268ec8da76814880521cebacac1c2, type: 3}
+  - {fileID: 21300000, guid: a7e2a4a21bd106f44b26c680be5941d2, type: 3}
+  - {fileID: 21300000, guid: 7a9a73d6a4fadcf4691df92f98da1d5d, type: 3}
+  - {fileID: 21300000, guid: 44717ec0497aa344cb8da47050c81cc5, type: 3}
+  - {fileID: 21300000, guid: 4b502a7b9e12eb9459e06f78cb028484, type: 3}
+  - {fileID: 21300000, guid: a44d4f92852a97e49b6213b587802078, type: 3}
+  - {fileID: 21300000, guid: 449379e604a842548a6b01389cba59c5, type: 3}
+  - {fileID: 21300000, guid: 3bed15d22c0158245803283ffcba7084, type: 3}
+  - {fileID: 21300000, guid: 77a53c013cf48dc44b30608d03a3f1fe, type: 3}
+  - {fileID: 21300000, guid: 6c8510012fb18374e8917bdd05dfc1c0, type: 3}
+  - {fileID: 21300000, guid: f3c5533e72a1e684f92af9f00f347937, type: 3}
+  - {fileID: 21300000, guid: c729bc6067a3bd34f9dfb57c40ac05af, type: 3}
+  - {fileID: 21300000, guid: 2bd61085ac64a3e4baf0554561e1e0cd, type: 3}
+  - {fileID: 21300000, guid: b5220f436fa36bc4785c9552fb34cc67, type: 3}
+  - {fileID: 21300000, guid: 7abb0e053d24b3e43a4187767909e7ab, type: 3}
+  - {fileID: 21300000, guid: 3007364c6e109714fb3321e8fe612a50, type: 3}
+  - {fileID: 21300000, guid: bac4d85a856e65b4282ec84876cad1c4, type: 3}
   framesResourceFolder: Sprites/Buildings/Towers/HammerTower
   idleFrame: 0
   attackStartFrame: 1

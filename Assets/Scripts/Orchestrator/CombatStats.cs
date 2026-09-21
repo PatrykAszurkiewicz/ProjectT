@@ -106,18 +106,37 @@ public class CombatStats : MonoBehaviour
     [Tooltip("Button label colour — light, so it reads on the dark button.")]
     public Color menuButtonTextColor = new Color(0.95f, 0.93f, 0.98f, 1f);
 
-    [Header("Back to Main Menu button — soft glow / animation")]
-    [Tooltip("How far the organic halo spreads beyond the button (x,y in px). It keeps the " +
+    [Header("Back to Main Menu button — smoky glow + purple/black threads")]
+    [Tooltip("How far the smoky halo spreads beyond the button (x,y in px). It keeps the " +
              "button from sitting hard against the Win/Lose backgrounds.")]
     public Vector2 menuGlowPadding = new Vector2(190f, 150f);
-    [Tooltip("Halo colour on the WIN screen. Bright background → a bold dark shadow reads best.")]
-    public Color menuGlowColorWin = new Color(0f, 0f, 0f, 0.78f);
-    [Tooltip("Halo colour on the LOSE screen. Dark background → a bright soft glow reads best.")]
-    public Color menuGlowColorLose = new Color(0.88f, 0.89f, 0.97f, 0.72f);
+    [Tooltip("Extra px (x,y) the woven THREAD ring reaches beyond the smoke halo, so the " +
+             "filaments can drift past the smoke's edge as they weave.")]
+    public Vector2 menuThreadPadding = new Vector2(58f, 46f);
+    [Tooltip("Per-screen master INTENSITY for the WIN screen (bright background). Only the " +
+             "ALPHA is used as an overall opacity multiplier — the effect's purple/black " +
+             "palette is baked into the sprite, so it blends on any background.")]
+    public Color menuGlowColorWin = new Color(1f, 1f, 1f, 0.92f);
+    [Tooltip("Per-screen master INTENSITY for the LOSE screen (dark background). Only the " +
+             "ALPHA is used as an overall opacity multiplier.")]
+    public Color menuGlowColorLose = new Color(1f, 1f, 1f, 1f);
+    [Tooltip("Overall size of the smoke+thread aura, as a multiplier (1 = the button's own " +
+             "size + padding). Lower = smaller aura; the button itself is never scaled. " +
+             "Tune this live in the Inspector — drag it up for a bigger halo, down for tighter.")]
+    [Range(0.35f, 1.6f)]
+    public float menuAuraSize = 0.77f;
     [Tooltip("Seconds for the button to smoothly fade in when the screen appears.")]
     public float menuFadeInDuration = 0.55f;
-    [Tooltip("Seconds per breathing pulse of the glow. Set to 0 to fade in only, no pulse.")]
+    [Tooltip("Seconds per breathing pulse of the smoke halo. Set to 0 to fade in only, no pulse.")]
     public float menuPulsePeriod = 2.4f;
+    [Tooltip("Peak sway of the thread layers, in degrees. They oscillate this far each way " +
+             "(never a full spin) so the filaments read as slowly weaving, not rotating.")]
+    public float menuThreadSwayDegrees = 7f;
+    [Tooltip("Seconds per full weave cycle of the threads. The two thread layers use " +
+             "slightly different periods so they drift against each other.")]
+    public float menuThreadSwayPeriod = 9f;
+    [Tooltip("How far (px) the thread layers gently drift while weaving, for parallax life.")]
+    public float menuThreadDriftPixels = 9f;
 
     [Header("Debug")]
     public bool debugLog = false;
@@ -562,18 +581,40 @@ public class CombatStats : MonoBehaviour
         var group = container.AddComponent<CanvasGroup>();
         group.alpha = 0f;   // faded in by the FX
 
-        // Soft halo behind the button (larger than it; centred; not raycastable).
-        var glowGO = new GameObject("Glow", typeof(RectTransform));
-        glowGO.transform.SetParent(container.transform, false);
-        var grt = glowGO.GetComponent<RectTransform>();
-        grt.anchorMin = grt.anchorMax = new Vector2(0.5f, 0.5f);
-        grt.pivot = new Vector2(0.5f, 0.5f);
-        grt.sizeDelta = menuButtonSize + menuGlowPadding * 2f;
-        var glow = glowGO.AddComponent<Image>();
-        glow.sprite = SoftShadowSprite();
-        glow.type = Image.Type.Simple;
-        glow.raycastTarget = false;
-        glow.color = isWin ? menuGlowColorWin : menuGlowColorLose;
+        // Per-screen master intensity (alpha only — the purple/black palette is baked in).
+        float master = Mathf.Clamp01((isWin ? menuGlowColorWin : menuGlowColorLose).a);
+
+        // Helper: a centred, non-raycastable Image child sized off the button. menuAuraSize
+        // scales the whole aura (threads + smoke) without touching the button itself.
+        Image AddLayer(string layerName, Sprite sprite, Vector2 pad, float alpha,
+                       out RectTransform outRt)
+        {
+            var lgo = new GameObject(layerName, typeof(RectTransform));
+            lgo.transform.SetParent(container.transform, false);
+            outRt = lgo.GetComponent<RectTransform>();
+            outRt.anchorMin = outRt.anchorMax = new Vector2(0.5f, 0.5f);
+            outRt.pivot = new Vector2(0.5f, 0.5f);
+            outRt.sizeDelta = (menuButtonSize + pad * 2f) * Mathf.Max(0.1f, menuAuraSize);
+            var im = lgo.AddComponent<Image>();
+            im.sprite = sprite;
+            im.type = Image.Type.Simple;
+            im.raycastTarget = false;
+            im.color = new Color(1f, 1f, 1f, alpha);   // white tint → show baked colour
+            return im;
+        }
+
+        // 1) Soft smoky halo (breathes). Dark screen: purple→black cloud that vanishes on the
+        // dark bg. Bright screen: a faint violet glow hugging the threads, open in the middle.
+        var smoke = AddLayer("Smoke", SmokeSprite(isWin), menuGlowPadding, master, out var grt);
+
+        // 2+3) Two woven THREAD layers sharing one baked sprite. They sway in opposite
+        // directions (see WinLoseButtonFX) so the filaments read as slowly weaving. The extra
+        // spread (added here as a constant so it applies regardless of Inspector values) gives
+        // the curling tentacles room to reach well past the smoke body.
+        Vector2 threadPad = menuGlowPadding + menuThreadPadding + new Vector2(90f, 66f);
+        var threadA = AddLayer("ThreadsA", ThreadSprite(isWin), threadPad, master, out var trtA);
+        var threadB = AddLayer("ThreadsB", ThreadSprite(isWin), threadPad, master * 0.85f, out var trtB);
+        trtB.localScale = new Vector3(-1.06f, 1.06f, 1f);   // mirrored+larger → the two never align
 
         // Button itself, filling the container.
         var go = new GameObject("BackToMainMenuButton", typeof(RectTransform));
@@ -619,9 +660,11 @@ public class CombatStats : MonoBehaviour
         var f = ResolveFont();
         if (f != null) tmp.font = f;
 
-        // Drive fade-in + breathing pulse on unscaled time (the run is frozen here).
+        // Drive fade-in + breathing smoke + weaving threads on unscaled time (run frozen).
         var fx = container.AddComponent<WinLoseButtonFX>();
-        fx.Init(group, glow, grt, menuFadeInDuration, menuPulsePeriod);
+        fx.Init(group, smoke, grt, threadA, trtA, threadB, trtB,
+                menuFadeInDuration, menuPulsePeriod,
+                menuThreadSwayDegrees, menuThreadSwayPeriod, menuThreadDriftPixels);
 
         container.transform.SetAsLastSibling();   // draw above the stats label
         cached = btn;
@@ -651,17 +694,119 @@ public class CombatStats : MonoBehaviour
         return t * t * (3f - 2f * t);
     }
 
-    // Lazily builds (once, shared by both screens) a soft ORGANIC glow sprite for the
-    // button's halo — a diffuse radial falloff whose edge is broken up with Perlin noise
-    // so it reads as a wispy, smoky glow instead of a hard geometric shape. White, so it
-    // tints per screen (dark smoke on Win, soft grey on Lose) via the Image colour.
-    private static Sprite _softShadowSprite;
-    private static Sprite SoftShadowSprite()
+    // Purple palette sampled from the reference art: a deep purple-black core through mid
+    // purple up to a vivid violet and a hot pink-violet highlight on the brightest threads.
+    // Baking these into the sprites (rather than tinting a white glow) is what lets ONE
+    // effect read on both bright and dark backgrounds: the near-black core shows against
+    // bright screens, the vivid threads glow against dark ones.
+    private static readonly Color PAL_BLACK = new Color(0.045f, 0.000f, 0.065f);
+    private static readonly Color PAL_DARK = new Color(0.200f, 0.000f, 0.250f);
+    private static readonly Color PAL_MID = new Color(0.360f, 0.011f, 0.430f);
+    private static readonly Color PAL_VIVID = new Color(0.790f, 0.100f, 0.940f);
+    private static readonly Color PAL_HOT = new Color(0.940f, 0.480f, 1.000f);
+
+    // BRIGHT-screen palette. On a light background the dark/near-black smoke of the dark
+    // palette just darkens to a muddy grey, so the Win screen uses saturated violets only
+    // (saturated purple stays purple over white; dark grey-purple turns grey) — a light
+    // glow colour, a deeper body, and a saturated vein colour instead of near-black.
+    private static readonly Color PAL_B_GLOW = new Color(0.660f, 0.240f, 0.860f);
+    private static readonly Color PAL_B_DEEP = new Color(0.520f, 0.090f, 0.720f);
+    private static readonly Color PAL_B_VEIN = new Color(0.460f, 0.060f, 0.600f);
+
+    // Ridged filament: folds Perlin noise into sharp thin "veins" (1 on the ridge line,
+    // falling off fast). Higher power → thinner, crisper threads. This is the core of the
+    // woven-thread look.
+    private static float Ridged(float x, float y, float power)
     {
-        if (_softShadowSprite != null) return _softShadowSprite;
+        float r = 1f - Mathf.Abs(2f * Mathf.PerlinNoise(x, y) - 1f);
+        return Mathf.Pow(Mathf.Clamp01(r), power);
+    }
 
-        const int w = 360, h = 236;   // extra res for the fine filament / wisp detail
+    // Shared shape field for BOTH the smoke and the threads, so they always agree. The effect
+    // is an ORGANIC, TENTACLED shape: a soft body that throws out a few fat, curling arms in
+    // noise-chosen directions. The arms are built from an ANGULAR noise (varies by direction →
+    // radial arms) sampled in a strongly domain-WARPED frame (so the arms bend and writhe
+    // instead of shooting out straight). A hard corner guard on the true radius guarantees the
+    // texture corners always stay transparent, so no matter how the arms fall it can never read
+    // as a rectangle. The arm tips fade over a long soft edge so they dissolve into the bg.
+    //   turb    – billowy turbulence (structure + internal erosion)
+    //   fine    – high-freq noise (internal erosion)
+    //   M       – tentacle mask (dark-screen smoke body); already eroded into wisps
+    //   threadA – bright fine filaments, confined to the shape
+    //   threadB – broad dark veins, confined to the shape
+    private static void FxFields(float nx, float ny, bool bright,
+                                 out float turb, out float fine, out float M,
+                                 out float threadA, out float threadB)
+    {
+        float dx = (nx - 0.5f) * 2f;   // -1..1
+        float dy = (ny - 0.5f) * 2f;   // -1..1
+        float rTrue = Mathf.Sqrt(dx * dx + dy * dy);   // undistorted radius (corner guard)
 
+        // Strong two-octave domain warp of the POSITION → arms curl and the whole shape is
+        // asymmetric. This is deliberately large; the corner guard below keeps it safe.
+        float wx = Mathf.PerlinNoise(nx * 1.7f + 15f, ny * 1.7f + 6f) * 2f - 1f;
+        float wy = Mathf.PerlinNoise(nx * 1.7f + 23f, ny * 1.7f + 9f) * 2f - 1f;
+        float wx2 = Mathf.PerlinNoise(nx * 3.3f + 60f, ny * 3.3f + 2f) * 2f - 1f;
+        float wy2 = Mathf.PerlinNoise(nx * 3.3f + 80f, ny * 3.3f + 7f) * 2f - 1f;
+        float WX = dx + 0.30f * wx + 0.12f * wx2;
+        float WY = dy + 0.30f * wy + 0.12f * wy2;
+        float rw = Mathf.Sqrt(WX * WX + WY * WY);
+
+        // Angular noise in the WARPED frame → a few fat arms that bend. Powered lightly so the
+        // arms are fat (not needle spikes) but still sparse (only some directions reach out).
+        float thw = Mathf.Atan2(WY, WX);
+        float caw = Mathf.Cos(thw);
+        float saw = Mathf.Sin(thw);
+        float an = Mathf.PerlinNoise(caw * 1.2f + 10f, saw * 1.2f + 20f);
+        float an2 = Mathf.PerlinNoise(caw * 2.3f + 50f, saw * 2.3f + 5f);
+        float armn = Mathf.Clamp01(0.62f * an + 0.38f * an2);
+        float spike = Mathf.Pow(armn, 1.8f);
+        float boundary = Mathf.Clamp(0.52f + 0.50f * spike, 0.42f, 1.0f);   // arms reach far
+
+        fine = Mathf.PerlinNoise(nx * 15.0f + 21f, ny * 15.0f + 3f);
+        turb = Mathf.Abs(2f * Mathf.PerlinNoise(nx * 2.6f + 3f, ny * 2.6f + 7f) - 1f) * 0.55f
+             + Mathf.Abs(2f * Mathf.PerlinNoise(nx * 5.3f + 41f, ny * 5.3f + 22f) - 1f) * 0.30f
+             + Mathf.Abs(2f * Mathf.PerlinNoise(nx * 10.4f + 9f, ny * 10.4f + 6f) - 1f) * 0.15f;
+
+        // Hard corner guard on the TRUE radius: forces alpha to 0 by the corners no matter what
+        // the warped arms do. Arms can still reach the mid-side edges; corners can't fill.
+        float guard = 1f - S01(0.98f, 1.25f, rTrue);
+
+        // The tentacle body: inside the arm boundary, long soft fade for wispy tips, eroded
+        // internally into wisps, then corner-guarded.
+        M = Mathf.Clamp01(1f - S01(boundary - 0.34f, boundary, rw));
+        M *= Mathf.Clamp01(0.35f + 0.85f * turb + 0.25f * (fine - 0.5f));
+        M = Mathf.Clamp01(M * guard);
+
+        // Ridged filaments sampled in the warped frame → they flow along the arms.
+        float tx = nx * 4.4f + 1.9f * Mathf.PerlinNoise(nx * 2.0f + 130f, ny * 2.0f + 2f);
+        float ty = ny * 4.4f + 1.9f * Mathf.PerlinNoise(nx * 2.0f + 20f, ny * 2.0f + 80f);
+        float thA = Ridged(tx * 1.3f + WX * 0.8f + 5f, ty * 1.3f + WY * 0.8f + 9f, 3.0f);
+        float thB = Ridged(tx * 0.8f + 40f, ty * 0.8f + 43f, 2.3f);
+
+        float Mth = Mathf.Clamp01(1f - S01(boundary - 0.28f, boundary, rw)) * (0.5f + 0.5f * turb);
+        Mth *= guard;
+        // Bright screen clears the centre so the button is framed; dark screen fills through.
+        float hole = S01(0.05f, 0.62f, rw);
+        float openMul = bright ? (0.35f + 0.65f * hole) : 1f;
+
+        threadA = Mth * thA * openMul;
+        threadB = Mth * thB * (1f - thA) * openMul;
+    }
+
+    // Lazily builds (once per screen kind) the SMOKY HALO behind the button.
+    //   • Dark screen  (bright=false): the original dark-purple → near-black organic cloud.
+    //     It vanishes into a dark background and adds a faint purple haze — looks great.
+    //   • Bright screen (bright=true): that dark cloud would grey out on a light background,
+    //     so instead we bake only a FAINT violet glow that hugs the threads and leave the
+    //     centre open, so the bright background shows through between the filaments.
+    private static Sprite _smokeSpriteWin, _smokeSpriteLose;
+    private static Sprite SmokeSprite(bool bright)
+    {
+        if (bright && _smokeSpriteWin != null) return _smokeSpriteWin;
+        if (!bright && _smokeSpriteLose != null) return _smokeSpriteLose;
+
+        const int w = 340, h = 224;
         var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
         var px = new Color32[w * h];
 
@@ -669,65 +814,112 @@ public class CombatStats : MonoBehaviour
         {
             for (int x = 0; x < w; x++)
             {
-                float nx = (x + 0.5f) / w;      // 0..1
-                float ny = (y + 0.5f) / h;      // 0..1
-                float dx = (nx - 0.5f) * 2f;    // -1..1
-                float dy = (ny - 0.5f) * 2f;    // -1..1
-                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                float nx = (x + 0.5f) / w;
+                float ny = (y + 0.5f) / h;
 
-                float fine = Mathf.PerlinNoise(nx * 15.0f + 210f, ny * 15.0f + 33f);
+                FxFields(nx, ny, bright, out float turb, out _, out float M,
+                         out float threadA, out float threadB);
 
-                // Two-scale domain warp → the whole shape flows organically (not an ellipse).
-                float w1x = Mathf.PerlinNoise(nx * 1.7f + 150f, ny * 1.7f + 60f) * 2f - 1f;
-                float w1y = Mathf.PerlinNoise(nx * 1.7f + 230f, ny * 1.7f + 95f) * 2f - 1f;
-                float w2x = Mathf.PerlinNoise(nx * 4.3f + 300f, ny * 4.3f + 12f) * 2f - 1f;
-                float w2y = Mathf.PerlinNoise(nx * 4.3f + 360f, ny * 4.3f + 77f) * 2f - 1f;
-                float wdx = dx + 0.26f * w1x + 0.09f * w2x;
-                float wdy = dy + 0.26f * w1y + 0.09f * w2y;
-                float d = Mathf.Sqrt(wdx * wdx + wdy * wdy) + (fine - 0.5f) * 0.10f;
+                float a;
+                Color c;
 
-                // Billowy TURBULENCE (abs-folded noise) → soft smoke/mist structure that
-                // looks natural, not like a painted stain.
-                float turb = Mathf.Abs(2f * Mathf.PerlinNoise(nx * 2.6f + 3f, ny * 2.6f + 7f) - 1f) * 0.55f
-                           + Mathf.Abs(2f * Mathf.PerlinNoise(nx * 5.3f + 41f, ny * 5.3f + 22f) - 1f) * 0.30f
-                           + Mathf.Abs(2f * Mathf.PerlinNoise(nx * 10.4f + 90f, ny * 10.4f + 61f) - 1f) * 0.15f;
+                if (bright)
+                {
+                    // Faint glow that FOLLOWS the (centre-cleared) threads, plus a whisper of
+                    // ambient blob. Centre stays open so the bright bg reads through.
+                    float glow = Mathf.Clamp01(threadA * 0.95f + threadB * 0.7f);
+                    a = Mathf.Clamp01(glow * 0.34f + M * turb * 0.035f);
 
-                // Soft GAUSSIAN envelope → seamless blend: no hard cutoff, a long smooth tail
-                // that fades imperceptibly into the background.
-                float env = Mathf.Exp(-2.7f * d * d);
-                // Concave socket: a textured ring at the button crease keeps the inset look.
-                float rim = Mathf.Exp(-((d - 0.44f) * (d - 0.44f)) / (2f * 0.30f * 0.30f));
+                    float dens = Mathf.Clamp01(a / 0.34f);
+                    float deep = S01(0.20f, 0.90f, dens);
+                    c = PAL_B_GLOW * (1f - deep) + PAL_B_DEEP * deep;
+                }
+                else
+                {
+                    // The organic blob itself, coloured dark-purple → near-black toward its
+                    // densest wisps. M already fades before the edges, so no contour, no oval.
+                    a = Mathf.Clamp01(M * (0.34f + 0.66f * turb));
 
-                float baseA = env * (0.42f + 0.72f * turb);
-                float a = Mathf.Max(baseA, rim * (0.5f + 0.5f * turb) * 0.95f);
+                    float dens = Mathf.Clamp01(a);
+                    float core = S01(0.40f, 0.98f, dens);
+                    float midm = S01(0.05f, 0.45f, dens) * (1f - core);
+                    float darkm = 1f - core - midm;
+                    c = PAL_MID * midm + PAL_DARK * darkm + PAL_BLACK * core;
+                }
 
-                // Soft web wisps (broad, gentle — not sharp veins), woven into the mid ring.
-                float wx = nx * 6.5f + 1.6f * Mathf.PerlinNoise(nx * 3.0f + 130f, ny * 3.0f + 17f);
-                float wy = ny * 6.5f + 1.6f * Mathf.PerlinNoise(nx * 3.0f + 205f, ny * 3.0f + 88f);
-                float web = Mathf.Pow(Mathf.Clamp01(1f - Mathf.Abs(2f * Mathf.PerlinNoise(wx, wy) - 1f)), 3f);
-                float webBand = Mathf.Clamp01(baseA * (1f - baseA) * 4f);
-                a += web * webBand * 0.22f;
-
-                // Organic edge DISSOLVE: erode only the low-alpha outer region into wisps so
-                // the shadow dissipates into the background instead of ending on a contour.
-                float erode = S01(0.12f, 0.72f, fine * 0.55f + turb * 0.45f);
-                float edgeAmt = S01(0.03f, 0.42f, a);
-                a *= Mathf.Lerp(erode, 1f, edgeAmt);
-
-                // Final clean fade to fully transparent at the texture edge.
-                a *= 1f - S01(0.82f, 0.98f, dist);
-
-                a = Mathf.Clamp01(a);
-
-                px[y * w + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                px[y * w + x] = new Color32(
+                    (byte)(Mathf.Clamp01(c.r) * 255f),
+                    (byte)(Mathf.Clamp01(c.g) * 255f),
+                    (byte)(Mathf.Clamp01(c.b) * 255f),
+                    (byte)(a * 255f));
             }
         }
         tex.SetPixels32(px);
         tex.Apply();
 
-        _softShadowSprite = Sprite.Create(tex, new Rect(0, 0, w, h),
-                                          new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-        return _softShadowSprite;
+        var sprite = Sprite.Create(tex, new Rect(0, 0, w, h),
+                                   new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+        if (bright) _smokeSpriteWin = sprite; else _smokeSpriteLose = sprite;
+        return sprite;
+    }
+
+    // Lazily builds (once per screen kind) the woven THREAD ring: bright violet filaments
+    // plus a few darker veins, laid into a ring around the button so they frame it. Instanced
+    // twice (mirrored) and swayed in opposite directions by the FX so the copies weave.
+    //   • Dark screen: dark-purple body, near-black veins (they read against the dark bg).
+    //   • Bright screen: saturated-purple body + veins instead of near-black, so the darker
+    //     parts stay purple rather than greying out on a light background.
+    private static Sprite _threadSpriteWin, _threadSpriteLose;
+    private static Sprite ThreadSprite(bool bright)
+    {
+        if (bright && _threadSpriteWin != null) return _threadSpriteWin;
+        if (!bright && _threadSpriteLose != null) return _threadSpriteLose;
+
+        const int w = 360, h = 236;   // extra res for crisp filaments
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        var px = new Color32[w * h];
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float nx = (x + 0.5f) / w;
+                float ny = (y + 0.5f) / h;
+
+                FxFields(nx, ny, bright, out _, out _, out _,
+                         out float threadA, out float threadB);
+
+                // Threads are already confined to the organic blob and centre-cleared on the
+                // bright screen, so there's no radial fade to apply here — the blob handles it.
+                float a = Mathf.Clamp01(threadA * (bright ? 0.95f : 0.90f) + threadB * 0.6f);
+                if (bright) a *= 0.92f;               // a touch lighter so threads sit on the bg
+                a = Mathf.Clamp01(a);
+
+                // Colour: bright threads ride vivid→hot violet either way. The connective body
+                // and the darker veins swap to saturated purple on the bright screen (vs the
+                // dark-purple/near-black used on the dark screen) so nothing greys out.
+                float bt = Mathf.Clamp01(threadA * 2.4f);
+                Color brightCol = PAL_VIVID * 0.55f + PAL_HOT * 0.45f;
+                Color body = bright ? PAL_B_DEEP : PAL_DARK;
+                Color vein = bright ? PAL_B_VEIN : PAL_BLACK;
+                Color c = body * (1f - bt) + brightCol * bt;
+                float dt = Mathf.Clamp01(threadB * 1.6f);
+                c = c * (1f - dt) + vein * dt;
+
+                px[y * w + x] = new Color32(
+                    (byte)(Mathf.Clamp01(c.r) * 255f),
+                    (byte)(Mathf.Clamp01(c.g) * 255f),
+                    (byte)(Mathf.Clamp01(c.b) * 255f),
+                    (byte)(a * 255f));
+            }
+        }
+        tex.SetPixels32(px);
+        tex.Apply();
+
+        var sprite = Sprite.Create(tex, new Rect(0, 0, w, h),
+                                   new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+        if (bright) _threadSpriteWin = sprite; else _threadSpriteLose = sprite;
+        return sprite;
     }
 
     // Return to the main-menu scene. The freeze + attack/aim suppression are deliberately
@@ -962,32 +1154,58 @@ public class CombatStats : MonoBehaviour
 #endif
 }
 
-// Fades the Win/Lose "Back to Main Menu" button in and gives its glow a gentle breathing
-// pulse. Everything runs on UNSCALED time because the Win/Lose screen freezes the game
-// (Time.timeScale = 0) — scaled-time animation would sit dead-frozen. Added at runtime by
-// CombatStats.EnsureMenuButton (so this class never needs to match a filename).
+// Fades the Win/Lose "Back to Main Menu" button in, gives its smoky halo a gentle breathing
+// pulse, and slowly WEAVES the two purple/black thread layers against each other. Everything
+// runs on UNSCALED time because the Win/Lose screen freezes the game (Time.timeScale = 0) —
+// scaled-time animation would sit dead-frozen. Added at runtime by CombatStats.EnsureMenuButton
+// (so this class never needs to match a filename).
 public class WinLoseButtonFX : MonoBehaviour
 {
-    private CanvasGroup _group;      // whole button+glow → faded in once
-    private Graphic _glow;           // shadow → alpha pulsed
-    private RectTransform _glowRt;   // shadow → scale "breathed" (button stays static)
-    private float _fadeIn;
-    private float _pulsePeriod;
+    private CanvasGroup _group;        // whole button+glow → faded in once
+
+    private Graphic _smoke;            // halo → alpha pulsed
+    private RectTransform _smokeRt;    // halo → scale "breathed"
+
+    private Graphic _threadA, _threadB;      // woven filament layers
+    private RectTransform _threadRtA, _threadRtB;
+
+    private float _fadeIn, _pulsePeriod;
+    private float _swayDeg, _swayPeriod, _driftPx;
 
     private float _startTime;
-    private float _glowBaseAlpha;
-    private bool _ready;
-    private bool _started;           // captures start time on the first REAL frame
+    private float _smokeBaseA, _threadBaseA, _threadBaseB;
+    private float _threadSignA, _threadSignB;   // preserve each layer's mirror (localScale sign)
+    private float _threadMagA, _threadMagB;
+    private bool _ready, _started;
 
-    public void Init(CanvasGroup group, Graphic glow, RectTransform glowRt,
-                     float fadeInDuration, float pulsePeriod)
+    public void Init(CanvasGroup group,
+                     Graphic smoke, RectTransform smokeRt,
+                     Graphic threadA, RectTransform threadRtA,
+                     Graphic threadB, RectTransform threadRtB,
+                     float fadeInDuration, float pulsePeriod,
+                     float swayDegrees, float swayPeriod, float driftPixels)
     {
         _group = group;
-        _glow = glow;
-        _glowRt = glowRt;
+        _smoke = smoke; _smokeRt = smokeRt;
+        _threadA = threadA; _threadRtA = threadRtA;
+        _threadB = threadB; _threadRtB = threadRtB;
+
         _fadeIn = Mathf.Max(0f, fadeInDuration);
         _pulsePeriod = pulsePeriod;
-        _glowBaseAlpha = glow != null ? glow.color.a : 1f;
+        _swayDeg = swayDegrees;
+        _swayPeriod = Mathf.Max(0.01f, swayPeriod);
+        _driftPx = driftPixels;
+
+        _smokeBaseA = smoke != null ? smoke.color.a : 1f;
+        _threadBaseA = threadA != null ? threadA.color.a : 1f;
+        _threadBaseB = threadB != null ? threadB.color.a : 1f;
+
+        // Remember each thread layer's mirror + magnitude so sway scaling keeps the flip.
+        _threadSignA = _threadRtA != null ? Mathf.Sign(_threadRtA.localScale.x) : 1f;
+        _threadSignB = _threadRtB != null ? Mathf.Sign(_threadRtB.localScale.x) : 1f;
+        _threadMagA = _threadRtA != null ? Mathf.Abs(_threadRtA.localScale.x) : 1f;
+        _threadMagB = _threadRtB != null ? Mathf.Abs(_threadRtB.localScale.y) : 1.06f;
+
         if (_group != null) _group.alpha = 0f;
         _ready = true;
         _started = false;            // don't start the clock until the first Update
@@ -1008,8 +1226,8 @@ public class WinLoseButtonFX : MonoBehaviour
         if (!_ready) return;
 
         // Start the clock on the first frame we actually render, NOT in Init(). Building the
-        // glow texture causes a one-frame hitch; if we timed from Init() that hitch could eat
-        // part of the fade and make it snap in. Timing from here guarantees a real fade.
+        // glow textures causes a one-frame hitch; timing from Init() could eat part of the
+        // fade and make it snap in. Timing from here guarantees a real fade.
         if (!_started)
         {
             _startTime = Time.unscaledTime;
@@ -1017,6 +1235,7 @@ public class WinLoseButtonFX : MonoBehaviour
         }
 
         float t = Time.unscaledTime - _startTime;   // unscaled: animates while timeScale = 0
+        const float TAU = Mathf.PI * 2f;
 
         // One-time smooth fade-in of the whole button.
         if (_group != null)
@@ -1025,23 +1244,74 @@ public class WinLoseButtonFX : MonoBehaviour
             _group.alpha = f * f * (3f - 2f * f);    // smoothstep ease
         }
 
+        // Organic "breath": two sine waves at different rates so the pulse never feels like a
+        // metronome — it swells and eases irregularly, like something alive. 0..1.
+        float breath = 0.5f + 0.5f * (0.72f * Mathf.Sin((t / _pulsePeriod) * TAU)
+                                    + 0.28f * Mathf.Sin((t / (_pulsePeriod * 1.9f)) * TAU + 1.1f));
+        breath = Mathf.Clamp01(breath);
+
+        // Breathing smoke halo — opacity + size gently swell. The button stays static.
         if (_pulsePeriod > 0.01f)
         {
-            float s = 0.5f + 0.5f * Mathf.Sin((t / _pulsePeriod) * Mathf.PI * 2f);   // 0..1
+            if (_smoke != null)
+            {
+                var c = _smoke.color;
+                c.a = _smokeBaseA * Mathf.Lerp(0.60f, 1f, breath);
+                _smoke.color = c;
+            }
+            if (_smokeRt != null)
+            {
+                float sc = Mathf.Lerp(0.94f, 1.10f, breath);
+                _smokeRt.localScale = new Vector3(sc, sc, 1f);
+            }
+        }
 
-            // Pulse the SHADOW only — its opacity and its (irregular) size breathe. The
-            // button, text and container are left untouched, so the button stays static.
-            if (_glow != null)
-            {
-                var c = _glow.color;
-                c.a = _glowBaseAlpha * Mathf.Lerp(0.65f, 1f, s);   // breathe, but stay bold
-                _glow.color = c;
-            }
-            if (_glowRt != null)
-            {
-                float sc = Mathf.Lerp(0.94f, 1.09f, s);            // shadow grows/shrinks
-                _glowRt.localScale = new Vector3(sc, sc, 1f);
-            }
+        // Weaving threads — the two layers oscillate (never spin) in opposite directions,
+        // drift a few px, and shimmer their opacity out of phase, so the filaments look like
+        // they slowly braid past each other. They also brighten a touch on the breath's swell
+        // (via 'breath'), so the whole aura pulses as one instead of in two separate rhythms.
+        float pa = t / _swayPeriod;
+        float pb = t / (_swayPeriod * 1.37f) + 0.25f;
+
+        WeaveLayer(_threadA, _threadRtA, _threadBaseA, _threadSignA, _threadMagA, pa, +1f, breath, TAU);
+        WeaveLayer(_threadB, _threadRtB, _threadBaseB, _threadSignB, _threadMagB, pb, -1f, breath, TAU);
+    }
+
+    // Applies one thread layer's sway (rotation), drift (position) and shimmer (alpha).
+    // 'dir' flips the sway/drift direction so the two layers move against each other; 'sign'
+    // and 'mag' preserve the layer's baked mirror + scale; 'breath' is the shared pulse.
+    private void WeaveLayer(Graphic g, RectTransform rt, float baseAlpha,
+                            float sign, float mag, float phase, float dir, float breath, float TAU)
+    {
+        float wave = Mathf.Sin(phase * TAU);          // -1..1
+        if (rt != null)
+        {
+            // Compound sway: primary swing + a faster, smaller second harmonic → the arms
+            // curl and uncurl instead of rocking as a rigid unit. Never a full spin.
+            float sway = dir * _swayDeg * (wave + 0.35f * Mathf.Sin(phase * TAU * 1.9f + 0.7f));
+            rt.localRotation = Quaternion.Euler(0f, 0f, sway);
+
+            float drift = _driftPx * dir;
+            rt.anchoredPosition = new Vector2(drift * wave,
+                                              drift * 0.6f * Mathf.Cos(phase * TAU));
+
+            // Anisotropic "breathing" — the layer stretches along one axis while squashing the
+            // other, out of phase between the two thread layers, so the tentacles visibly reach
+            // out and draw back rather than just scaling uniformly.
+            float sc = mag * Mathf.Lerp(0.98f, 1.04f, 0.5f + 0.5f * wave);
+            float stretch = 0.07f * Mathf.Sin(phase * TAU * 0.8f + dir);
+            rt.localScale = new Vector3(sign * sc * (1f + stretch), sc * (1f - stretch), 1f);
+        }
+        if (g != null)
+        {
+            var c = g.color;
+            float shimmer = Mathf.Lerp(0.72f, 1f, 0.5f + 0.5f * Mathf.Sin(phase * TAU + dir));
+            float pulse = Mathf.Lerp(0.90f, 1.06f, breath);   // gently brighten on the swell
+            c.a = baseAlpha * shimmer * pulse;
+            g.color = c;
         }
     }
 }
+
+
+

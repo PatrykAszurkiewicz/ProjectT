@@ -1,7 +1,46 @@
-// BUILT-IN LAYOUTS with slot positions, obstacles, and layout-shaped connection lines that visually link the slots.
+// BUILT-IN LAYOUTS with slot positions, obstacles, and layout-shaped connection
+// lines that visually link the slots.
+//
+// ============================================================================
+//  SPACING CONTRACT — read this before editing any number in this file
+// ============================================================================
+//  Enemies steer locally (EnemyController) with no pathfinder, so the geometry
+//  here IS the pathfinding. Every layout below is measured against four rules,
+//  with an enemy roughly the size of a tower:
+//
+//      ENEMY radius 0.75      TOWER radius 0.75      CORE radius 1.0
+//      LANE  = 2.00           the clear width an enemy needs to walk through
+//      CLOSED = 0.50          a gap this narrow is a solid wall - an enemy
+//                             can't get into it, so it can't trap them either
+//
+//   R1  obstacle <-> obstacle        gap >= LANE, or <= CLOSED (a merged wall)
+//   R2  obstacle <-> slot + tower    gap >= LANE, or <= CLOSED
+//   R3  slot + tower <-> slot + tower gap >= LANE, or <= CLOSED
+//   R4  core <-> anything            gap >= LANE, or <= CLOSED
+//   R5  with EVERY slot occupied by a tower, the core is still reachable
+//       from outside the map.
+//
+//  In plain numbers that means:
+//      slot centre to slot centre        >= 3.50
+//      slot centre to obstacle surface   >= 2.75
+//      obstacle surface to obstacle      >= 2.00
+//      slot centre to map centre         >= 3.75
+//
+//  The dangerous zone is a gap BETWEEN those two thresholds - wide enough for
+//  an enemy to nose into, too narrow to pass. That's the "stuck between the
+//  obstacles" bug: the enemy wedges in, the avoidance push from both sides
+//  cancels out, and it grinds there until stuck-mode kicks it loose. An
+//  obstacle-slot-obstacle sandwich is the same trap with a tower as one wall,
+//  which is why R2/R3 budget for a built tower rather than an empty slot.
+//
+//  R5 is what stops a player bricking the map: because no two towers can ever
+//  be closer than a lane, and no tower can ever be a lane away from an
+//  obstacle, there is no arrangement of towers that closes every route.
+//
+//  If you add or move anything here, re-check those four numbers by hand.
+//
 // Coordinate scale: the map radius is 10. Slot positions span roughly
-// ±2.5 (inner) to ±8 (outer). Bonus slots can extend further.
-
+// +-3.5 (inner) to +-12 (outer). Bonus slots can extend further.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -31,10 +70,15 @@ public static class MapLayoutExamples
             MakeCrossroadsPillars(),
             MakeAsteroidBelt(),
             MakePinwheel(),
+            MakeBrokenCrown(),
+            MakeTheFord(),
+            MakeCrescentBastion(),
         };
     }
 
     // 01  CONCENTRIC CLASSIC  (rings draw themselves — no connection lines)
+    // Ring radii are unchanged. Only the bonus ring moved out: at 12.50 it sat
+    // 1.57 from the outer ring's towers, right in the trap zone.
     public static MapLayoutDefinition MakeConcentricClassic()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -47,12 +91,15 @@ public static class MapLayoutExamples
             new TowerDefenseMap.RingConfiguration { radius = 7.70f, slotCount = 8,  slotSize = 1.9f, enabled = true },
             new TowerDefenseMap.RingConfiguration { radius = 11.20f, slotCount = 10, slotSize = 1.9f, enabled = true },
         };
-        d.bonusSlotPositions = CirclePositions(12.50f, 8, 22.5f);
+        d.bonusSlotPositions = CirclePositions(14.60f, 8, 22.5f);
         d.bonusSlotSize = 1.9f;
         return d;
     }
 
     // 02  CHOKEPOINT CORRIDOR  (Custom + walls + horizontal guide lines)
+    // Walls moved out to y=+-8.0 and the slot rows in to y=+-4.5, so a tower on
+    // the row still leaves 2.05 between it and the wall (was 0.51 — a wedge).
+    // The rows are evenly spaced at 3.50, the minimum tower-to-tower distance.
     public static MapLayoutDefinition MakeChokepointCorridor()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -63,52 +110,50 @@ public static class MapLayoutExamples
 
         d.customSlotPositions = new List<Vector2>
         {
-            // Top wall edge slots
-            new Vector2(-7.00f, 4.62f), new Vector2(-3.50f, 4.62f), new Vector2(0.00f, 4.62f),
-            new Vector2(3.50f, 4.62f), new Vector2(7.00f, 4.62f),
-            // Bottom wall edge slots
-            new Vector2(-7.00f, -4.62f), new Vector2(-3.50f, -4.62f), new Vector2(0.00f, -4.62f),
-            new Vector2(3.50f, -4.62f), new Vector2(7.00f, -4.62f),
-            // Lane flanks (close to core, inside the corridor)
+            // Top row
+            new Vector2(-7.00f, 4.50f), new Vector2(-3.50f, 4.50f), new Vector2(0.00f, 4.50f),
+            new Vector2(3.50f, 4.50f), new Vector2(7.00f, 4.50f),
+            // Bottom row
+            new Vector2(-7.00f, -4.50f), new Vector2(-3.50f, -4.50f), new Vector2(0.00f, -4.50f),
+            new Vector2(3.50f, -4.50f), new Vector2(7.00f, -4.50f),
+            // Lane flanks
             new Vector2(-9.80f, 0.00f), new Vector2(9.80f, 0.00f),
         };
         d.bonusSlotPositions = new List<Vector2>
         {
-            new Vector2(-9.80f, 4.62f), new Vector2(9.80f, 4.62f),
-            new Vector2(-9.80f, -4.62f), new Vector2(9.80f, -4.62f),
-            // Mid-corridor flanks at the wall row
+            new Vector2(-10.50f, 4.50f), new Vector2(10.50f, 4.50f),
+            new Vector2(-10.50f, -4.50f), new Vector2(10.50f, -4.50f),
             new Vector2(-5.60f, 0.00f), new Vector2(5.60f, 0.00f),
         };
         d.bonusSlotSize = 1.9f;
 
-        // Two rows of short wall segments, each with gaps for enemies to pass through.
-        // Local avoidance can navigate around 3-unit segments easily.
+        // Two rows of short wall segments with 2.10 gaps between them.
         d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
         {
-            // Top wall row at y=4.7 — three 2.5-unit segments, 1.5-unit gaps
-            Wall("TopWall_L", pos:(-5.60f, 6.58f), size:(3.50f, 1.40f)),
-            Wall("TopWall_M", pos:(0.00f, 6.58f), size:(3.50f, 1.40f)),
-            Wall("TopWall_R", pos:(5.60f, 6.58f), size:(3.50f, 1.40f)),
-            // Bottom wall row mirrors the top
-            Wall("BotWall_L", pos:(-5.60f, -6.58f), size:(3.50f, 1.40f)),
-            Wall("BotWall_M", pos:(0.00f, -6.58f), size:(3.50f, 1.40f)),
-            Wall("BotWall_R", pos:(5.60f, -6.58f), size:(3.50f, 1.40f)),
+            Wall("TopWall_L", pos:(-5.60f, 8.00f), size:(3.50f, 1.40f)),
+            Wall("TopWall_M", pos:(0.00f, 8.00f), size:(3.50f, 1.40f)),
+            Wall("TopWall_R", pos:(5.60f, 8.00f), size:(3.50f, 1.40f)),
+            Wall("BotWall_L", pos:(-5.60f, -8.00f), size:(3.50f, 1.40f)),
+            Wall("BotWall_M", pos:(0.00f, -8.00f), size:(3.50f, 1.40f)),
+            Wall("BotWall_R", pos:(5.60f, -8.00f), size:(3.50f, 1.40f)),
         };
 
-        // Two horizontal guide lines along the wall slot rows
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
             Line(closed:false, points: new Vector2[] {
-                new Vector2(-10.50f, 4.62f), new Vector2(10.50f, 4.62f),
+                new Vector2(-11.20f, 4.50f), new Vector2(11.20f, 4.50f),
             }),
             Line(closed:false, points: new Vector2[] {
-                new Vector2(-10.50f, -4.62f), new Vector2(10.50f, -4.62f),
+                new Vector2(-11.20f, -4.50f), new Vector2(11.20f, -4.50f),
             }),
         };
         return d;
     }
 
-    // 05  SPIRAL SIEGE  (Custom + spiral guide line)
+    // 03  SPIRAL SIEGE  (Custom + spiral guide line)
+    // The pairs used to sit 2.80 apart across the path, so two towers left a
+    // 1.30 gap — passable-looking, not passable. Pairs are now 3.80 apart and
+    // the turns are spaced so no two slots on adjacent turns pinch either.
     public static MapLayoutDefinition MakeSpiralSiege()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -117,113 +162,83 @@ public static class MapLayoutExamples
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
+        // 7 pairs, each straddling the spiral at +-1.90 from its centreline.
         d.customSlotPositions = new List<Vector2>
         {
-            // 14 slots paired along a 1.25-turn inward spiral
-            new Vector2(-1.40f, 11.90f), new Vector2(1.40f, 11.90f),
-            new Vector2(-10.50f, 1.37f), new Vector2(-9.79f, 4.07f),
-            new Vector2(-3.33f, -8.58f), new Vector2(-5.77f, -7.18f),
-            new Vector2(6.44f, -4.45f), new Vector2(4.45f, -6.44f),
-            new Vector2(4.76f, 4.37f), new Vector2(6.16f, 1.93f),
-            new Vector2(-2.62f, 4.37f), new Vector2(0.08f, 5.10f),
-            new Vector2(-3.50f, -1.40f), new Vector2(-3.50f, 1.40f),
+            new Vector2(0.79f, 12.72f), new Vector2(-2.99f, 12.39f),
+            new Vector2(-10.87f, 3.51f), new Vector2(-11.42f, -0.25f),
+            new Vector2(-5.43f, -8.53f), new Vector2(-1.90f, -9.93f),
+            new Vector2(5.95f, -6.49f), new Vector2(8.13f, -3.38f),
+            new Vector2(6.69f, 3.41f), new Vector2(4.17f, 6.25f),
+            new Vector2(-1.14f, 6.12f), new Vector2(-4.49f, 4.32f),
+            new Vector2(-4.94f, 0.64f), new Vector2(-3.95f, -3.03f),
         };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            // Spread along the outer turns of the spiral, away from the
-            // tightly packed inner slots and the core.
-            new Vector2(8.40f, 5.60f), new Vector2(-8.40f, -5.60f),
-            new Vector2(2.80f, -10.50f), new Vector2(-2.80f, 10.50f),
-            new Vector2(10.50f, -2.80f), new Vector2(-10.50f, 2.80f),
-        };
+        d.bonusSlotPositions = CirclePositions(14.50f, 6, 30f);
         d.bonusSlotSize = 1.9f;
 
-        // Single spiral path as the guide line — matches slot count/turns
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            Line(closed:false, points: BuildSpiralPath(11.90f, 2.10f, 90f, 90f + 450f, 32)),
+            Line(closed:false, points: BuildSpiralPath(12.60f, 4.60f, 95f, 95f + 460f, 40)),
         };
         return d;
     }
 
-    // 06  BREACHED FORTRESS  (Custom + walls + perimeter guide line)
+    // 04  BREACHED FORTRESS  (Custom + walls + perimeter guide line)
+    // The corners used to leave a 1.29 diagonal slot between the end of one wall
+    // and the start of the next — the classic wedge. The wall spans now MEET at
+    // the corners (gap 0), turning each corner into one solid L. All four
+    // cardinal breaches are 11.90 wide, so the fortress is if anything easier to
+    // enter than before; it just no longer has four traps built into it.
     public static MapLayoutDefinition MakeBreachedFortress()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
         d.layoutName = "Breached Fortress";
         d.description = "Perimeter wall with 4 cardinal gap breaches. " +
-                        "Gap-guard slots flank the openings.";
+                        "Solid corners, wide openings.";
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        d.customSlotPositions = new List<Vector2>
-        {
-            // Gap guards (flank the 4 cardinal breach openings)
-            new Vector2(3.50f, 9.80f), new Vector2(-3.50f, 9.80f),
-            new Vector2(3.50f, -9.80f), new Vector2(-3.50f, -9.80f),
-            new Vector2(9.80f, 3.50f), new Vector2(9.80f, -3.50f),
-            new Vector2(-9.80f, 3.50f), new Vector2(-9.80f, -3.50f),
-            // Corner clusters
-            new Vector2(9.80f, 9.80f), new Vector2(7.00f, 9.80f), new Vector2(9.80f, 7.00f),
-            new Vector2(9.80f, -9.80f), new Vector2(7.00f, -9.80f), new Vector2(9.80f, -7.00f),
-            new Vector2(-9.80f, 9.80f), new Vector2(-7.00f, 9.80f), new Vector2(-9.80f, 7.00f),
-            new Vector2(-9.80f, -9.80f), new Vector2(-7.00f, -9.80f), new Vector2(-9.80f, -7.00f),
-            // Interior fallback slots
-            new Vector2(0.00f, 4.90f), new Vector2(0.00f, -4.90f),
-            new Vector2(4.90f, 0.00f), new Vector2(-4.90f, 0.00f),
-        };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            // Inside the fortress, away from the core (which sits at 0,0)
-            // and away from the walls (which sit at radius ~9.8).
-            // Two rings: inner (r=2.8) and middle (r=6.3).
-            new Vector2(2.80f, 2.80f), new Vector2(-2.80f, 2.80f),
-            new Vector2(2.80f, -2.80f), new Vector2(-2.80f, -2.80f),
-            new Vector2(6.30f, 2.80f), new Vector2(-6.30f, 2.80f),
-            new Vector2(6.30f, -2.80f), new Vector2(-6.30f, -2.80f),
-        };
+        // Two concentric squares of slots inside the walls, plus a mid ring.
+        d.customSlotPositions = new List<Vector2>();
+        d.customSlotPositions.AddRange(CirclePositions(4.90f, 4, 0f));
+        d.customSlotPositions.AddRange(CirclePositions(4.90f, 4, 45f));
+        d.customSlotPositions.AddRange(CirclePositions(8.60f, 4, 0f));
+
+        d.bonusSlotPositions = new List<Vector2>();
+        d.bonusSlotPositions.AddRange(CirclePositions(8.60f, 4, 45f));
+        d.bonusSlotPositions.AddRange(CirclePositions(12.20f, 4, 0f));
         d.bonusSlotSize = 1.9f;
 
-        // Wall segments at the perimeter, each 2.5 units long with multiple
-        // gap openings. Local avoidance handles short obstacles much better
-        // than long walls, and multiple gaps give enemies several entry points.
+        // Each corner is an L: the N/S spans and the E/W spans overlap exactly
+        // at their ends, so there is no slot between them to get caught in.
         d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
         {
-            // North side — two segments with a wide center gap
-            Wall("N_Wall_L", pos:(-7.70f, 10.92f), size:(3.50f, 1.12f)),
-            Wall("N_Wall_R", pos:(7.70f, 10.92f), size:(3.50f, 1.12f)),
-            // South side
-            Wall("S_Wall_L", pos:(-7.70f, -10.92f), size:(3.50f, 1.12f)),
-            Wall("S_Wall_R", pos:(7.70f, -10.92f), size:(3.50f, 1.12f)),
-            // West side
-            Wall("W_Wall_T", pos:(-10.92f, 7.70f), size:(1.12f, 3.50f)),
-            Wall("W_Wall_B", pos:(-10.92f, -7.70f), size:(1.12f, 3.50f)),
-            // East side
-            Wall("E_Wall_T", pos:(10.92f, 7.70f), size:(1.12f, 3.50f)),
-            Wall("E_Wall_B", pos:(10.92f, -7.70f), size:(1.12f, 3.50f)),
+            Wall("N_Wall_L", pos:(-8.16f, 10.92f), size:(4.41f, 1.12f)),
+            Wall("N_Wall_R", pos:(8.16f, 10.92f), size:(4.41f, 1.12f)),
+            Wall("S_Wall_L", pos:(-8.16f, -10.92f), size:(4.41f, 1.12f)),
+            Wall("S_Wall_R", pos:(8.16f, -10.92f), size:(4.41f, 1.12f)),
+            Wall("W_Wall_T", pos:(-10.92f, 8.16f), size:(1.12f, 4.41f)),
+            Wall("W_Wall_B", pos:(-10.92f, -8.16f), size:(1.12f, 4.41f)),
+            Wall("E_Wall_T", pos:(10.92f, 8.16f), size:(1.12f, 4.41f)),
+            Wall("E_Wall_B", pos:(10.92f, -8.16f), size:(1.12f, 4.41f)),
         };
 
-        // Square perimeter as guide (with gaps where breaches are)
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            // North wall span (with gap at center)
-            Line(false, new Vector2[] { new Vector2(-10.50f, 9.80f), new Vector2(-3.50f, 9.80f) }),
-            Line(false, new Vector2[] { new Vector2(3.50f, 9.80f), new Vector2(10.50f, 9.80f) }),
-            // South wall span
-            Line(false, new Vector2[] { new Vector2(-10.50f, -9.80f), new Vector2(-3.50f, -9.80f) }),
-            Line(false, new Vector2[] { new Vector2(3.50f, -9.80f), new Vector2(10.50f, -9.80f) }),
-            // West wall span
-            Line(false, new Vector2[] { new Vector2(-9.80f, 10.50f), new Vector2(-9.80f, 3.50f) }),
-            Line(false, new Vector2[] { new Vector2(-9.80f, -3.50f), new Vector2(-9.80f, -10.50f) }),
-            // East wall span
-            Line(false, new Vector2[] { new Vector2(9.80f, 10.50f), new Vector2(9.80f, 3.50f) }),
-            Line(false, new Vector2[] { new Vector2(9.80f, -3.50f), new Vector2(9.80f, -10.50f) }),
+            Line(false, new Vector2[] { new Vector2(-10.92f, 10.92f), new Vector2(-5.95f, 10.92f) }),
+            Line(false, new Vector2[] { new Vector2(5.95f, 10.92f), new Vector2(10.92f, 10.92f) }),
+            Line(false, new Vector2[] { new Vector2(-10.92f, -10.92f), new Vector2(-5.95f, -10.92f) }),
+            Line(false, new Vector2[] { new Vector2(5.95f, -10.92f), new Vector2(10.92f, -10.92f) }),
+            Line(false, new Vector2[] { new Vector2(-10.92f, 10.92f), new Vector2(-10.92f, 5.95f) }),
+            Line(false, new Vector2[] { new Vector2(-10.92f, -5.95f), new Vector2(-10.92f, -10.92f) }),
+            Line(false, new Vector2[] { new Vector2(10.92f, 10.92f), new Vector2(10.92f, 5.95f) }),
+            Line(false, new Vector2[] { new Vector2(10.92f, -5.95f), new Vector2(10.92f, -10.92f) }),
         };
         return d;
     }
 
-    // 07  CROSSROADS  (Custom + lane grid guide lines)
-
+    // 05  CROSSROADS  (Custom + lane grid guide lines)
+    // Untouched — 7.00 slot spacing already clears every rule with room to spare.
     public static MapLayoutDefinition MakeCrossroads()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -233,35 +248,26 @@ public static class MapLayoutExamples
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        // 8 slots forming a square grid (skipping the center where the core is)
         d.customSlotPositions = new List<Vector2>
         {
-            // Top row (y = +5)
             new Vector2(-7.00f, 7.00f), new Vector2(0.00f, 7.00f), new Vector2(7.00f, 7.00f),
-            // Middle row (y = 0) — skip center, that's the core
-            new Vector2(-7.00f, 0.00f),                        new Vector2(7.00f, 0.00f),
-            // Bottom row (y = -5)
+            new Vector2(-7.00f, 0.00f),                            new Vector2(7.00f, 0.00f),
             new Vector2(-7.00f, -7.00f), new Vector2(0.00f, -7.00f), new Vector2(7.00f, -7.00f),
         };
         d.bonusSlotPositions = new List<Vector2>
         {
-            // Outer corners — extend the grid one more step
             new Vector2(-11.20f, 11.20f), new Vector2(11.20f, 11.20f),
             new Vector2(-11.20f, -11.20f), new Vector2(11.20f, -11.20f),
-            // Outer cardinal mids on the same outer ring
             new Vector2(0.00f, 11.20f), new Vector2(0.00f, -11.20f),
             new Vector2(-11.20f, 0.00f), new Vector2(11.20f, 0.00f),
         };
         d.bonusSlotSize = 1.9f;
 
-        // Guide lines pass exactly through the slot rows/columns
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            // 3 horizontal lines through the slot rows
             Line(false, new Vector2[] { new Vector2(-11.90f, 7.00f), new Vector2(11.90f, 7.00f) }),
             Line(false, new Vector2[] { new Vector2(-11.90f, 0.00f), new Vector2(11.90f, 0.00f) }),
             Line(false, new Vector2[] { new Vector2(-11.90f, -7.00f), new Vector2(11.90f, -7.00f) }),
-            // 3 vertical lines through the slot columns
             Line(false, new Vector2[] { new Vector2(-7.00f, -11.90f), new Vector2(-7.00f, 11.90f) }),
             Line(false, new Vector2[] { new Vector2(0.00f, -11.90f), new Vector2(0.00f, 11.90f) }),
             Line(false, new Vector2[] { new Vector2(7.00f, -11.90f), new Vector2(7.00f, 11.90f) }),
@@ -269,8 +275,10 @@ public static class MapLayoutExamples
         return d;
     }
 
-    // 08  THE GAUNTLET  (Custom + short deflector walls)
-
+    // 06  THE GAUNTLET  (Custom + short deflector walls)
+    // The runs were 4.20 apart with a divider dead centre, leaving 1.00 between a
+    // tower and the wall. Runs are now 6.00 apart (y = 12 / 6 / 0) and the
+    // dividers are thinner (0.50), which puts a clean 2.00 on both sides.
     public static MapLayoutDefinition MakeTheGauntlet()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -279,55 +287,53 @@ public static class MapLayoutExamples
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        // 3 horizontal "runs" at y = +8, +5, +3.5 (above core).
-        // Final slots flank the core at y = -3, -6.
         d.customSlotPositions = new List<Vector2>
         {
-            // Run 1 (top, y = +8) — left to right
-            new Vector2(-9.80f, 11.20f), new Vector2(-4.20f, 11.20f),
-            new Vector2(4.20f, 11.20f), new Vector2(9.80f, 11.20f),
-            // Run 2 (y = +5) — right to left
-            new Vector2(9.80f, 7.00f), new Vector2(4.20f, 7.00f),
-            new Vector2(-4.20f, 7.00f), new Vector2(-9.80f, 7.00f),
-            // Final approach (slots flanking the path on the way to the core)
-            new Vector2(-9.80f, 2.80f), new Vector2(9.80f, 2.80f),
-            new Vector2(-4.20f, -4.20f), new Vector2(4.20f, -4.20f),
-            new Vector2(-4.20f, -8.40f), new Vector2(4.20f, -8.40f),
+            // Run 1 (top)
+            new Vector2(-9.80f, 12.00f), new Vector2(-4.20f, 12.00f),
+            new Vector2(4.20f, 12.00f), new Vector2(9.80f, 12.00f),
+            // Run 2
+            new Vector2(9.80f, 6.00f), new Vector2(4.20f, 6.00f),
+            new Vector2(-4.20f, 6.00f), new Vector2(-9.80f, 6.00f),
+            // Run 3 (level with the core)
+            new Vector2(-9.80f, 0.00f), new Vector2(9.80f, 0.00f),
+            // Final approach
+            new Vector2(-4.20f, -6.00f), new Vector2(4.20f, -6.00f),
+            new Vector2(-4.20f, -10.00f), new Vector2(4.20f, -10.00f),
         };
         d.bonusSlotPositions = new List<Vector2>
         {
-            new Vector2(-11.90f, 9.10f), new Vector2(11.90f, 9.10f),
-            new Vector2(-11.90f, 4.90f), new Vector2(11.90f, 4.90f),
-            // Bottom flanks (covering the final approach lanes)
-            new Vector2(-11.90f, -6.30f), new Vector2(11.90f, -6.30f),
+            new Vector2(-13.30f, 9.00f), new Vector2(13.30f, 9.00f),
+            new Vector2(-13.30f, 3.00f), new Vector2(14.00f, 3.00f),
+            new Vector2(-11.90f, -8.00f), new Vector2(11.90f, -8.00f),
         };
         d.bonusSlotSize = 1.9f;
 
-        // Short wall segments with 1.5-unit gaps between them. The pattern still
-        // funnels the threat alternately, but enemies have multiple navigation options.
+        // Divider rows sit exactly halfway between the runs, biased alternately
+        // left and right so the open side flips each time.
         d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
         {
-            // Between run 1 and run 2 — segments biased to LEFT, gap on right
-            Wall("Div1_L", pos:(-8.40f, 9.10f), size:(3.50f, 0.70f)),
-            Wall("Div1_M", pos:(-2.80f, 9.10f), size:(3.50f, 0.70f)),
-            // Between run 2 and run 3 — segments biased to RIGHT, gap on left
-            Wall("Div2_M", pos:(2.80f, 4.90f), size:(3.50f, 0.70f)),
-            Wall("Div2_R", pos:(8.40f, 4.90f), size:(3.50f, 0.70f)),
+            Wall("Div1_L", pos:(-8.40f, 9.00f), size:(3.50f, 0.50f)),
+            Wall("Div1_M", pos:(-2.80f, 9.00f), size:(3.50f, 0.50f)),
+            Wall("Div2_M", pos:(3.50f, 3.00f), size:(3.50f, 0.50f)),
+            Wall("Div2_R", pos:(9.10f, 3.00f), size:(3.50f, 0.50f)),
         };
 
-        // Zigzag guide line passes through every slot row at the slot Y
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
             Line(false, new Vector2[] {
-                new Vector2(-11.90f, 11.20f),  new Vector2(11.90f, 11.20f),  // run 1
-                new Vector2(11.90f, 7.00f),  new Vector2(-11.90f, 7.00f),  // run 2
-                new Vector2(-11.90f, 2.80f),  new Vector2(11.90f, 2.80f),  // approach
+                new Vector2(-11.90f, 12.00f), new Vector2(11.90f, 12.00f),
+                new Vector2(11.90f, 6.00f),   new Vector2(-11.90f, 6.00f),
+                new Vector2(-11.90f, 0.00f),  new Vector2(11.90f, 0.00f),
             }),
         };
         return d;
     }
 
-    // 09  THE ARENA  (Custom + moat + bridges + perimeter guide)
+    // 07  THE ARENA  (Custom — no physical obstacles, moat is visual only)
+    // The island slots sat 3.65 from the map centre, leaving 1.90 between a
+    // tower and the core. Island ring moved out to 4.20 and the outer ring
+    // respaced so no two rings pinch.
     public static MapLayoutDefinition MakeTheArena()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -336,198 +342,137 @@ public static class MapLayoutExamples
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        d.customSlotPositions = new List<Vector2>
-        {
-            // Bridge guards (just outside moat at cardinals)
-            new Vector2(0.00f, 6.30f), new Vector2(0.00f, -6.30f),
-            new Vector2(6.30f, 0.00f), new Vector2(-6.30f, 0.00f),
-            // Outer perimeter ring
-            new Vector2(11.20f, 0.00f), new Vector2(9.70f, 5.60f),
-            new Vector2(5.60f, 9.70f), new Vector2(0.00f, 11.20f),
-            new Vector2(-5.60f, 9.70f), new Vector2(-9.70f, 5.60f),
-            new Vector2(-11.20f, 0.00f), new Vector2(-9.70f, -5.60f),
-            new Vector2(-5.60f, -9.70f), new Vector2(0.00f, -11.20f),
-            new Vector2(5.60f, -9.70f), new Vector2(9.70f, -5.60f),
-            // Inner island ring
-            new Vector2(2.58f, 2.58f), new Vector2(-2.58f, 2.58f),
-            new Vector2(-2.58f, -2.58f), new Vector2(2.58f, -2.58f),
-        };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            // Cardinals between island and outer ring
-            new Vector2(0.00f, 9.10f), new Vector2(0.00f, -9.10f),
-            new Vector2(9.10f, 0.00f), new Vector2(-9.10f, 0.00f),
-            // Diagonals on the outer perimeter
-            new Vector2(6.44f, 6.44f), new Vector2(-6.44f, 6.44f),
-            new Vector2(6.44f, -6.44f), new Vector2(-6.44f, -6.44f),
-        };
+        d.customSlotPositions = new List<Vector2>();
+        d.customSlotPositions.AddRange(CirclePositions(4.20f, 4, 45f));   // island
+        d.customSlotPositions.AddRange(CirclePositions(5.50f, 4, 0f));    // bridge guards
+        d.customSlotPositions.AddRange(CirclePositions(11.50f, 8, 22.5f)); // outer ring
+
+        d.bonusSlotPositions = CirclePositions(9.00f, 8, 0f);
         d.bonusSlotSize = 1.9f;
 
-        // No physical obstacles for The Arena — the moat/bridges are
-        // communicated visually by the connection lines (outer perimeter +
-        // inner island circle). Avoids cluttering the map with decorative
-        // sprites that confused players.
-
-        // Outer perimeter circle + inner island circle as guides
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            Line(closed:true, points: ApproximateCircle(11.20f, 0.00f, 0.00f, 36)),
-            Line(closed:true, points: ApproximateCircle(3.64f, 0.00f, 0.00f, 16)),
+            Line(closed:true, points: ApproximateCircle(11.50f, 0.00f, 0.00f, 36)),
+            Line(closed:true, points: ApproximateCircle(3.40f, 0.00f, 0.00f, 16)),
         };
         return d;
     }
 
-    // GHOST TOWN  (Custom + buildings)
-
+    // 08  GHOST TOWN  (Custom + buildings)
+    // Rebuilt. The old grid put buildings on the cardinal sides with 2.10 streets
+    // between them, and slots at junctions where a tower closed the street down
+    // to 1.23 — this was one of four layouts a player could brick outright.
+    // Buildings now sit on the DIAGONALS and the four cardinal avenues are left
+    // completely clear, so towers line the avenues without ever narrowing them.
     public static MapLayoutDefinition MakeGhostTown()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
         d.layoutName = "Ghost Town";
-        d.description = "Buildings funnel enemies down streets. Slots sit at street junctions.";
+        d.description = "Buildings occupy the corners; four wide avenues run " +
+                        "to the core. Slots line the avenues.";
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        // Slots sit at junctions of a 3×3 street grid (skipping center = core)
-        // Streets run at x = ±4 and y = ±4. Junctions at all 8 combinations.
-        d.customSlotPositions = new List<Vector2>
-        {
-            // Outer street ring (corners of map)
-            new Vector2(-9.80f, 9.80f), new Vector2(0.00f, 9.80f), new Vector2(9.80f, 9.80f),
-            new Vector2(-9.80f, 0.00f),                        new Vector2(9.80f, 0.00f),
-            new Vector2(-9.80f, -9.80f), new Vector2(0.00f, -9.80f), new Vector2(9.80f, -9.80f),
-            // Inner street junctions
-            new Vector2(-4.90f, 4.90f), new Vector2(4.90f, 4.90f),
-            new Vector2(-4.90f, -4.90f), new Vector2(4.90f, -4.90f),
-        };
+        d.customSlotPositions = new List<Vector2>();
+        d.customSlotPositions.AddRange(CirclePositions(4.20f, 4, 0f));
+        d.customSlotPositions.AddRange(CirclePositions(8.40f, 4, 0f));
+        d.customSlotPositions.AddRange(CirclePositions(12.00f, 4, 0f));
+
         d.bonusSlotPositions = new List<Vector2>
         {
-            // Cardinal mid-ring (street-facing)
-            new Vector2(0.00f, 4.90f), new Vector2(0.00f, -4.90f),
-            new Vector2(4.90f, 0.00f), new Vector2(-4.90f, 0.00f),
-            // Diagonal mid-ring (corner-pointing, between inner & outer buildings)
-            new Vector2(2.45f, 4.90f), new Vector2(-2.45f, 4.90f),
-            new Vector2(2.45f, -4.90f), new Vector2(-2.45f, -4.90f),
+            new Vector2(3.60f, 9.00f), new Vector2(-3.60f, 9.00f),
+            new Vector2(3.60f, -9.00f), new Vector2(-3.60f, -9.00f),
+            new Vector2(9.00f, 3.60f), new Vector2(-9.00f, 3.60f),
+            new Vector2(9.00f, -3.60f), new Vector2(-9.00f, -3.60f),
         };
         d.bonusSlotSize = 1.9f;
 
-        // 4 outer buildings + 4 inner buildings, all outside the core's
-        // safety zone (3 units). Streets remain open at every junction.
+        // Inner and outer blocks on each diagonal, 2.55 apart corner to corner.
         d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
         {
-            Building("NW_Building", pos:(-7.35f, 7.35f), size:(3.50f, 3.50f)),
-            Building("NE_Building", pos:(7.35f, 7.35f), size:(3.50f, 3.50f)),
-            Building("SW_Building", pos:(-7.35f, -7.35f), size:(3.50f, 3.50f)),
-            Building("SE_Building", pos:(7.35f, -7.35f), size:(3.50f, 3.50f)),
-            // Inner buildings — pushed out so they don't overlap core safe zone
-            Building("Inner_NW", pos:(-7.35f, 2.45f), size:(2.10f, 2.10f)),
-            Building("Inner_NE", pos:(7.35f, 2.45f), size:(2.10f, 2.10f)),
-            Building("Inner_SW", pos:(-7.35f, -2.45f), size:(2.10f, 2.10f)),
-            Building("Inner_SE", pos:(7.35f, -2.45f), size:(2.10f, 2.10f)),
+            Building("NE_Block", pos:(9.60f, 9.60f), size:(4.20f, 4.20f)),
+            Building("NW_Block", pos:(-9.60f, 9.60f), size:(4.20f, 4.20f)),
+            Building("SE_Block", pos:(9.60f, -9.60f), size:(4.20f, 4.20f)),
+            Building("SW_Block", pos:(-9.60f, -9.60f), size:(4.20f, 4.20f)),
+            Building("Inner_NE", pos:(4.50f, 4.50f), size:(2.40f, 2.40f)),
+            Building("Inner_NW", pos:(-4.50f, 4.50f), size:(2.40f, 2.40f)),
+            Building("Inner_SE", pos:(4.50f, -4.50f), size:(2.40f, 2.40f)),
+            Building("Inner_SW", pos:(-4.50f, -4.50f), size:(2.40f, 2.40f)),
         };
 
-        // Street grid: lines pass through every slot row/column
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            // Horizontal streets at y = -7, -3.5, 0, 3.5, 7
-            Line(false, new Vector2[] { new Vector2(-11.90f, 9.80f),    new Vector2(11.90f, 9.80f) }),
-            Line(false, new Vector2[] { new Vector2(-11.90f, 4.90f),  new Vector2(11.90f, 4.90f) }),
-            Line(false, new Vector2[] { new Vector2(-11.90f, 0.00f),    new Vector2(11.90f, 0.00f) }),
-            Line(false, new Vector2[] { new Vector2(-11.90f, -4.90f),  new Vector2(11.90f, -4.90f) }),
-            Line(false, new Vector2[] { new Vector2(-11.90f, -9.80f),    new Vector2(11.90f, -9.80f) }),
-            // Vertical streets at x = -7, -3.5, 0, 3.5, 7
-            Line(false, new Vector2[] { new Vector2(-9.80f, -11.90f), new Vector2(-9.80f, 11.90f) }),
-            Line(false, new Vector2[] { new Vector2(-4.90f, -11.90f), new Vector2(-4.90f, 11.90f) }),
-            Line(false, new Vector2[] { new Vector2(0.00f, -11.90f), new Vector2(0.00f, 11.90f) }),
-            Line(false, new Vector2[] { new Vector2(4.90f, -11.90f), new Vector2(4.90f, 11.90f) }),
-            Line(false, new Vector2[] { new Vector2(9.80f, -11.90f), new Vector2(9.80f, 11.90f) }),
+            // The four avenues
+            Line(false, new Vector2[] { new Vector2(-13.50f, 0.00f), new Vector2(13.50f, 0.00f) }),
+            Line(false, new Vector2[] { new Vector2(0.00f, -13.50f), new Vector2(0.00f, 13.50f) }),
+            // Ring road linking the avenue slots
+            Line(true, new Vector2[] {
+                new Vector2(8.40f, 0.00f), new Vector2(0.00f, 8.40f),
+                new Vector2(-8.40f, 0.00f), new Vector2(0.00f, -8.40f),
+            }),
         };
         return d;
     }
 
-    // MAZE HALLWAYS  (Custom + walls forming an H-pattern)
-
+    // 09  MAZE HALLWAYS  (Custom + walls forming an H-pattern)
+    // The corridors were 5.46 wide, so a tower parked in one left 1.98 on each
+    // side — just under a lane, on both sides at once. Outer walls moved out to
+    // +-10.50 (corridor 6.16 wide) and the slots centred at x = +-7.00, which
+    // leaves 2.33 either side of a tower.
     public static MapLayoutDefinition MakeMazeHallways()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
         d.layoutName = "Maze Hallways";
         d.description = "Two vertical corridors connected by a horizontal one. " +
-                        "Slots line the inside walls of each corridor.";
+                        "Slots run down the middle of each corridor.";
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        // Slots inside the H-shape, at the corridor walls
         d.customSlotPositions = new List<Vector2>
         {
-            // Left corridor — vertical column of slots
-            new Vector2(-7.70f, 9.80f), new Vector2(-7.70f, 5.60f),
-            new Vector2(-7.70f, -5.60f), new Vector2(-7.70f, -9.80f),
-            new Vector2(-4.90f, 9.80f), new Vector2(-4.90f, 5.60f),
-            new Vector2(-4.90f, -5.60f), new Vector2(-4.90f, -9.80f),
+            // Left corridor (centred between the walls at -3.50 and -10.50)
+            new Vector2(-7.00f, 12.00f), new Vector2(-7.00f, 8.40f), new Vector2(-7.00f, 4.50f),
+            new Vector2(-7.00f, -4.50f), new Vector2(-7.00f, -8.40f), new Vector2(-7.00f, -12.00f),
             // Right corridor
-            new Vector2(7.70f, 9.80f), new Vector2(7.70f, 5.60f),
-            new Vector2(7.70f, -5.60f), new Vector2(7.70f, -9.80f),
-            new Vector2(4.90f, 9.80f), new Vector2(4.90f, 5.60f),
-            new Vector2(4.90f, -5.60f), new Vector2(4.90f, -9.80f),
-            // Cross-corridor (horizontal connection through the middle)
-            new Vector2(-2.10f, 2.10f), new Vector2(2.10f, 2.10f),
-            new Vector2(-2.10f, -2.10f), new Vector2(2.10f, -2.10f),
+            new Vector2(7.00f, 12.00f), new Vector2(7.00f, 8.40f), new Vector2(7.00f, 4.50f),
+            new Vector2(7.00f, -4.50f), new Vector2(7.00f, -8.40f), new Vector2(7.00f, -12.00f),
+            // Cross-corridor, kept clear of the core
+            new Vector2(-2.80f, 2.80f), new Vector2(2.80f, 2.80f),
+            new Vector2(-2.80f, -2.80f), new Vector2(2.80f, -2.80f),
         };
         d.bonusSlotPositions = new List<Vector2>
         {
-            // Cross-corridor edges and flanking the top/bottom corridor openings.
-            // (0,0) is avoided — that's where the central core sits.
             new Vector2(0.00f, 6.30f), new Vector2(0.00f, -6.30f),
-            new Vector2(-6.30f, 0.00f), new Vector2(6.30f, 0.00f),
-            new Vector2(0.00f, 9.80f), new Vector2(0.00f, -9.80f),
+            new Vector2(0.00f, 10.50f), new Vector2(0.00f, -10.50f),
+            new Vector2(13.00f, 0.00f), new Vector2(-13.00f, 0.00f),
         };
         d.bonusSlotSize = 1.9f;
 
-        // Walls forming the corridors (short segments, easy to navigate around)
-        // Left corridor: outer wall at x=-7, inner wall at x=-2.5
-        // Right corridor: outer wall at x=+7, inner wall at x=+2.5
         d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
         {
-            // Left outer (-7) — top and bottom segments, gap in middle
-            Wall("L_Out_T", pos:(-9.80f, 8.40f), size:(0.84f, 3.50f)),
-            Wall("L_Out_B", pos:(-9.80f, -8.40f), size:(0.84f, 3.50f)),
-            // Left inner (-2.5)
+            Wall("L_Out_T", pos:(-10.50f, 8.40f), size:(0.84f, 3.50f)),
+            Wall("L_Out_B", pos:(-10.50f, -8.40f), size:(0.84f, 3.50f)),
             Wall("L_In_T",  pos:(-3.50f, 8.40f), size:(0.84f, 3.50f)),
             Wall("L_In_B",  pos:(-3.50f, -8.40f), size:(0.84f, 3.50f)),
-            // Right outer (+7)
-            Wall("R_Out_T", pos:(9.80f, 8.40f), size:(0.84f, 3.50f)),
-            Wall("R_Out_B", pos:(9.80f, -8.40f), size:(0.84f, 3.50f)),
-            // Right inner (+2.5)
+            Wall("R_Out_T", pos:(10.50f, 8.40f), size:(0.84f, 3.50f)),
+            Wall("R_Out_B", pos:(10.50f, -8.40f), size:(0.84f, 3.50f)),
             Wall("R_In_T",  pos:(3.50f, 8.40f), size:(0.84f, 3.50f)),
             Wall("R_In_B",  pos:(3.50f, -8.40f), size:(0.84f, 3.50f)),
         };
 
-        // Guide lines tracing the corridor shape
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            // Left corridor outline
-            Line(false, new Vector2[] {
-                new Vector2(-9.80f, 11.20f), new Vector2(-9.80f, -11.20f),
-            }),
-            Line(false, new Vector2[] {
-                new Vector2(-3.50f, 11.20f), new Vector2(-3.50f, -11.20f),
-            }),
-            // Right corridor outline
-            Line(false, new Vector2[] {
-                new Vector2(9.80f, 11.20f), new Vector2(9.80f, -11.20f),
-            }),
-            Line(false, new Vector2[] {
-                new Vector2(3.50f, 11.20f), new Vector2(3.50f, -11.20f),
-            }),
-            // Horizontal cross-corridor
-            Line(false, new Vector2[] {
-                new Vector2(-3.50f, 0.00f), new Vector2(3.50f, 0.00f),
-            }),
+            Line(false, new Vector2[] { new Vector2(-10.50f, 13.00f), new Vector2(-10.50f, -13.00f) }),
+            Line(false, new Vector2[] { new Vector2(-3.50f, 13.00f), new Vector2(-3.50f, -13.00f) }),
+            Line(false, new Vector2[] { new Vector2(10.50f, 13.00f), new Vector2(10.50f, -13.00f) }),
+            Line(false, new Vector2[] { new Vector2(3.50f, 13.00f), new Vector2(3.50f, -13.00f) }),
+            Line(false, new Vector2[] { new Vector2(-3.50f, 0.00f), new Vector2(3.50f, 0.00f) }),
         };
         return d;
     }
 
-    // DIAMOND FORMATION  (Custom — slots in a rotated grid, no obstacles)
-
+    // 10  DIAMOND FORMATION  (Custom — no obstacles)
+    // Untouched — every gap already clears the rules.
     public static MapLayoutDefinition MakeDiamondFormation()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -537,20 +482,14 @@ public static class MapLayoutExamples
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        // Diamond ring 1 (small) at distance ~3.5 along diagonals
-        // Diamond ring 2 (medium) at distance ~6
-        // Diamond ring 3 (large) at distance ~8.5
         d.customSlotPositions = new List<Vector2>
         {
-            // Inner diamond (4 cardinal-rotated points)
             new Vector2(4.90f, 0.00f), new Vector2(-4.90f, 0.00f),
             new Vector2(0.00f, 4.90f), new Vector2(0.00f, -4.90f),
-            // Mid diamond — 4 corners + 4 edge midpoints (8 total)
             new Vector2(8.40f, 0.00f), new Vector2(-8.40f, 0.00f),
             new Vector2(0.00f, 8.40f), new Vector2(0.00f, -8.40f),
             new Vector2(5.88f, 5.88f), new Vector2(-5.88f, 5.88f),
             new Vector2(5.88f, -5.88f), new Vector2(-5.88f, -5.88f),
-            // Outer diamond
             new Vector2(11.90f, 0.00f), new Vector2(-11.90f, 0.00f),
             new Vector2(0.00f, 11.90f), new Vector2(0.00f, -11.90f),
             new Vector2(8.40f, 8.40f), new Vector2(-8.40f, 8.40f),
@@ -565,20 +504,16 @@ public static class MapLayoutExamples
         };
         d.bonusSlotSize = 1.9f;
 
-        // Three nested diamond outlines
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            // Inner diamond
             Line(closed:true, points: new Vector2[] {
                 new Vector2(4.90f, 0.00f), new Vector2(0.00f, 4.90f),
                 new Vector2(-4.90f, 0.00f), new Vector2(0.00f, -4.90f),
             }),
-            // Mid diamond
             Line(closed:true, points: new Vector2[] {
                 new Vector2(8.40f, 0.00f), new Vector2(0.00f, 8.40f),
                 new Vector2(-8.40f, 0.00f), new Vector2(0.00f, -8.40f),
             }),
-            // Outer diamond
             Line(closed:true, points: new Vector2[] {
                 new Vector2(11.90f, 0.00f), new Vector2(0.00f, 11.90f),
                 new Vector2(-11.90f, 0.00f), new Vector2(0.00f, -11.90f),
@@ -587,8 +522,10 @@ public static class MapLayoutExamples
         return d;
     }
 
-    // PINCER GRIP  (Custom — slots in two arc clusters, threat from sides)
-
+    // 11  PINCER GRIP  (Custom — two arc clusters, threat from top and bottom)
+    // The arcs packed slots 2.20 apart in places (0.71 between towers). Rebuilt
+    // as two clean arcs per flank: 4 slots on an outer arc at 8.50 and 3 on an
+    // inner arc at 5.00, which keeps every neighbour at least 3.50 away.
     public static MapLayoutDefinition MakePincerGrip()
     {
         var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
@@ -598,52 +535,414 @@ public static class MapLayoutExamples
         d.layoutType = MapLayoutDefinition.LayoutType.Custom;
         d.customSlotSize = 1.9f;
 
-        d.customSlotPositions = new List<Vector2>
+        d.customSlotPositions = new List<Vector2>();
+        foreach (float baseAngle in new float[] { 0f, 180f })
         {
-            // Left arc cluster — slots curving around the west flank
-            new Vector2(-4.20f, 6.30f),
-            new Vector2(-7.00f, 4.20f),
-            new Vector2(-9.10f, 0.00f),
-            new Vector2(-7.00f, -4.20f),
-            new Vector2(-4.20f, -6.30f),
-            new Vector2(-6.30f, 2.10f),
-            new Vector2(-6.30f, -2.10f),
-            new Vector2(-3.50f, 0.00f),
-            // Right arc cluster — mirror
-            new Vector2(4.20f, 6.30f),
-            new Vector2(7.00f, 4.20f),
-            new Vector2(9.10f, 0.00f),
-            new Vector2(7.00f, -4.20f),
-            new Vector2(4.20f, -6.30f),
-            new Vector2(6.30f, 2.10f),
-            new Vector2(6.30f, -2.10f),
-            new Vector2(3.50f, 0.00f),
-        };
+            foreach (float a in new float[] { -50f, -16.7f, 16.7f, 50f })
+                d.customSlotPositions.Add(Polar(8.50f, baseAngle + a));
+            foreach (float a in new float[] { -45f, 0f, 45f })
+                d.customSlotPositions.Add(Polar(5.00f, baseAngle + a));
+        }
+
         d.bonusSlotPositions = new List<Vector2>
         {
-            // Late-game slots that finally cover the top/bottom entry points
-            new Vector2(-2.10f, 9.10f), new Vector2(2.10f, 9.10f),
-            new Vector2(-2.10f, -9.10f), new Vector2(2.10f, -9.10f),
-            // Wider top/bottom sentries to extend coverage further
-            new Vector2(0.00f, 11.20f), new Vector2(0.00f, -11.20f),
-            new Vector2(-5.60f, 9.10f), new Vector2(5.60f, 9.10f),
+            new Vector2(0.00f, 11.00f), new Vector2(0.00f, -11.00f),
+            new Vector2(3.50f, 9.50f), new Vector2(-3.50f, 9.50f),
+            new Vector2(3.50f, -9.50f), new Vector2(-3.50f, -9.50f),
         };
         d.bonusSlotSize = 1.9f;
 
-        // Two arc guide lines visualising the pincer shape
         d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
         {
-            // Left arc — half-circle from top-left to bottom-left
-            Line(false, points: BuildArc(centerX: 0.00f, centerY: 0.00f, radius: 7.00f,
-                startAngleDeg: 130f, endAngleDeg: 230f, segments: 16)),
-            // Right arc — mirror
-            Line(false, points: BuildArc(centerX: 0.00f, centerY: 0.00f, radius: 7.00f,
-                startAngleDeg: -50f, endAngleDeg: 50f, segments: 16)),
+            Line(false, points: BuildArc(0.00f, 0.00f, 8.50f, 130f, 230f, 16)),
+            Line(false, points: BuildArc(0.00f, 0.00f, 8.50f, -50f, 50f, 16)),
         };
         return d;
     }
 
+    // ================================================================
+    // ROUND / CURVED LAYOUTS (Circle and Crescent obstacles)
+    // ================================================================
+
+    static readonly Color STONE_GREY = new Color(0.45f, 0.46f, 0.50f, 1.00f);
+    static readonly Color LINE_WARM_AMBER = new Color(0.90f, 0.65f, 0.30f, 0.55f);
+
+    // 12  STONEHENGE — 8 outer stones + 4 inner stones
+    // The inner stones sat 3.50 out, 1.75 from the core — an enemy could get
+    // between them and the core but not back out. And the inner slot ring was
+    // pinched 1.06 between two outer stones, so towers there sealed the map.
+    // Both rings moved out: stones to 8.50 / 4.20, slots to 11.00 / 5.30.
+    public static MapLayoutDefinition MakeStonehenge()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "Stonehenge";
+        d.description = "Eight large standing stones in an outer ring with " +
+                        "four inner stones on the diagonals. Wide cardinal " +
+                        "gaps for boss access.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        d.customSlotPositions = new List<Vector2>();
+        d.customSlotPositions.AddRange(CirclePositions(11.00f, 8, 0f));  // outside the ring
+        d.customSlotPositions.AddRange(CirclePositions(5.30f, 4, 0f));   // inside, on the cardinals
+
+        d.bonusSlotPositions = CirclePositions(13.00f, 8, 22.5f);
+        d.bonusSlotSize = 1.9f;
+
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>();
+        // OUTER ring: 8 stones on the diagonals-between-cardinals, 4.31 gaps.
+        for (int i = 0; i < 8; i++)
+            d.obstacles.Add(Stone($"OuterStone_{i}", Polar(8.50f, i * 45f + 22.5f), 2.2f, STONE_GREY));
+        // INNER ring: 4 stones on the diagonals, 2.45 clear of the core.
+        for (int i = 0; i < 4; i++)
+            d.obstacles.Add(Stone($"InnerStone_{i}", Polar(4.20f, 45f + i * 90f), 1.5f, STONE_GREY));
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
+        {
+            Line(true, ApproximateCircle(8.5f, 0f, 0f, 36)),
+            Line(true, ApproximateCircle(4.2f, 0f, 0f, 24)),
+        };
+        return d;
+    }
+
+    // 13  CROSSROADS PILLARS — open cardinal cross, pillars on the diagonals
+    // The inner pillar ring sat at radius 2.97, and the cardinal slots at 3.00
+    // ran right between them: four towers plus four pillars formed a closed ring
+    // around the core, sealing the map completely. The inner ring is gone; the
+    // pillars now sit at 6.36 on the diagonals with the cardinal highways
+    // completely clear, and the outer diagonals carry solid arches (real
+    // colliders — enemies path around them, not through them).
+    public static MapLayoutDefinition MakeCrossroadsPillars()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "Crossroads Pillars";
+        d.description = "Open cardinal highways for boss approaches, with " +
+                        "pillars and arches on the diagonals. Slots dominate " +
+                        "the open cross.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        d.customSlotPositions = new List<Vector2>
+        {
+            new Vector2(0.00f, 4.50f), new Vector2(0.00f, -4.50f),
+            new Vector2(4.50f, 0.00f), new Vector2(-4.50f, 0.00f),
+            new Vector2(0.00f, 8.00f), new Vector2(0.00f, -8.00f),
+            new Vector2(8.00f, 0.00f), new Vector2(-8.00f, 0.00f),
+            new Vector2(0.00f, 11.50f), new Vector2(0.00f, -11.50f),
+            new Vector2(11.50f, 0.00f), new Vector2(-11.50f, 0.00f),
+        };
+        d.bonusSlotPositions = new List<Vector2>
+        {
+            new Vector2(3.60f, 8.20f), new Vector2(-3.60f, 8.20f),
+            new Vector2(3.60f, -8.20f), new Vector2(-3.60f, -8.20f),
+            new Vector2(8.20f, 3.60f), new Vector2(-8.20f, 3.60f),
+            new Vector2(8.20f, -3.60f), new Vector2(-8.20f, -3.60f),
+        };
+        d.bonusSlotSize = 1.9f;
+
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
+        {
+            Stone("Pillar_NE", new Vector2( 4.50f,  4.50f), 1.8f, STONE_GREY),
+            Stone("Pillar_NW", new Vector2(-4.50f,  4.50f), 1.8f, STONE_GREY),
+            Stone("Pillar_SE", new Vector2( 4.50f, -4.50f), 1.8f, STONE_GREY),
+            Stone("Pillar_SW", new Vector2(-4.50f, -4.50f), 1.8f, STONE_GREY),
+
+            // Solid arches on the outer diagonals — real colliders, enemies
+            // cannot pass through them. Each one's open side faces the core, so
+            // enemies coming inward meet the convex back and slide around it.
+            // 3.60 x 1.00 keeps the arc shallow (see the crescent sizing note at
+            // the bottom of this file); the nearest a tower can ever get is 2.97.
+            Arch("Arch_NE", new Vector2( 8.50f,  8.50f), 3.6f, 1.0f, 135f),
+            Arch("Arch_NW", new Vector2(-8.50f,  8.50f), 3.6f, 1.0f, 225f),
+            Arch("Arch_SE", new Vector2( 8.50f, -8.50f), 3.6f, 1.0f, 45f),
+            Arch("Arch_SW", new Vector2(-8.50f, -8.50f), 3.6f, 1.0f, 315f),
+        };
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
+        {
+            ColorLine(false, new Vector2[] { new Vector2(0f, -12.5f), new Vector2(0f, 12.5f) }, LINE_WARM_AMBER),
+            ColorLine(false, new Vector2[] { new Vector2(-12.5f, 0f), new Vector2(12.5f, 0f) }, LINE_WARM_AMBER),
+        };
+        return d;
+    }
+
+    // 14  ASTEROID BELT — 6 round stones evenly spaced around a ring
+    // The belt sat at radius 5.00, and the old layout deliberately put slots
+    // "in the gaps themselves" — six towers plugging six holes sealed the map.
+    // Worse, the geometry made an inner slot impossible: with stones at 5.00 no
+    // point between the core and the belt is 3.75 clear of a stone centre. The
+    // belt moved out to 7.00, which opens a genuine inner courtyard: slots ride
+    // at 4.50 inside and 9.50 outside, both in the angular gaps, and neither can
+    // block the 5.00-wide lanes between the stones.
+    public static MapLayoutDefinition MakeAsteroidBelt()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "Asteroid Belt";
+        d.description = "Six round stones in a ring around the core. " +
+                        "Generous gaps between every pair — six approach " +
+                        "lanes for enemies.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        // Both slot rings sit at 60° offsets — i.e. lined up with the gaps
+        // between stones, never behind a stone.
+        d.customSlotPositions = new List<Vector2>();
+        d.customSlotPositions.AddRange(CirclePositions(4.50f, 6, 60f));
+        d.customSlotPositions.AddRange(CirclePositions(9.50f, 6, 60f));
+
+        d.bonusSlotPositions = CirclePositions(13.40f, 6, 60f);
+        d.bonusSlotSize = 1.9f;
+
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>();
+        for (int i = 0; i < 6; i++)
+            d.obstacles.Add(Stone($"Asteroid_{i}", Polar(7.00f, 90f + i * 60f), 2.0f, STONE_GREY));
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
+        {
+            Line(true, ApproximateCircle(7.0f, 0f, 0f, 36)),
+        };
+        return d;
+    }
+
+    // 15  PINWHEEL — curved spokes with stones along each spoke
+    // The two stones on each spoke were 0.96 apart (a wedge), the spoke slots
+    // were 2.47 apart (0.98 between towers), and the innermost slot was 1.22
+    // from the core. Slots respaced to 3.60 along each arm starting at radius
+    // 3.96.
+    //
+    // The two stones per arm used to sit 1.48 apart with radii summing to 1.80 —
+    // an 18% PARTIAL overlap. That is the worst of both options: too much to read
+    // as two separate rocks, too little to read as one blob, so it just looked
+    // like a rendering mistake. Each also keeps its own CircleCollider2D, so the
+    // overlap region is double-covered and the concave notch where the two circles
+    // meet is exactly the kind of crease pathing snags on.
+    //
+    // They are now spaced to a clean 0.35 gap: two distinct rocks with daylight
+    // between them, and two convex colliders enemies slide around.
+    public static MapLayoutDefinition MakePinwheel()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "Pinwheel";
+        d.description = "Four curved spokes pinwheel outward. Stone blobs flank " +
+                        "each spoke; wide open quadrants between.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        // One arm, repeated at 90° intervals.
+        Vector2[] arm = { new Vector2(1.40f, 3.70f), new Vector2(3.80f, 6.40f), new Vector2(6.20f, 9.10f) };
+        d.customSlotPositions = new List<Vector2>();
+        for (int turn = 0; turn < 4; turn++)
+            foreach (var p in arm) d.customSlotPositions.Add(Rotate90(p, turn));
+
+        d.bonusSlotPositions = CirclePositions(13.00f, 8, 30f);
+        d.bonusSlotSize = 1.9f;
+
+        // Two SEPARATED stones per arm. Centres 2.15 apart against radii summing
+        // to 1.80, i.e. a 0.35 clear gap — see the note above.
+        (Vector2 pos, float dia)[] armStones =
+        {
+            (new Vector2(6.80f, 3.76f), 2.0f),
+            (new Vector2(7.97f, 5.57f), 1.6f),
+        };
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>();
+        for (int turn = 0; turn < 4; turn++)
+            for (int s = 0; s < armStones.Length; s++)
+                d.obstacles.Add(Stone($"Spoke_{turn}_{s}", Rotate90(armStones[s].pos, turn),
+                                      armStones[s].dia, STONE_GREY));
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>();
+        for (int turn = 0; turn < 4; turn++)
+        {
+            d.connectionLines.Add(ColorLine(false, BuildQuadraticCurve(
+                Rotate90(new Vector2(0.80f, 3.20f), turn),
+                Rotate90(new Vector2(2.20f, 5.60f), turn),
+                Rotate90(new Vector2(6.60f, 9.60f), turn), 16), LINE_WARM_AMBER));
+        }
+        return d;
+    }
+
+
+    // ================================================================
+    // ASYMMETRIC LAYOUTS
+    // The core sits at the origin in every layout, so asymmetry comes from
+    // where the slots and terrain are NOT. Each of these leaves one flank of
+    // the core genuinely open: a wide arc with no slots and no obstacles, so
+    // enemies arriving from that side reach the core with far less resistance
+    // than from any other bearing.
+    //
+    // R5 is trivially satisfied by all three — the open flank is a permanent
+    // corridor that no arrangement of towers can close.
+    // ================================================================
+
+    // 16  BROKEN CROWN  (open NORTH)
+    // Concentric Classic with a 90 degree bite taken out of the north. The
+    // inner ring keeps 7 of its 8 positions (the one at 90 is gone) and the
+    // outer ring runs 130 -> 410, leaving 50..130 empty.
+    //
+    // Two stumps sit INSIDE the gap rather than at its edges. At the edges they
+    // would land 0.37 from the nearest outer slot — a wedge. At 75 and 105 they
+    // are 2.90 clear of the nearest tower and 2.66 from each other, so the
+    // breach reads as collapsed masonry without ever pinching.
+    public static MapLayoutDefinition MakeBrokenCrown()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "Broken Crown";
+        d.description = "Concentric rings with the northern quarter collapsed. " +
+                        "Every other bearing is fully defended; the north is a " +
+                        "90 degree hole straight to the core.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        d.customSlotPositions = new List<Vector2>();
+        // Inner ring: 45 degree spacing (chord 3.83), skipping due north.
+        for (int i = 0; i < 7; i++)
+            d.customSlotPositions.Add(Polar(5.00f, 135f + i * 45f));
+        // Outer ring: 28 degree spacing (chord 4.35), 130 -> 410.
+        for (int i = 0; i < 11; i++)
+            d.customSlotPositions.Add(Polar(9.00f, 130f + i * 28f));
+
+        d.bonusSlotPositions = new List<Vector2>();
+        for (int i = 0; i < 9; i++)
+            d.bonusSlotPositions.Add(Polar(12.50f, 140f + i * 32.5f));
+        d.bonusSlotSize = 1.9f;
+
+        // The two surviving stumps of the collapsed arc.
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
+        {
+            Stone("Stump_E", Polar(9.00f, 75f), 2.0f, STONE_GREY),
+            Stone("Stump_W", Polar(9.00f, 105f), 2.0f, STONE_GREY),
+        };
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
+        {
+            Line(false, BuildArc(0f, 0f, 9.00f, 130f, 410f, 40)),
+            Line(false, BuildArc(0f, 0f, 5.00f, 135f, 405f, 28)),
+        };
+        return d;
+    }
+
+    // 17  THE FORD  (open NORTH-EAST)
+    // A line of boulders lies across the south-west on the chord 9.00 out along
+    // the 225 bearing. It is deliberately SPARSE: four rocks, three lanes.
+    //
+    //   outer gaps 2.19   inner gap (the ford) 3.21   both ends fully open
+    //
+    // Every gap clears LANE, so nothing here can wedge an enemy — this is a
+    // shallow river to wade, not a wall. The rocks shape the approach rather
+    // than blocking it, and the slots watch the crossings from behind.
+    //
+    // The whole north-east, from bearing 320 round to 130, has no slots and no
+    // terrain at all: a 170 degree open field. That is the layout's point.
+    public static MapLayoutDefinition MakeTheFord()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "The Ford";
+        d.description = "A sparse boulder line fords the south-west with three " +
+                        "wadeable lanes. Slots watch the crossings; the entire " +
+                        "north-east is open field.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        d.customSlotPositions = new List<Vector2>
+        {
+            // Crossing guards: 45 degree spacing at 5.00 (chord 3.83).
+            Polar(5.00f, 180f), Polar(5.00f, 225f), Polar(5.00f, 270f),
+            // Bank arcs, held clear of the boulder line (nearest rock 5.93).
+            Polar(9.00f, 130f), Polar(9.00f, 155f),
+            Polar(9.00f, 295f), Polar(9.00f, 320f),
+        };
+
+        d.bonusSlotPositions = new List<Vector2>
+        {
+            // Forward posts out on the exposed side.
+            Polar(12.50f, 0f), Polar(12.50f, 45f),
+            Polar(12.50f, 90f), Polar(12.50f, 120f),
+            new Vector2(4.50f, 0.00f),
+        };
+        d.bonusSlotSize = 1.9f;
+
+        // Four rocks on the line through (-13.44, 0.71) -> (0.71, -13.44).
+        // Diameter 2.8, so surface gaps are 2.19 / 3.21 / 2.19 from west to east.
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
+        {
+            Stone("Ford_Rock_0", new Vector2(-12.02f, -0.71f), 2.8f, STONE_GREY),
+            Stone("Ford_Rock_1", new Vector2(-8.49f, -4.24f), 2.8f, STONE_GREY),
+            Stone("Ford_Rock_2", new Vector2(-4.24f, -8.49f), 2.8f, STONE_GREY),
+            Stone("Ford_Rock_3", new Vector2(-0.71f, -12.02f), 2.8f, STONE_GREY),
+        };
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
+        {
+            // The riverbed itself.
+            ColorLine(false, new Vector2[] {
+                new Vector2(-13.44f, 0.71f), new Vector2(0.71f, -13.44f),
+            }, LINE_WARM_AMBER),
+            Line(false, BuildArc(0f, 0f, 5.00f, 180f, 270f, 16)),
+            Line(false, BuildArc(0f, 0f, 9.00f, 130f, 155f, 10)),
+            Line(false, BuildArc(0f, 0f, 9.00f, 295f, 320f, 10)),
+        };
+        return d;
+    }
+
+    // 18  CRESCENT BASTION  (open SOUTH-WEST)
+    // Three crescent arches curve around the core's north-east at radius 9.50,
+    // spaced 50 degrees apart so the gaps between them are 4.46 — more than two
+    // lanes wide. Enemies walk straight between the arches; the bastion shapes
+    // the approach and gives the towers something to shoot across, it does not
+    // seal anything.
+    //
+    // Each arch is 3.20 x 1.00. The minor axis is under the 1.20 ceiling in the
+    // Arch() sizing note, so the bowl is shallower than an enemy is wide and
+    // none of them can be nosed into. Openings face the core (rotation = bearing
+    // + 90), so anything coming inward meets the convex back and slides off.
+    //
+    // Slots stack in front of and behind each arch. The south-west quadrant is
+    // left completely bare — 8 slots total makes this the sparsest layout in
+    // the file, and the hardest.
+    public static MapLayoutDefinition MakeCrescentBastion()
+    {
+        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
+        d.layoutName = "Crescent Bastion";
+        d.description = "Three widely spaced crescent arches shield the " +
+                        "north-east. Enemies pass freely between them, and the " +
+                        "south-west quadrant is undefended ground.";
+        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
+        d.customSlotSize = 1.9f;
+
+        // Bearings the bastion is built on.
+        float[] bastionAngles = { 20f, 70f, 120f };
+
+        d.customSlotPositions = new List<Vector2>();
+        // Behind the wall (3.17 clear of the collider chain).
+        foreach (float a in bastionAngles) d.customSlotPositions.Add(Polar(6.00f, a));
+        // In front of it (3.17 clear on the outside).
+        foreach (float a in bastionAngles) d.customSlotPositions.Add(Polar(13.00f, a));
+        // Two wings covering the flanks of the open quadrant.
+        d.customSlotPositions.Add(Polar(7.50f, 160f));
+        d.customSlotPositions.Add(Polar(7.50f, 335f));
+
+        d.bonusSlotPositions = new List<Vector2>
+        {
+            Polar(5.00f, 245f),                       // last-ditch post facing the gap
+            Polar(9.50f, 200f), Polar(9.50f, 290f),   // shoulders of the open quadrant
+            Polar(12.00f, 160f),
+        };
+        d.bonusSlotSize = 1.9f;
+
+        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>();
+        foreach (float a in bastionAngles)
+            d.obstacles.Add(Arch($"Bastion_{a:F0}", Polar(9.50f, a), 3.2f, 1.0f, a + 90f));
+
+        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
+        {
+            ColorLine(false, BuildArc(0f, 0f, 9.50f, 20f, 120f, 24), LINE_WARM_AMBER),
+        };
+        return d;
+    }
+
+    // ================================================================
     // OBSTACLE HELPERS
+    // ================================================================
 
     static MapLayoutDefinition.LayoutObstacle Wall(string label, (float x, float y) pos, (float w, float h) size)
     {
@@ -671,39 +970,131 @@ public static class MapLayoutExamples
         };
     }
 
-    // CONNECTION LINE HELPERS
+    // A round stone (Circle obstacle — single smooth CircleCollider2D).
+    static MapLayoutDefinition.LayoutObstacle Stone(string label, Vector2 pos, float diameter, Color color)
+    {
+        return new MapLayoutDefinition.LayoutObstacle
+        {
+            shape = MapLayoutDefinition.ObstacleShape.Circle,
+            position = pos,
+            size = new Vector2(diameter, diameter),
+            rotationDegrees = 0f,
+            color = color,
+            blocksMovement = true,
+            label = label,
+        };
+    }
+
+    // A curved arched wall (Crescent obstacle) with a REAL collider — enemies
+    // cannot walk through it. Unity gets a chain of overlapping CircleCollider2D
+    // along the rim, so the surface is smooth and enemies slide around it.
+    //
+    // SIZING RULE — read before adding one anywhere
+    // A crescent is a C, not a banana: the rim covers about 267°, leaving an
+    // opening of roughly 93°. Whether that opening is dangerous depends entirely
+    // on the MINOR axis:
+    //
+    //   height <= 1.20  the bowl is shallower than an enemy is wide, so an enemy
+    //                   can't get inside it at all. It behaves as a solid curved
+    //                   wall. SAFE — this is what the layouts here use.
+    //   height >  1.40  the bowl becomes an alcove an enemy can nose into and
+    //                   then has to reverse out of. Local steering handles that
+    //                   badly: it wanders in, grinds against the back, and looks
+    //                   stuck. DON'T.
+    //
+    // At 3.60 x 1.00 the collider chain is 22 circles of radius 0.22, reaching
+    // 1.80 along the arc and 0.66 through the thickness. Budget clearance from
+    // those extents, not from the centre.
+    //
+    // Point the opening at the core (rotationDeg = the direction the open side
+    // faces, minus 90) so enemies coming inward hit the convex back first.
+    static MapLayoutDefinition.LayoutObstacle Arch(string label, Vector2 pos,
+                                                   float width, float height, float rotationDeg)
+    {
+        return new MapLayoutDefinition.LayoutObstacle
+        {
+            shape = MapLayoutDefinition.ObstacleShape.Crescent,
+            position = pos,
+            size = new Vector2(width, height),
+            rotationDegrees = rotationDeg,
+            color = STONE_GREY,
+            blocksMovement = true,
+            label = label,
+        };
+    }
+
+    // ================================================================
+    // CONNECTION-LINE HELPERS
+    // ================================================================
 
     static MapLayoutDefinition.ConnectionLine Line(bool closed, Vector2[] points)
     {
-        var line = new MapLayoutDefinition.ConnectionLine
+        return new MapLayoutDefinition.ConnectionLine
         {
             closed = closed,
             color = LINE_COLOR,
             width = 0.08f,
             points = new List<Vector2>(points),
         };
-        return line;
     }
 
     static MapLayoutDefinition.ConnectionLine Line(bool closed, List<Vector2> points)
     {
-        var line = new MapLayoutDefinition.ConnectionLine
+        return new MapLayoutDefinition.ConnectionLine
         {
             closed = closed,
             color = LINE_COLOR,
             width = 0.08f,
             points = new List<Vector2>(points),
         };
-        return line;
+    }
+
+    static MapLayoutDefinition.ConnectionLine ColorLine(bool closed, Vector2[] points, Color color)
+    {
+        return new MapLayoutDefinition.ConnectionLine
+        {
+            closed = closed,
+            color = color,
+            width = 0.08f,
+            points = new List<Vector2>(points),
+        };
+    }
+
+    static MapLayoutDefinition.ConnectionLine ColorLine(bool closed, List<Vector2> points, Color color)
+    {
+        return new MapLayoutDefinition.ConnectionLine
+        {
+            closed = closed,
+            color = color,
+            width = 0.08f,
+            points = new List<Vector2>(points),
+        };
+    }
+
+    // ================================================================
+    // GEOMETRY HELPERS
+    // ================================================================
+
+    // Point at a polar coordinate, rounded to 2dp to match the authored style.
+    static Vector2 Polar(float radius, float angleDeg)
+    {
+        float a = angleDeg * Mathf.Deg2Rad;
+        return new Vector2(
+            Mathf.Round(radius * Mathf.Cos(a) * 100f) / 100f,
+            Mathf.Round(radius * Mathf.Sin(a) * 100f) / 100f);
+    }
+
+    // Rotates a point by -90° per turn (used to repeat one pinwheel arm).
+    static Vector2 Rotate90(Vector2 p, int turns)
+    {
+        for (int i = 0; i < turns; i++) p = new Vector2(p.y, -p.x);
+        return p;
     }
 
     static List<Vector2> ApproximateCircle(float radius, float cx, float cy, int segments)
     {
         // Auto-bump under-sampled circles so they render as smooth curves
-        // (rather than visible polygons) at typical 2D camera distances.
-        // Rule of thumb: ~1 segment per 0.3 world units of perimeter,
-        // capped at 8 (so tiny circles still get some shape) and 96 (so we
-        // don't waste vertices on big circles).
+        // rather than visible polygons at typical 2D camera distances.
         int idealSegments = Mathf.Clamp(Mathf.CeilToInt(2f * Mathf.PI * radius / 0.3f), 8, 96);
         if (segments < idealSegments) segments = idealSegments;
 
@@ -738,7 +1129,6 @@ public static class MapLayoutExamples
     static List<Vector2> BuildArc(float centerX, float centerY, float radius,
                                    float startAngleDeg, float endAngleDeg, int segments)
     {
-        // Same auto-upgrade as ApproximateCircle, scaled by arc fraction.
         float arcFraction = Mathf.Abs(endAngleDeg - startAngleDeg) / 360f;
         int idealSegments = Mathf.Clamp(
             Mathf.CeilToInt(2f * Mathf.PI * radius * arcFraction / 0.3f), 4, 64);
@@ -757,358 +1147,13 @@ public static class MapLayoutExamples
         return pts;
     }
 
-    // RING POSITION HELPER
-
     static List<Vector2> CirclePositions(float radius, int count, float offsetDeg)
     {
         var list = new List<Vector2>(count);
         for (int i = 0; i < count; i++)
-        {
-            float angle = Mathf.Deg2Rad * (i * 360f / count + offsetDeg);
-            list.Add(new Vector2(
-                Mathf.Round(radius * Mathf.Cos(angle) * 100f) / 100f,
-                Mathf.Round(radius * Mathf.Sin(angle) * 100f) / 100f
-            ));
-        }
+            list.Add(Polar(radius, i * 360f / count + offsetDeg));
         return list;
     }
-
-    // ================================================================
-    // NEW LAYOUTS — round/curved obstacles (Circle + Crescent shapes).
-    // All gaps are sized for boss enemies: minimum gap width between any
-    // two obstacles is 3 world units (twice the typical boss collider
-    // size). No concave pockets, no narrow chokes, no traps.
-    // ================================================================
-
-    // Palette — only colors actually used by current layouts.
-    static readonly Color STONE_GREY = new Color(0.45f, 0.46f, 0.50f, 1.00f);
-    static readonly Color LINE_WARM_AMBER = new Color(0.90f, 0.65f, 0.30f, 0.55f);
-    static readonly Color LINE_COOL_BLUE = new Color(0.55f, 0.75f, 0.95f, 0.55f);
-
-    // ----------------------------------------------------------------
-    // 13. STONEHENGE — 8 outer stones + 4 inner stones, wide gaps
-    // ----------------------------------------------------------------
-    // Tweak: only 8 outer stones (down from 12) so each cardinal gap
-    // is ~3.5 units wide. Inner ring stones sit on diagonals only.
-    public static MapLayoutDefinition MakeStonehenge()
-    {
-        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
-        d.layoutName = "Stonehenge";
-        d.description = "Eight large standing stones in an outer ring with " +
-                        "four inner stones on the diagonals. Wide cardinal " +
-                        "gaps for boss access.";
-        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
-        d.customSlotSize = 1.9f;
-
-        d.customSlotPositions = new List<Vector2>
-        {
-            // Cardinal slots outside the ring (forward defense)
-            new Vector2(0.00f, 8.00f),   new Vector2(0.00f, -8.00f),
-            new Vector2(8.00f, 0.00f),   new Vector2(-8.00f, 0.00f),
-            // Diagonal slots outside the ring
-            new Vector2(5.50f, 5.50f),   new Vector2(-5.50f, 5.50f),
-            new Vector2(5.50f, -5.50f),  new Vector2(-5.50f, -5.50f),
-            // Inner cardinal slots (between core and inner stones)
-            new Vector2(0.00f, 4.50f),   new Vector2(0.00f, -4.50f),
-            new Vector2(4.50f, 0.00f),   new Vector2(-4.50f, 0.00f),
-        };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            new Vector2(-3.00f, 8.00f),  new Vector2(3.00f, 8.00f),
-            new Vector2(-3.00f, -8.00f), new Vector2(3.00f, -8.00f),
-            new Vector2(-9.50f, 0.00f),  new Vector2(9.50f, 0.00f),
-        };
-        d.bonusSlotSize = 1.9f;
-
-        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>();
-        // OUTER ring: 8 big stones at radius 6.5, placed on the diagonals
-        // (45° offsets) so the 4 cardinals are wide-open boss paths.
-        float outerR = 6.5f;
-        for (int i = 0; i < 8; i++)
-        {
-            float angDeg = i * 45f + 22.5f; // 22.5°, 67.5°, ... — between cardinals
-            float angRad = angDeg * Mathf.Deg2Rad;
-            Vector2 pos = new Vector2(Mathf.Cos(angRad) * outerR, Mathf.Sin(angRad) * outerR);
-            d.obstacles.Add(Stone($"OuterStone_{i}", pos, 2.2f, STONE_GREY));
-        }
-        // INNER ring: 4 smaller stones on the diagonals at radius 3.5.
-        // These create soft S-curve paths from cardinals into the core.
-        for (int i = 0; i < 4; i++)
-        {
-            float angDeg = 45f + i * 90f;
-            float angRad = angDeg * Mathf.Deg2Rad;
-            Vector2 pos = new Vector2(Mathf.Cos(angRad) * 3.5f, Mathf.Sin(angRad) * 3.5f);
-            d.obstacles.Add(Stone($"InnerStone_{i}", pos, 1.5f, STONE_GREY));
-        }
-
-        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
-        {
-            Line(true, ApproximateCircle(6.5f, 0f, 0f, 36)),
-            Line(true, ApproximateCircle(3.5f, 0f, 0f, 24)),
-        };
-        return d;
-    }
-
-
-    // ----------------------------------------------------------------
-    // 15. CROSSROADS PILLARS (inverted) — open cardinal cross, pillars on diagonals
-    // ----------------------------------------------------------------
-    // Original idea had pillars on cardinals which trapped boss approaches.
-    // INVERTED: cardinals are wide-open highways, pillars sit on the
-    // diagonals where bosses would naturally avoid. Small arches between
-    // adjacent diagonal pillars add visual structure.
-    public static MapLayoutDefinition MakeCrossroadsPillars()
-    {
-        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
-        d.layoutName = "Crossroads Pillars";
-        d.description = "Open cardinal highways for boss approaches, with " +
-                        "pillars and arches on the diagonals. Slots dominate " +
-                        "the open cross.";
-        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
-        d.customSlotSize = 1.9f;
-
-        d.customSlotPositions = new List<Vector2>
-        {
-            // Slots along the OPEN cardinal cross — these get to shoot
-            // at bosses head-on.
-            new Vector2(0.00f, 8.00f),   new Vector2(0.00f, -8.00f),
-            new Vector2(8.00f, 0.00f),   new Vector2(-8.00f, 0.00f),
-            new Vector2(0.00f, 5.00f),   new Vector2(0.00f, -5.00f),
-            new Vector2(5.00f, 0.00f),   new Vector2(-5.00f, 0.00f),
-            new Vector2(0.00f, 3.00f),   new Vector2(0.00f, -3.00f),
-            new Vector2(3.00f, 0.00f),   new Vector2(-3.00f, 0.00f),
-            // Slots between cardinal cross arms and the diagonal pillars
-            new Vector2(2.50f, 5.00f),   new Vector2(-2.50f, 5.00f),
-            new Vector2(2.50f, -5.00f),  new Vector2(-2.50f, -5.00f),
-            new Vector2(5.00f, 2.50f),   new Vector2(-5.00f, 2.50f),
-            new Vector2(5.00f, -2.50f),  new Vector2(-5.00f, -2.50f),
-        };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            new Vector2(0.00f, 9.50f),   new Vector2(0.00f, -9.50f),
-            new Vector2(9.50f, 0.00f),   new Vector2(-9.50f, 0.00f),
-            // Bonus slots tucked between pillar pairs on the diagonals
-            new Vector2(4.20f, 4.20f),   new Vector2(-4.20f, 4.20f),
-            new Vector2(4.20f, -4.20f),  new Vector2(-4.20f, -4.20f),
-        };
-        d.bonusSlotSize = 1.9f;
-
-        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
-        {
-            // 4 INNER diagonal pillars at radius 3 (close to core)
-            Stone("Pillar_NE_in", new Vector2( 2.10f,  2.10f), 1.4f, STONE_GREY),
-            Stone("Pillar_NW_in", new Vector2(-2.10f,  2.10f), 1.4f, STONE_GREY),
-            Stone("Pillar_SE_in", new Vector2( 2.10f, -2.10f), 1.4f, STONE_GREY),
-            Stone("Pillar_SW_in", new Vector2(-2.10f, -2.10f), 1.4f, STONE_GREY),
-            // 4 OUTER diagonal pillars at radius 6
-            Stone("Pillar_NE_out", new Vector2( 4.50f,  4.50f), 1.8f, STONE_GREY),
-            Stone("Pillar_NW_out", new Vector2(-4.50f,  4.50f), 1.8f, STONE_GREY),
-            Stone("Pillar_SE_out", new Vector2( 4.50f, -4.50f), 1.8f, STONE_GREY),
-            Stone("Pillar_SW_out", new Vector2(-4.50f, -4.50f), 1.8f, STONE_GREY),
-            // 4 short diagonal arches connecting outer pillars to perimeter.
-            // Rotation rule: rotationDeg = position_angle + 90° (mod 360°),
-            // so the convex side faces AWAY from the core.
-            //   NE at (+7, +7) — angle  45°, rotation = 135°
-            //   NW at (-7, +7) — angle 135°, rotation = 225° (or -135°)
-            //   SE at (+7, -7) — angle -45° (315°), rotation =  45°
-            //   SW at (-7, -7) — angle 225° (-135°), rotation = 315° (or -45°)
-            Crescent("Arch_NE", pos: ( 7.00f,  7.00f), width: 2.4f, height: 1.0f, rotationDeg: 135f),
-            Crescent("Arch_NW", pos: (-7.00f,  7.00f), width: 2.4f, height: 1.0f, rotationDeg: 225f),
-            Crescent("Arch_SE", pos: ( 7.00f, -7.00f), width: 2.4f, height: 1.0f, rotationDeg: 45f),
-            Crescent("Arch_SW", pos: (-7.00f, -7.00f), width: 2.4f, height: 1.0f, rotationDeg: 315f),
-        };
-
-        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
-        {
-            // The open cardinal cross — the boss highways.
-            ColorLine(false, new Vector2[] { new Vector2(0f, -9.5f), new Vector2(0f, 9.5f) }, LINE_WARM_AMBER),
-            ColorLine(false, new Vector2[] { new Vector2(-9.5f, 0f), new Vector2(9.5f, 0f) }, LINE_WARM_AMBER),
-        };
-        return d;
-    }
-
-    // ----------------------------------------------------------------
-    // 16. ASTEROID BELT — 6 round stones evenly spaced around a ring
-    // ----------------------------------------------------------------
-    // 6 stones at radius 5, spaced 60° apart with no rotation offset.
-    // Centre-to-centre gap = 5 units. Stone diameter 2 → clear gap of
-    // ~3 units between any two stones. Plenty for bosses.
-    public static MapLayoutDefinition MakeAsteroidBelt()
-    {
-        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
-        d.layoutName = "Asteroid Belt";
-        d.description = "Six round stones in a ring around the core. " +
-                        "Generous gaps between every pair — six approach " +
-                        "lanes for enemies.";
-        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
-        d.customSlotSize = 1.9f;
-
-        d.customSlotPositions = new List<Vector2>
-        {
-            // Inner ring of slots, sitting INSIDE the asteroid ring (radius 2.5–3)
-            // — positioned in the 6 gaps so they can fire outward through them.
-            new Vector2(0.00f, 3.00f),   new Vector2(0.00f, -3.00f),
-            new Vector2(2.60f, 1.50f),   new Vector2(-2.60f, 1.50f),
-            new Vector2(2.60f, -1.50f),  new Vector2(-2.60f, -1.50f),
-            // Outer ring of slots, behind the asteroids (radius 7) —
-            // shoot at enemies that already passed the belt.
-            new Vector2(0.00f, 8.00f),   new Vector2(0.00f, -8.00f),
-            new Vector2(7.00f, 4.00f),   new Vector2(-7.00f, 4.00f),
-            new Vector2(7.00f, -4.00f),  new Vector2(-7.00f, -4.00f),
-            // 6 slots in the gaps themselves (between adjacent asteroids)
-            new Vector2(4.30f, 0.00f),   new Vector2(-4.30f, 0.00f),
-            new Vector2(2.20f, 3.80f),   new Vector2(-2.20f, 3.80f),
-            new Vector2(2.20f, -3.80f),  new Vector2(-2.20f, -3.80f),
-        };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            new Vector2(0.00f, 9.50f),   new Vector2(0.00f, -9.50f),
-            new Vector2(9.50f, 0.00f),   new Vector2(-9.50f, 0.00f),
-            // Bonus right at core
-            new Vector2(1.50f, 0.00f),   new Vector2(-1.50f, 0.00f),
-        };
-        d.bonusSlotSize = 1.9f;
-
-        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>();
-        // 6 asteroids evenly spaced. First at top (angle 90°), then every 60°.
-        float beltR = 5.0f;
-        for (int i = 0; i < 6; i++)
-        {
-            float angDeg = 90f + i * 60f;
-            float angRad = angDeg * Mathf.Deg2Rad;
-            Vector2 pos = new Vector2(Mathf.Cos(angRad) * beltR, Mathf.Sin(angRad) * beltR);
-            d.obstacles.Add(Stone($"Asteroid_{i}", pos, 2.0f, STONE_GREY));
-        }
-
-        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
-        {
-            // The asteroid ring (orbit-style line)
-            Line(true, ApproximateCircle(5.0f, 0f, 0f, 36)),
-        };
-        return d;
-    }
-
-
-    // ----------------------------------------------------------------
-    // 18. PINWHEEL — curved spokes with stones along each spoke
-    // ----------------------------------------------------------------
-    // Unchanged from previous version. 4 spokes with 2 stones each at the
-    // outer ends; wide open quadrants between spokes for enemy approach.
-    public static MapLayoutDefinition MakePinwheel()
-    {
-        var d = ScriptableObject.CreateInstance<MapLayoutDefinition>();
-        d.layoutName = "Pinwheel";
-        d.description = "Four curved spokes pinwheel outward. Stones mark " +
-                        "each spoke's outer end; wide open quadrants between.";
-        d.layoutType = MapLayoutDefinition.LayoutType.Custom;
-        d.customSlotSize = 1.9f;
-
-        d.customSlotPositions = new List<Vector2>
-        {
-            new Vector2(1.00f, 2.80f),   new Vector2(2.80f, 4.50f),   new Vector2(4.80f, 6.20f),
-            new Vector2(2.80f, -1.00f),  new Vector2(4.50f, -2.80f),  new Vector2(6.20f, -4.80f),
-            new Vector2(-1.00f, -2.80f), new Vector2(-2.80f, -4.50f), new Vector2(-4.80f, -6.20f),
-            new Vector2(-2.80f, 1.00f),  new Vector2(-4.50f, 2.80f),  new Vector2(-6.20f, 4.80f),
-        };
-        d.bonusSlotPositions = new List<Vector2>
-        {
-            new Vector2(6.50f, -6.50f),  new Vector2(-6.50f, 6.50f),
-            new Vector2(7.50f, 7.50f),   new Vector2(-7.50f, -7.50f),
-            new Vector2(0.00f, 8.50f),   new Vector2(0.00f, -8.50f),
-            new Vector2(8.50f, 0.00f),   new Vector2(-8.50f, 0.00f),
-        };
-        d.bonusSlotSize = 1.9f;
-
-        d.obstacles = new List<MapLayoutDefinition.LayoutObstacle>
-        {
-            Stone("Spoke_NE_outer", new Vector2( 5.80f,  7.40f), 2.0f, STONE_GREY),
-            Stone("Spoke_NE_mid",   new Vector2( 3.80f,  5.50f), 1.6f, STONE_GREY),
-            Stone("Spoke_SE_outer", new Vector2( 7.40f, -5.80f), 2.0f, STONE_GREY),
-            Stone("Spoke_SE_mid",   new Vector2( 5.50f, -3.80f), 1.6f, STONE_GREY),
-            Stone("Spoke_SW_outer", new Vector2(-5.80f, -7.40f), 2.0f, STONE_GREY),
-            Stone("Spoke_SW_mid",   new Vector2(-3.80f, -5.50f), 1.6f, STONE_GREY),
-            Stone("Spoke_NW_outer", new Vector2(-7.40f,  5.80f), 2.0f, STONE_GREY),
-            Stone("Spoke_NW_mid",   new Vector2(-5.50f,  3.80f), 1.6f, STONE_GREY),
-        };
-
-        d.connectionLines = new List<MapLayoutDefinition.ConnectionLine>
-        {
-            ColorLine(false, BuildQuadraticCurve(new Vector2( 0.5f,  2.5f), new Vector2( 1.5f,  5.0f), new Vector2( 5.5f,  7.0f), 16), LINE_WARM_AMBER),
-            ColorLine(false, BuildQuadraticCurve(new Vector2( 2.5f, -0.5f), new Vector2( 5.0f, -1.5f), new Vector2( 7.0f, -5.5f), 16), LINE_WARM_AMBER),
-            ColorLine(false, BuildQuadraticCurve(new Vector2(-0.5f, -2.5f), new Vector2(-1.5f, -5.0f), new Vector2(-5.5f, -7.0f), 16), LINE_WARM_AMBER),
-            ColorLine(false, BuildQuadraticCurve(new Vector2(-2.5f,  0.5f), new Vector2(-5.0f,  1.5f), new Vector2(-7.0f,  5.5f), 16), LINE_WARM_AMBER),
-        };
-        return d;
-    }
-
-    // ================================================================
-    // OBSTACLE HELPERS (used by the layouts above)
-    // ================================================================
-
-    // A round stone (Circle obstacle — single smooth CircleCollider2D).
-    static MapLayoutDefinition.LayoutObstacle Stone(string label, Vector2 pos, float diameter, Color color)
-    {
-        return new MapLayoutDefinition.LayoutObstacle
-        {
-            shape = MapLayoutDefinition.ObstacleShape.Circle,
-            position = pos,
-            size = new Vector2(diameter, diameter),
-            rotationDegrees = 0f,
-            color = color,
-            blocksMovement = true,
-            label = label,
-        };
-    }
-
-    // A curved arched-wall obstacle (Crescent — moon-shaped, with chained
-    // circle colliders along the convex outer arc). The 'bite' (concave
-    // side) faces the direction of rotationDeg (0°=up, 90°=left,
-    // 180°=down, 270°=right). Put the convex side facing enemies so they
-    // slide around it; never put the concave bite toward enemy approaches.
-    static MapLayoutDefinition.LayoutObstacle Crescent(string label, (float x, float y) pos,
-                                                       float width, float height, float rotationDeg)
-    {
-        return new MapLayoutDefinition.LayoutObstacle
-        {
-            shape = MapLayoutDefinition.ObstacleShape.Crescent,
-            position = new Vector2(pos.x, pos.y),
-            size = new Vector2(width, height),
-            rotationDegrees = rotationDeg,
-            color = Color.white, // texture provides color
-            blocksMovement = true,
-            label = label,
-        };
-    }
-
-    // ================================================================
-    // CONNECTION-LINE HELPERS (colored variants)
-    // ================================================================
-
-    static MapLayoutDefinition.ConnectionLine ColorLine(bool closed, Vector2[] points, Color color)
-    {
-        return new MapLayoutDefinition.ConnectionLine
-        {
-            closed = closed,
-            color = color,
-            width = 0.08f,
-            points = new List<Vector2>(points),
-        };
-    }
-
-    static MapLayoutDefinition.ConnectionLine ColorLine(bool closed, List<Vector2> points, Color color)
-    {
-        return new MapLayoutDefinition.ConnectionLine
-        {
-            closed = closed,
-            color = color,
-            width = 0.08f,
-            points = new List<Vector2>(points),
-        };
-    }
-
-    // ================================================================
-    // GEOMETRY HELPERS — Quadratic Bezier for Pinwheel spokes
-    // ================================================================
 
     static List<Vector2> BuildQuadraticCurve(Vector2 p0, Vector2 p1, Vector2 p2, int segments)
     {
@@ -1145,7 +1190,6 @@ public static class MapLayoutExamplesLookup
             if (layout == null) continue;
             if (string.Equals(layout.layoutName, layoutName, System.StringComparison.OrdinalIgnoreCase))
             {
-                // Mark as runtime-only so the Inspector doesn't track it.
                 layout.hideFlags = HideFlags.HideAndDontSave;
                 return layout;
             }
@@ -1153,3 +1197,5 @@ public static class MapLayoutExamplesLookup
         return null;
     }
 }
+
+

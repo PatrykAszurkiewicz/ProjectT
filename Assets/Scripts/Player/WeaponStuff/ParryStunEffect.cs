@@ -1,5 +1,15 @@
 using UnityEngine;
 
+// Optional: implement on a component of an enemy whose body is much taller than a
+// regular enemy's (bosses), so the stun stars orbit above its head instead of
+// through its sprite. ParryStunEffect looks it up when the stun starts. Enemies that
+// don't implement it keep the default STAR_Y_OFFSET, exactly as before.
+public interface IParryStunStarsAnchor
+{
+    /// World units above the enemy's transform.position to centre the star ring on.
+    float ParryStunStarsHeight { get; }
+}
+
 // PARRY STUN EFFECT
 // Added to an enemy when the player successfully parries their attack (melee OR
 // projectile parry — both routes call ParryStunEffect.ApplyOrRefresh).
@@ -36,6 +46,18 @@ public class ParryStunEffect : MonoBehaviour
     private const float STAR_ORBIT_RADIUS = 0.55f;
     private const float STAR_ROTATE_SPEED = 200f; // degrees per second
     private const float STAR_Y_OFFSET = 0.7f; // above enemy center (near head)
+
+    // Per-enemy height override (see IParryStunStarsAnchor). Null for regular enemies.
+    private IParryStunStarsAnchor starsAnchor;
+
+    private float StarsYOffset()
+    {
+        // Unity-null check through the Object cast: the anchor is a component and
+        // may have been destroyed along with its enemy.
+        if (starsAnchor is Object anchorObj && anchorObj != null)
+            return starsAnchor.ParryStunStarsHeight;
+        return STAR_Y_OFFSET;
+    }
 
 
     /// Public accessor: the bonus damage multiplier while the debuff is active.
@@ -136,6 +158,7 @@ public class ParryStunEffect : MonoBehaviour
         if (spriteRenderer == null)
             spriteRenderer = GetComponentInChildren<SpriteRenderer>();
         rb = GetComponent<Rigidbody2D>();
+        starsAnchor = GetComponent<IParryStunStarsAnchor>();
 
         if (spriteRenderer != null)
             originalColor = spriteRenderer.color;
@@ -204,7 +227,7 @@ public class ParryStunEffect : MonoBehaviour
         if (starsHost == null) return;
 
         // Follow the enemy position (offset upward near head)
-        starsHost.transform.position = transform.position + Vector3.up * STAR_Y_OFFSET;
+        starsHost.transform.position = transform.position + Vector3.up * StarsYOffset();
         starsHost.transform.rotation = Quaternion.identity;
 
         float orbitAngle = elapsed * STAR_ROTATE_SPEED * Mathf.Deg2Rad;
@@ -287,7 +310,7 @@ public class ParryStunEffect : MonoBehaviour
     private void CreateStarsVFX()
     {
         starsHost = new GameObject("ParryStunStars");
-        starsHost.transform.position = transform.position + Vector3.up * STAR_Y_OFFSET;
+        starsHost.transform.position = transform.position + Vector3.up * StarsYOffset();
 
         starRenderers = new SpriteRenderer[STAR_COUNT];
         Sprite starSprite = GetStarSprite();
@@ -365,4 +388,5 @@ public class ParryStunEffect : MonoBehaviour
         return _starSprite;
     }
 }
+
 

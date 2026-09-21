@@ -18,6 +18,7 @@ GameObject:
   - component: {fileID: 494122911128716204}
   - component: {fileID: 4219758196434808656}
   - component: {fileID: -2919370879419114123}
+  - component: {fileID: 8315371934576133786}
   m_Layer: 0
   m_Name: Splitter
   m_TagString: Enemy
@@ -184,6 +185,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
   hitImpulse: 5
   hitSquash: 0.18
@@ -209,6 +213,7 @@ MonoBehaviour:
   detectRange: 3
   attackRange: 1.8
   attackCooldown: 0.9
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -226,6 +231,7 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  ExternalMovementControl: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -252,6 +258,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &4219758196434808656
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -325,17 +332,17 @@ MonoBehaviour:
   minRadiusFactor: 0.3
   maxRadiusFactor: 2.2
   stretchDecay: 7
-  coreColor: {r: 0.86, g: 0.55, b: 1, a: 1}
-  midColor: {r: 0.62, g: 0.24, b: 0.86, a: 1}
-  edgeColor: {r: 0.26, g: 0.08, b: 0.4, a: 1}
-  rimLightColor: {r: 0.95, g: 0.62, b: 1, a: 1}
-  nucleusColor: {r: 1, g: 0.72, b: 1, a: 0.55}
-  cellColor: {r: 0.96, g: 0.6, b: 1, a: 0.42}
-  highlightColor: {r: 1, g: 0.95, b: 1, a: 0.5}
-  glowColor: {r: 0.62, g: 0.24, b: 0.92, a: 0.3}
+  coreColor: {r: 0.6862745, g: 0.11764706, b: 0.81960785, a: 1}
+  midColor: {r: 0.3882353, g: 0.007843138, b: 0.47843137, a: 1}
+  edgeColor: {r: 0.1764706, g: 0, b: 0.21960784, a: 1}
+  rimLightColor: {r: 0.75686276, g: 0.32941177, b: 0.85882354, a: 1}
+  nucleusColor: {r: 0.7294118, g: 0.30980393, b: 0.81960785, a: 0.55}
+  cellColor: {r: 0.69803923, g: 0.26666668, b: 0.8, a: 0.42}
+  highlightColor: {r: 0.91764706, g: 0.84705883, b: 0.9372549, a: 0.5}
+  glowColor: {r: 0.50980395, g: 0, b: 0.61960787, a: 0.3}
   glowWidth: 0.4
   lightDirection: {x: -0.5, y: 0.85}
-  outlineColor: {r: 0.08, g: 0.02, b: 0.14, a: 1}
+  outlineColor: {r: 0.06666667, g: 0, b: 0.08627451, a: 1}
   outlineWidth: 0.08
   featherWidth: 0.07
   midStop: 0.58
@@ -343,7 +350,38 @@ MonoBehaviour:
   cellCount: 5
   cellSize: 0.13
   cellDriftSpeed: 0.35
-  flashColor: {r: 1, g: 0.85, b: 1, a: 1}
+  flashColor: {r: 0.8392157, g: 0.5568628, b: 0.8980392, a: 1}
   flashDuration: 0.1
   shatterWedges: 9
   shatterLifetime: 1.15
+--- !u!114 &8315371934576133786
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

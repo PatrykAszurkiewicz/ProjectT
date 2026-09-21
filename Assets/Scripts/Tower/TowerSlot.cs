@@ -47,11 +47,27 @@ public class TowerSlot : MonoBehaviour
             spriteRenderer.sortingLayerName = "Default";
         }
         UpdateVisuals();
-        // Register the slot with the placement manager
-        if (TowerPlacementManager.Instance != null)
-        {
-            TowerPlacementManager.Instance.RegisterSlot(this);
-        }
+        Register();
+    }
+
+    void OnEnable()
+    {
+        // FIX: registration used to happen ONLY in Awake. A slot authored into the scene
+        // whose Awake runs before TowerPlacementManager's would never register, and would
+        // then be invisible to FindSlot() — the exact lookup the save-restore path uses.
+        // OnEnable retries, and Start() below is a final backstop.
+        Register();
+    }
+
+    private bool _registered;
+
+    private void Register()
+    {
+        if (_registered) return;
+        var hub = TowerPlacementManager.Instance;
+        if (hub == null) return;
+        hub.RegisterSlot(this);
+        _registered = true;
     }
 
     void LateUpdate()
@@ -105,6 +121,8 @@ public class TowerSlot : MonoBehaviour
 
     void Start()
     {
+        Register();   // backstop if the hub only came up after our Awake/OnEnable
+
         // Subscribe to player energy changes to update visuals
         if (EnergyManager.Instance != null)
         {
@@ -125,6 +143,7 @@ public class TowerSlot : MonoBehaviour
         {
             TowerPlacementManager.Instance.UnregisterSlot(this);
         }
+        _registered = false;
     }
 
     void OnPlayerEnergyChanged(int newEnergy)
@@ -224,6 +243,20 @@ public class TowerSlot : MonoBehaviour
     /// cost, no build sound/animation. Sets upgrade level and energy, applies tower
     /// augments. Returns the new Tower, or null if the slot was occupied.
     public Tower PlaceTowerForRestore(GameObject towerPrefab, int upgradeLevel, float currentEnergy)
+        => PlaceTowerForRestore(towerPrefab, upgradeLevel, currentEnergy, 0f);
+
+    /// FIX: `maxEnergy` was captured into TowerSaveEntry / TowerSnapshot but never
+    /// applied, so a tower whose max pool had been raised by an augment was restored at
+    /// the prefab's base pool. Pass <= 0 to keep the prefab's own value.
+    ///
+    /// The ordering below is deliberate:
+    ///   1. SetUpgradeLevel — re-derives the upgrade health bonus, which WRITES maxEnergy
+    ///                        (and the setter rescales currentEnergy proportionally).
+    ///   2. maxEnergy       — restore the saved pool on top of that.
+    ///   3. currentEnergy   — set the saved ABSOLUTE last, so neither proportional
+    ///                        rescale above can distort it.
+    public Tower PlaceTowerForRestore(GameObject towerPrefab, int upgradeLevel,
+                                      float currentEnergy, float maxEnergy)
     {
         if (isOccupied || towerPrefab == null) return null;
 
@@ -235,7 +268,13 @@ public class TowerSlot : MonoBehaviour
         if (towerComponent != null)
         {
             towerComponent.SetUpgradeLevel(upgradeLevel);
-            towerComponent.currentEnergy = currentEnergy;
+
+            if (maxEnergy > 0f)
+                towerComponent.maxEnergy = maxEnergy;   // setter rescales currentEnergy...
+
+            towerComponent.currentEnergy =              // ...so pin the absolute afterwards
+                Mathf.Clamp(currentEnergy, 0f, towerComponent.maxEnergy);
+
             StartCoroutine(ApplyAugmentsAfterFrame(towerComponent));
         }
 
@@ -264,7 +303,16 @@ public class TowerSlot : MonoBehaviour
 
         if (currentTower != null)
         {
-            DestroyImmediate(currentTower);
+            // FIX: DestroyImmediate is an editor call. This runs at RUNTIME from enemy
+            // damage and from the wave rewind — potentially inside a physics callback,
+            // where immediate destruction can corrupt collider/contact state. Detach and
+            // deactivate first so IsOccupied/currentTower are consistent this frame even
+            // though Unity defers the real destroy to end of frame.
+            var doomed = currentTower;
+            doomed.transform.SetParent(null, true);
+            doomed.SetActive(false);
+            if (Application.isPlaying) Destroy(doomed);
+            else DestroyImmediate(doomed);
         }
         currentTower = null;
         isOccupied = false;
@@ -364,4 +412,6 @@ public class TowerSlot : MonoBehaviour
 #endif
     }
 }
+
+
 

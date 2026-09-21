@@ -18,8 +18,34 @@ MonoBehaviour:
   moveSpeed: 2
   damage: 4
   mass: 20
-  spriteFolderPath: Sprites/EnemySprites/Parfumer
+  frames:
+  - {fileID: 21300000, guid: 7122b56480d952344b0a93c61a510705, type: 3}
+  - {fileID: 21300000, guid: 7236626c233239947968b254f2f5a51c, type: 3}
+  - {fileID: 21300000, guid: ddb95043424862f4ba4720bc9c83a3ce, type: 3}
+  - {fileID: 21300000, guid: 45cf118c9c1607342b9e6834d44230b5, type: 3}
+  - {fileID: 21300000, guid: c0c365103ef683b4e9a7d129aa569f21, type: 3}
+  - {fileID: 21300000, guid: bd42e7709257aea4f9e7558c7e075922, type: 3}
+  - {fileID: 21300000, guid: 82a26d77e7a586647a9792f4d4e10158, type: 3}
+  - {fileID: 21300000, guid: 57942c21aa184864280bd423eb43ef4a, type: 3}
+  - {fileID: 21300000, guid: 385d8239ec6813341bb24cbc3f568927, type: 3}
+  - {fileID: 21300000, guid: ae5e49790282bea4387d6f009d15cbdd, type: 3}
+  - {fileID: 21300000, guid: 2ede4ce757211b247a5a794c34c3f44b, type: 3}
+  - {fileID: 21300000, guid: d287f834238e3db418ff626f852242e8, type: 3}
+  - {fileID: 21300000, guid: c7ab27740423fab4c89fc9bbff6dd8a9, type: 3}
+  - {fileID: 21300000, guid: 889abeca1d5ece549b97a879b954fd96, type: 3}
+  - {fileID: 21300000, guid: 22a43d773d1d2f14ba30ae0119d2e6d8, type: 3}
+  - {fileID: 21300000, guid: b02a41019420ddc4ca7193cab14bc15f, type: 3}
+  - {fileID: 21300000, guid: 11969535d187d9c40b6990ff948e9b71, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
   animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 0
     frameCount: 0

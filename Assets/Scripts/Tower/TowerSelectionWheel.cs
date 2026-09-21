@@ -63,11 +63,16 @@ public class TowerSelectionWheel : MonoBehaviour
         CreatePieSlices();
         gameObject.SetActive(true);
         isActive = true;
+
+        // Freeze this player's facing / torch / cursor while the wheel is open;
+        // the mouse or stick now only steers the wheel (see PlayerAim.BeginMenuCapture).
+        if (_aim != null) _aim.BeginMenuCapture(transform.position);
         StartCoroutine(ScaleUp());
     }
 
     public void CloseWheel()
     {
+        ReleaseAim();
         isActive = false;
         gameObject.SetActive(false);
         CleanUp();
@@ -94,7 +99,7 @@ public class TowerSelectionWheel : MonoBehaviour
     void CreateBackingAndHub()
     {
         backing = new GameObject("Backing");
-        backing.transform.parent = transform;
+        backing.transform.SetParent(transform, false);   // see the note in CreateSlice
         backing.transform.localPosition = new Vector3(0f, 0f, 0.05f);
         backing.transform.localScale = Vector3.one * 1.45f;
         var bsr = backing.AddComponent<SpriteRenderer>();
@@ -104,7 +109,7 @@ public class TowerSelectionWheel : MonoBehaviour
         bsr.sortingOrder = 2998; // behind slices (3000)
 
         hub = new GameObject("Hub");
-        hub.transform.parent = transform;
+        hub.transform.SetParent(transform, false);       // see the note in CreateSlice
         hub.transform.localPosition = new Vector3(0f, 0f, -0.05f);
         hub.transform.localScale = Vector3.one * 0.42f;
         var hsr = hub.AddComponent<SpriteRenderer>();
@@ -121,8 +126,24 @@ public class TowerSelectionWheel : MonoBehaviour
 
         // Create slice object
         GameObject slice = new GameObject($"Slice{index}");
-        slice.transform.parent = transform;
+
+        // SetParent(..., false), NOT `.parent =`.
+        //
+        // THE BUG THIS FIXES. Assigning `.parent` is worldPositionStays:TRUE, so Unity
+        // rewrites the child's localScale to 1/parentScale in order to preserve its
+        // WORLD size. The wheel is parented to the PLAYER (so it is destroyed with
+        // them), and the player is scaled — so every slice was born at a compensated
+        // localScale rather than 1. The hover handler then does
+        //     slices[i].transform.localScale = Vector3.one;
+        // on un-hover, which THROWS THAT COMPENSATION AWAY. Each slice you hovered
+        // shrank permanently, and after hovering them all the whole wheel looked
+        // roughly half size.
+        //
+        // With worldPositionStays:false the slice keeps localScale = 1, so Vector3.one
+        // is genuinely its resting scale and the hover code is correct as written.
+        slice.transform.SetParent(transform, false);
         slice.transform.localPosition = Vector3.zero;
+        slice.transform.localScale = Vector3.one;   // explicit: what hover resets TO
 
         // Create pie slice sprite
         SpriteRenderer sr = slice.AddComponent<SpriteRenderer>();
@@ -173,7 +194,7 @@ public class TowerSelectionWheel : MonoBehaviour
                 : TextAlignment.Center;
 
         GameObject labelGO = new GameObject("Label");
-        labelGO.transform.parent = parent;
+        labelGO.transform.SetParent(parent, false);      // see the note in CreateSlice
         labelGO.transform.localPosition = pos;
         labelGO.transform.localRotation = Quaternion.identity;
 
@@ -197,7 +218,7 @@ public class TowerSelectionWheel : MonoBehaviour
                           TextAlignment align, Vector3 localPos, Color color, int order)
     {
         GameObject go = new GameObject("T");
-        go.transform.parent = parent;
+        go.transform.SetParent(parent, false);           // see the note in CreateSlice
         go.transform.localPosition = localPos;
         go.transform.localRotation = Quaternion.identity;
 
@@ -367,8 +388,11 @@ public class TowerSelectionWheel : MonoBehaviour
     {
         if (slices == null) return;
 
-        // Hover direction = this player's reticle direction (mouse or stick).
-        Vector2 direction = _aim != null ? _aim.Direction : Vector2.right;
+        // Hover direction = this player's menu-captured aim (mouse relative to the
+        // wheel centre, or right stick). Gameplay aim stays frozen meanwhile.
+        Vector2 direction = Vector2.right;
+        if (_aim != null)
+            direction = _aim.MenuCaptured ? _aim.MenuDirection : _aim.Direction;
         if (direction.sqrMagnitude < 0.0001f) direction = Vector2.right;
 
         float mouseAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -477,8 +501,19 @@ public class TowerSelectionWheel : MonoBehaviour
         yield break;
     }
 
+    // Hand aim back to the player. Safe to call repeatedly.
+    void ReleaseAim()
+    {
+        if (_aim != null && _aim.MenuCaptured) _aim.EndMenuCapture();
+    }
+
     void OnDisable()
     {
+        // Covers every way the wheel can go away (closed, deactivated, destroyed)
+        // so the player's aim can never be left frozen.
+        ReleaseAim();
         isActive = false;
     }
 }
+
+

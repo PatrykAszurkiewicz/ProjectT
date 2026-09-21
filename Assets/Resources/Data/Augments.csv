@@ -1,86 +1,86 @@
 ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,WhoImplements,TargetTypes
-1,0,Melee attack increase and defense decrease,Player,"Common, Rare, Epic","damage*1.1,currentArmor*0.8",Perk increases melee attack by 10% and decreases physical damage defense by 10%,Resources/Sprites/Augments/1,Patryk,"Weapon,Player"
-2,0,Unlocked melee,Player,Epic,NULL,Unlocked melee attack,Resources/Sprites/Augments/2,Kuba,Player
-3,0,Obstacles generation,Map,Epic,NULL,Unlocked obstacles generation,Resources/Sprites/Augments/3,Patryk,Global
-4,0,Unlocked obstacle drawer,Player,"Epic",NULL,Unlocked obstacle drawer,Resources/Sprites/Augments/4,Kuba,Player
-5,0,Tower damage increase,Tower,"Common, Rare, Epic",tower_damage+5,Increased tower attack,Resources/Sprites/Augments/5,Kuba,Tower
-6,0,Berserker's Fury,Player,Legendary,player_damage_stack_kill*1.02,Player attack increases by 2% for each enemy killed resets on taking damage,Resources/Sprites/Augments/6,Kuba,Player
-7,0,Rapid Fire,Player,Epic,"attackCooldown*0.714,damage*0.85",Increases player attack speed by 40% decreases damage by 15%,Resources/Sprites/Augments/7,Kuba,Player
-8,0,Lifesteal,Player,Epic,lifesteal_percentage=0.15,Player heals for 15% of damage dealt,Resources/Sprites/Augments/8,Kuba,Player
-9,0,Armor Plating,Player,Common,currentArmor*1.2,Reduces all incoming damage by 20%,Resources/Sprites/Augments/9,Patryk,Player
-10,0,Regeneration,Player,Epic,healthRegenRate+0.02,Slowly heal 2% max health per second when not taking damage,Resources/Sprites/Augments/10,Patryk,Player
-11,0,Immunity Phases,Player,Legendary,NULL,Become immune to damage for 2 seconds after taking a hit (15s cooldown),Resources/Sprites/Augments/11,Kub,Player
-12,0,Damage Reflection,Player,Rare,reflection_percentage=0.30,Reflect 30% of received damage back to attackers,Resources/Sprites/Augments/12,Kuba,Player
-13,0,Ice Armor,Player,Epic,ice_armor_duration=3,Freeze enemy attackers for 3 seconds when hit,Resources/Sprites/Augments/13,Kuba,Player
-14,0,Speed Boost,Player,Common,moveSpeed*1.3,+30% movement speed permanently,Resources/Sprites/Augments/14,Patryk,Player
-15,0,Magnetic Field,Player,Epic,collectionRadius*1.5,Automatically collect resources within larger radius,Resources/Sprites/Augments/15,Kuba,Player
-16,0,Freeze Ray,Tower,Epic,tower_freeze_chance=0.2,20% chance to freeze enemies for 2 seconds,Resources/Sprites/Augments/16,Kuba,Tower
-17,0,Tower Healing,Tower,Rare,tower_health_regen+0.1,Towers slowly regenerate health over time,Resources/Sprites/Augments/17,Kuba,Tower
-18,0,Overcharge,Tower,Epic,"tower_damage*1.08,tower_energy_cost*1.03",Towers deal 8% more damage but consume 3% more energy to fire,Resources/Sprites/Augments/18,Kuba,Tower
+1,0,Melee Power,Player,"Common, Rare, Epic","damage*1.1,currentArmor*0.8",Increase melee attack but lower defense,Resources/Sprites/Augments/1,Patryk,"Weapon,Player"
+2,1,Unlocked Melee,Player,Epic,NULL,Unlocked melee attack,Resources/Sprites/Augments/2,Kuba,Player
+3,0,Map Obstacles,Map,Epic,NULL,Generate obstacles across the map,Resources/Sprites/Augments/3,Patryk,Global
+4,0,Obstacle Drawer,Player,Epic,NULL,Unlock obstacle drawer tool,Resources/Sprites/Augments/4,Kuba,Player
+5,0,Tower Attack,Tower,"Common, Rare, Epic",tower_damage+5,Increase tower attack,Resources/Sprites/Augments/5,Kuba,Tower
+6,0,Berserker Fury,Player,Legendary,player_damage_stack_kill*1.02,Attack rises with each kill, resets after taking damage,Resources/Sprites/Augments/6,Kuba,Player
+7,0,Rapid Fire,Player,Epic,"attackCooldown*0.714,damage*0.85",Attack faster but deal less damage,Resources/Sprites/Augments/7,Kuba,Player
+8,0,Lifesteal,Player,Epic,lifesteal_percentage=0.15,Heal for part of the damage dealt,Resources/Sprites/Augments/8,Kuba,Player
+9,0,Armor Plating,Player,Common,currentArmor*1.2,Reduce all incoming damage,Resources/Sprites/Augments/9,Patryk,Player
+10,0,Regeneration,Player,Epic,healthRegenRate+0.02,Slowly heal when not taking damage,Resources/Sprites/Augments/10,Patryk,Player
+11,0,Immunity Phases,Player,Legendary,NULL,Brief immunity after a hit (15s cooldown),Resources/Sprites/Augments/11,Kub,Player
+12,0,Reflect Damage,Player,Rare,reflection_percentage=0.30,Reflect part of taken damage back to attackers,Resources/Sprites/Augments/12,Kuba,Player
+13,0,Ice Armor,Player,Epic,ice_armor_duration=3,Freeze attackers for 3s when hit,Resources/Sprites/Augments/13,Kuba,Player
+14,0,Speed Boost,Player,Common,moveSpeed*1.3,Move faster permanently,Resources/Sprites/Augments/14,Patryk,Player
+15,0,Magnetic Field,Player,Epic,collectionRadius*1.5,Auto-collect resources in a larger radius,Resources/Sprites/Augments/15,Kuba,Player
+16,0,Freeze Ray,Tower,Epic,tower_freeze_chance=0.2,Chance to freeze enemies for 2s,Resources/Sprites/Augments/16,Kuba,Tower
+17,0,Tower Healing,Tower,Rare,tower_health_regen+0.1,Towers slowly regenerate health,Resources/Sprites/Augments/17,Kuba,Tower
+18,0,Overcharge,Tower,Epic,"tower_damage*1.08,tower_energy_cost*1.03",Towers deal more damage but cost more energy,Resources/Sprites/Augments/18,Kuba,Tower
 19,0,Rough Terrain,Map,Rare,"MoveSpeed*0.8,towerBuildCost*1.3",Enemies move slower but towers cost more,Resources/Sprites/Augments/19,Patryk,Enemy
-20,0,Generator Abundance,Tower,Common,energyGenerationRate*1.15,15% more resource generation from Generator Towers,Resources/Sprites/Augments/20,Kuba,Tower
-21,0,Scavenger's Paradise,Map,Rare,resource_generation*1.05,Defeating enemies yields 5% extra resources,Resources/Sprites/Augments/21,Kuba,Global
-22,0,Economic Crisis,Map,Epic,"towerBuildCost*1.3,repairCostPerClick*1.3,globalResourceMultiplier*1.2",All costs increased by 30% and rewards by 20%,Resources/Sprites/Augments/22,Kuba,Global
-23,0,Recycling Plant,Map,Common,towerSellRefundPercentage*1.3,Destroyed towers return 30% of their cost,Resources/Sprites/Augments/23,Kuba,Global
-24,0,Symbiosis,Synergy,Legendary,proximity_tower_damage*1.2,Player presence near towers increase towers attack by 20%,Resources/Sprites/Augments/24,Kuba,Player
-25,0,Tower Commander,Synergy,Rare,tower_energy_decay*0.7,Player presence near towers decrease constant natural energy decay by 30%,Resources/Sprites/Augments/25,Kuba,Tower
+20,0,Generator Boost,Tower,Common,energyGenerationRate*1.15,Generators produce more resources,Resources/Sprites/Augments/20,Kuba,Tower
+21,0,Scavenger,Map,Rare,resource_generation*1.05,Enemies drop extra resources when killed,Resources/Sprites/Augments/21,Kuba,Global
+22,0,Economic Crisis,Map,Epic,"towerBuildCost*1.3,repairCostPerClick*1.3,globalResourceMultiplier*1.2",All costs and all rewards increase,Resources/Sprites/Augments/22,Kuba,Global
+23,0,Recycling Plant,Map,Common,towerSellRefundPercentage*1.3,Destroyed towers refund part of their cost,Resources/Sprites/Augments/23,Kuba,Global
+24,0,Symbiosis,Synergy,Legendary,proximity_tower_damage*1.2,Nearby towers gain attack while you stand close,Resources/Sprites/Augments/24,Kuba,Player
+25,0,Tower Commander,Synergy,Rare,tower_energy_decay*0.7,Towers near you lose energy slower,Resources/Sprites/Augments/25,Kuba,Tower
 26,2,Environmental Mastery,Synergy,Epic,NULL,Player can activate map effects manually,Resources/Sprites/Augments/26,Patryk,
-27,0,Escalation,Stack,Common,escalation_multiplier=1.02,Each wave cleared increases all damage by 2% (stacks infinitely),Resources/Sprites/Augments/27,Kuba,Player
-28,0,Momentum,Stack,Rare,"momentum_health=1.03,momentum_damage=1.03",Consecutive kills without taking damage increase health and attack by 3%,Resources/Sprites/Augments/28,Kuba,Player
-29,1,Friendly Fire,Special,Epic,"enemy_infighting_chance=0.5,enemy_infighting_duration=30",1 Random enemy attacks other enemies for 20 seconds (30s cooldown),Resources/Sprites/Augments/29,Kuba,Global
+27,0,Escalation,Stack,Common,escalation_multiplier=1.02,Each wave cleared increases all damage,Resources/Sprites/Augments/27,Kuba,Player
+28,0,Momentum,Stack,Rare,"momentum_health=1.03,momentum_damage=1.03",Kills without taking damage raise health and attack,Resources/Sprites/Augments/28,Kuba,Player
+29,0,Friendly Fire,Special,Epic,"enemy_infighting_chance=0.5,enemy_infighting_duration=30",Random enemy attacks other enemies for 20s (30s cooldown),Resources/Sprites/Augments/29,Kuba,Global
 30,1,God Mode,Special,Legendary,"temporary_invincibility*1, max_health_reduction*0.96",Temporary invincibility for 60 seconds but permanently reduces max health afterward by 4%,Resources/Sprites/Augments/30,Patryk,
-31,0,Player damage boost,Player,"Common, Rare, Epic, Legendary",damage*1.15,Increases player attack damage by 5%,Resources/Sprites/Augments/31,Patryk,Player
-32,0,Player health increase,Player,"Common, Rare, Epic",maxHealth*1.25,Increases player maximum health by 15%,Resources/Sprites/Augments/32,Patryk,Player
-33,0,Faster movement,Player,"Common, Rare, Epic",player_movement_speed*1.2,Increases player movement speed by 20%,Resources/Sprites/Augments/33,Patryk,Player
-34,0,Health on kill,Player,Epic,health_per_kill=20,Restore 20 health points for each enemy killed,Resources/Sprites/Augments/34,Kuba,Player
-35,0,Damage resistance,Player,Rare,player_armor*1.15,Reduces incoming damage by 15%,Resources/Sprites/Augments/35,Patryk,
-36,0,Resource finder,Player,Rare,bonusResourceDropChance+0.2,Plus 20% chance enemies drop double resources when killed,Resources/Sprites/Augments/36,Kuba,Global
-37,0,Quick revive,Player,Legendary,NULL,Instantly revive with 50% health when killed (once per wave),Resources/Sprites/Augments/37,Kuba,
-38,0,Stamina boost,Player,"Common, Rare, Epic",maxStamina*1.2,Increases stamina capacity by 20%,Resources/Sprites/Augments/38,Patryk,Player
-39,0,Tower damage increase,Tower,"Common, Rare",tower_damage*1.1,Increases all tower damage by 10%,Resources/Sprites/Augments/39,Kuba,Tower
-40,0,Tower range boost,Tower,Common,tower_range*1.15,Increases all tower projectile range by 15%,Resources/Sprites/Augments/40,Kuba,Tower
-41,0,Faster tower firing,Tower,Rare,tower_fire_rate*1.15,Increases tower firing speed by 15%,Resources/Sprites/Augments/41,Kuba,Tower
-42,0,Tower health boost,Tower,Common,tower_max_health*1.15,Increases tower maximum health by 15%,Resources/Sprites/Augments/42,Kuba,Tower
-43,0,Cheaper tower construction,Tower,Rare,towerBuildCost*0.85,Reduces tower construction costs by 15%,Resources/Sprites/Augments/43,Kuba,Global
-44,0,Tower repair efficiency,Tower,Rare,tower_repair_cost*0.8,Tower repairs cost 20% less resources,Resources/Sprites/Augments/44,Kuba,Global
+31,0,Damage Boost,Player,"Common, Rare, Epic, Legendary",damage*1.15,Increase player attack damage,Resources/Sprites/Augments/31,Patryk,Player
+32,0,Health Boost,Player,"Common, Rare, Epic",maxHealth*1.25,Increase player maximum health,Resources/Sprites/Augments/32,Patryk,Player
+33,0,Faster Movement,Player,"Common, Rare, Epic",player_movement_speed*1.15,Increase player movement speed,Resources/Sprites/Augments/33,Patryk,Player
+34,0,Health on Kill,Player,Epic,health_per_kill=20,Restore health for each enemy killed,Resources/Sprites/Augments/34,Kuba,Player
+35,0,Damage Resist,Player,Rare,player_armor*1.15,Reduce incoming damage,Resources/Sprites/Augments/35,Patryk,
+36,0,Resource Finder,Player,Rare,bonusResourceDropChance+0.2,Chance enemies drop double resources when killed,Resources/Sprites/Augments/36,Kuba,Global
+37,0,Quick Revive,Player,Legendary,NULL,Revive once per wave when killed,Resources/Sprites/Augments/37,Kuba,
+38,0,Stamina Boost,Player,"Common, Rare, Epic",maxStamina*1.2,Increase stamina capacity,Resources/Sprites/Augments/38,Patryk,Player
+39,0,Tower Damage,Tower,"Common, Rare",tower_damage*1.1,Increase all tower damage,Resources/Sprites/Augments/39,Kuba,Tower
+40,0,Tower Range,Tower,Common,tower_range*1.15,Increase all tower range,Resources/Sprites/Augments/40,Kuba,Tower
+41,0,Tower Fire Rate,Tower,Rare,tower_fire_rate*1.15,Increase tower firing speed,Resources/Sprites/Augments/41,Kuba,Tower
+42,0,Tower Health,Tower,Common,tower_max_health*1.15,Increase tower maximum health,Resources/Sprites/Augments/42,Kuba,Tower
+43,0,Cheaper Towers,Tower,Rare,towerBuildCost*0.85,Towers cost less to build,Resources/Sprites/Augments/43,Kuba,Global
+44,0,Cheap Repairs,Tower,Rare,tower_repair_cost*0.8,Tower repairs cost less,Resources/Sprites/Augments/44,Kuba,Global
 45,2,Tower targeting priority,Tower,Common,NULL,Towers automatically target closest enemies first,Resources/Sprites/Augments/45,Kuba,
-46,0,Reinforced towers,Tower,Rare,tower_armor+0.05,Towers take 5% less damage from enemy attacks,Resources/Sprites/Augments/46,Kuba,Tower
-47,0,Tower energy efficiency,Tower,Epic,"tower_energy_consumption*0.8,globalEnergyDecayRate*0.8","Towers consume 20% less energy",Resources/Sprites/Augments/47,Kuba,"Tower,Global"
-48,0,Basic energy boost,Energy,Common,energy_generation_rate*1.2,Increases base energy generation by 20%,Resources/Sprites/Augments/48,Kuba,Tower
-49,0,Energy cost reduction,Energy,Rare,"towerBuildCost*0.8,tower_energy_consumption*0.8,tower_repair_cost*0.8","All energy-consuming actions cost 20% less",Resources/Sprites/Augments/49,Kuba,"Tower,Global"
-50,0,Overclocked generators,Energy,Epic,"energy_generation_rate*1.3,generatorSelfConsumption*1.2",Generators produce 30% more energy but wear out 20% faster,Resources/Sprites/Augments/50,Kuba,Tower
+46,0,Reinforced,Tower,Rare,tower_armor+0.05,Towers take less damage from enemies,Resources/Sprites/Augments/46,Kuba,Tower
+47,0,Low Upkeep,Tower,Epic,"tower_energy_consumption*0.8,globalEnergyDecayRate*0.8",Towers consume less energy,Resources/Sprites/Augments/47,Kuba,"Tower,Global"
+48,0,Energy Boost,Energy,Common,energy_generation_rate*1.2,Increase base energy generation,Resources/Sprites/Augments/48,Kuba,Tower
+49,0,Energy Savings,Energy,Rare,"towerBuildCost*0.8,tower_energy_consumption*0.8,tower_repair_cost*0.8",Energy-consuming actions cost less,Resources/Sprites/Augments/49,Kuba,Tower
+50,0,Overclocked,Energy,Epic,"energy_generation_rate*1.3,generatorSelfConsumption*1.2",Generators make more energy but wear out faster,Resources/Sprites/Augments/50,Kuba,Tower
 51,2,Smart energy management,Energy,Rare,NULL,Automatically optimizes energy distribution to most critical systems,Resources/Sprites/Augments/51,Kuba,
-52,0,Enemy slowdown,Enemy,Common,MoveSpeed*0.85,All enemies move 15% slower,Resources/Sprites/Augments/52,Kuba,Enemy
-53,0,Weaker enemy spawns,Enemy,Rare,Damage*0.85,All enemies deal 20% less damage,Resources/Sprites/Augments/53,Kuba,Enemy
-54,0,Reduced enemy health,Enemy,Common,MaxHealth*0.75,All enemies have 25% less maximum health,Resources/Sprites/Augments/54,Kuba,Enemy
-55,0,Delayed enemy waves,Enemy,Rare,wave_spawn_delay+15,Each wave starts 15 seconds later,Resources/Sprites/Augments/55,Kuba,Global
-56,0,Enemy supply shortage,Enemy,Common,enemy_spawn_count*0.9,10% fewer enemies spawn per wave,Resources/Sprites/Augments/56,Kuba,Global
-57,0,Resource deposits,Map,Common,resource_node_count=3,Adds 3 additional resource collection points to the map,Resources/Sprites/Augments/57,Kuba,Global
-58,0,Favorable terrain,Map,Rare,additional_tower_rings+1,Additional outer ring for tower placement,Resources/Sprites/Augments/58,Kuba,Global
-59,0,Tower synergy boost,Synergy,Rare,adjacent_tower_damage*1.15,Towers get 15% damage bonus when built near each other,Resources/Sprites/Augments/59,Kuba,Tower
-60,0,Player tower coordination,Synergy,Epic,"currentArmor+10,armorReduction+0.10",Player and nearby towers both get +10 and 10% armor boost respectively,Resources/Sprites/Augments/60,Kuba,"Tower,Player"
-61,0,Energy tower efficiency,Synergy,Common,tower_near_generator_efficiency*0.8,Towers near energy generators consume 20% less power,Resources/Sprites/Augments/61,Kuba,
-62,0,Starting resource boost,Economy,Common,current_energy*1.50,Get 50% additional energy,Resources/Sprites/Augments/62,Kuba,Global
-63,1,Cost reduction,Economy,Rare,{all_purchase_costs: -0.15},All purchases cost 15% less,Resources/Sprites/Augments/63,Patryk,
-64,0,Auto-collect resources,Utility,Rare,collectionRadius*3.0,Automatically collects nearby resources without manual interaction,Resources/Sprites/Augments/64,Kuba,Player
-65,0,Unlocked grappling hook,Player,Rare,NULL,Unlocked grappling hook weapon,Resources/Sprites/Augments/65,Kuba,
-66,0,Unlocked ranged weapon,Player,Rare,NULL,Unlocked ranged weapon,Resources/Sprites/Augments/66,Kuba,
-67,0,Adrenaline Rush,Player,Rare,"adrenaline_health_threshold=0.30,adrenaline_duration=15,adrenaline_cooldown=30,adrenaline_attack_speed=0.50,adrenaline_move_speed=0.50",When health drops below 30% - gain massive speed and attack rate for 15 seconds with 30 seconds cooldown,Resources/Sprites/Augments/67,Patryk,Player
-68,0,Berserker Mode,Player,Epic,"berserker_damage_per_missing_health=0.02,berserker_defense_penalty=0.25",Gain 2% damage for every 1% health missing but lose 25% defense,Resources/Sprites/Augments/68,Kuba,Player
+52,0,Enemy Slowdown,Enemy,Common,MoveSpeed*0.85,All enemies move slower,Resources/Sprites/Augments/52,Kuba,Enemy
+53,0,Weak Enemies,Enemy,Rare,Damage*0.85,All enemies deal less damage,Resources/Sprites/Augments/53,Kuba,Enemy
+54,0,Frail Enemies,Enemy,Common,MaxHealth*0.75,All enemies have less health,Resources/Sprites/Augments/54,Kuba,Enemy
+55,0,Delayed Waves,Enemy,Rare,wave_spawn_delay+15,Each wave starts 15 seconds later,Resources/Sprites/Augments/55,Kuba,Global
+56,0,Fewer Enemies,Enemy,Common,enemy_spawn_count*0.9,Fewer enemies spawn per wave,Resources/Sprites/Augments/56,Kuba,Global
+57,0,Resource Nodes,Map,Common,resource_node_count=3,Add 3 resource collection points to the map,Resources/Sprites/Augments/57,Kuba,Global
+58,1,Extra Ring,Map,Rare,additional_tower_rings+1,Add an outer ring for tower placement,Resources/Sprites/Augments/58,Kuba,Global
+59,0,Tower Synergy,Synergy,Rare,adjacent_tower_damage*1.15,Towers gain damage when built near each other,Resources/Sprites/Augments/59,Kuba,Tower
+60,0,Shared Armor,Synergy,Epic,"currentArmor+10,armorReduction+0.10",Player and nearby towers gain armor,Resources/Sprites/Augments/60,Kuba,"Tower,Player"
+61,0,Grid Boost,Synergy,Common,tower_near_generator_efficiency*0.8,Towers near generators use less power,Resources/Sprites/Augments/61,Kuba,
+62,0,Head Start,Economy,Common,current_energy*1.50,Get extra energy once,Resources/Sprites/Augments/62,Kuba,Global
+63,1,Cost reduction,Economy,Rare,{all_purchase_costs: -0.15},All purchases cost less,Resources/Sprites/Augments/63,Patryk,
+64,0,Auto-Collect,Utility,Rare,collectionRadius*3.0,Automatically collect nearby resources,Resources/Sprites/Augments/64,Kuba,Player
+65,0,Grappling Hook,Player,Rare,NULL,Unlocked grappling hook weapon,Resources/Sprites/Augments/65,Kuba,
+66,0,Ranged Weapon,Player,Rare,NULL,Unlocked ranged weapon,Resources/Sprites/Augments/66,Kuba,
+67,0,Adrenaline Rush,Player,Rare,"adrenaline_health_threshold=0.30,adrenaline_duration=15,adrenaline_cooldown=30,adrenaline_attack_speed=0.50,adrenaline_move_speed=0.50",At low health briefly surge speed and attack rate,Resources/Sprites/Augments/67,Patryk,Player
+68,0,Berserker Mode,Player,Epic,"berserker_damage_per_missing_health=0.02,berserker_defense_penalty=0.25",Gain damage as health drops but lose defense,Resources/Sprites/Augments/68,Kuba,Player
 69,1,Combat Medic,Player,Epic,tower_energy_heal*1.30,Player can heal damaged towers at increased efficiencies,Resources/Sprites/Augments/69,Kuba,
-70,0,Scrap Collector,Player,Common,"globalResourceMultiplier*1.20,towerSellRefundPercentage*1.20",Collect 20% more scrap materials from destroyed enemies and structures,Resources/Sprites/Augments/70,Kuba,Global
-71,0,Energy Vampire Touch,Player,Epic,player_energy_drain+2,Drain 2 energy from enemies on successful melee attacks,Resources/Sprites/Augments/71,Kuba,Player
-72,0,Energy Scavenging,Energy,Rare,energy_scavenging_amount+5,Gain 5 energy units for each enemy destroyed near Generators,Resources/Sprites/Augments/72,Kuba,Global
-73,0,Core Shield Matrix,Central Core,Epic,core_shield+200,Provide energy-based shield with 200 hit points protecting the Central Core,Resources/Sprites/Augments/73,Kuba,Global
-74,0,Core Repair Systems,Central Core,Rare,core_regen_rate+0.5,Core stops decaying and regenerates 0.5 energy per second after 30 seconds without getting damaged,Resources/Sprites/Augments/74,Kuba,Global
-75,0,Core Energy Siphon,Central Core,Rare,core_energy_from_attacks*0.20,Core gains energy from enemy attacks converting 20% damage to Central Core health energy,Resources/Sprites/Augments/75,Kuba,Global
-76,0,Pheromone Control,Player,Epic,player_enemy_confusion_aura=0.15,Nearby enemies have 15% chance to ignore you or attack each other,Resources/Sprites/Augments/76,Kuba,Player
-77,0,Grappling Hook Damage,Player,"Rare, Epic, Legendary",grappling_hook_damage=15,Grappling Hook deals damage when shot at the enemy,Resources/Sprites/Augments/77,Kuba,Player
-78,0,Increased Shield Defenses,Player,"Rare, Epic, Legendary",player_damage_reduction=0.15,Reduce incoming damage to the Player by 15%,Resources/Sprites/Augments/78,Patryk,
-79,0,Lightning on dodge,Player,Legendary,lightning_dodge_damage=0.8,Row of lightning after dodge on the ground dealing 80% of base damage,Resources/Sprites/Augments/79,Kuba,Player
-80,0,Fire on dodge,Player,Legendary,"fire_dodge_damage=0.2,fire_dodge_dot=0.05,fire_dodge_duration=10",Row of fire after dodge on the ground with 20% initial damage plus 5% damage over time per second for 10 seconds,Resources/Sprites/Augments/80,Kuba,Player
-81,0,Unlock Shield,Player,Epic,NULL,Unlocks the Shield as an equippable weapon,Resources/Sprites/Augments/81,Kuba,Player
-82,1,Multi-Shot,Tower,Rare,{tower_projectile_count: 2},Towers fire 2 additional projectiles at reduced damage,Resources/Sprites/Augments/82,Kuba,
+70,0,Scrap Collector,Player,Common,"globalResourceMultiplier*1.20,towerSellRefundPercentage*1.20",Collect more scrap from kills and wreckage,Resources/Sprites/Augments/70,Kuba,Global
+71,0,Energy Drain,Player,Epic,player_energy_drain+2,Melee hits drain energy from enemies,Resources/Sprites/Augments/71,Kuba,Player
+72,0,Energy Harvest,Energy,Rare,energy_scavenging_amount+5,Gain energy for kills near generators,Resources/Sprites/Augments/72,Kuba,Global
+73,0,Core Shield,Central Core,Epic,core_shield+200,Shield the core with an energy barrier,Resources/Sprites/Augments/73,Kuba,Global
+74,0,Core Repair,Central Core,Rare,core_regen_rate+0.5,Core stops decaying and slowly heals when undamaged,Resources/Sprites/Augments/74,Kuba,Global
+75,0,Core Siphon,Central Core,Rare,core_energy_from_attacks*0.20,Core turns enemy damage into energy,Resources/Sprites/Augments/75,Kuba,Global
+76,0,Pheromones,Player,Epic,player_enemy_confusion_aura=0.15,Nearby enemies may ignore you or attack each other,Resources/Sprites/Augments/76,Kuba,Player
+77,0,Hook Damage,Player,"Rare, Epic, Legendary",grappling_hook_damage=15,Grappling hook deals damage to the enemies,Resources/Sprites/Augments/77,Kuba,Player
+78,0,Shield Boost,Player,"Rare, Epic, Legendary",player_damage_reduction=0.15,Reduce incoming damage to the player,Resources/Sprites/Augments/78,Patryk,
+79,0,Dodge Bolt,Player,Legendary,lightning_dodge_damage=0.8,Dodging leaves a line of lightning behind,Resources/Sprites/Augments/79,Kuba,Player
+80,0,Fire on Dodge,Player,Legendary,"fire_dodge_damage=0.2,fire_dodge_dot=0.05,fire_dodge_duration=10",Dodging leaves a line of fire that burns enemies,Resources/Sprites/Augments/80,Kuba,Player
+81,0,Unlocked Shield,Player,Epic,NULL,Unlocked shield as an equippable weapon,Resources/Sprites/Augments/81,Kuba,Player
+82,1,Multi-Shot,Tower,Rare,{tower_projectile_count: 2},Towers fire additional projectiles at reduced damage,Resources/Sprites/Augments/82,Kuba,
 83,1,Poison Coating,Tower,Common,"{tower_poison_damage_per_second: 0.05, tower_poison_duration: 8}",Tower attacks apply poison DoT (5% damage/sec for 8 seconds),Resources/Sprites/Augments/83,Kuba,
 84,1,Critical Towers,Tower,Epic,{tower_crit_chance: 0.15},15% chance for towers to deal 300% damage,Resources/Sprites/Augments/84,Kuba,
 85,1,Explosive Shells,Tower,Rare,{tower_explosion_radius: 1.5},Tower projectiles explode for area damage,Resources/Sprites/Augments/85,Kuba,
@@ -91,7 +91,7 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 90,1,Resource Magnet,Synergy,Rare,NULL,Player movement generates energy for nearby generators,Resources/Sprites/Augments/90,Patryk,
 91,1,Splash damage towers,Tower,Epic,{tower_splash_radius: 1.0},Towers deal splash damage in small radius,Resources/Sprites/Augments/91,Kuba,
 92,1,Trade routes,Map,Rare,{passive_resource_income: 0.25},Generates 25% additional passive resource income,Resources/Sprites/Augments/92,Patryk,
-93,0,Unlocked flamethrower,Player,"Rare, Epic, Legendary",NULL,Unlocked flamethrower weapon,Resources/Sprites/Augments/93,Kuba,Player
+93,0,Flamethrower,Player,"Rare, Epic, Legendary",NULL,Unlocked flamethrower weapon,Resources/Sprites/Augments/93,Kuba,Player
 94,1,Unlocked portable obstacles,Player,"Rare, Epic, Legendary",NULL,Unlocked portable obstacles,Resources/Sprites/Augments/94,Patryk,
 95,1,Modular Construction,Tower,Common,{tower_build_flexibility: 1.0},Towers can be quickly disassembled and rebuilt in new locations,Resources/Sprites/Augments/95,Kuba,
 96,1,Self-Destruct Protocol,Tower,Legendary,{tower_destruction_damage: 5.0},Critically damaged towers can detonate dealing massive area damage,Resources/Sprites/Augments/96,Kuba,
@@ -312,40 +312,40 @@ ID,Priority,Augment_Name,Category,Rarity,Affected_Stats,Description,Sprite_path,
 311,2,Interdimensional Communication,Central Core,Epic,NULL,Core can communicate with parallel universe versions for strategic advice,Resources/Sprites/Augments/311,Kuba,
 312,2,Genesis Protocol,Central Core,Legendary,NULL,If everything else fails core can restart civilization from stored genetic and cultural templates,Resources/Sprites/Augments/312,Kuba,
 313,1,Increase fire defense,Player,"Common, Epic",{player_fire_defense: +0.15},Increased fire defense of the player by 15%,Resources/Sprites/Augments/313,Patryk,
-314,0,Unlocked bomb launcher,Player,"Epic",NULL,Unlocked bomb launcher weapon,Resources/Sprites/Augments/314,Kuba,Player
-315,0,Unlocked trap,Player,"Rare",NULL,Unlocked trap weapon — places bear traps that root enemies in place,Resources/Sprites/Augments/315,Kuba,Player
-316,0,Unlocked decoy,Player,"Rare",NULL,Unlocked decoy weapon — deploy a signal device that confuses and attracts nearby enemies for 7 seconds,Resources/Sprites/Augments/316,Kuba,Player
-317,0,Unlocked turret,Player,"Epic",NULL,Unlocked turret weapon — deploy a portable auto-turret that targets nearby enemies,Resources/Sprites/Augments/317,Kuba,Player
-318,0,Unlocked boomerang,Player,"Rare",NULL,Unlocked boomerang weapon,Resources/Sprites/Augments/318,Kuba,Player
-319,0,Additional Tower Slot,Map,Rare,additional_tower_slots=1,Reveals one extra tower placement slot on the current map,Resources/Sprites/Augments/319,Kuba,Global
-320,0,Additional Tower Slot Per Waves,Map,Epic,"slots_per_wave_interval=1,slots_per_wave_count=1,slots_per_wave_max=0",Reveals one extra tower placement slot every 3rd wave cleared,Resources/Sprites/Augments/320,Kuba,Global
-321,0,Unlocked revenant necronomicon,Player,"Legendary",NULL,Unlocked revenant necronomicon — activate to raise a purple aura that resurrects enemies slain inside it as friendly shadows for 8 seconds,Resources/Sprites/Augments/321,Kuba,Player
-322,0,Unlocked battle hammer,Player,Epic,NULL,Unlocked battle hammer,Resources/Sprites/Augments/322,Kuba,Player
-323,0,Unlock stealth cloak,Player,Epic,NULL,Unlocked stealth cloak tool grants 30s invisibility on right-click enemies ignore you until you attack 10s cooldown,Resources/Sprites/Augments/323,Kuba,Player
-324,0,Unlock torch,Player,Rare,NULL,Unlocked torch tool — equip to cast a circle of light around you at night and right-click to place up to 3 glowing torches on the map,Resources/Sprites/Augments/324,Kuba,Player
-325,0,Unlock Projectile Parry,Player,Legendary,NULL,"Deflect an incoming Mort shell or Pitcher shot with timely parry",Resources/Sprites/Augments/325,Kuba,Player
-326,0,Unlock time clock,Player,Epic,NULL,Unlocked time clock tool — right-click to rewind to the start of the current wave (30s cooldown),Resources/Sprites/Augments/326,Kuba,Player
-327,0,Unlock mortar,Player,Epic,NULL,Unlocked mortar weapon,Resources/Sprites/Augments/327,Kuba,Player
-328,0,Cooldown reduction,Player,Epic,cooldown_reduction=20,Shorten all weapon and tool cooldowns by 20 percent,Resources/Sprites/Augments/328,Kuba,Player
-329,0,Unlock smoke screen,Player,Epic,NULL,Unlocked Smoke Screen tool,Resources/Sprites/Augments/329,Kuba,Player
-330,0,Longer Parry Stun,Player,Epic,parry_stun_bonus_seconds=1,Parried enemies stay stunned longer,Resources/Sprites/Augments/330,Kuba,Player
-331,0,Powerful Parry,Player,Epic,"parry_damage_bonus=0.30,parry_damage_duration=5",Parried enemies take 30% more damage for 5 seconds,Resources/Sprites/Augments/331,Kuba,Player
-332,0,Longer Parry Window,Player,Epic,parry_window_frames=2,Parry window is 2 frames longer,Resources/Sprites/Augments/332,Kuba,Player
-333,0,Heal on Parry,Player,Epic,parry_heal_percent=0.03,Heal 3% of max health on a successful parry,Resources/Sprites/Augments/333,Kuba,Player
-334,0,Last Stand,Player,Legendary,"aug_health_threshold=0.30,aug_energy_bonus=0.30,aug_attack_bonus=0.30",While below 30% health gain 30% more energy and 30% more attack power,Resources/Sprites/Augments/334,Kuba,Player
-335,0,Energy Tithe,Tower,Rare,aug_energy_per_kill=2,Towers grant the player 2 energy for every enemy they kill,Resources/Sprites/Augments/335,Kuba,Global
-336,0,Rich Harvest,Energy,Common,globalResourceMultiplier*1.2,Enemies drop 20% more energy,Resources/Sprites/Augments/336,Kuba,Global
-337,0,Lucky Strikes,Energy,Common,aug_drop_chance_bonus=0.20,Enemies are 20% more likely to drop energy,Resources/Sprites/Augments/337,Kuba,Global
-338,0,Siege Doctrine,Synergy,Epic,"damage*0.6,attackCooldown*1.6667,aug_tower_damage_bonus=0.30,aug_tower_firerate_bonus=0.30",Lose 40% player melee damage and attack speed but all towers gain 30% damage and fire rate,Resources/Sprites/Augments/338,Kuba,Player
-339,0,Martyr's Bargain,Synergy,Epic,"maxHealth*0.5,towerBuildCost*0.6,repairCostPerClick*0.6",Halve player max health but towers cost 40% less to build and repair,Resources/Sprites/Augments/339,Kuba,"Player,Global,Global"
-340,0,Phalanx,Tower,Epic,"aug_firerate_per_tower=0.03,aug_range_per_tower=0.02",For every active tower all towers gain 3% fire rate and 2% range,Resources/Sprites/Augments/340,Kuba,Tower
-341,0,Marksman's Bounty,Tower,Rare,aug_tower_kill_chance_bonus=0.30,Enemies killed by a tower are 30% more likely to drop energy,Resources/Sprites/Augments/341,Kuba,Global
-342,0,Plunderer's Payload,Tower,Rare,aug_tower_kill_value_bonus=0.30,Enemies killed by a tower drop 30% more energy,Resources/Sprites/Augments/342,Kuba,Global
-343,0,Efficient Grid,Tower,Common,aug_tower_decay_mult=0.9,Tower energy decays 10% slower,Resources/Sprites/Augments/343,Kuba,Tower
-344,0,Phoenix Protocol,Tower,Legendary,aug_revives_per_stage=1,A random destroyed tower is rebuilt for free at the start of the next stage,Resources/Sprites/Augments/344,Kuba,Tower
-345,0,Overload Aura,Tower,Epic,aug_aoe_damage_mult=4.0,Generator towers deal damage around themselves,Resources/Sprites/Augments/345,Kuba,Tower
-346,0,Conscript's Sacrifice,Synergy,Rare,"damage*0.7,aug_tower_damage_bonus=0.30",Reduce player attack by 30% but increase all tower attack by 30%,Resources/Sprites/Augments/346,Kuba,Player
-347,0,Reckless Calibration,Tower,Rare,"tower_damage*1.15,aug_tower_decay_mult=1.1",Tower energy decays 10% faster but tower damage increases 15%,Resources/Sprites/Augments/347,Kuba,Tower
-348,0,Energy Attunement,Energy,Rare,aug_energy_gain_bonus=0.10,Increase energy received from all sources by 10%,Resources/Sprites/Augments/348,Kuba,Global
+314,0,Bomb Launcher,Player,Epic,NULL,Unlocked bomb launcher weapon,Resources/Sprites/Augments/314,Kuba,Player
+315,0,Unlocked Trap,Player,Rare,NULL,Unlocked trap that catches enemies in place,Resources/Sprites/Augments/315,Kuba,Player
+316,0,Unlocked Decoy,Player,Rare,NULL,Unlocked decoy device that lures enemies,Resources/Sprites/Augments/316,Kuba,Player
+317,0,Unlocked Turret,Player,Epic,NULL,Unlocked a portable turret that targets nearby enemies,Resources/Sprites/Augments/317,Kuba,Player
+318,0,Boomerang,Player,Rare,NULL,Unlocked boomerang weapon,Resources/Sprites/Augments/318,Kuba,Player
+319,0,Extra Slot,Map,Rare,additional_tower_slots=1,Reveal one extra tower slot on the map,Resources/Sprites/Augments/319,Kuba,Global
+320,0,Slots Per Wave,Map,Epic,"slots_per_wave_interval=1,slots_per_wave_count=1,slots_per_wave_max=0",Reveal an extra tower slot every 3rd wave,Resources/Sprites/Augments/320,Kuba,Global
+321,0,Necronomicon,Player,Legendary,NULL,Unlocked a book that revives enemies as allies,Resources/Sprites/Augments/321,Kuba,Player
+322,0,Battle Hammer,Player,Epic,NULL,Unlocked battle hammer weapon,Resources/Sprites/Augments/322,Kuba,Player
+323,0,Stealth Cloak,Player,Epic,NULL,Unlocked cloak giving invisibility until an attack,Resources/Sprites/Augments/323,Kuba,Player
+324,0,Unlocked Torch,Player,Rare,NULL,Unlocked torches that lights the area,Resources/Sprites/Augments/324,Kuba,Player
+325,0,Parry Shots,Player,Legendary,NULL,Parry to deflect an incoming enemy shot,Resources/Sprites/Augments/325,Kuba,Player
+326,0,Time Clock,Player,Epic,NULL,Unlocked clock that rewinds time to the wave start,Resources/Sprites/Augments/326,Kuba,Player
+327,0,Unlocked Mortar,Player,Epic,NULL,Unlocked mortar weapon,Resources/Sprites/Augments/327,Kuba,Player
+328,0,Fast Cooldowns,Player,Epic,cooldown_reduction=20,Shorten all weapon and tool cooldowns,Resources/Sprites/Augments/328,Kuba,Player
+329,0,Smoke Screen,Player,Epic,NULL,Unlocked smoke screen tool,Resources/Sprites/Augments/329,Kuba,Player
+330,0,Parry Stun,Player,Epic,parry_stun_bonus_seconds=1,Parried enemies stay stunned longer,Resources/Sprites/Augments/330,Kuba,Player
+331,0,Powerful Parry,Player,Epic,"parry_damage_bonus=0.30,parry_damage_duration=5",Parried enemies take more damage,Resources/Sprites/Augments/331,Kuba,Player
+332,0,Parry Window,Player,Epic,parry_window_frames=2,Parry window is longer,Resources/Sprites/Augments/332,Kuba,Player
+333,0,Heal on Parry,Player,Epic,parry_heal_percent=0.03,Partial heal on a successful parry,Resources/Sprites/Augments/333,Kuba,Player
+334,0,Last Stand,Player,Legendary,"aug_health_threshold=0.30,aug_energy_bonus=0.30,aug_attack_bonus=0.30",At low health gain more energy and attack,Resources/Sprites/Augments/334,Kuba,Player
+335,0,Energy Tithe,Tower,Rare,aug_energy_per_kill=2,Towers give energy for each enemy they kill,Resources/Sprites/Augments/335,Kuba,Global
+336,0,Rich Harvest,Energy,Common,globalResourceMultiplier*1.2,Enemies drop more energy,Resources/Sprites/Augments/336,Kuba,Global
+337,0,Lucky Strikes,Energy,Common,aug_drop_chance_bonus=0.20,Enemies are more likely to drop energy,Resources/Sprites/Augments/337,Kuba,Global
+338,0,Siege Doctrine,Synergy,Epic,"damage*0.6,attackCooldown*1.6667,aug_tower_damage_bonus=0.30,aug_tower_firerate_bonus=0.30",Lower melee power but towers gain damage and fire rate,Resources/Sprites/Augments/338,Kuba,Player
+339,0,Blood Pact,Synergy,Epic,"maxHealth*0.5,towerBuildCost*0.6,repairCostPerClick*0.6",Halve the health but towers cost far less,Resources/Sprites/Augments/339,Kuba,"Player,Global,Global"
+340,0,Phalanx,Tower,Epic,"aug_firerate_per_tower=0.03,aug_range_per_tower=0.02",Each active tower boosts all towers fire rate and range,Resources/Sprites/Augments/340,Kuba,Tower
+341,0,Marksman Loot,Tower,Rare,aug_tower_kill_chance_bonus=0.30,Tower kills are more likely to drop energy,Resources/Sprites/Augments/341,Kuba,Global
+342,0,Plunder,Tower,Rare,aug_tower_kill_value_bonus=0.30,Tower kills drop more energy,Resources/Sprites/Augments/342,Kuba,Global
+343,0,Efficient Grid,Tower,Common,aug_tower_decay_mult=0.9,Tower energy decays slower,Resources/Sprites/Augments/343,Kuba,Tower
+344,0,Phoenix,Tower,Legendary,aug_revives_per_stage=1,Rebuild a random destroyed tower next stage,Resources/Sprites/Augments/344,Kuba,Tower
+345,0,Overload Aura,Tower,Epic,aug_aoe_damage_mult=4.0,Generators deal damage around themselves,Resources/Sprites/Augments/345,Kuba,Tower
+346,0,Conscript,Synergy,Rare,"damage*0.7,aug_tower_damage_bonus=0.30",Lower your attack but raise all tower attack,Resources/Sprites/Augments/346,Kuba,Player
+347,0,Reckless Tune,Tower,Rare,"tower_damage*1.15,aug_tower_decay_mult=1.1",Towers hit harder but energy decays faster,Resources/Sprites/Augments/347,Kuba,Tower
+348,0,Attunement,Energy,Rare,aug_energy_gain_bonus=0.10,Increase energy received from all sources,Resources/Sprites/Augments/348,Kuba,Global
 
 

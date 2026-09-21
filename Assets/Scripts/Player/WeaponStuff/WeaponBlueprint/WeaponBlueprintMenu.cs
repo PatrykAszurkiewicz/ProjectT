@@ -43,6 +43,13 @@ public class WeaponBlueprintMenu : MonoBehaviour
 
     // Inner content width available to a row = panel width - 2*side inset.
     private const float PanelWidth = 1440f;
+
+    // 9-slice border for MenuPanel 1, in SOURCE pixels. The corner ornament (magenta
+    // flame + silver bevel diagonal) reaches ~170 px in from each edge, so a 140 border
+    // sliced through the bevel and Unity smeared it along the stretched edges. 180
+    // contains the whole ornament. Applied in code below so it works regardless of the
+    // sprite asset's import border.
+    private const float PanelBorder = 180f;
     private const float SideInset = 72f;
     private const float RowContentWidth = PanelWidth - SideInset * 2f;
 
@@ -302,7 +309,19 @@ public class WeaponBlueprintMenu : MonoBehaviour
         pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
         pr.pivot = new Vector2(0.5f, 0.5f);
         pr.sizeDelta = new Vector2(PanelWidth, 860);
-        MenuTheme.ApplySprite(panel.AddComponent<Image>(), MenuTheme.PanelSprite, MenuTheme.PanelSolid);
+        var panelImg = panel.AddComponent<Image>();
+        MenuTheme.ApplySprite(panelImg, MenuTheme.PanelSprite, MenuTheme.PanelSolid);
+        // 9-slice fix: bake the 180 px border so the corner ornament sits inside the
+        // fixed corner slices instead of smearing along the stretched edges. This panel
+        // is 1440×860 (landscape), so the top/bottom frame bars stretch — but they're
+        // plain, only the corners must stay fixed. 180 / 1.3 ≈ 138 px corners here;
+        // raise the multiplier to shrink the corners, lower it to enlarge them.
+        if (panelImg.sprite != null)
+        {
+            panelImg.sprite = WithBorder(panelImg.sprite, PanelBorder);
+            panelImg.type = Image.Type.Sliced;
+            panelImg.pixelsPerUnitMultiplier = 1.8f;
+        }
 
         var inner = MenuTheme.NewUI("Inner", panel.transform);
         var irt = inner.GetComponent<RectTransform>();
@@ -425,5 +444,22 @@ public class WeaponBlueprintMenu : MonoBehaviour
         _circle = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f), 100f);
         return _circle;
     }
+
+    // Rebuilds a sprite with a 9-slice border baked in, so a Sliced Image keeps its
+    // corners fixed while the edges/center stretch. Border is in source-texture pixels.
+    // The texture does NOT need Read/Write enabled — Sprite.Create only references a
+    // rect of the existing texture, it never reads pixels.
+    private static Sprite WithBorder(Sprite src, float border)
+    {
+        if (src == null) return null;
+        try
+        {
+            float ppu = src.pixelsPerUnit > 0 ? src.pixelsPerUnit : 100f;
+            return Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), ppu, 0,
+                                 SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+        }
+        catch { return src; }
+    }
 }
+
 

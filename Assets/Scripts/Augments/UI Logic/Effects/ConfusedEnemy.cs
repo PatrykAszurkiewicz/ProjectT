@@ -1,24 +1,43 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 public class ConfusedEnemy : MonoBehaviour
 {
     private float duration;
     private float timer;
 
-    private EnemyController enemyController;
     private Rigidbody2D rb;
     private EnemyStats enemyStats;
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
     private Coroutine confusionEffectCoroutine;
 
+    // Exactly the behaviour components WE disabled, so EndConfusion / OnDestroy can
+    // re-enable that set and nothing else. Replaces the old single `enemyController`
+    // field, which only ever handled EnemyController-driven enemies.
+    private List<Behaviour> suspendedControllers;
+
+    /// True if confusion can meaningfully be applied to `enemy`. Callers (e.g.
+    /// PheromoneControlEffect) should check this BEFORE adding the component, so a
+    /// boss or a self-driving enemy isn't given a misleading tint while carrying on
+    /// at full strength. Initialize() also self-destructs if it is ignored.
+    public static bool CanAffect(GameObject enemy) => EnemyStats.CanBeExternallyControlled(enemy);
+
     public void Initialize(float duration)
     {
+        // Refuse enemies we cannot actually steer (bosses, non-dynamic bodies,
+        // already-dead enemies). Bail BEFORE touching the sprite colour so we leave
+        // no trace at all. See EnemyStats.CanBeExternallyControlled for the rationale.
+        if (!EnemyStats.CanBeExternallyControlled(gameObject))
+        {
+            Destroy(this);
+            return;
+        }
+
         this.duration = duration;
         this.timer = 0f;
 
-        enemyController = GetComponent<EnemyController>();
         rb = GetComponent<Rigidbody2D>();
         enemyStats = GetComponent<EnemyStats>();
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -29,11 +48,11 @@ public class ConfusedEnemy : MonoBehaviour
             confusionEffectCoroutine = StartCoroutine(ConfusionVisualEffect());
         }
 
-        // Disable normal controller to override behavior
-        if (enemyController != null)
-        {
-            enemyController.enabled = false;
-        }
+        // Silence EVERY self-driving controller, not just EnemyController. Enemies
+        // like the Buffer / Parfumer / Bomber have no EnemyController and drive their
+        // own Rigidbody2D from FixedUpdate, which used to overwrite the confused
+        // velocity every physics step and make this augment a no-op on them.
+        suspendedControllers = EnemyStats.SuspendBehaviourControllers(gameObject);
     }
 
     private IEnumerator ConfusionVisualEffect()
@@ -52,6 +71,15 @@ public class ConfusedEnemy : MonoBehaviour
 
     private void Update()
     {
+        // The enemy can die mid-confusion. Stop steering a corpse and let
+        // EndConfusion tear the effect down (Restore skips re-enabling controllers
+        // on a dead enemy, so a death routine's disables are respected).
+        if (enemyStats == null || enemyStats.IsDead())
+        {
+            EndConfusion();
+            return;
+        }
+
         timer += Time.deltaTime;
 
         if (timer >= duration)
@@ -129,11 +157,8 @@ public class ConfusedEnemy : MonoBehaviour
             spriteRenderer.color = originalColor;
         }
 
-        // Re-enable normal controller
-        if (enemyController != null)
-        {
-            enemyController.enabled = true;
-        }
+        // Re-enable exactly the controllers we suspended.
+        EnemyStats.RestoreBehaviourControllers(gameObject, suspendedControllers);
 
         //Debug.Log($"[CONFUSION] {gameObject.name} returned to normal behavior");
 
@@ -148,10 +173,11 @@ public class ConfusedEnemy : MonoBehaviour
         if (rb != null)
             rb.linearVelocity = Vector2.zero;
 
-        if (enemyController != null && !enemyController.enabled)
-        {
-            enemyController.enabled = true;
-        }
+        // Idempotent: Restore() clears the list, so the EndConfusion path above has
+        // already emptied it and this does nothing. It only matters when the
+        // component is destroyed without EndConfusion running (scene unload, the
+        // enemy GameObject being torn down mid-effect).
+        EnemyStats.RestoreBehaviourControllers(gameObject, suspendedControllers);
 
         if (spriteRenderer != null)
         {
@@ -159,3 +185,5 @@ public class ConfusedEnemy : MonoBehaviour
         }
     }
 }
+
+

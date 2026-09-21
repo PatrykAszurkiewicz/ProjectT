@@ -88,6 +88,21 @@ public class PlayerTowerPlacer : MonoBehaviour
     private void Start()
     {
         // Each player gets its own wheel, driven by this player's aim + Build.
+        // The wheel is deliberately left UNPARENTED (a scene-root object) and is
+        // destroyed explicitly in OnDestroy instead.
+        //
+        // HISTORY, so nobody "fixes" this back: it originally leaked — one wheel per
+        // respawn, never cleaned up — and the obvious fix was to parent it to the player
+        // so it died with them. That parenting broke the wheel's SIZE, because the player
+        // transform is SCALED and the wheel inherited that scale. It looked fine at first
+        // only because the wheel's children were attached with `.parent =`
+        // (worldPositionStays: TRUE), which made Unity write localScale = 1/playerScale
+        // on each child and accidentally cancel the inheritance out — until the hover
+        // handler reset a slice to Vector3.one and it shrank permanently.
+        //
+        // Keeping the wheel at the scene root means its world scale is 1, which is what
+        // all its hard-coded sizes (1.45f backing, 0.42f hub, HoverPop) assume. Explicit
+        // cleanup in OnDestroy solves the leak without touching scale at all.
         var wheelGO = new GameObject($"TowerSelectionWheel_P{(_playerRef != null ? _playerRef.PlayerIndex : 0)}");
         _wheel = wheelGO.AddComponent<TowerSelectionWheel>();
         _wheel.Configure(_aim, _buildAction, _playerRef);
@@ -131,13 +146,16 @@ public class PlayerTowerPlacer : MonoBehaviour
         // toward the teammate — no need to park the cursor on the body. Turn to face a
         // tower instead and normal placement resumes. If a wheel/menu is open, close it
         // so it can't keep ownership of Build, then handle the revive and skip the rest.
-        if (FindReviveTarget() != null)
+        // FIX: this called FindReviveTarget() and then TryHandleRevive() called it AGAIN,
+        // scanning the registry twice per player per frame. Resolve once and pass it down.
+        var reviveTarget = FindReviveTarget();
+        if (reviveTarget != null)
         {
             if (_actionMenu != null && _actionMenu.IsOpen) _actionMenu.Close();
             if (_wheel != null && _wheel.IsOpen) _wheel.CloseWheel();
             StopSupplying();
             if (_highlightedSlot != null) { _highlightedSlot.SetHighlight(false); _highlightedSlot = null; }
-            TryHandleRevive();   // shows the bar + fills on held Build
+            HandleRevive(reviveTarget);   // shows the bar + fills on held Build
             return;
         }
 
@@ -149,9 +167,9 @@ public class PlayerTowerPlacer : MonoBehaviour
         // try to open/build here.
         if (_wheel != null && _wheel.IsOpen) return;
 
-        // Fallback revive check for any remaining edge (no-op once the guard above
-        // has handled the in-reach-and-facing case).
-        if (TryHandleRevive()) return;
+        // The guard above already handled every in-reach-and-facing case, so there is
+        // nothing left to check here — just make sure a stale bar/progress is cleared.
+        CancelRevive();
 
         // Tool button (Right Mouse / Left Trigger) on a tower opens the upgrade /
         // disassemble popup. Independent of Build, so hold-to-supply is unaffected.
@@ -299,9 +317,8 @@ public class PlayerTowerPlacer : MonoBehaviour
     // Phase 7b: hold-Build-to-revive the downed teammate this player is facing (see
     // FindReviveTarget for the directional rule). Returns true while it's actively
     // handling the revive (so the caller skips the normal build path). No-op solo.
-    private bool TryHandleRevive()
+    private bool HandleRevive(PlayerDownedState target)
     {
-        var target = FindReviveTarget();
         if (target == null)
         {
             CancelRevive();
@@ -576,58 +593,19 @@ public class PlayerTowerPlacer : MonoBehaviour
         return null;   // co-op: couldn't find this player's camera — caller overlays full-screen
     }
 
-    // Facing lock while the tower wheel is open 
-    // The reticle that drives wheel hover also rotates the player's body, so the
-    // player visually spins while choosing a tower. Freeze the body's rotation for
-    // as long as the wheel is open and restore normal aiming when it closes.
-    private bool _facingLocked;
-    private System.Collections.Generic.List<Transform> _facingTargets;
-    private System.Collections.Generic.List<Quaternion> _facingRots;
-
-    private void LateUpdate()
-    {
-        bool wheelOpen = _wheel != null && _wheel.IsOpen;
-
-        if (wheelOpen)
-        {
-            if (!_facingLocked) CaptureFacingLock();
-            // Re-apply every frame so whatever aims the body in Update can't spin it.
-            if (_facingTargets != null)
-                for (int i = 0; i < _facingTargets.Count; i++)
-                    if (_facingTargets[i] != null) _facingTargets[i].rotation = _facingRots[i];
-        }
-        else if (_facingLocked)
-        {
-            _facingLocked = false;
-        }
-    }
-
-    private void CaptureFacingLock()
-    {
-        _facingTargets = new System.Collections.Generic.List<Transform>();
-        _facingRots = new System.Collections.Generic.List<Quaternion>();
-
-        // Lock the player root and its main body sprite (covers rigs that rotate the
-        // root and rigs that rotate a sprite/pivot child).
-        AddFacingTarget(transform);
-        var sr = GetComponentInChildren<SpriteRenderer>();
-        if (sr != null) AddFacingTarget(sr.transform);
-
-        _facingLocked = true;
-    }
-
-    private void AddFacingTarget(Transform t)
-    {
-        if (t == null || _facingTargets.Contains(t)) return;
-        _facingTargets.Add(t);
-        _facingRots.Add(t.rotation);
-    }
+    // NOTE: the player's facing / torch / cursor are frozen while the tower wheel is
+    // open by PlayerAim's menu capture (TowerSelectionWheel.OpenWheel/CloseWheel).
+    // The old approach here re-applied transform rotations in LateUpdate, which had
+    // no effect because facing is driven by PlayerAim.Direction, not transform rotation.
 
     private void OnDisable()
     {
-        _facingLocked = false;
         CancelRevive();
         if (_actionMenu != null) _actionMenu.Close();
+        // The wheel lives at the scene root, so it does NOT go away when this component
+        // is disabled (e.g. the player is downed). Close it explicitly, otherwise it
+        // stays open and keeps this player's aim frozen by its menu capture.
+        if (_wheel != null && _wheel.IsOpen) _wheel.CloseWheel();
         StopSupplying();
         SetPlacementScreenEffect(false); // drop greyscale if disabled mid-build (e.g. downed)
         if (_placementMode)
@@ -641,8 +619,15 @@ public class PlayerTowerPlacer : MonoBehaviour
 
     private void OnDestroy()
     {
+        // The wheel lives at the scene root (see the note in the setup above), so it is
+        // NOT destroyed automatically with this player — do it here or it leaks.
+        if (_wheel != null) Destroy(_wheel.gameObject);
+
         if (_reviveBar != null) Destroy(_reviveBar.gameObject);
         if (EnergyManager.Instance != null) EnergyManager.Instance.SetSupplierActive(this, false);
         if (_supplyBeam != null) { _supplyBeam.Cleanup(); _supplyBeam = null; }
     }
 }
+
+
+

@@ -445,7 +445,15 @@ public class RedEye : MonoBehaviour
                 if (tickTimer <= 0f)
                 {
                     tickTimer = Mathf.Max(0.02f, laserTickInterval);
-                    ApplyLaserDamage(laserDamagePerSecond * tickTimer);
+                    // ScaleDamage applies the SAME augment x per-stage x difficulty
+                    // multiplier that EnemyStats.Damage applies to melee. The laser used
+                    // its raw serialized DPS before, so it was the only enemy attack in
+                    // the game that ignored difficulty, stage scaling AND the enemy-damage
+                    // augment — an elite whose melee scaled on Nightmare while its
+                    // signature attack stayed flat.
+                    ApplyLaserDamage(
+                        (stats != null ? stats.ScaleDamage(laserDamagePerSecond) : laserDamagePerSecond)
+                        * tickTimer);
                 }
             }
 
@@ -661,6 +669,11 @@ public class RedEye : MonoBehaviour
                 var cs = go.GetComponent<CharacterStats>();
                 if (cs != null) cs.TakeDamage(amount);
             }
+
+            // Player-side on-hit augments (Damage Reflection / Ice Armor). The laser
+            // never routes through EnemyController, so these were skipped entirely.
+            // `amount` is one tick, so reflection scales with the tick — correct.
+            EnemyController.NotifyPlayerDamaged(go, amount, gameObject);
             return;
         }
 

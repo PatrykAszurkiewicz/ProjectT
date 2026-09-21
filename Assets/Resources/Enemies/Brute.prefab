@@ -18,6 +18,7 @@ GameObject:
   - component: {fileID: 7932242476479118238}
   - component: {fileID: 494122911128716204}
   - component: {fileID: -861160836453700753}
+  - component: {fileID: 3637192921191141002}
   m_Layer: 0
   m_Name: Brute
   m_TagString: Enemy
@@ -157,7 +158,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: -0.29690236, y: -0.025817586}
-  m_Radius: 2.0052838
+  m_Radius: 4.6
 --- !u!114 &1235146779362298109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -170,8 +171,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 200
-  currentHealth: 200
+  maxHealth: 100
+  currentHealth: 100
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -184,6 +185,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0.6
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 2
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &1608654102432218712
 MonoBehaviour:
@@ -197,9 +201,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 430637058
+      Data2: 1295616091
+      Data3: -977113966
+      Data4: 1390038466
+    Path: event:/BruteWaveSlow
   detectRange: 3
   attackRange: 2.3
   attackCooldown: 1
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -210,6 +222,8 @@ MonoBehaviour:
   requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.2
+  stuckMinCommitTime: 0.35
+  stuckTargetPull: 0.35
   smoothSteeringEnabled: 1
   lookAheadDistance: 1.6
   avoidanceStrength: 1.8
@@ -217,6 +231,15 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  crowdSeparationEnabled: 1
+  crowdRadiusFactor: 2
+  personalSpaceFactor: 1.15
+  crowdSeparationStrength: 1
+  crowdSeparationWhileAttacking: 0.4
+  crowdDepenetrationPerStep: 0.015
+  crowdScanInterval: 2
+  SuppressCrowdSeparation: 0
+  ExternalMovementControl: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -231,6 +254,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 1
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -257,6 +282,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 1
 --- !u!114 &-861160836453700753
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -269,14 +295,45 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7703474095d1e9848b461efdd9491b13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  slamInterval: 0.5
-  slamStartDelay: 0.3
-  attackStateGrace: 0.4
-  fistLateralOffset: 0.35
-  fistGroundOffset: -0.4
+  slamFrames: 0e000000
+  waveSoundFrame: 0
+  fistLateralOffset: 2.3
+  fistGroundOffset: -0.55
   firstSlamIsLeft: 1
+  mirrorFistsWithFacing: 1
   slamDamageRadius: 1.2
   slamVfxRadius: 0.8
   slamVfxColor: {r: 0.85, g: 0.6, b: 0.32, a: 1}
   slamCameraShake: 0.06
   deathVfxDuration: 1.2
+--- !u!114 &3637192921191141002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

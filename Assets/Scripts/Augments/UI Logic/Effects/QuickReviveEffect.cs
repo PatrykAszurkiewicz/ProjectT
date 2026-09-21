@@ -13,11 +13,25 @@ public class QuickReviveEffect : MonoBehaviour
     public float reviveFlashDuration = 0.3f;
     public int reviveFlashCount = 3;
 
+    [Header("Self-revive screen effect")]
+    [Tooltip("Show the downed grey screen + pulsing damage vignette across the self-revive " +
+             "moment. The window itself is only reviveDelay long (~0.1s), far too short to " +
+             "read, so the effect is held for screenEffectSeconds instead. Split-screen safe: " +
+             "it lands only on THIS player's camera.")]
+    public bool screenEffectOnRevive = true;
+
+    [Tooltip("How long the grey screen + vignette is held for a self-revive.")]
+    public float screenEffectSeconds = 0.7f;
+
     private bool hasBeenUsedThisWave = false;
     private PlayerStats playerStats;
     private SpriteRenderer spriteRenderer;
     private bool isProcessingRevive = false;
     private int lastWaveNumber = -1;
+
+    // Cached so the downed guard below costs nothing per frame.
+    private PlayerDownedState downedState;
+    private bool downedStateResolved;
 
     void Awake()
     {
@@ -61,12 +75,45 @@ public class QuickReviveEffect : MonoBehaviour
         }
     }
 
+    // True while this player is in the co-op / respawn DOWNED state: alive object,
+    // pinned at 0 HP, control cut, awaiting a teammate revive or a respawn countdown.
+    //
+    // WHY THIS GUARD EXISTS. Quick Revive triggers off a polled IsDead() check rather
+    // than off Die(), and a downed player is pinned at 0 HP — so IsDead() is true for
+    // the entire downed window. Without this guard, any path that recharges the augment
+    // while the player is down (the wave rolling over is the obvious one) would fire
+    // PerformRevive and call SetHealthAndNotify on a player whose PlayerDownedState is
+    // still IsDowned. The result is a "zombie": 50% HP, but control frozen, colliders
+    // off and the prone animation still playing — and, worse, PlayerRegistry.AllDead()
+    // now returns false, so EvaluateTeamWipe can never fire and a co-op team wipe
+    // silently fails to end the run.
+    //
+    // Standing the player back up from here instead would be the other option, but a
+    // respawn may already be pending on them (PlayerRespawnController marks itself
+    // pending before calling EnterDowned), and un-downing behind its back risks a
+    // double revive. Leaving the downed player to the teammate revive / respawn
+    // countdown is the safe half of that choice: the augment simply stays charged,
+    // because it was never spent.
+    private bool IsDownedNow()
+    {
+        if (!downedStateResolved)
+        {
+            downedState = GetComponent<PlayerDownedState>();
+            // The component is added on demand by PlayerStats.Die(), so keep looking
+            // until one actually exists.
+            if (downedState != null) downedStateResolved = true;
+        }
+        return downedState != null && downedState.IsDowned;
+    }
+
     void Update()
     {
         // Check if player is dead and revive is available
         // This needs to happen immediately when IsDead() becomes true
         if (playerStats.IsDead() && !hasBeenUsedThisWave && !isProcessingRevive)
         {
+            if (IsDownedNow()) return;   // see IsDownedNow — not ours to revive
+
             //Debug.Log("[QUICK_REVIVE] Death detected Triggering revive");
             StartCoroutine(PerformRevive());
         }
@@ -86,8 +133,38 @@ public class QuickReviveEffect : MonoBehaviour
             //AudioManager.instance.PlayOneShot(FMODEvents.instance.weaponPickup, transform.position);
         }
 
+        // Grey screen + pulsing damage vignette on THIS player's half, held long enough
+        // to actually read. Started before the delay so the effect covers the whole
+        // self-revive beat rather than appearing after it. Same per-camera component
+        // build mode uses, so split-screen isolation comes for free.
+        if (screenEffectOnRevive)
+        {
+            var pref = GetComponent<PlayerRef>();
+            var cam = PlayerRef.ResolveCameraFor(pref);
+            if (cam != null)
+            {
+                bool showVignette = PlayerDamageVignette.Mode != PlayerDamageVignette.VignetteMode.Off;
+                PlacementModeScreenEffect
+                    .Ensure(cam, pref != null ? pref.PlayerIndex : 0)
+                    .PulseDowned(screenEffectSeconds, showVignette);
+            }
+        }
+
         // Small delay for dramatic effect
         yield return new WaitForSeconds(reviveDelay);
+
+        // RACE GUARD. IsAvailable() returns false the moment isProcessingRevive is set,
+        // so a second damage tick landing inside this delay (poison, an aura, contact
+        // damage — anything faster than reviveDelay) falls straight past the Quick Revive
+        // branch in PlayerStats.Die() and into the downed / respawn path. Healing now
+        // would produce exactly the zombie state described on IsDownedNow. Bail instead,
+        // and refund the charge since the revive never happened.
+        if (IsDownedNow())
+        {
+            hasBeenUsedThisWave = false;
+            isProcessingRevive = false;
+            yield break;
+        }
 
         // Revive player with 50% health
         float reviveHealth = playerStats.maxHealth * reviveHealthPercentage;
@@ -192,3 +269,5 @@ public class TemporaryReviveImmunity : MonoBehaviour
         return isActive && Time.time < endTime;
     }
 }
+
+

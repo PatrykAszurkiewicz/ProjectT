@@ -25,6 +25,17 @@ public class EnemyController : MonoBehaviour
     [SerializeField] private float attackRange = 1.7f;
     [SerializeField] private float attackCooldown = 1f;
 
+    [Tooltip("Whiff tolerance. Attack range is only tested when the attack STARTS, so a " +
+             "target that walks away during the wind-up still takes full damage across " +
+             "the gap - and because ShieldSystem runs its own proximity test on the " +
+             "attacker, that hit also cannot be blocked or parried. At the moment the " +
+             "hit lands the range is re-tested against attackRange * this value, and the " +
+             "swing simply misses if the target left. 1 = exact range (attacks whiff " +
+             "constantly against a strafing player), ~1.25 = a little grace, higher = " +
+             "stickier. Set 0 to disable the re-check and keep the old hit-anyway " +
+             "behaviour for this enemy (e.g. a boss whose slam should never miss).")]
+    [SerializeField] private float attackWhiffTolerance = 1.25f;
+
     private float attackTimer = 0f;
 
     [Header("Obstacle Avoidance")]
@@ -50,6 +61,21 @@ public class EnemyController : MonoBehaviour
     [Tooltip("Progress toward target (in world units) required during stuckCheckTime to avoid being marked stuck. " +
              "Measures progress along the direction to the target, so sliding along a wall counts as no progress.")]
     [SerializeField] private float minMovementThreshold = 0.05f;
+
+    [Tooltip("Minimum time an enemy commits to a slide direction before the " +
+             "'the way is clear again' early release may fire. Stops the heading " +
+             "flickering on and off while scraping past a wall face.")]
+    [SerializeField] private float stuckMinCommitTime = 0.35f;
+
+    [Tooltip("How much of the straight-line pull toward the target is KEPT while " +
+             "sliding around an obstacle. 0 = the old behaviour (completely blind " +
+             "to the target for the whole slide). ~0.35 makes the enemy curve back " +
+             "in the moment it has room, instead of overshooting past the corner.")]
+    [SerializeField] private float stuckTargetPull = 0.35f;
+
+    // How long one committed slide lasts. Was a magic 2f inside EnterStuckMode;
+    // HandleStuckDetection now needs it too, to know how long we have been sliding.
+    private const float STUCK_MODE_DURATION = 2f;
 
     [Header("Smooth Steering & Avoidance")]
     [Tooltip("Master switch for the smoothed, multi-obstacle steering. When OFF " +
@@ -89,6 +115,136 @@ public class EnemyController : MonoBehaviour
              "along the face. Bigger = the enemy swings out further to round the " +
              "obstacle.")]
     [SerializeField] private float stuckArcWidth = 0.6f;
+
+    [Header("Crowd Separation")]
+    // Other creatures are NOT obstacles. They must never reach the stuck /
+    // wall-avoidance path (that system blanks out the target direction and commits
+    // to a fixed heading, which is what made packs scatter). They get their own
+    // gentle, always-on push instead, folded into the same smoothed heading, so a
+    // crowd spreads out while every member keeps steering at its target.
+    [Tooltip("Push enemies apart so a pack spreads into a front instead of " +
+             "collapsing into one column and jamming. Off = bodies overlap and " +
+             "the ones at the back make no progress.")]
+    [SerializeField] private bool crowdSeparationEnabled = true;
+
+    [Tooltip("Neighbour scan radius, as a multiple of this enemy's own collider " +
+             "radius. 2 covers the ring of bodies actually touching us.")]
+    [SerializeField] private float crowdRadiusFactor = 2f;
+
+    [Tooltip("The gap each enemy defends, as a multiple of the two colliders' " +
+             "combined radii. 1.0 = push only while physically overlapping, which " +
+             "settles them exactly touching. ~1.15 leaves a visible sliver.")]
+    [SerializeField] private float personalSpaceFactor = 1.15f;
+
+    [Tooltip("How hard the crowd push bends the heading. This competes with the " +
+             "pull toward the target, so keep it BELOW avoidanceStrength: walls " +
+             "must always win over neighbours.")]
+    [SerializeField] private float crowdSeparationStrength = 1f;
+
+    [Tooltip("Fraction of the crowd push that still applies while attacking. Do " +
+             "NOT set 0 — velocity is zeroed during an attack, so with no push at " +
+             "all two enemies on the same target fuse and never come apart.")]
+    [Range(0f, 1f)][SerializeField] private float crowdSeparationWhileAttacking = 0.4f;
+
+    [Tooltip("Max world units per physics step of DIRECT position correction when " +
+             "bodies actually overlap. Steering alone cannot undo an overlap while " +
+             "velocity is being assigned (which wipes Box2D's contact impulse). " +
+             "0 disables.")]
+    [SerializeField] private float crowdDepenetrationPerStep = 0.015f;
+
+    [Tooltip("Physics steps between neighbour scans. The scan is the most " +
+             "expensive thing an enemy does per step and a crowd does not " +
+             "rearrange itself in 20 ms, so 2-3 is visually identical to 1 and " +
+             "cuts the cost proportionally on big waves. Scans are phase-offset " +
+             "per enemy so a wave never scans in lock-step on one frame.")]
+    [Range(1, 4)][SerializeField] private int crowdScanInterval = 2;
+
+    private int crowdScanCounter;
+    private int crowdScanPhase;
+    private Vector2 lastCrowdPush;
+
+    // Set by a companion that runs its OWN separation (e.g. SplitterController) so
+    // the two don't both push and double the force.
+    [HideInInspector] public bool SuppressCrowdSeparation = false;
+
+    // Written by ComputeCrowdSeparation, consumed by ApplyCrowdDepenetration in the
+    // same physics step.
+    private Vector2 crowdPushDir;
+    private float crowdOverlapDepth;
+    private Collider2D selfCollider;
+    private static readonly Collider2D[] _crowdScan = new Collider2D[24];
+
+    // PERF: per-collider component caches.
+    // ComputeCrowdSeparation did GetComponentInParent<EnemyStats>() for every
+    // neighbour of every enemy on every scan, and AccumulateBlockerContact did
+    // GetComponentInParent<CharacterStats>() for every contact pair on EVERY
+    // physics step (OnCollisionStay2D). In a packed wave of 100 that is thousands
+    // of hierarchy walks per step, and the step runs several times per frame once
+    // the framerate drops. Which components sit above a collider never changes
+    // for its lifetime (pooled enemies keep theirs), so resolve once and reuse.
+    // Liveness (IsDead) is still checked live on every use.
+    //
+    // Each entry also stores the exact Collider2D REFERENCE it was built for.
+    // UnityEngine.Object equality (used by the Dictionary) compares instance IDs,
+    // so if an ID were ever reused by a newly spawned collider, the lookup could
+    // land on a dead entry. The ReferenceEquals check below turns that into a
+    // plain cache miss instead of a wrong answer.
+    private struct ColliderCacheEntry<T>
+    {
+        public Collider2D Owner;
+        public T Value;
+    }
+
+    private static readonly Dictionary<Collider2D, ColliderCacheEntry<EnemyStats>> _enemyStatsByCollider =
+        new Dictionary<Collider2D, ColliderCacheEntry<EnemyStats>>(256);
+    private static readonly Dictionary<Collider2D, ColliderCacheEntry<bool>> _isCreatureByCollider =
+        new Dictionary<Collider2D, ColliderCacheEntry<bool>>(256);
+    // Destroyed colliders stay as dead keys; flushing the whole cache now and then
+    // bounds memory at the cost of one re-lookup per live collider.
+    private const int COLLIDER_CACHE_LIMIT = 4096;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetColliderCaches()
+    {
+        _enemyStatsByCollider.Clear();
+        _isCreatureByCollider.Clear();
+    }
+
+    private static EnemyStats GetEnemyStatsCached(Collider2D col)
+    {
+        if (_enemyStatsByCollider.TryGetValue(col, out var cached)
+            && ReferenceEquals(cached.Owner, col))
+            return cached.Value;
+        if (_enemyStatsByCollider.Count > COLLIDER_CACHE_LIMIT) _enemyStatsByCollider.Clear();
+        var found = col.GetComponentInParent<EnemyStats>();
+        _enemyStatsByCollider.Remove(col); // drop a stale entry whose key compares equal
+        _enemyStatsByCollider[col] = new ColliderCacheEntry<EnemyStats> { Owner = col, Value = found };
+        return found;
+    }
+
+    private static bool IsCreatureCached(Collider2D col)
+    {
+        if (_isCreatureByCollider.TryGetValue(col, out var cached)
+            && ReferenceEquals(cached.Owner, col))
+            return cached.Value;
+        if (_isCreatureByCollider.Count > COLLIDER_CACHE_LIMIT) _isCreatureByCollider.Clear();
+        bool found = col.GetComponentInParent<CharacterStats>() != null;
+        _isCreatureByCollider.Remove(col); // drop a stale entry whose key compares equal
+        _isCreatureByCollider[col] = new ColliderCacheEntry<bool> { Owner = col, Value = found };
+        return found;
+    }
+    private static readonly ContactFilter2D _crowdFilter = BuildCrowdFilter();
+
+    private static ContactFilter2D BuildCrowdFilter()
+    {
+        // NoFilter() turns useTriggers ON. Trigger colliders are everywhere in a
+        // tower defence (aggro ranges, pickup zones, VFX volumes) and would eat
+        // slots in the 24-entry scan buffer, silently hiding the real bodies behind
+        // them — exactly in the dense crowds this system exists to fix.
+        ContactFilter2D f = new ContactFilter2D().NoFilter();
+        f.useTriggers = false;
+        return f;
+    }
 
     // Persistent heading we ease toward the goal each FixedUpdate. Keeping this
     // between frames (rather than recomputing velocity from scratch) is what
@@ -213,6 +369,58 @@ public class EnemyController : MonoBehaviour
     // by the projectile-parry path, not by reacting to the throw animation.
     public bool HasAttackOverride => AttackHandlerOverride != null;
 
+    // Optional "my hit actually connected" notification. Fired by
+    // ApplyDamageToTarget AFTER a hit has genuinely reduced a target's health (or
+    // damaged a tower), with the amount that actually landed. Same opt-in
+    // composition idiom as the hooks above: null for every existing prefab, so
+    // nothing changes unless a companion component subscribes (WolfController
+    // uses it for lifesteal).
+    //
+    // Load-bearing details for subscribers:
+    //   * The float is the health the target REALLY lost - post-armor, after
+    //     god-mode, with overkill excluded - not this enemy's nominal Damage.
+    //   * It never fires for a hit that was blocked, parried, or swallowed by a
+    //     parry stun, because those paths return before damage is applied. An
+    //     on-hit effect built on this therefore gets denied by a successful
+    //     parry for free.
+    //   * It does NOT fire for enemies that bypass ApplyDamageToTarget entirely
+    //     (Eye AOE, RedEye laser, Bomber explosion, boss specials), for the same
+    //     reason NotifyPlayerDamaged had to be hoisted out into a static.
+    public System.Action<Transform, float> OnDamageDealt;
+
+    //  Companion-driven movement suspension 
+    // While true, this controller runs NONE of its own movement, steering,
+    // stuck-detection or attack-trigger logic for the frame — a sibling
+    // behaviour (e.g. InsectController during its burrow / underground / emerge
+    // phases) is driving the body directly and we must not fight it. Same
+    // composition idiom as PriorityTargetProvider / AttackHandlerOverride above:
+    // it defaults false and is only ever flipped by an opt-in companion, so
+    // every existing enemy behaves exactly as before. The companion hands
+    // control BACK (sets it false) for the actual strike so the normal attack
+    // cycle — hit frames, parry window, SFX, damage, retarget-after-kill — is
+    // reused rather than re-implemented.
+    public bool ExternalMovementControl = false;
+
+    // Read-only view of the configured melee attack range, so a companion
+    // behaviour can align its own "close enough to surface and strike" distance
+    // with the range at which this controller will actually open an attack.
+    public float AttackRange => attackRange;
+
+    // Lets a companion component (e.g. BerserkController) supply the per-enemy attack
+    // sound from code when it isn't assigned on the prefab, reusing the existing
+    // PlayAttackSound path so it stays in sync with the hit frame. A value already set
+    // in the inspector wins, so this never clobbers explicit prefab wiring.
+    // Read-only access to the per-enemy attack sound for companions that replace
+    // PerformHit via AttackHandlerOverride (which skips PlayAttackSound), e.g.
+    // BruteController, so they can still play the sound wired on the prefab.
+    // Pure getter: no behaviour change for any other enemy.
+    public EventReference AttackSoundOverride => attackSoundOverride;
+
+    public void SetAttackSoundOverrideIfUnset(EventReference ev)
+    {
+        if (attackSoundOverride.IsNull) attackSoundOverride = ev;
+    }
+
     private void Start()
     {
         stats = GetComponent<EnemyStats>();
@@ -227,19 +435,23 @@ public class EnemyController : MonoBehaviour
         // below so we don't GetComponent<Boss1> three separate times at startup.
         boss1 = GetComponent<Boss1>();
 
+        // Cache boss status once, BEFORE it is used. This used to be computed into a
+        // local that shadowed the field inside the Y-sort block, then recomputed
+        // into the field a few lines later - same value, two GetComponent calls, and
+        // a shadowed name that read as if the field were already set.
+        // (smoke-blinding is skipped for bosses.)
+        isBoss = boss1 != null || GetComponent<BaseBossStats>() != null;
+
         if (GetComponent<YSortEntity>() == null)
         {
             var ysort = gameObject.AddComponent<YSortEntity>();
             ysort.sortPrecision = 10f;
             ysort.sortOrderBase = 1000;
 
-            bool isBoss = boss1 != null || GetComponent<BaseBossStats>() != null;
             ysort.sortYOffset = isBoss ? -1.0f : -0.2f;
         }
 
-        // Cache boss status (smoke-blinding is skipped for bosses) and a random
-        // phase so a group of smoke-blinded enemies doesn't shuffle in lock-step.
-        isBoss = boss1 != null || GetComponent<BaseBossStats>() != null;
+        // Random phase so a group of smoke-blinded enemies doesn't shuffle in lock-step.
         smokeShufflePhase = Random.value * 6.2831853f;
 
         // Per-enemy wander offset, and a cached contact filter for the
@@ -257,6 +469,54 @@ public class EnemyController : MonoBehaviour
 
         // Resolve frame config once at start
         ResolveFrameConfig();
+    }
+
+    // Companion to the guard in ApplyKnockback. That one covers "knocked back while
+    // already disabled"; this covers "disabled WHILE knocked back", which is the case
+    // that actually strands enemies: ConfusedEnemy.Initialize and
+    // BerserkEnemy.Initialize both disable this controller to take over movement (see
+    // MortController's comment about exactly that), and EnemyStats.DelayedDeath does
+    // too. Disabled mid-knockback, FixedUpdate stops running, the velocity is never
+    // decayed, and the body coasts away at whatever speed it had - the
+    // 'no_enemy_adrift_off_map' symptom. Clearing the state here makes that
+    // impossible regardless of who does the disabling or when.
+    // Reseed the stuck-detection baseline every time this controller becomes
+    // active.
+    //
+    // lastKnownPosition used to be left at its default (0,0) — it was never
+    // assigned in Start — so the FIRST HandleStuckDetection measured progress from
+    // the WORLD ORIGIN rather than from the enemy. For any enemy whose position
+    // projects onto the negative side of the target direction, that reads as "no
+    // progress" on every single step (the baseline is never refreshed because the
+    // refresh lives in the branch that check gates), so the enemy was pinned in
+    // stuck mode from half a second after spawn until it physically crossed the
+    // origin plane — steering on a frozen heading the whole way.
+    //
+    // OnEnable rather than Start because ConfusedEnemy / BerserkEnemy disable this
+    // component to take over movement and hand it back later, and pooled enemies
+    // are re-enabled at a brand new position.
+    private void OnEnable()
+    {
+        lastKnownPosition = transform.position;
+        timeSinceLastMovement = 0f;
+        isInStuckMode = false;
+        stuckModeTimer = 0f;
+        smoothHeading = Vector2.zero;
+        crowdScanPhase = Mathf.Abs(GetInstanceID());
+        crowdScanCounter = 0;
+        lastCrowdPush = Vector2.zero;
+    }
+
+    private void OnDisable()
+    {
+        if (!isKnockedBack) return;
+
+        isKnockedBack = false;
+        knockbackTimer = 0f;
+        knockbackVelocity = Vector2.zero;
+
+        if (rb != null && rb.bodyType == RigidbodyType2D.Dynamic)
+            rb.linearVelocity = Vector2.zero;
     }
 
     private void OnDestroy()
@@ -284,6 +544,15 @@ public class EnemyController : MonoBehaviour
         if (resolvedParryEnd < resolvedParryStart)
             resolvedParryEnd = resolvedParryStart;
     }
+
+    /// Re-read the hit / parry frame numbers from EnemyData.
+    ///
+    /// EnemyData stays the single source of truth - this only re-syncs the cached
+    /// copy. A companion component that adjusts this enemy's own (per-instance,
+    /// cloned) EnemyData during Start() calls this so it doesn't matter whether
+    /// EnemyController.Start() happened to run first. Harmless to call at any
+    /// time; a no-op when nothing changed.
+    public void RefreshFrameConfig() => ResolveFrameConfig();
 
     //  Decoy target API (called by DecoyDevice) 
     // Called by DecoyDevice to lure this enemy towards the decoy.
@@ -341,6 +610,12 @@ public class EnemyController : MonoBehaviour
             if (rb != null) rb.linearVelocity = Vector2.zero;
             return;
         }
+
+        // Companion (e.g. InsectController while burrowing) owns the body this
+        // phase — bail out WITHOUT touching velocity so we don't cancel the
+        // motion it's driving. Placed after the freeze / parry-stun / game-over
+        // gates so those still take priority (a frozen burrower still stops).
+        if (ExternalMovementControl) return;
 
         // Uses the cached Boss1 reference (assigned in Start, before the first
         // FixedUpdate) instead of a per-physics-frame GetComponent<Boss1>().
@@ -420,6 +695,7 @@ public class EnemyController : MonoBehaviour
             {
                 rb.linearVelocity = Vector2.zero;
                 smoothHeading = Vector2.zero; // re-seed heading when we move again
+                SettleInCrowd(); // stopped, but still must not fuse with neighbours
                 return;
             }
         }
@@ -432,6 +708,7 @@ public class EnemyController : MonoBehaviour
             {
                 rb.linearVelocity = Vector2.zero;
                 smoothHeading = Vector2.zero; // re-seed heading when we move again
+                SettleInCrowd(); // stopped, but still must not fuse with neighbours
                 return;
             }
         }
@@ -443,6 +720,11 @@ public class EnemyController : MonoBehaviour
         // Lured enemies move slightly slower (confused)
         float speedMultiplier = isLuredByDecoy ? 0.8f : 1f;
         rb.linearVelocity = direction.normalized * stats.MoveSpeed * speedMultiplier;
+
+        // Assigning linearVelocity above wipes the contact impulse Box2D applied for
+        // any overlap, so velocity alone can never separate two bodies that are
+        // already inside each other. Nudge the transform directly, hard-capped.
+        ApplyCrowdDepenetration();
     }
 
     public bool IsBeingGrappled() => isBeingGrappled;
@@ -460,36 +742,78 @@ public class EnemyController : MonoBehaviour
         else
             progress = displacement.magnitude;
 
-        if (progress > minMovementThreshold)
+        // Two independent ways to count as "moving".
+        //
+        //   madeProgress — strict: closing on the target. Sliding along a wall
+        //                  scores ~0, which is what we want, because sliding along
+        //                  a wall IS being stuck.
+        //   travelled    — raw distance covered, used only as an escape hatch once
+        //                  we are ALREADY in stuck mode. Stuck mode deliberately
+        //                  steers sideways, so it produces ~0 target-ward progress
+        //                  by construction: without this, the mode's own behaviour
+        //                  guarantees its own exit condition can never be met and
+        //                  an enemy could stay latched to it indefinitely.
+        bool madeProgress = progress > minMovementThreshold;
+        float travelGate = minMovementThreshold * 6f;
+        bool travelled = displacement.sqrMagnitude > travelGate * travelGate;
+
+        if (madeProgress || (isInStuckMode && travelled))
         {
             timeSinceLastMovement = 0f;
             lastKnownPosition = transform.position;
-            isInStuckMode = false;
+            if (madeProgress) isInStuckMode = false;
         }
         else
         {
             timeSinceLastMovement += Time.fixedDeltaTime;
             if (timeSinceLastMovement > stuckCheckTime && !isInStuckMode)
-                EnterStuckMode();
+            {
+                if (HasRealBlockerNearby())
+                {
+                    EnterStuckMode();
+                }
+                else
+                {
+                    // No world geometry in the way — we are simply packed in with
+                    // other enemies. Crowding must NOT enter stuck mode: that path
+                    // drops the target direction from the steering entirely and
+                    // commits to a fixed heading for two seconds, which is exactly
+                    // the "whole pack runs off in random directions" symptom.
+                    // Keep seeking and let crowd separation open the jam up.
+                    timeSinceLastMovement = 0f;
+                    lastKnownPosition = transform.position;
+                }
+            }
         }
 
         if (isInStuckMode)
         {
             stuckModeTimer -= Time.fixedDeltaTime;
+
+            // Release EARLY the moment the line to the target is genuinely open, so
+            // the enemy turns back in as soon as it has rounded the corner instead
+            // of running out the full two seconds. The commit window keeps this from
+            // chattering on and off while still scraping along the wall.
+            float elapsed = STUCK_MODE_DURATION - stuckModeTimer;
+            if (elapsed >= stuckMinCommitTime && PathToTargetClear())
+            {
+                isInStuckMode = false;
+                timeSinceLastMovement = 0f;
+                lastKnownPosition = transform.position;
+                return;
+            }
+
             if (stuckModeTimer <= 0f)
             {
-                // Only release stuck mode when we've actually cleared the
-                // obstacle. If we're still pressed against one (e.g. a long
-                // wall whose end we haven't rounded yet), refresh the slide
-                // direction — we might have reached a corner where the
-                // previously blocked side is now clear.
-                bool stillBlocked = Physics2D.OverlapCircle(
-                    transform.position, avoidDistance, CombinedBlockerMask) != null;
-                if (stillBlocked)
+                // Only release when we've actually cleared the obstacle. If we're
+                // still pressed against one (e.g. a long wall whose end we haven't
+                // rounded yet), refresh the slide direction — we might have reached
+                // a corner where the previously blocked side is now clear.
+                if (HasRealBlockerNearby())
                 {
                     EnterStuckMode();
-                    // Reset the movement-progress baseline so we don't
-                    // immediately re-trigger the "no progress" path.
+                    // Reset the movement-progress baseline so we don't immediately
+                    // re-trigger the "no progress" path.
                     timeSinceLastMovement = 0f;
                     lastKnownPosition = transform.position;
                 }
@@ -503,83 +827,136 @@ public class EnemyController : MonoBehaviour
 
     private void EnterStuckMode()
     {
+        // Remember the side we were already committed to (0 on a fresh entry) so a
+        // refresh halfway around a long wall keeps going the same way instead of
+        // reversing and grinding back into the corner it just left.
+        Vector2 previousSlide = isInStuckMode ? stuckAvoidanceDirection : Vector2.zero;
+
         isInStuckMode = true;
-        stuckModeTimer = 2f;
+        stuckModeTimer = STUCK_MODE_DURATION;
 
-        // Find what we're actually pressed against, so we slide ALONG the
-        // wall (perpendicular to its surface normal) rather than perpendicular
-        // to "direction to target", which is only correct when the wall and
-        // target happen to be axis-aligned with each other.
-        Collider2D wall = Physics2D.OverlapCircle(
-            transform.position, avoidDistance, CombinedBlockerMask);
+        Vector2 selfPos = transform.position;
+        Vector2 toTarget = (Vector2)currentTarget.position - selfPos;
+        toTarget = toTarget.sqrMagnitude > 0.0001f ? toTarget.normalized : Vector2.right;
 
-        Vector2 wallNormal;
-        if (wall != null)
+        // Find what we're actually pressed against, so we slide ALONG the wall
+        // (perpendicular to its surface normal) rather than perpendicular to
+        // "direction to target", which is only correct when the wall and target
+        // happen to be axis-aligned with each other.
+        Collider2D wall = Physics2D.OverlapCircle(selfPos, BlockerProbeRadius, CombinedBlockerMask);
+
+        Vector2 slideA;
+
+        if (wall != null || HasRecentBlockerContact)
         {
-            Vector2 selfPos = transform.position;
-            Vector2 closest = wall.ClosestPoint(selfPos);
-            wallNormal = selfPos - closest;
+            Vector2 wallNormal = Vector2.zero;
 
-            // If we're inside the collider, ClosestPoint may return our own
-            // position. Fall back to the collider centre direction.
-            if (wallNormal.sqrMagnitude < 0.0001f)
-                wallNormal = selfPos - (Vector2)wall.transform.position;
+            if (wall != null)
+            {
+                Vector2 closest = wall.ClosestPoint(selfPos);
+                wallNormal = selfPos - closest;
 
-            if (wallNormal.sqrMagnitude < 0.0001f)
-            {
-                // Total fallback — treat target as the reference.
-                Vector2 toT = ((Vector2)currentTarget.position - selfPos).normalized;
-                wallNormal = new Vector2(-toT.y, toT.x);
+                // If we're inside the collider, ClosestPoint may return our own
+                // position. Fall back to the collider centre direction.
+                if (wallNormal.sqrMagnitude < 0.0001f)
+                    wallNormal = selfPos - (Vector2)wall.transform.position;
             }
-            else
-            {
-                wallNormal = wallNormal.normalized;
-            }
+
+            // Nothing usable on the configured layers, but we ARE physically
+            // touching something (e.g. an untagged tree): use the real contact
+            // normal so the slide is computed against the actual blocker.
+            if (wallNormal.sqrMagnitude < 0.0001f && HasRecentBlockerContact)
+                wallNormal = _contactNormal;
+
+            slideA = wallNormal.sqrMagnitude > 0.0001f
+                ? Perp(wallNormal.normalized)   // along the wall face
+                : Perp(toTarget);               // degenerate: sidestep instead
         }
         else
         {
-            // No obstacle found on the configured layers. If we're physically
-            // touching something (e.g. an untagged tree), use that real contact
-            // normal so the slide is computed against the actual blocker. Only
-            // when we have neither do we fall back to perpendicular-to-target.
-            if (HasRecentBlockerContact)
-            {
-                wallNormal = _contactNormal;
-            }
-            else
-            {
-                // Stuck without a nearby wall (e.g. jammed between enemies).
-                Vector2 toT = (currentTarget.position - transform.position).normalized;
-                wallNormal = new Vector2(-toT.y, toT.x);
-            }
+            // No world blocker anywhere near us. Sidestep LATERALLY, keeping our
+            // distance to the target roughly constant.
+            //
+            // The old code built a fake "wall normal" perpendicular to the target
+            // here and then took ITS perpendicular — which algebraically cancels
+            // back to exactly +/- the direction to the target. The clearance probe
+            // then rejected the toward-target option (the tower we are trying to
+            // reach sits on the blocker layers, so the probe lands inside it) and
+            // committed the enemy to running DIRECTLY AWAY from its own target for
+            // two full seconds. Perpendicular-to-target is the only sane pair here.
+            //
+            // In practice this branch is now nearly unreachable: HandleStuckDetection
+            // refuses to enter stuck mode at all without a real blocker. It stays as
+            // a safety net for the frame where a blocker vanishes mid-slide.
+            slideA = Perp(toTarget);
         }
 
-        // Two ways to slide along the wall (perpendicular to its normal).
-        Vector2 slideA = new Vector2(-wallNormal.y, wallNormal.x);
         Vector2 slideB = -slideA;
 
-        // Probe further than avoidDistance: on a long segmented wall, a short
-        // probe lands inside another segment of the same wall and reports
-        // "blocked" on both sides. 3x avoidDistance reaches past segment
-        // boundaries so we can pick the genuinely-clear direction.
+        // Probe further than avoidDistance: on a long segmented wall, a short probe
+        // lands inside another segment of the same wall and reports "blocked" on
+        // both sides. 3x avoidDistance reaches past segment boundaries so we can
+        // pick the genuinely-clear direction.
         float probeDist = avoidDistance * 3f;
-        Vector2 selfPos2 = transform.position;
-        bool aClear = !Physics2D.OverlapCircle(selfPos2 + slideA * probeDist, 0.3f, CombinedBlockerMask);
-        bool bClear = !Physics2D.OverlapCircle(selfPos2 + slideB * probeDist, 0.3f, CombinedBlockerMask);
+        bool aClear = !Physics2D.OverlapCircle(selfPos + slideA * probeDist, 0.3f, CombinedBlockerMask);
+        bool bClear = !Physics2D.OverlapCircle(selfPos + slideB * probeDist, 0.3f, CombinedBlockerMask);
 
-        if (aClear && !bClear) stuckAvoidanceDirection = slideA;
-        else if (bClear && !aClear) stuckAvoidanceDirection = slideB;
-        else
-        {
-            // Both clear or both blocked: pick the side whose probe lands
-            // closer to the target. Prevents systematically drifting the
-            // wrong way along a long wall.
-            Vector2 aEnd = selfPos2 + slideA * probeDist;
-            Vector2 bEnd = selfPos2 + slideB * probeDist;
-            float aDistSq = Vector2.SqrMagnitude((Vector2)currentTarget.position - aEnd);
-            float bDistSq = Vector2.SqrMagnitude((Vector2)currentTarget.position - bEnd);
-            stuckAvoidanceDirection = (aDistSq <= bDistSq) ? slideA : slideB;
-        }
+        // Score both sides instead of the old if/else-if/coin-flip chain:
+        //   • clearance dominates — weight 3 exceeds the 2-unit span of a dot
+        //     product, so a clear side always beats a blocked one;
+        //   • then "which way still faces the target", so we never choose the side
+        //     that walks away from it when the two are equally clear (the old
+        //     tie-break compared probe endpoints, which are near-equidistant when
+        //     the enemy is beside its target — a float-noise coin flip, committed
+        //     for two seconds, and different for every enemy in a pack);
+        //   • then hysteresis toward the side we were already sliding.
+        float aScore = (aClear ? 3f : 0f) + Vector2.Dot(slideA, toTarget)
+                                          + Vector2.Dot(slideA, previousSlide) * 0.75f;
+        float bScore = (bClear ? 3f : 0f) + Vector2.Dot(slideB, toTarget)
+                                          + Vector2.Dot(slideB, previousSlide) * 0.75f;
+
+        stuckAvoidanceDirection = (aScore >= bScore) ? slideA : slideB;
+    }
+
+    private static Vector2 Perp(Vector2 v) => new Vector2(-v.y, v.x);
+
+    // "Is there real world geometry in the way?" — the gate that keeps crowding out
+    // of the stuck / wall-avoidance system. Other creatures are deliberately absent
+    // from both CombinedBlockerMask (a layer choice) and the contact normal
+    // (AccumulateBlockerContact skips anything with CharacterStats), so a pack
+    // jammed shoulder-to-shoulder in open ground answers false here and keeps
+    // seeking its target.
+    private bool HasRealBlockerNearby()
+    {
+        if (HasRecentBlockerContact) return true;
+        int mask = CombinedBlockerMask;
+        if (mask == 0) return false;
+
+        return Physics2D.OverlapCircle(transform.position, BlockerProbeRadius, mask) != null;
+    }
+
+    // Can we head straight at the target again? Used to release a slide the instant
+    // we've rounded the obstacle, rather than burning the full commit timer.
+    // Deliberately probes only as far as we can plan for — a distant wall between us
+    // and the core is the next slide's problem, not this one's.
+    private bool PathToTargetClear()
+    {
+        if (currentTarget == null) return true;
+        int mask = CombinedBlockerMask;
+        if (mask == 0) return true;
+
+        Vector2 from = GetBodyCentre(transform);
+        Vector2 to = GetBodyCentre(currentTarget);
+        Vector2 delta = to - from;
+        float dist = delta.magnitude;
+        if (dist <= 0.0001f) return true;
+
+        const float R = 0.12f;
+        float probe = Mathf.Min(dist, lookAheadDistance * 2.5f);
+        if (probe <= R) return true;
+
+        Vector2 dir = delta / dist;
+        return Physics2D.CircleCast(from + dir * R, R, dir, probe - R, mask).collider == null;
     }
 
     // Builds (or rebuilds) the contact filter used by the multi-obstacle
@@ -602,6 +979,12 @@ public class EnemyController : MonoBehaviour
     // same way by both.
     private int CombinedBlockerMask => obstacleLayer.value | blockerLayers.value;
 
+    // One radius for "is there world geometry here". HasRealBlockerNearby gates
+    // entry into stuck mode and EnterStuckMode looks up the wall it will slide
+    // along — if those two disagreed, the gate could pass on a wall the lookup then
+    // failed to find, dropping us into the no-wall fallback for no reason.
+    private float BlockerProbeRadius => Mathf.Max(avoidDistance, lookAheadDistance * 0.75f);
+
     // Smooth, multi-obstacle steering. Produces a heading that:
     //   • aims at the current target,
     //   • is pushed away from ALL nearby obstacles at once (so a gap between two
@@ -619,12 +1002,26 @@ public class EnemyController : MonoBehaviour
         Vector2 selfPos = transform.position;
         Vector2 goal;
 
+        // Neighbour push, computed once and folded into BOTH branches below. This is
+        // the whole point of the crowd fix: a pack spreads sideways into a front
+        // while every member keeps steering at its own target, instead of the back
+        // ranks stalling, tripping the stuck detector, and peeling off on frozen
+        // headings.
+        Vector2 crowd = ComputeCrowdSeparation(selfPos);
+
         if (isInStuckMode)
         {
-            // Wide arc: slide ALONG the wall but also bleed in the away-from-wall
-            // push so we swing OUT and round it, rather than scraping its face.
+            // Wide arc: slide ALONG the wall, bleed in the away-from-wall push so we
+            // swing OUT and round it rather than scraping its face, and KEEP a
+            // fraction of the pull toward the target so the arc curves back in as
+            // soon as there is room. That last term is new: without it the enemy is
+            // completely blind to its target for the whole slide, which is what made
+            // a mis-triggered slide look like it had simply forgotten where it was
+            // going.
             Vector2 offWall = ComputeAvoidanceVector(selfPos, out _);
-            goal = stuckAvoidanceDirection + offWall.normalized * stuckArcWidth;
+            goal = stuckAvoidanceDirection
+                 + offWall.normalized * stuckArcWidth
+                 + desired * Mathf.Max(0f, stuckTargetPull);
             if (goal.sqrMagnitude < 0.0001f) goal = stuckAvoidanceDirection;
         }
         else
@@ -651,6 +1048,16 @@ public class EnemyController : MonoBehaviour
             {
                 goal = desired;
             }
+        }
+
+        // Neighbours bend the heading, but never as hard as walls: crowdSeparation-
+        // Strength is meant to sit below avoidanceStrength so geometry always wins.
+        if (crowd.sqrMagnitude > 0.0001f)
+        {
+            float crowdFactor = isAttackingCycle
+                ? Mathf.Clamp01(crowdSeparationWhileAttacking)
+                : 1f;
+            goal += crowd * (crowdSeparationStrength * crowdFactor);
         }
 
         // Slow organic wander (continuous Perlin noise → no twitching).
@@ -740,6 +1147,132 @@ public class EnemyController : MonoBehaviour
         return sum;
     }
 
+    // Averaged push away from nearby ENEMIES, magnitude 0..1, strongest at full
+    // overlap and zero at the defended gap.
+    //
+    // Layer-agnostic on purpose (scan everything, keep what has EnemyStats) so this
+    // needs no inspector setup and cannot be silently disabled by a layer mistake —
+    // the same approach SplitterController already uses.
+    //
+    // The current target is excluded even when it IS an enemy (BerserkController
+    // hunts other enemies): pushing away from the thing we're trying to reach would
+    // stop us ever reaching it.
+    private Vector2 ComputeCrowdSeparation(Vector2 selfPos)
+    {
+        if (!crowdSeparationEnabled || SuppressCrowdSeparation)
+        {
+            crowdPushDir = Vector2.zero;
+            crowdOverlapDepth = 0f;
+            return lastCrowdPush = Vector2.zero;
+        }
+
+        // Throttled + phase-offset. On a skipped step we reuse the previous push
+        // (and the previous overlap depth) rather than reporting "no neighbours",
+        // which would make the push stutter on and off.
+        if (crowdScanInterval > 1)
+        {
+            crowdScanCounter++;
+            if ((crowdScanCounter % crowdScanInterval) != (crowdScanPhase % crowdScanInterval))
+                return lastCrowdPush;
+        }
+
+        crowdPushDir = Vector2.zero;
+        crowdOverlapDepth = 0f;
+
+        if (selfCollider == null) selfCollider = GetComponent<Collider2D>();
+        float myR = selfCollider != null
+            ? Mathf.Max(selfCollider.bounds.extents.x, 0.05f)
+            : 0.25f;
+
+        float scanR = myR * Mathf.Max(1f, crowdRadiusFactor);
+        int hits = Physics2D.OverlapCircle(selfPos, scanR, _crowdFilter, _crowdScan);
+        if (hits <= 1) return lastCrowdPush = Vector2.zero;
+
+        Vector2 push = Vector2.zero;
+        int counted = 0;
+
+        for (int i = 0; i < hits; i++)
+        {
+            Collider2D other = _crowdScan[i];
+            if (other == null || other == selfCollider || other.isTrigger) continue;
+            if (other.transform == transform) continue;
+
+            EnemyStats otherStats = GetEnemyStatsCached(other);
+            if (otherStats == null || otherStats == stats) continue;
+            if (otherStats.IsDead()) continue;
+            if (currentTarget != null && otherStats.transform == currentTarget) continue;
+
+            Vector2 delta = selfPos - (Vector2)other.transform.position;
+            float d = delta.magnitude;
+
+            if (d < 0.0001f)
+            {
+                // Perfectly co-located — the degenerate case physics can't resolve.
+                // Compare instance IDs so the two bodies deterministically pick
+                // OPPOSITE directions; Random here would make both of them jitter.
+                bool first = GetInstanceID() < otherStats.GetInstanceID();
+                push += first ? Vector2.right : Vector2.left;
+                counted++;
+                crowdOverlapDepth = Mathf.Max(crowdOverlapDepth, myR);
+                continue;
+            }
+
+            float otherR = Mathf.Max(other.bounds.extents.x, 0.05f);
+
+            // Defend a GAP, not just non-overlap. At personalSpaceFactor = 1 the
+            // force reaches zero the instant the colliders touch, so bodies settle
+            // perfectly tangent and read as one merged mass.
+            float desiredGap = (myR + otherR) * Mathf.Max(1f, personalSpaceFactor);
+            if (d >= desiredGap) continue;
+
+            crowdOverlapDepth = Mathf.Max(crowdOverlapDepth, (myR + otherR) - d);
+            push += (delta / d) * (1f - d / desiredGap); // linear falloff
+            counted++;
+        }
+
+        if (counted == 0) return lastCrowdPush = Vector2.zero;
+
+        push /= counted;
+        if (push.sqrMagnitude > 0.0001f) crowdPushDir = push.normalized;
+        return lastCrowdPush = push;
+    }
+
+    // Direct position correction for bodies that are already inside each other.
+    // Needed because FixedUpdate ASSIGNS linearVelocity, which erases the contact
+    // impulse Box2D generated for the overlap — so velocity alone can never undo it.
+    // Hard-capped per step so nobody is teleported through a wall.
+    private void ApplyCrowdDepenetration()
+    {
+        if (!crowdSeparationEnabled || SuppressCrowdSeparation) return;
+        if (crowdDepenetrationPerStep <= 0f) return;
+        if (crowdOverlapDepth <= 0f || crowdPushDir.sqrMagnitude < 0.0001f) return;
+        if (rb == null || rb.bodyType == RigidbodyType2D.Static) return;
+        if (isKnockedBack || isBeingGrappled || isFrozen) return;
+
+        float factor = isAttackingCycle ? Mathf.Clamp01(crowdSeparationWhileAttacking) : 1f;
+        float step = Mathf.Min(crowdOverlapDepth * 0.5f, crowdDepenetrationPerStep) * factor;
+        if (step <= 0f) return;
+
+        Vector2 dest = rb.position + crowdPushDir * step;
+
+        // This write bypasses collision resolution, so a push aimed at a wall would
+        // embed the enemy in it. Give up the nudge rather than clip geometry — the
+        // steering push is still applied, and the overlap resolves as soon as the
+        // pair rotates off the wall.
+        int mask = CombinedBlockerMask;
+        if (mask != 0 && Physics2D.OverlapPoint(dest, mask) != null) return;
+
+        rb.position = dest;
+    }
+
+    // Standing still (attacking, or milling at a decoy) still has to unstick bodies
+    // from each other, or two enemies on the same target slide together and fuse.
+    private void SettleInCrowd()
+    {
+        ComputeCrowdSeparation(transform.position);
+        ApplyCrowdDepenetration();
+    }
+
     private static Vector2 Rotate(Vector2 v, float radians)
     {
         float c = Mathf.Cos(radians);
@@ -761,7 +1294,7 @@ public class EnemyController : MonoBehaviour
         // other creatures (enemies / the player) so crowding isn't mistaken for a
         // wall — their separation is handled by normal seek movement, and we must
         // never treat the player we're chasing as an obstacle.
-        if (collision.collider.GetComponentInParent<CharacterStats>() != null) return;
+        if (IsCreatureCached(collision.collider)) return;
 
         // Average an away-from-surface direction from the contact points. Deriving
         // it from (self - contactPoint) sidesteps any ambiguity in the contact
@@ -931,12 +1464,12 @@ public class EnemyController : MonoBehaviour
                 UnfreezeEnemy();
         }
 
-        if (isKnockedBack)
-        {
-            knockbackTimer -= Time.deltaTime;
-            if (knockbackTimer <= 0f)
-                isKnockedBack = false;
-        }
+        // BUGFIX: the knockback timer used to be decremented HERE as well as in
+        // FixedUpdate, so it drained at ~2x real time and a 0.25s knockback lasted
+        // ~0.125s (the exact amount drifting with framerate vs fixed timestep).
+        // FixedUpdate owns the knockback entirely - it is the only place that also
+        // decays knockbackVelocity and writes it to the Rigidbody - so the decrement
+        // belongs there and nowhere else.
 
         if (currentTarget != null && !IsValidTarget(currentTarget))
         {
@@ -954,6 +1487,10 @@ public class EnemyController : MonoBehaviour
         {
             UpdateTarget();
         }
+
+        // Companion is driving this phase (e.g. Insect burrowing / travelling
+        // underground): never open an attack cycle until it hands control back.
+        if (ExternalMovementControl) return;
 
         if (currentTarget != null && !isFrozen && !isAttackingCycle
             && (GetComponent<ParryStunEffect>()?.IsStunActive != true)
@@ -1079,6 +1616,12 @@ public class EnemyController : MonoBehaviour
     // A parry succeeds if EITHER: The shield was RAISED (right-click pressed) during the parry frames, OR The shield is currently held AND the hit lands during the parry frames.
     // Called by ShieldSystem.TryBlockOrParry().
 
+    // Editor-only verbose parry tracing. Off by default; flip it at runtime from
+    // another script or a debug menu when you need to see the window maths.
+#if UNITY_EDITOR
+    public static bool LogParryChecks = false;
+#endif
+
     public bool IsInParryWindow(float shieldRaiseTime)
         => IsInParryWindow(shieldRaiseTime, 0);
 
@@ -1124,17 +1667,37 @@ public class EnemyController : MonoBehaviour
         // Holding shield from before the window is just a block, not a parry.
         bool isParry = raisedDuringWindow;
 
-        Debug.Log($"[PARRY CHECK] {gameObject.name}: shieldRaise={shieldRaiseTime:F3} now={Time.time:F3} " +
-                  $"parryWindow=[{parryWindowStart:F3}-{parryWindowEnd:F3}] " +
-                  $"frames={pStart}-{pEnd} hit={hit} " +
-                  $"raisedDuring={raisedDuringWindow} => {(isParry ? "PARRY!" : "BLOCK")}");
+        // BUGFIX: this used to log unconditionally. It fires on EVERY parry
+        // adjudication - i.e. every time any enemy connects on a shielded player -
+        // and the interpolated string is built even when nothing reads it. Gated
+        // behind an editor-only switch you can flip from the Console/inspector when
+        // you actually need to debug parry timing.
+#if UNITY_EDITOR
+        if (LogParryChecks)
+        {
+            Debug.Log($"[PARRY CHECK] {gameObject.name}: shieldRaise={shieldRaiseTime:F3} now={Time.time:F3} " +
+                      $"parryWindow=[{parryWindowStart:F3}-{parryWindowEnd:F3}] " +
+                      $"frames={pStart}-{pEnd} hit={hit} " +
+                      $"raisedDuring={raisedDuringWindow} => {(isParry ? "PARRY!" : "BLOCK")}");
+        }
+#endif
 
         return isParry;
     }
 
     // Returns true if this enemy is currently mid-attack and the current time falls within its parry frames. 
 
-    public bool IsCurrentlyInParryFrames()
+    // BUGFIX: this took no player index and read the GLOBAL
+    // ParryUpgrades.ExtraParryFrames, while IsInParryWindow (the method that
+    // actually adjudicates the parry) reads the per-player ExtraParryFramesFor().
+    // In split screen the two disagreed, so anything driven off this - indicators,
+    // telemetry - showed a window that did not match what the game would accept.
+    // Defaults to player 0, matching the 1-arg IsInParryWindow overload, so every
+    // existing zero-arg call site keeps compiling and keeps its old single-player
+    // behaviour.
+    public bool IsCurrentlyInParryFrames() => IsCurrentlyInParryFrames(0);
+
+    public bool IsCurrentlyInParryFrames(int parryingIndex)
     {
         if (!isAttackingCycle || attackCycleStartTime < 0f) return false;
         if (stats == null || stats.enemyData == null) return false;
@@ -1154,7 +1717,7 @@ public class EnemyController : MonoBehaviour
         // Clamp the earlier edge at frame 0 — the parry window can't open before
         // the attack animation begins, so the augment's benefit is naturally
         // capped at this enemy's parryFrameStart (matches ParryIndicator).
-        int effParryStart = Mathf.Max(0, pStart - ParryUpgrades.ExtraParryFrames);
+        int effParryStart = Mathf.Max(0, pStart - ParryUpgrades.ExtraParryFramesFor(parryingIndex));
         float parryWindowStart = attackCycleStartTime + effParryStart * animSpeed;
         float parryWindowEnd = attackCycleStartTime + (pEnd + 1) * animSpeed;
 
@@ -1179,6 +1742,27 @@ public class EnemyController : MonoBehaviour
         // Boss1 plays an additional ground-hit sound on melee connect (cached ref)
         if (boss1 != null)
             boss1.PlayGroundHitSound();
+
+        // Re-test range AT THE MOMENT OF THE HIT.
+        // Range is otherwise only checked where the attack cycle is started, which
+        // leaves the whole wind-up unguarded: the target can back off and still be hit
+        // from well outside attackRange. That hit is also unblockable and unparryable,
+        // because ShieldSystem does its own proximity test against the attacker and
+        // fails it - so from the player's side it reads as damage from nowhere that the
+        // shield inexplicably ignored. Slower wind-ups make it far more visible, since
+        // they give the target more time to drift out.
+        //
+        // The sounds above deliberately still play: a miss should be audible as a swing.
+        // NOTE this guards the standard melee path only. Projectiles (which resolve
+        // their own hit on impact) and AoE attacks that call ApplyDamageToTarget
+        // directly - e.g. BruteController.ApplySlamDamage, whose slam radius is its own
+        // and larger than attackRange - intentionally bypass it.
+        if (attackWhiffTolerance > 0f && target != null)
+        {
+            float dist = Vector2.Distance(transform.position, target.position);
+            if (dist > attackRange * attackWhiffTolerance)
+                return;   // target left during the wind-up - the swing misses
+        }
 
         ApplyDamageToTarget(target);
     }
@@ -1220,21 +1804,31 @@ public class EnemyController : MonoBehaviour
         if (stats != null)
         {
             float damageAmount = this.stats.Damage;
+
+            // Sample health either side of the hit so OnDamageDealt can report what
+            // the target ACTUALLY lost rather than the nominal swing: armor
+            // mitigation, DebugCheats god-mode and overkill on a killing blow all
+            // make those two numbers differ.
+            float healthBefore = stats.currentHealth;
             stats.TakeDamage(damageAmount);
+            float healthLost = Mathf.Max(0f, healthBefore - stats.currentHealth);
 
             if (playerStats != null)
             {
                 CombatJuice.OnEnemyHitPlayer(target.GetComponentInParent<PlayerRef>());
 
 
-                var reflectionEffect = playerStats.GetComponent<DamageReflectionEffect>();
-                if (reflectionEffect != null)
-                    reflectionEffect.ReflectDamage(damageAmount, gameObject);
-
-                var iceArmorEffect = playerStats.GetComponent<IceArmorEffect>();
-                if (iceArmorEffect != null)
-                    iceArmorEffect.FreezeAttacker(gameObject);
+                // Hoisted into the static NotifyPlayerDamaged below so the enemies
+                // that do NOT route through this method (Eye AOE, RedEye laser, Bomber
+                // explosion, boss specials) can fire the same augments. Behaviour here
+                // is unchanged: same two components, same arguments, same order.
+                NotifyPlayerDamaged(playerStats, damageAmount, gameObject);
             }
+
+            // Opt-in on-hit hook (see field comment). Fired before the
+            // retarget-after-kill below so a subscriber still sees the victim.
+            if (healthLost > 0f)
+                OnDamageDealt?.Invoke(target, healthLost);
 
             if (stats.IsDead())
                 RetargetAfterKill();
@@ -1245,8 +1839,15 @@ public class EnemyController : MonoBehaviour
         var consumer = target.GetComponent<IEnergyConsumer>();
         if (consumer != null && EnergyManager.Instance != null)
         {
+            float structureDamage = this.stats.Damage;
             bool wasDestroyed = EnergyManager.Instance.DamageEnergyConsumer(
-                consumer, this.stats.Damage, gameObject);
+                consumer, structureDamage, gameObject);
+
+            // Structures don't expose a health delta, so this reports the nominal
+            // damage. Subscribers that care about the difference should treat
+            // non-CharacterStats targets separately (WolfController does).
+            if (structureDamage > 0f)
+                OnDamageDealt?.Invoke(target, structureDamage);
 
             if (wasDestroyed)
             {
@@ -1258,6 +1859,59 @@ public class EnemyController : MonoBehaviour
                 RetargetAfterKill();
             }
         }
+    }
+
+    // =========================================================================
+    //  PLAYER ON-HIT AUGMENT REACTIONS  (shared, static)
+    // -------------------------------------------------------------------------
+    //  Damage Reflection and Ice Armor used to fire from exactly ONE place: the
+    //  melee/projectile hit in ApplyDamageToTarget above. Every attack that does
+    //  NOT route through EnemyController — the Eye's AOE pulse, the RedEye's
+    //  laser, the Bomber's explosion, and all of the boss specials — silently
+    //  skipped both augments, so a player holding Damage Reflection got nothing
+    //  back from the attacks that hurt most.
+    //
+    //  DOUBLE-FIRE SAFETY: ApplyDamageToTarget now calls NotifyPlayerDamaged
+    //  instead of doing the work inline. Do NOT re-add the inline block, and do
+    //  NOT call these from a path that already goes through ApplyDamageToTarget
+    //  (e.g. BruteController's slams, which deliberately reuse that method).
+    //
+    //  `damage` must be the amount actually handed to TakeDamage, so the reflected
+    //  fraction matches what the player received.
+    // =========================================================================
+
+    /// Fire the on-hit augment reactions for a player damaged by `attacker`.
+    /// No-op when the player holds neither augment.
+    public static void NotifyPlayerDamaged(PlayerStats playerStats, float damage, GameObject attacker)
+    {
+        if (playerStats == null || attacker == null || damage <= 0f) return;
+
+        var reflectionEffect = playerStats.GetComponent<DamageReflectionEffect>();
+        if (reflectionEffect != null)
+            reflectionEffect.ReflectDamage(damage, attacker);
+
+        var iceArmorEffect = playerStats.GetComponent<IceArmorEffect>();
+        if (iceArmorEffect != null)
+            iceArmorEffect.FreezeAttacker(attacker);
+    }
+
+    /// GameObject overload for callers that only have the hit object.
+    public static void NotifyPlayerDamaged(GameObject playerObject, float damage, GameObject attacker)
+    {
+        if (playerObject == null) return;
+
+        var playerStats = playerObject.GetComponent<PlayerStats>();
+        if (playerStats == null) playerStats = playerObject.GetComponentInParent<PlayerStats>();
+
+        NotifyPlayerDamaged(playerStats, damage, attacker);
+    }
+
+    /// Convenience for AoE paths that iterate CharacterStats: fires only when the
+    /// hit character is actually a player, so enemies caught in the same sweep (and
+    /// the attacker itself) are ignored.
+    public static void NotifyCharacterDamaged(CharacterStats victim, float damage, GameObject attacker)
+    {
+        NotifyPlayerDamaged(victim as PlayerStats, damage, attacker);
     }
 
     private void PlayAttackSound()
@@ -1292,11 +1946,22 @@ public class EnemyController : MonoBehaviour
             spriteRenderer.color = originalColor;
     }
 
+    // PERF: IsValidTarget runs 2-3 times per enemy per frame (FixedUpdate and
+    // Update). The Tower component on a given target never changes, so look it up
+    // once per target instead of GetComponent<Tower>() on every call.
+    private Transform _validityCacheTarget;
+    private Tower _validityCacheTower;
+
     private bool IsValidTarget(Transform target)
     {
-        if (target == null || target.gameObject == null || !target.gameObject.activeInHierarchy)
+        if (target == null || !target.gameObject.activeInHierarchy)
             return false;
-        var tower = target.GetComponent<Tower>();
+        if (!ReferenceEquals(target, _validityCacheTarget))
+        {
+            _validityCacheTarget = target;
+            _validityCacheTower = target.GetComponent<Tower>();
+        }
+        var tower = _validityCacheTower;
         if (tower != null && tower.IsDestroyed())
             return false;
         return true;
@@ -1338,13 +2003,22 @@ public class EnemyController : MonoBehaviour
     // Returns the world-space centre of the first non-trigger 2D collider on
     // the given Transform, accounting for collider offset and scale. Falls
     // back to transform.position if no collider is found.
+    // PERF: GetComponents<T>() returns a NEW array on every call. This runs up to
+    // four times per enemy per physics step (SmokeBlocksTarget, HasLineOfSightTo-
+    // Target, PathToTargetClear - once for self, once for the target) and again in
+    // Update, so at 100 enemies it was thousands of small garbage arrays per frame.
+    // The List<T> overload fills a reused buffer instead. Same result, zero alloc.
+    // Safe as a static: Unity scripts run on the main thread and nothing below
+    // re-enters this method while the buffer is being read.
+    private static readonly List<Collider2D> _bodyColliderScratch = new List<Collider2D>(4);
+
     private static Vector2 GetBodyCentre(Transform t)
     {
         if (t == null) return Vector2.zero;
-        var colliders = t.GetComponents<Collider2D>();
-        for (int i = 0; i < colliders.Length; i++)
+        t.GetComponents(_bodyColliderScratch);
+        for (int i = 0; i < _bodyColliderScratch.Count; i++)
         {
-            var c = colliders[i];
+            var c = _bodyColliderScratch[i];
             if (c != null && !c.isTrigger)
                 return c.bounds.center;
         }
@@ -1384,8 +2058,21 @@ public class EnemyController : MonoBehaviour
 
     /// SAFE knockback — checks rigidbody type before setting velocity.
     /// Bosses with static/kinematic bodies won't crash.
+    /// Is a knockback currently in progress? Exposed so tests and effects can ask
+    /// directly instead of inferring it from rb.linearVelocity — the physics solver
+    /// zeroes velocity when the body hits a wall, which looks identical to "the
+    /// knockback ended" from the outside and is not.
+    public bool IsKnockedBack => isKnockedBack;
+
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.25f)
     {
+        // BUGFIX (adrift enemies): knockback is decayed ONLY by this component's
+        // FixedUpdate. If the controller is not running, nothing will ever decay
+        // knockbackVelocity or clear isKnockedBack, and a Dynamic body with no drag
+        // coasts at a constant speed forever - straight off the map, still alive,
+        // keeping the wave from completing. Refuse the push instead of stranding it.
+        if (!isActiveAndEnabled) return;
+
         if (rb == null || rb.bodyType != RigidbodyType2D.Dynamic)
         {
             //Debug.Log($"[CombatFeel] KNOCKBACK SKIPPED on {gameObject.name} (non-dynamic rigidbody)");

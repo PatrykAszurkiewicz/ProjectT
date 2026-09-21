@@ -139,9 +139,13 @@ public class BorderRingGenerator : MonoBehaviour
         Sprite[] prefabSprite = new Sprite[validPrefabs.Count];
         float[] prefabHalfW = new float[validPrefabs.Count];
         float[] prefabHalfH = new float[validPrefabs.Count];
+        // Per-prefab scale taken from the prefab's own Transform (root + children),
+        // so a prefab scaled to 2 in the Inspector appears twice as large on the border.
+        float[] prefabScale = new float[validPrefabs.Count];
 
         for (int i = 0; i < validPrefabs.Count; i++)
         {
+            prefabScale[i] = 1f;
             SpriteRenderer sr = validPrefabs[i].GetComponentInChildren<SpriteRenderer>(true);
             if (sr != null && sr.sprite != null)
             {
@@ -149,6 +153,9 @@ public class BorderRingGenerator : MonoBehaviour
                 // Sprite bounds in local units (before our baseScale)
                 prefabHalfW[i] = sr.sprite.bounds.extents.x;
                 prefabHalfH[i] = sr.sprite.bounds.extents.y;
+                // Quads are scaled uniformly, so only the X scale is used
+                prefabScale[i] = Mathf.Abs(sr.transform.lossyScale.x);
+                if (prefabScale[i] < 0.0001f) prefabScale[i] = 1f;
             }
         }
 
@@ -169,7 +176,7 @@ public class BorderRingGenerator : MonoBehaviour
         {
             for (int i = 0; i < prefabCount; i++)
             {
-                float maxScale = baseScale * (1f + scaleVariation);
+                float maxScale = baseScale * (1f + scaleVariation) * prefabScale[i];
                 float r = Mathf.Max(prefabHalfW[i], prefabHalfH[i]) * maxScale + overlapPadding;
                 if (r > maxSpriteRadius) maxSpriteRadius = r;
             }
@@ -199,7 +206,7 @@ public class BorderRingGenerator : MonoBehaviour
                 if (spr == null) continue;
 
                 float variation = Random.Range(1f - scaleVariation, 1f + scaleVariation);
-                float s = baseScale * variation;
+                float s = baseScale * variation * prefabScale[prefabIdx];
 
                 //  Overlap check 
                 if (preventOverlap)
@@ -516,8 +523,5 @@ public class BorderRingGenerator : MonoBehaviour
         public Material material;
     }
 }
-
-
-
 
 

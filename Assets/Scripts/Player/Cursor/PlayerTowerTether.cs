@@ -17,8 +17,17 @@ public class PlayerTowerTether : MonoBehaviour
     public float maxTetherRange = 8f;
 
     [Tooltip("Once tethered, a tower stays tethered up to this multiplier of maxTetherRange. " +
-             "Reduces flicker when the player walks near the edge.")]
+             "Reduces flicker when the player walks near the edge.\n\n" +
+             "This is the CONNECT/BREAK hysteresis band: a tether forms at maxTetherRange " +
+             "and only breaks at maxTetherRange x this.")]
     public float breakRangeMultiplier = 1.15f;
+
+    [Tooltip("Hysteresis on the NEAR/MID/FAR boundaries, as a fraction of maxTetherRange. " +
+             "The zone you are currently in is widened by this much, so standing exactly on " +
+             "a boundary doesn't strobe the colour and the buff between two zones. " +
+             "0.04 with an 8-unit range = you must walk ~0.32 units past a boundary before " +
+             "the zone flips. 0 = old behaviour (flips on the exact threshold).")]
+    [Range(0f, 0.25f)] public float zoneHysteresis = 0.04f;
 
     [Tooltip("Maximum number of simultaneous tethers (safety cap).")]
     public int maxSimultaneousTethers = 8;
@@ -29,8 +38,22 @@ public class PlayerTowerTether : MonoBehaviour
 
     [Header("Buff Strengths (scale with number of tethered towers)")]
     [Tooltip("Each connected tower adds this fraction to the FAR-zone range buff. " +
-             "E.g. 0.05 with 4 tethers = +20% range. Effective multiplier = 1 + (this × tetherCount).")]
-    public float farRangeBonusPerTether = 0.05f;
+             "E.g. 0.12 with 4 tethers = +48% range. Effective multiplier = 1 + (this × tetherCount).\n\n" +
+             "This was 0.05, which is +0.5 world units on a typical 10-unit tower — smaller " +
+             "than the gap between two dots on the range ring, so the buff was invisible " +
+             "even though it was working.")]
+    public float farRangeBonusPerTether = 0.12f;
+
+    [Tooltip("Whether the FAR-zone range buff also grows the tower's DETECTION collider.\n\n" +
+             "It must, to do anything. Tower only ever considers enemies that entered its " +
+             "trigger (OnTriggerEnter2D) or its OverlapCircle sweep, both sized from the " +
+             "collider; ProjectileRange is only a filter applied to that set. Raising " +
+             "ProjectileRange alone therefore bought nothing past the collider's built-in " +
+             "+0.5 margin — the ring would grow but the tower still couldn't see further.\n\n" +
+             "TRADE-OFF: a bigger trigger is also a bigger target for Physics2D queries that " +
+             "hit triggers (e.g. boss lasers), so a heavily buffed tower can take hits from " +
+             "further away. Turn this off to go back to a cosmetic-only range buff.")]
+    public bool farBuffGrowsDetectionRange = true;
 
     [Tooltip("Each connected tower adds this fraction to the MID-zone damage buff. " +
              "E.g. 0.10 with 3 tethers = +30% damage. Effective multiplier = 1 + (this × tetherCount).")]
@@ -71,10 +94,23 @@ public class PlayerTowerTether : MonoBehaviour
     [Tooltip("How often (seconds) we re-scan for towers in range. Visual updates are per-frame.")]
     public float retargetInterval = 0.1f;
 
+    [Tooltip("Buff strength scales with how many towers are tethered, so EVERY tethered " +
+             "tower's buff changes the moment any ONE tether forms or breaks. Walking " +
+             "around therefore made every tower's range twitch constantly.\n\n" +
+             "Gaining a tether applies immediately (gaining power should feel instant), " +
+             "but LOSING one waits this long before the count drops, so a tether that " +
+             "blinks out and back doesn't ripple through every other tower. " +
+             "0 = old behaviour.")]
+    [Min(0f)] public float tetherCountSettleSeconds = 0.4f;
+
     [Header("Visual - Chain")]
-    public Color farColor = new Color(1.0f, 0.85f, 0.3f, 0.85f);  // gold     (range)
-    public Color midColor = new Color(1.0f, 0.55f, 0.2f, 0.85f);  // orange   (damage)
-    public Color nearColor = new Color(0.3f, 0.9f, 1.0f, 0.85f);  // cyan     (defense)
+    // Zone colours must be distinguishable AT A GLANCE, mid-fight, over grass. Gold vs
+    // orange (the old far/mid pair) are neighbouring hues at similar brightness, so the
+    // FAR buff looked like it never engaged. Violet / red-orange / cyan are three
+    // clearly separate hues.
+    public Color farColor = new Color(0.75f, 0.50f, 1.00f, 0.90f);  // violet   (range)
+    public Color midColor = new Color(1.00f, 0.40f, 0.18f, 0.90f);  // red-orange (damage)
+    public Color nearColor = new Color(0.30f, 0.90f, 1.00f, 0.90f); // cyan     (defense)
     [Tooltip("Color used while bulk-supplying energy to towers. Replaces zone color during supply.")]
     public Color supplyColor = new Color(0.3f, 0.6f, 1.0f, 1.0f); // electric blue
     [Tooltip("How fast the energy 'pulse' travels from player to tower along the chain during bulk supply. " +
@@ -94,6 +130,15 @@ public class PlayerTowerTether : MonoBehaviour
     public Vector2 playerAnchorOffset = new Vector2(0f, 0f);
     [Tooltip("Anchor offset on the tower (local space).")]
     public Vector2 towerAnchorOffset = new Vector2(0f, 0.2f);
+
+    [Tooltip("Opacity units per second for the chain fading in when a tether forms and out " +
+             "as it stretches into the break band. Stops tethers from popping into existence " +
+             "at full brightness on the retarget tick.")]
+    [Min(0.1f)] public float chainFadeSpeed = 4f;
+
+    [Tooltip("How fast the chain colour blends when the zone changes (higher = snappier). " +
+             "Without this the gold/orange/cyan swap is a hard cut mid-walk.")]
+    [Min(0.1f)] public float zoneColorBlendSpeed = 6f;
 
     [Header("Y-Sort (must match GrassCartoonOverlay / PlayerMovement)")]
     public float sortPrecision = 10f;
@@ -123,6 +168,12 @@ public class PlayerTowerTether : MonoBehaviour
         public TowerTetherDecayBoost nearDecayBoost; // attached to tower while in NEAR zone
         public float debugLastEnergy;         // for damage-source diagnostic
         public bool debugLastEnergyValid;
+
+        // Visual smoothing state. visualAlpha starts at 0 so a new tether fades in
+        // instead of appearing at full strength on the next retarget tick.
+        public float visualAlpha;
+        public Color displayColor;
+        public bool hasDisplayColor;
     }
 
     // Active tethers keyed by tower so we can dedupe trivially.
@@ -161,6 +212,41 @@ public class PlayerTowerTether : MonoBehaviour
     private int nearTetherCount = 0;
     private bool coreDecayHooked = false;
 
+    // Settled tether count — see tetherCountSettleSeconds. Rises instantly, falls slowly.
+    private int effectiveTetherCount = 0;
+    private int pendingCount = -1;
+    private float pendingSince;
+
+    /// The count the buff formulas use. Never the raw dictionary size.
+    private int EffectiveTetherCount => Mathf.Max(effectiveTetherCount, 0);
+
+    /// Rise-fast / fall-slow debounce. Returns true if the effective count changed.
+    private bool UpdateEffectiveCount()
+    {
+        int actual = activeTethers.Count;
+
+        if (actual == effectiveTetherCount) { pendingCount = -1; return false; }
+
+        // Gaining a tether is applied at once — a buff appearing late feels broken.
+        if (actual > effectiveTetherCount || tetherCountSettleSeconds <= 0f)
+        {
+            effectiveTetherCount = actual;
+            pendingCount = -1;
+            return true;
+        }
+
+        // Losing one has to hold steady for the settle window first.
+        if (actual != pendingCount) { pendingCount = actual; pendingSince = Time.time; }
+
+        if (Time.time - pendingSince >= tetherCountSettleSeconds)
+        {
+            effectiveTetherCount = actual;
+            pendingCount = -1;
+            return true;
+        }
+        return false;
+    }
+
     void OnDisable()
     {
         DetachAll();
@@ -173,6 +259,10 @@ public class PlayerTowerTether : MonoBehaviour
 
     void Update()
     {
+        // The boost component is shared per tower and added at runtime, so it has no
+        // inspector of its own — mirror the setting onto it each frame (a static write).
+        TowerTetherBoost.GrowRangeCollider = farBuffGrowsDetectionRange;
+
         retargetTimer -= Time.deltaTime;
         if (retargetTimer <= 0f)
         {
@@ -181,6 +271,11 @@ public class PlayerTowerTether : MonoBehaviour
         }
 
         UpdateAllTethers();
+
+        // Fold in any settled change to the tether count (a tether that dropped and
+        // stayed dropped). Rises were already applied the moment they happened.
+        if (UpdateEffectiveCount()) RecomputeAllBuffs();
+
         UpdateBulkSupply();
     }
 
@@ -211,11 +306,14 @@ public class PlayerTowerTether : MonoBehaviour
             DetachOne(t);
 
         // 2. Find candidate towers within maxTetherRange.
+        // Uses the shared Tower.ActiveTowers registry rather than FindObjectsByType,
+        // which allocated a fresh array ten times a second per player.
         scratchInRange.Clear();
-        Tower[] all = FindObjectsByType<Tower>(FindObjectsSortMode.None);
+        var all = Tower.ActiveTowers;
+        if (all == null) return;   // pruning above already ran; nothing left to scan
         foreach (var t in all)
         {
-            if (t == null || t.IsDestroyed()) continue;
+            if (t == null || !t.gameObject.activeInHierarchy || t.IsDestroyed()) continue;
             float sqr = ((Vector2)(t.transform.position - me)).sqrMagnitude;
             if (sqr <= maxSqr)
                 scratchInRange.Add(t);
@@ -263,11 +361,20 @@ public class PlayerTowerTether : MonoBehaviour
             }
 
             float dist = Vector2.Distance(me, t.transform.position);
-            TetherZone newZone = ComputeZone(dist);
+
+            // FIX: this used to call ComputeZone(dist), which returns None the instant
+            // dist exceeds maxTetherRange. That ran every frame and dropped the tether
+            // at exactly 1.0x range, so breakRangeMultiplier's hysteresis band never
+            // got a chance to hold the tether: RescanTowers would re-attach it on the
+            // next 0.1s tick, the next frame would drop it again, and walking along the
+            // edge produced a chain that flickered on a ~0.1s beat. Passing the CURRENT
+            // zone lets ComputeZone apply the break band, which is what it was for.
+            TetherZone newZone = ComputeZone(dist, at.zone);
 
             if (newZone == TetherZone.None)
             {
-                // Out of range — drop it. Rescan would also catch this, but this keeps it instant.
+                // Past the break range — drop it. Rescan would also catch this, but this
+                // keeps it instant. The chain has already faded out across the band.
                 scratchToRemove.Add(t);
                 continue;
             }
@@ -397,15 +504,114 @@ public class PlayerTowerTether : MonoBehaviour
         }
     }
 
-    private TetherZone ComputeZone(float distance)
+    /// Zone for `distance`, given the zone this tether is ALREADY in.
+    ///
+    /// Two bands of hysteresis, both driven by `current`:
+    ///
+    ///   1. CONNECT/BREAK. A tether forms at maxTetherRange but is only dropped past
+    ///      maxTetherRange x breakRangeMultiplier. Passing current == None (a tower we
+    ///      are not tethered to yet) uses the tighter connect range, so the band can't
+    ///      be used to reach further than intended.
+    ///
+    ///   2. ZONE BOUNDARIES. The band we're currently in is widened by zoneHysteresis
+    ///      on the side(s) it can be left from, so hovering on a threshold can't
+    ///      strobe the buff and the chain colour frame to frame.
+    private TetherZone ComputeZone(float distance, TetherZone current)
     {
-        if (distance > maxTetherRange) return TetherZone.None;
-        float frac = distance / maxTetherRange;
-        if (frac <= nearZoneEnd) return TetherZone.Near;
-        if (frac <= midZoneEnd) return TetherZone.Mid;
+        bool alreadyTethered = current != TetherZone.None;
+        float dropRange = alreadyTethered
+            ? maxTetherRange * Mathf.Max(1f, breakRangeMultiplier)
+            : maxTetherRange;
+
+        if (distance > dropRange) return TetherZone.None;
+
+        float frac = distance / Mathf.Max(0.0001f, maxTetherRange);
+
+        float nearEnd = nearZoneEnd;
+        float midEnd = midZoneEnd;
+        float h = Mathf.Max(0f, zoneHysteresis);
+
+        switch (current)
+        {
+            case TetherZone.Near: nearEnd += h; break;                 // harder to leave Near outward
+            case TetherZone.Mid: nearEnd -= h; midEnd += h; break;     // harder to leave Mid either way
+            case TetherZone.Far: midEnd -= h; break;                   // harder to leave Far inward
+        }
+
+        // A big hysteresis with tight thresholds could invert the boundaries.
+        if (midEnd < nearEnd) midEnd = nearEnd;
+
+        if (frac <= nearEnd) return TetherZone.Near;
+        if (frac <= midEnd) return TetherZone.Mid;
         return TetherZone.Far;
     }
 
+
+    // Diagnostics
+
+    /// Live state for one tower, for the telemetry log. False if not tethered.
+    public bool TryGetTetherState(Tower t, out string zone, out float distance, out float rangeMultiplier)
+    {
+        zone = "None"; distance = -1f; rangeMultiplier = 1f;
+        if (t == null || !activeTethers.TryGetValue(t, out var at)) return false;
+
+        zone = at.zone.ToString();
+        distance = Vector2.Distance(transform.position, t.transform.position);
+        rangeMultiplier = ComputeRangeMultiplier(EffectiveTetherCount);
+        return true;
+    }
+
+    /// One compact line of this player's tether state for the telemetry block.
+    public string TelemetryLine()
+    {
+        return $"tether: active={activeTethers.Count} effectiveCount={EffectiveTetherCount} " +
+               $"maxRange={maxTetherRange:F1} breakAt={maxTetherRange * breakRangeMultiplier:F1} " +
+               $"zones[near<={nearZoneEnd:F2} mid<={midZoneEnd:F2}] hyst={zoneHysteresis:F2} " +
+               $"FARmult=x{ComputeRangeMultiplier(EffectiveTetherCount):F3} " +
+               $"growCollider={farBuffGrowsDetectionRange}";
+    }
+
+    /// Dump the live numbers for every tether: distance, zone, the multiplier being
+    /// applied, and the tower's resulting reach. Use this rather than judging the buff
+    /// by eye — a +5% range change is smaller than the gap between two dots on the
+    /// range ring. Wire it to a key:
+    ///     if (Input.GetKeyDown(KeyCode.F10)) GetComponent<PlayerTowerTether>().LogTetherState();
+    [ContextMenu("Log Tether State")]
+    public void LogTetherState()
+    {
+        if (activeTethers.Count == 0)
+        {
+            Debug.Log($"[Tether] No active tethers (maxTetherRange={maxTetherRange}).");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"[Tether] tethers={activeTethers.Count} effectiveCount={EffectiveTetherCount} ");
+        sb.Append($"growCollider={farBuffGrowsDetectionRange}\n");
+        sb.Append($"  multipliers at this count: FAR range x{ComputeRangeMultiplier(EffectiveTetherCount):F3}, ");
+        sb.Append($"MID damage x{ComputeDamageMultiplier(EffectiveTetherCount):F3}, ");
+        sb.Append($"NEAR decay x{ComputeDecayMultiplier(EffectiveTetherCount):F3}");
+
+        Vector3 me = transform.position;
+        foreach (var kvp in activeTethers)
+        {
+            var t = kvp.Key;
+            var at = kvp.Value;
+            if (t == null) continue;
+
+            float d = Vector2.Distance(me, t.transform.position);
+            sb.Append($"\n  '{t.towerName}' dist={d:F2} ({d / Mathf.Max(0.0001f, maxTetherRange) * 100f:F0}% of range) ");
+            sb.Append($"zone={at.zone} ProjectileRange={t.ProjectileRange:F2} ");
+            sb.Append($"colliderReach={t.RangeColliderWorldRadius:F2} damage={t.GetDamage():F1}");
+
+            // The tower can only ever shoot what it DETECTS, so this is the number that
+            // decides whether the FAR buff did anything at all.
+            if (t.RangeColliderWorldRadius < t.ProjectileRange - 0.01f)
+                sb.Append("  <-- collider is SMALLER than ProjectileRange: the extra reach is dead");
+        }
+
+        Debug.Log(sb.ToString());
+    }
 
     // Attach / detach plumbing
 
@@ -426,7 +632,9 @@ public class PlayerTowerTether : MonoBehaviour
         BuildChainVisualsFor(at);
         activeTethers[tower] = at;
 
-        // Tether count just increased — re-apply existing tethers with the new count-scaled buff.
+        // Tether count just increased — rises apply immediately, so push it through now
+        // and re-apply existing tethers with the new count-scaled buff.
+        UpdateEffectiveCount();
         RecomputeAllBuffs();
     }
 
@@ -436,8 +644,10 @@ public class PlayerTowerTether : MonoBehaviour
         ReleaseTether(at);
         activeTethers.Remove(tower);
 
-        // Tether count just decreased — remaining tethers need weaker buffs.
-        RecomputeAllBuffs();
+        // Deliberately NOT recomputing here. The count only drops after
+        // tetherCountSettleSeconds of staying dropped (see UpdateEffectiveCount), so a
+        // tether that blinks out and back can't ripple a buff change through every
+        // other tower on the board.
     }
 
     private void DetachAll()
@@ -445,6 +655,9 @@ public class PlayerTowerTether : MonoBehaviour
         foreach (var kvp in activeTethers)
             ReleaseTether(kvp.Value);
         activeTethers.Clear();
+
+        effectiveTetherCount = 0;
+        pendingCount = -1;
 
         // Make sure the core decay multiplier is fully unwound even if counts got out of sync.
         if (coreDecayHooked)
@@ -496,7 +709,7 @@ public class PlayerTowerTether : MonoBehaviour
         if (wasNear && !isNear) { at.contributesToCoreDecay = false; DecrementNearCount(); }
         else if (!wasNear && isNear) { at.contributesToCoreDecay = true; IncrementNearCount(); }
 
-        int tetherCount = activeTethers.Count;
+        int tetherCount = EffectiveTetherCount;
 
         // Each tether contributes to AT MOST one boost type at a time (its current zone).
         // We Set the contribution for the new zone and Clear the boost type(s) we no longer use.
@@ -553,7 +766,7 @@ public class PlayerTowerTether : MonoBehaviour
     private void RecomputeAllBuffs()
     {
         if (activeTethers.Count == 0) return;
-        int count = activeTethers.Count;
+        int count = EffectiveTetherCount;
 
         foreach (var kvp in activeTethers)
         {
@@ -667,34 +880,44 @@ public class PlayerTowerTether : MonoBehaviour
         // Per-tether phase offset so multiple tethers don't pulse / wobble in lockstep.
         float phase = at.tower.GetInstanceID() * 0.37f;
 
-        // Choose colors: while bulk-supplying, override with electric-blue supply color.
-        Color baseTint, glowTint;
-        float widthMul;
+        // ── Edge fade ───────────────────────────────────────────────────────
+        // Full strength inside maxTetherRange, ramping to zero across the break band.
+        // Together with visualAlpha starting at 0, both ends of a tether's life are a
+        // fade rather than a pop: forming one eases in over a few frames, and one
+        // about to break dims out as you walk away instead of cutting mid-stride.
+        float dist = Vector2.Distance(transform.position, at.tower.transform.position);
+        float breakRange = maxTetherRange * Mathf.Max(1f, breakRangeMultiplier);
+        float edge = breakRange > maxTetherRange + 0.001f
+            ? Mathf.Clamp01(Mathf.InverseLerp(breakRange, maxTetherRange, dist))
+            : 1f;
+        at.visualAlpha = Mathf.MoveTowards(at.visualAlpha, edge, chainFadeSpeed * Time.deltaTime);
 
-        if (isBulkSupplying)
+        // ── Colour ──────────────────────────────────────────────────────────
+        // Blended toward the zone's colour instead of assigned, so crossing a zone
+        // boundary reads as the chain shifting hue over ~0.2s rather than a hard cut.
+        Color zoneColor = at.zone switch
         {
-            // Strong pulse during supply — energetic feel.
-            float supplyPulse = 0.7f + Mathf.Sin(Time.time * 8f + phase) * 0.3f;
-            baseTint = supplyColor;
-            baseTint.a = supplyColor.a * supplyPulse;
-            glowTint = supplyColor;
-            glowTint.a = supplyColor.a * 0.5f * supplyPulse;
-            widthMul = supplyWidthMultiplier;
-        }
-        else
-        {
-            Color zoneColor = at.zone switch
-            {
-                TetherZone.Far => farColor,
-                TetherZone.Mid => midColor,
-                TetherZone.Near => nearColor,
-                _ => Color.white,
-            };
-            float pulse = 0.85f + Mathf.Sin(Time.time * 4f + phase) * 0.15f;
-            baseTint = zoneColor; baseTint.a = zoneColor.a * pulse;
-            glowTint = zoneColor; glowTint.a = zoneColor.a * 0.45f * pulse;
-            widthMul = 1f;
-        }
+            TetherZone.Far => farColor,
+            TetherZone.Mid => midColor,
+            TetherZone.Near => nearColor,
+            _ => Color.white,
+        };
+        Color targetColor = isBulkSupplying ? supplyColor : zoneColor;
+
+        if (!at.hasDisplayColor) { at.displayColor = targetColor; at.hasDisplayColor = true; }
+        // Exponential blend: frame-rate independent, unlike a raw Lerp with a fixed t.
+        at.displayColor = Color.Lerp(at.displayColor, targetColor,
+                                     1f - Mathf.Exp(-zoneColorBlendSpeed * Time.deltaTime));
+
+        float pulse = isBulkSupplying
+            ? 0.7f + Mathf.Sin(Time.time * 8f + phase) * 0.3f    // strong pulse during supply
+            : 0.85f + Mathf.Sin(Time.time * 4f + phase) * 0.15f;
+        float widthMul = isBulkSupplying ? supplyWidthMultiplier : 1f;
+        float glowFactor = isBulkSupplying ? 0.5f : 0.45f;
+
+        Color tint = at.displayColor;
+        Color baseTint = tint; baseTint.a = tint.a * pulse * at.visualAlpha;
+        Color glowTint = tint; glowTint.a = tint.a * glowFactor * pulse * at.visualAlpha;
 
         // Set start/end colors.
         at.chainBase.startColor = baseTint;
@@ -841,6 +1064,10 @@ public class PlayerTowerTether : MonoBehaviour
 /// the last contributor leaves (then the component self-destructs). This is what lets two
 /// players' tether buffs STACK correctly on the same tower instead of clobbering each other.
 /// Single player (one contributor) is byte-identical to the old snapshot/apply behavior.
+// Runs its re-apply pass BEFORE other LateUpdates (TowerRangeIndicator is at the
+// default 0), so by the time anything reads ProjectileRange in the same frame, an
+// external overwrite has already been corrected.
+[DefaultExecutionOrder(-100)]
 public class TowerTetherBoost : MonoBehaviour
 {
     private Tower tower;
@@ -851,14 +1078,123 @@ public class TowerTetherBoost : MonoBehaviour
     private float baseProjectileRange;
     private bool hasBaseRange;
 
+    // The trigger radius that went with baseProjectileRange. Scaled by the same product
+    // so the buff actually extends what the tower can DETECT, not just what it filters.
+    private float baseColliderWorldRadius;
+
+    /// Mirrored from PlayerTowerTether.farBuffGrowsDetectionRange.
+    public static bool GrowRangeCollider = true;
+
+    /// Log whenever an external system overwrites a stat we are buffing. Leave on while
+    /// hunting down whatever is writing Tower.range.
+    public static bool LogAdoptions = true;
+
     // Per-contributor multipliers. A given tether contributes EITHER damage OR range,
     // depending on its current zone — never both at once.
     private readonly Dictionary<object, float> damageContribs = new Dictionary<object, float>();
     private readonly Dictionary<object, float> rangeContribs = new Dictionary<object, float>();
 
-    // Cached reflection handle for the private ProjectileRange setter (see TrySetProjectileRange).
+    // Cached reflection handles for Tower's private range plumbing.
     private static System.Reflection.MethodInfo s_projectileRangeSetter;
     private static bool s_projectileRangeReflectionInit;
+    private static System.Reflection.MethodInfo s_colliderRadiusSetter;
+    private static bool s_colliderReflectionInit;
+
+    // Last values WE wrote. Anything else on the tower is an external writer.
+    private float lastAppliedDamage;
+    private float lastAppliedRange;
+    private bool hasAppliedDamage;
+    private bool hasAppliedRange;
+
+    /// EXTERNAL-WRITER DETECTION. This is what made the buff behave erratically.
+    ///
+    /// Tower.range is a PROPERTY whose setter does `ProjectileRange = _range` — note it
+    /// assigns the RAW range, while SetupTower assigns
+    /// `max(range * 2, tentacleReach * 3.5, 6)`. So anything that touches tower.range
+    /// (an augment, the JSON config reload, SetupTower2 on a rebuild) both wipes our
+    /// buff AND can roughly halve ProjectileRange outright.
+    ///
+    /// Worse, `baseProjectileRange` was captured once and trusted forever. If an
+    /// external write landed while a contribution was live, the captured base no longer
+    /// matched reality, and when the last contributor left we "restored" a number that
+    /// was never the tower's true base — the range ratcheted. That is exactly the
+    /// "sometimes the range changes, sometimes it doesn't" symptom. Nothing is cached in
+    /// Unity; the stale base lived in this component.
+    ///
+    /// Now: if the live value drifts from what we last wrote, adopt it as the new base
+    /// and re-apply our product on top. Composes with every other writer instead of
+    /// fighting them.
+    void LateUpdate()
+    {
+        // Nothing applied = nothing to defend against an external writer.
+        if (!hasAppliedDamage && !hasAppliedRange) return;
+        if (tower == null) { tower = GetComponent<Tower>(); if (tower == null) return; }
+        if (tower.IsDestroyed()) return;
+
+        bool reapply = false;
+
+        if (hasBaseDamage && hasAppliedDamage &&
+            Mathf.Abs(tower.GetDamage() - lastAppliedDamage) > 0.0001f)
+        {
+            // Adopt the observed value AS THE NEW BASE — do not divide our multiplier out.
+            // See the note below: external writers write unbuffed numbers.
+            if (LogAdoptions)
+                Debug.Log($"[Tether] '{tower.towerName}' damage changed externally " +
+                          $"{lastAppliedDamage:F2} -> {tower.GetDamage():F2}; adopting as new base.");
+            baseDamage = tower.GetDamage();
+            reapply = true;
+        }
+
+        if (hasBaseRange && hasAppliedRange &&
+            Mathf.Abs(tower.ProjectileRange - lastAppliedRange) > 0.0001f)
+        {
+            // FIX (the downward ratchet): this used to do `base = observed / ourMultiplier`,
+            // which assumes the external writer's number already contained our buff. It
+            // never does. Tower.range's setter writes a RAW value and SetupTower re-derives
+            // one, both unaware that any buff exists.
+            //
+            // With a x1.2 buff live, an external write of 5.0 gave base = 4.167, we then
+            // re-applied 4.167 x 1.2 = 5.0 (so the buff silently did nothing), and when the
+            // tether finally released we "restored" 4.167 — permanently shrinking the tower.
+            // Repeat per pass and the range walks downward: 10 -> 5 -> 4.167 -> 3.571.
+            if (LogAdoptions)
+                Debug.Log($"[Tether] '{tower.towerName}' ProjectileRange changed externally " +
+                          $"{lastAppliedRange:F3} -> {tower.ProjectileRange:F3}; adopting as new base " +
+                          $"(our multiplier x{ProductOf(rangeContribs):F3} will be re-applied on top).");
+
+            baseProjectileRange = tower.ProjectileRange;
+
+            // The same writer resized the collider, so re-capture that too or we would
+            // scale a stale radius.
+            baseColliderWorldRadius = tower.RangeColliderWorldRadius;
+            reapply = true;
+        }
+
+        if (reapply) Recompute();
+    }
+
+    private static float ProductOf(Dictionary<object, float> d)
+    {
+        float p = 1f;
+        foreach (var kv in d) p *= kv.Value;
+        return p;
+    }
+
+    // ── Read-only diagnostics ───────────────────────────────────────────────
+    // So TowerRangeIndicator (and any future HUD) can say WHY a tower's range moved
+    // instead of just reporting that it did.
+
+    /// Combined range multiplier currently applied by all contributors. 1 = none.
+    public float RangeMultiplier => rangeContribs.Count > 0 ? ProductOf(rangeContribs) : 1f;
+
+    /// Combined damage multiplier currently applied by all contributors. 1 = none.
+    public float DamageMultiplier => damageContribs.Count > 0 ? ProductOf(damageContribs) : 1f;
+
+    /// The tower's unbuffed ProjectileRange, or -1 when we hold no range contribution.
+    public float BaseProjectileRange => hasBaseRange ? baseProjectileRange : -1f;
+
+    public int RangeContributorCount => rangeContribs.Count;
+    public int DamageContributorCount => damageContribs.Count;
 
     /// Get the single shared boost for a tower, creating it if absent. NEVER destroys an
     /// existing one — that would wipe another player's contribution.
@@ -911,14 +1247,15 @@ public class TowerTetherBoost : MonoBehaviour
         if (damageContribs.Count > 0)
         {
             if (!hasBaseDamage) { baseDamage = tower.GetDamage(); hasBaseDamage = true; }
-            float p = 1f;
-            foreach (var kv in damageContribs) p *= kv.Value;
-            if (alive) tower.SetDamage(baseDamage * Mathf.Max(0f, p));
+            float p = ProductOf(damageContribs);
+            float want = baseDamage * Mathf.Max(0f, p);
+            if (alive) { tower.SetDamage(want); lastAppliedDamage = want; hasAppliedDamage = true; }
         }
         else if (hasBaseDamage)
         {
             if (alive) tower.SetDamage(baseDamage);
             hasBaseDamage = false;
+            hasAppliedDamage = false;
         }
 
         // RANGE = trueBase × product(contribs). ProjectileRange only — never the physical
@@ -926,14 +1263,36 @@ public class TowerTetherBoost : MonoBehaviour
         if (rangeContribs.Count > 0)
         {
             if (!hasBaseRange) { baseProjectileRange = tower.ProjectileRange; hasBaseRange = true; }
-            float p = 1f;
-            foreach (var kv in rangeContribs) p *= kv.Value;
-            if (alive) TrySetProjectileRange(tower, baseProjectileRange * Mathf.Max(0.01f, p));
+            if (baseColliderWorldRadius <= 0f) baseColliderWorldRadius = tower.RangeColliderWorldRadius;
+
+            float p = Mathf.Max(0.01f, ProductOf(rangeContribs));
+            float want = baseProjectileRange * p;
+            if (alive)
+            {
+                TrySetProjectileRange(tower, want);
+                lastAppliedRange = want;
+                hasAppliedRange = true;
+
+                // Scale the detection trigger by the same factor, preserving whatever
+                // margin the tower type was set up with (standard towers get +0.5,
+                // generators/heal get none). Tower.ApplyRangeColliderRadius forces a
+                // re-sweep, so enemies already standing in the new band are picked up
+                // rather than waiting for a fresh OnTriggerEnter2D that will never come.
+                if (GrowRangeCollider && baseColliderWorldRadius > 0f)
+                    TrySetColliderWorldRadius(tower, baseColliderWorldRadius * p);
+            }
         }
         else if (hasBaseRange)
         {
-            if (alive) TrySetProjectileRange(tower, baseProjectileRange);
+            if (alive)
+            {
+                TrySetProjectileRange(tower, baseProjectileRange);
+                if (GrowRangeCollider && baseColliderWorldRadius > 0f)
+                    TrySetColliderWorldRadius(tower, baseColliderWorldRadius);
+            }
             hasBaseRange = false;
+            hasAppliedRange = false;
+            baseColliderWorldRadius = 0f;
         }
     }
 
@@ -948,9 +1307,17 @@ public class TowerTetherBoost : MonoBehaviour
         }
         if (hasBaseRange)
         {
-            if (alive) TrySetProjectileRange(tower, baseProjectileRange);
+            if (alive)
+            {
+                TrySetProjectileRange(tower, baseProjectileRange);
+                if (GrowRangeCollider && baseColliderWorldRadius > 0f)
+                    TrySetColliderWorldRadius(tower, baseColliderWorldRadius);
+            }
             hasBaseRange = false;
         }
+        baseColliderWorldRadius = 0f;
+        hasAppliedDamage = false;
+        hasAppliedRange = false;
         damageContribs.Clear();
         rangeContribs.Clear();
     }
@@ -962,6 +1329,33 @@ public class TowerTetherBoost : MonoBehaviour
     // because queriesHitTriggers defaults to true) hit the enlarged trigger zones of distant
     // tethered towers, causing them to take damage they shouldn't. Tower.IsValidTarget reads
     // ProjectileRange, so scaling it alone is a real but world-safe FAR-zone buff.
+
+    /// Set the tower's detection trigger from a WORLD radius. Tower's own
+    /// SetRangeColliderWorldRadius is private, and it is the ONLY correct way to do this:
+    /// CircleCollider2D.radius is local-space, and tower prefabs are authored at scale
+    /// 0.25, so writing .radius directly would give a trigger a quarter of the intended
+    /// size (the exact bug documented above Tower.SetRangeColliderWorldRadius).
+    private static void TrySetColliderWorldRadius(Tower tower, float worldRadius)
+    {
+        if (!s_colliderReflectionInit)
+        {
+            s_colliderRadiusSetter = typeof(Tower).GetMethod(
+                "SetRangeColliderWorldRadius",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            s_colliderReflectionInit = true;
+
+            if (s_colliderRadiusSetter == null)
+                Debug.LogWarning("[Tether] Tower.SetRangeColliderWorldRadius not found — the " +
+                                 "FAR range buff will be cosmetic only.");
+        }
+
+        if (s_colliderRadiusSetter == null) return;
+        try { s_colliderRadiusSetter.Invoke(tower, new object[] { worldRadius }); }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[Tether] Failed to set the range collider: {e.Message}");
+        }
+    }
 
     /// Set Tower.ProjectileRange via reflection (its setter is private).
     private static void TrySetProjectileRange(Tower tower, float value)
@@ -1056,4 +1450,7 @@ public static class TetherMath
     public static float DecayMultiplier(int count, float reductionPerTether)
         => Mathf.Clamp01(1f - reductionPerTether * Mathf.Max(0, count));
 }
+
+
+
 

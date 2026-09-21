@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{ebcf2c3c-4861-4cfe-93d9-b58167a6f195}">
 		<property name="volume">
-			<value>-30</value>
+			<value>-23.5</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{70aecbae-759b-45b9-9909-5082f22ebd94}</destination>
@@ -99,6 +99,8 @@
 	<object class="MixerBusEffectChain" id="{70aecbae-759b-45b9-9909-5082f22ebd94}">
 		<relationship name="effects">
 			<destination>{15af0cf9-444c-41fe-9dd6-26b5cd3f68ea}</destination>
+			<destination>{9f8d40da-8ddb-4d2a-af6c-caaf2381080b}</destination>
+			<destination>{8d7b56c5-b8d8-4c25-9827-d85d3792a34e}</destination>
 			<destination>{4c9ad8e5-9423-4d71-af81-378127e95d6e}</destination>
 			<destination>{292d231c-8a34-46c9-ab0d-fe19df43076b}</destination>
 			<destination>{0b701afa-2628-4f45-a169-b5d5b2c6c89a}</destination>
@@ -111,10 +113,10 @@
 			<value>2.5</value>
 		</property>
 		<property name="volume">
-			<value>-7</value>
+			<value>-6.5</value>
 		</property>
 		<property name="pitch">
-			<value>-1.20000005</value>
+			<value>-3</value>
 		</property>
 		<relationship name="sounds">
 			<destination>{80c75ea4-034c-44c6-925f-9f779fc5de2a}</destination>
@@ -123,6 +125,31 @@
 	</object>
 	<object class="MixerBusFader" id="{222eaa42-27b8-433a-bcd3-6319aeb0d3b4}" />
 	<object class="MixerBusFader" id="{15af0cf9-444c-41fe-9dd6-26b5cd3f68ea}" />
+	<object class="DelayEffect" id="{9f8d40da-8ddb-4d2a-af6c-caaf2381080b}">
+		<property name="delay">
+			<value>30</value>
+		</property>
+		<property name="feedback">
+			<value>44</value>
+		</property>
+		<property name="level">
+			<value>-11.5</value>
+		</property>
+		<property name="dryLevel">
+			<value>-25.5</value>
+		</property>
+	</object>
+	<object class="SFXReverbEffect" id="{8d7b56c5-b8d8-4c25-9827-d85d3792a34e}">
+		<property name="decayTime">
+			<value>550</value>
+		</property>
+		<property name="lateDelay">
+			<value>19</value>
+		</property>
+		<property name="HFDecayRatio">
+			<value>80</value>
+		</property>
+	</object>
 	<object class="FlangerEffect" id="{4c9ad8e5-9423-4d71-af81-378127e95d6e}">
 		<property name="delay">
 			<value>0.789999962</value>

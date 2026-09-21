@@ -5,7 +5,7 @@ using System.Collections;
 // Melee attacks and movement are handled by EnemyController.
 // Melee hit timing is driven by EnemyData.hitFrame through the unified system.
 
-public class Boss1 : BaseBossStats //, IDamageable
+public class Boss1 : BaseBossStats, ISpritePrewarm //, IDamageable
 {
     [Header("Boss Collider")]
     [SerializeField] private float bossColliderRadius = 4f;
@@ -53,6 +53,11 @@ public class Boss1 : BaseBossStats //, IDamageable
     [SerializeField] private float laserFireDuration = 1.0f;
     [SerializeField] private float laserCooldown = 6f;
     [SerializeField] private Vector2 laserSpawnLocalOffset = new Vector2(0f, 0f);
+    [Tooltip("Laser beam frames as DIRECT references. When set, laserSpritePath is " +
+             "ignored — this is what lets the art leave Resources/.")]
+    [SerializeField] private Sprite[] laserSpriteFrames;
+
+    [Tooltip("DEPRECATED fallback — used only when Laser Sprite Frames is empty.")]
     [SerializeField] private string laserSpritePath = "Sprites/EnemySprites/LaserBeam";
     [SerializeField] private float laserBeamStartFraction = 0.1056f;
     [SerializeField] private LayerMask laserTargetLayers;
@@ -132,6 +137,10 @@ public class Boss1 : BaseBossStats //, IDamageable
     [SerializeField] private bool spawnDetachableHead = true;
     [SerializeField] private float headSpawnMinDistance = 10f;
     [SerializeField] private float headSpawnMaxDistance = 20f;
+    [Tooltip("Boss head as a DIRECT reference. When set, headSpritePath is ignored.")]
+    [SerializeField] private Sprite headSpriteAsset;
+
+    [Tooltip("DEPRECATED fallback — used only when Head Sprite Asset is empty.")]
     [SerializeField] private string headSpritePath = "Sprites/EnemySprites/Boss1/boss1_head_sprite";
     [SerializeField] private float headMapBoundsMin = -45f;
     [SerializeField] private float headMapBoundsMax = 45f;
@@ -199,8 +208,20 @@ public class Boss1 : BaseBossStats //, IDamageable
 
     protected override void Awake()
     {
-        maxArmor = bossMaxArmor;
+        // EnemyData is the source of truth when assigned (same contract as Boss2-5);
+        // the serialized bossMax* fields are only the fallback when it is not.
+        maxArmor = enemyData != null ? enemyData.maxArmor : bossMaxArmor;
         maxHealth = enemyData != null ? enemyData.maxHealth : bossMaxHealth;
+
+        // No EnemyData asset: EnemyStats.Awake skips its whole init block (including
+        // `currentHealth = maxHealth`), so seed it here or the boss spawns on
+        // CharacterStats' serialized default of 100 HP regardless of bossMaxHealth
+        // and dies almost instantly. Boss3 already did this; Boss1/Boss2 did not.
+        // When enemyData IS assigned this is skipped and base.Awake() owns the value,
+        // exactly as before.
+        if (enemyData == null)
+            currentHealth = maxHealth;
+
         base.Awake();
 
         if (laserTargetLayers == 0)
@@ -332,9 +353,44 @@ public class Boss1 : BaseBossStats //, IDamageable
         float xOff = (bossSprite != null && bossSprite.flipX) ? -healthBarXOffset : healthBarXOffset;
         HealthBar.SetOffset(new Vector3(xOff, healthBarYOffset, 0f));
     }
+
+    // ISpritePrewarm. Almost everything this used to do is now unnecessary: the laser
+    // frames and the head sprite are DIRECT references (laserSpriteFrames /
+    // headSpriteAsset) that Unity loads with the scene, and the body folder is
+    // EnemyData.frames. EnemyAnimationController.LoadFolderCached no longer exists.
+    //
+    // The method is kept because Boss1 still implements ISpritePrewarm and the
+    // orchestrator still calls it — and because the legacy path fallbacks are still
+    // wired for any prefab that has not been given direct references yet.
+    public void PrewarmSpriteFolders()
+    {
+        bool laserMigrated = laserSpriteFrames != null && laserSpriteFrames.Length > 0;
+        bool headMigrated = headSpriteAsset != null;
+
+        if (!laserMigrated && !string.IsNullOrEmpty(laserSpritePath))
+            Resources.LoadAll<Sprite>(laserSpritePath);          // InitializeLaser()'s load is then warm
+        if (!headMigrated && spawnDetachableHead && !string.IsNullOrEmpty(headSpritePath))
+            Resources.Load<Sprite>(headSpritePath);              // SpawnBossHead()'s load is then warm
+
+        // The EnemyData body folder needs nothing: migrated assets hold direct Sprite[]
+        // references, and the Resources loader that warmed the legacy path is gone.
+    }
+
     private void InitializeLaser()
     {
-        laserSprites = Resources.LoadAll<Sprite>(laserSpritePath);
+        // Prefer direct references; fall back to Resources for unmigrated prefabs.
+        if (laserSpriteFrames != null && laserSpriteFrames.Length > 0)
+        {
+            laserSprites = laserSpriteFrames;
+        }
+        else
+        {
+            laserSprites = Resources.LoadAll<Sprite>(laserSpritePath);
+            if (laserSprites != null && laserSprites.Length > 0)
+                Debug.LogWarning($"[Boss1] Laser frames still loading from Resources " +
+                                 $"('{laserSpritePath}'). Assign Laser Sprite Frames on the prefab " +
+                                 "so this art can leave Resources/.");
+        }
 
         if (laserSprites == null || laserSprites.Length < 63)
         {
@@ -726,12 +782,30 @@ public class Boss1 : BaseBossStats //, IDamageable
         // Reset to idle frame 0 BEFORE disabling animController or calling VFX
         if (bossSprite != null && enemyData != null)
         {
-            var allSprites = Resources.LoadAll<Sprite>(enemyData.spriteFolderPath);
-            if (allSprites != null && allSprites.Length > 0)
+            // FIX: this used to call Resources.LoadAll<Sprite>(enemyData.spriteFolderPath)
+            // and re-sort the ENTIRE folder just to pick one frame — a synchronous disk
+            // read fired during the boss-kill freeze, the worst possible moment for it.
+            // It also read spriteFolderPath directly, bypassing EnemyAnimationController,
+            // so it would have silently stopped working (boss frozen on its death frame,
+            // no error) the moment the sprites moved out of Resources.
+            // The animator already holds the resolved frames.
+            Sprite idleFrame = animController != null
+                ? animController.GetFrame(enemyData.idle.startFrame)
+                : null;
+
+            if (idleFrame == null && !string.IsNullOrEmpty(enemyData.spriteFolderPath))
             {
-                System.Array.Sort(allSprites, (a, b) => a.name.CompareTo(b.name));
-                bossSprite.sprite = allSprites[enemyData.idle.startFrame];
+                // Legacy fallback for an unmigrated asset whose animator never ran.
+                var allSprites = Resources.LoadAll<Sprite>(enemyData.spriteFolderPath);
+                if (allSprites != null && allSprites.Length > 0)
+                {
+                    System.Array.Sort(allSprites, (a, b) => string.CompareOrdinal(a.name, b.name));
+                    if (enemyData.idle.startFrame < allSprites.Length)
+                        idleFrame = allSprites[enemyData.idle.startFrame];
+                }
             }
+
+            if (idleFrame != null) bossSprite.sprite = idleFrame;
         }
         // Destroy health bar
         if (HealthBar != null)
@@ -781,8 +855,21 @@ public class Boss1 : BaseBossStats //, IDamageable
         // Roll for a permanent weapon/tool blueprint drop
         RollBlueprintDrop(deathPos);
 
-        if (EnergyManager.Instance != null)
-            EnergyManager.Instance.OnEnemyKilled(gameObject);
+        // Shared death book-keeping. This used to be a bare EnergyManager call, which
+        // meant a boss killed by a tower paid NO augment-335 tithe and left a stale
+        // TowerKillAttribution entry behind. FireCommonDeathHooks runs the exact same
+        // sequence EnemyStats.PerformDeath uses (wave counter -> tithe -> EnergyManager
+        // -> attribution cleanup) and still raises OnEnemyKilledEvent, so lifesteal and
+        // health-on-kill behave exactly as before.
+        //
+        // The wave-counter notify balances the enemiesAlive++ that
+        // WaveSpawner.SpawnEnemyPublic did when GameOrchestrator.SpawnBoss spawned us.
+        // Orchestrator mode never reads that counter, so this changes nothing there; it
+        // stops a boss placed in a plain WaveConfig from soft-locking standalone mode.
+        //
+        // NOTE: drops are deliberately NOT routed through the hook — this boss already
+        // spawns its own reward ring above, and adding the standard roll would double it.
+        EnemyStats.FireCommonDeathHooks(gameObject);
 
         if (spawnedHead != null && spawnedHead.gameObject != null)
         {
@@ -798,6 +885,13 @@ public class Boss1 : BaseBossStats //, IDamageable
                 if (AudioManager.instance != null && FMODEvents.instance != null)
                     AudioManager.instance.PlayOneShot(FMODEvents.instance.towerDeath, deathPos);
             });
+
+        // Guaranteed teardown if the VFX above never finishes. Bosses never reach
+        // CharacterStats.Die() -> Destroy(gameObject), so a failed VFX would leave this
+        // object alive forever and GameOrchestrator.WaitForBossDead() would spin on it
+        // for the rest of the session. Fires well after the VFX should have completed,
+        // so the normal death path is untouched.
+        ScheduleDeathFailsafe(disintegrationDuration);
     }
 
 
@@ -897,7 +991,13 @@ public class Boss1 : BaseBossStats //, IDamageable
 
     private void SpawnBossHead()
     {
-        Sprite headSprite = Resources.Load<Sprite>(headSpritePath);
+        Sprite headSprite = headSpriteAsset != null
+            ? headSpriteAsset
+            : Resources.Load<Sprite>(headSpritePath);
+
+        if (headSpriteAsset == null && headSprite != null)
+            Debug.LogWarning($"[Boss1] Head sprite still loading from Resources " +
+                             $"('{headSpritePath}'). Assign Head Sprite Asset on the prefab.");
         if (headSprite == null)
         {
             Debug.LogError($"Boss1: Head sprite not found at {headSpritePath}");
@@ -989,6 +1089,13 @@ public class Boss1 : BaseBossStats //, IDamageable
 
     private void TryLaser()
     {
+        // Don't start an attack during the boss-intro zoom. The intro freezes gameplay
+        // (Time.timeScale = 0), but FMOD ignores timeScale — so starting the laser here
+        // fires the charge SOUND on the real audio clock immediately while the charge
+        // ANIMATION (scaled WaitForSeconds) stays frozen until the cinematic ends. That's
+        // the "laser sound now, animation seconds later" desync. Wait for the zoom to finish.
+        if (BossZoomController.CinematicActive) return;
+
         // Second line of defence: TryLaser() is also the entry point any future
         // caller would use, so re-check here rather than trusting Update() alone.
         if (IsMeleeAttackInProgress()) return;
@@ -1415,6 +1522,14 @@ public class Boss1 : BaseBossStats //, IDamageable
         {
             if (ShieldBlockHelper.TryBlock(gameObject, target)) return;
             stats.TakeDamage(damage);
+
+            // Fire the player-side on-hit augments (Damage Reflection / Ice Armor).
+            // These used to live ONLY in EnemyController.ApplyDamageToTarget, so the
+            // laser — which never touches EnemyController — reflected nothing. No-op
+            // for non-player targets and for players without the augments. Called
+            // AFTER TakeDamage and only when the hit was not blocked, so the reflected
+            // fraction matches damage the player actually received.
+            EnemyController.NotifyCharacterDamaged(stats, damage, gameObject);
             return;
         }
         var consumer = target.GetComponent<IEnergyConsumer>();
@@ -1477,7 +1592,12 @@ public class Boss1 : BaseBossStats //, IDamageable
 
     // CLEANUP
 
-    private void OnDestroy()
+    // OVERRIDE (was a private declaration that HID EnemyStats.OnDestroy).
+    // Unity dispatches only the most-derived OnDestroy, so while this was private
+    // the boss never unregistered from EnemyStatModifierManager and never released
+    // its damage-flash material. base.OnDestroy() is called LAST so this class's
+    // own teardown runs first, exactly as it did before.
+    protected override void OnDestroy()
     {
         CleanupLaserNightLights();
         if (laserObject != null) Destroy(laserObject);
@@ -1493,6 +1613,8 @@ public class Boss1 : BaseBossStats //, IDamageable
         isPerformingLaserAttack = false;
         if (laserRenderer != null) laserRenderer.enabled = false;
         SetChargeTelegraphActive(false);
+
+        base.OnDestroy();
     }
 
 
@@ -1646,3 +1768,5 @@ public class Boss1 : BaseBossStats //, IDamageable
     }
 #endif
 }
+
+

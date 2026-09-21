@@ -224,8 +224,9 @@ public class ImprovedAssetChecker
 
             if (weapon != null && weapon.name == assetName)
             {
-                // Only require projectile prefab for ranged weapons that aren't grappling hooks
-                return weapon.isRanged && !weapon.isGrapplingHook;
+                // Only require projectile prefab for ranged weapons that aren't grappling hooks.
+                // Boomerangs are also exempt: Weapon.ShootBoomerang builds the projectile in code.
+                return weapon.isRanged && !weapon.isGrapplingHook && !weapon.isBoomerang;
             }
         }
 
@@ -248,7 +249,7 @@ public class ImprovedAssetChecker
             if (weapon == null) continue;
 
             // Check weapon-specific issues
-            if (weapon.isRanged && !weapon.isGrapplingHook && weapon.projectilePrefab == null)
+            if (weapon.isRanged && !weapon.isGrapplingHook && !weapon.isBoomerang && weapon.projectilePrefab == null)
             {
                 Debug.LogError($"Ranged weapon '{weapon.name}' missing projectile prefab!", weapon);
             }
@@ -270,3 +271,5 @@ public class ImprovedAssetChecker
     }
 }
 #endif
+
+

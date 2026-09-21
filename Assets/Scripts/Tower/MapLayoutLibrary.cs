@@ -41,7 +41,7 @@ public class MapLayoutLibrary : ScriptableObject
     [Tooltip("If non-empty, PickRandom() always returns the layout whose\n" +
              "layoutName matches this string (case-insensitive). Use to test a\n" +
              "specific layout in isolation. Leave empty for normal random pick.\n" +
-             "Examples: 'Stonehenge', 'Twin Moons', 'Orbital Dance'.")]
+             "Examples: 'Stonehenge', 'Broken Crown', 'The Ford', 'Crescent Bastion'.")]
     public string forcedLayoutName = "";
 
     // Cached resolved list (built-ins + user layouts), built lazily.
@@ -51,8 +51,24 @@ public class MapLayoutLibrary : ScriptableObject
     // Returns the active layout list, generating built-ins on first call if the user list is empty and useBuiltinLayouts is true.
     public List<MapLayoutDefinition> GetLayouts()
     {
+        // FIX: the built-in layouts are ScriptableObject.CreateInstance objects created
+        // at RUNTIME. They are destroyed when Play mode exits, but this library is a
+        // PROJECT ASSET that stays loaded, so `resolvedLayouts` survived holding a list
+        // of destroyed objects. The old `Count > 0` check happily returned them, and the
+        // second Play session of an editor run picked a dead layout — ApplyLayout then
+        // built the default rings (or threw) instead of the intended map.
+        // Unity's overloaded == reports a destroyed object as null, so this detects it.
         if (resolvedLayouts != null && resolvedLayouts.Count > 0)
-            return resolvedLayouts;
+        {
+            bool stale = false;
+            for (int i = 0; i < resolvedLayouts.Count; i++)
+                if (resolvedLayouts[i] == null) { stale = true; break; }
+
+            if (!stale) return resolvedLayouts;
+
+            Debug.Log("[MapLayoutLibrary] Cached layouts were destroyed (Play-mode exit) — re-resolving.");
+            resolvedLayouts = null;
+        }
 
         resolvedLayouts = new List<MapLayoutDefinition>();
 
@@ -99,20 +115,39 @@ public class MapLayoutLibrary : ScriptableObject
         }
 
         var pool = new List<MapLayoutDefinition>(list);
+        pool.RemoveAll(l => l == null);
+        if (pool.Count == 0) return null;
 
         if (avoidRepeatLayouts && alreadyUsed != null && alreadyUsed.Count > 0)
         {
             pool.RemoveAll(l => alreadyUsed.Contains(l));
 
-            // If we've exhausted the pool, refill (mirrors RunConfig biome logic)
+            // If we've exhausted the pool, refill (mirrors RunConfig biome logic).
+            // FIX: the plain refill allowed the layout used most recently to come up
+            // AGAIN immediately, which reads as a bug to the player ("it didn't change").
+            // Exclude just the last-used one when the refilled pool is big enough.
             if (pool.Count == 0)
+            {
                 pool = new List<MapLayoutDefinition>(list);
+                pool.RemoveAll(l => l == null);
+
+                var last = alreadyUsed[alreadyUsed.Count - 1];
+                if (pool.Count > 1 && last != null) pool.Remove(last);
+            }
         }
 
+        if (pool.Count == 0) return null;
         return pool[Random.Range(0, pool.Count)];
     }
 
     // Case-insensitive name lookup against the resolved pool.
+    //
+    // FIX: GetLayouts() only auto-adds the built-ins when the user `layouts`
+    // list is EMPTY. So the moment you assigned a single custom layout asset,
+    // forcedLayoutName could no longer find any built-in by name — it fell
+    // through to "didn't match any layout" and picked at random, which looks
+    // exactly like the force-select being broken. Fall back to the built-in
+    // table directly so a forced name always resolves, whatever is in `layouts`.
     public MapLayoutDefinition FindLayoutByName(string name)
     {
         if (string.IsNullOrEmpty(name)) return null;
@@ -123,7 +158,14 @@ public class MapLayoutLibrary : ScriptableObject
             if (string.Equals(l.layoutName, name, System.StringComparison.OrdinalIgnoreCase))
                 return l;
         }
-        return null;
+
+        var builtin = MapLayoutExamplesLookup.FindByName(name);
+        if (builtin != null)
+        {
+            Debug.Log($"[MapLayoutLibrary] '{name}' isn't in the resolved pool — " +
+                      "using the built-in layout of that name.");
+        }
+        return builtin;
     }
 
     // Force a re-resolve next time GetLayouts() is called. Useful after editing user layouts in the inspector mid-play.
@@ -159,9 +201,15 @@ public class MapLayoutLibrary : ScriptableObject
     [ContextMenu("Force: Asteroid Belt")] private void _F4() { forcedLayoutName = "Asteroid Belt"; LogForced(); }
     [ContextMenu("Force: Pinwheel")] private void _F6() { forcedLayoutName = "Pinwheel"; LogForced(); }
 
+    // Asymmetric layouts — the core is exposed from one flank.
+    [ContextMenu("Force: Broken Crown")] private void _F7() { forcedLayoutName = "Broken Crown"; LogForced(); }
+    [ContextMenu("Force: The Ford")] private void _F8() { forcedLayoutName = "The Ford"; LogForced(); }
+    [ContextMenu("Force: Crescent Bastion")] private void _F9() { forcedLayoutName = "Crescent Bastion"; LogForced(); }
+
     private void LogForced()
     {
         Debug.Log($"[MapLayoutLibrary] forcedLayoutName set to '{forcedLayoutName}'. " +
                   "Next stage will use this layout.");
     }
 }
+

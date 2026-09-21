@@ -40,6 +40,14 @@ public class ScarecrowStats : EnemyStats
         );
 
         TriggerNonVisualDeathSideEffects();
+
+        // Guaranteed teardown. This path never calls base.Die(), so nothing here ever
+        // reaches CharacterStats.Die() -> Destroy(gameObject) — the EnemyDeathVFX above
+        // is the only thing that removes the object. If that VFX fails, the corpse
+        // stays in the scene and keeps counting as a living enemy in
+        // GameOrchestrator.CountLivingEnemiesInScene(), which can stall a stage. Fires
+        // well after the VFX should have completed, so a healthy death is unaffected.
+        ScheduleDeathFailsafe(deathVfxDuration);
     }
 
     // Mirrors the non-visual parts of EnemyStats.PerformDeath()
@@ -47,15 +55,22 @@ public class ScarecrowStats : EnemyStats
     {
         if (canDropEnergy)
         {
-            EnergyDropManager.TrySpawnEnemyDrop(
-                transform.position,
-                GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+            // Routed through EnemyDropAugments, exactly as EnemyStats.PerformDeath does.
+            // This used to call EnergyDropManager.TrySpawnEnemyDrop directly — the
+            // pre-augment API — so Lucky Strikes (337), Marksman's Bounty (341) and
+            // Plunder (342) all silently skipped the Scarecrow. The Scarecrow is an
+            // ordinary drop-bearing enemy, so it should honour them like every other.
+            int stageIdx = GameOrchestrator.Instance?.CurrentStageIndex ?? 0;
+            EnemyDropAugments.SpawnEnemyDrop(
+                transform.position, stageIdx, gameObject, energyDropChance, energyDropValue);
         }
 
-        WaveSpawner waveSpawner = FindAnyObjectByType<WaveSpawner>();
-        if (waveSpawner != null) waveSpawner.OnEnemyDeath();
-
-        if (EnergyManager.Instance != null)
-            EnergyManager.Instance.OnEnemyKilled(gameObject);
+        // Shared death book-keeping: wave counter -> augment 335 tithe -> EnergyManager
+        // kill event -> attribution cleanup. This path previously did only the wave
+        // counter and the EnergyManager call, so a Scarecrow killed by a tower paid NO
+        // tithe and leaked a TowerKillAttribution entry.
+        EnemyStats.FireCommonDeathHooks(gameObject);
     }
 }
+
+

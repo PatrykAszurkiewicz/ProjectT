@@ -232,9 +232,14 @@ public class GrassCartoonOverlay : MonoBehaviour
             }
         }
 
-        //  Camera culling — apply to EVERY active orthographic camera so the
-        //  baked grass meshes aren't frustum-culled in any split-screen view.
-        ApplyOversizedCullingToAllCameras();
+        //  Camera culling. Each band mesh has correct bounds, so every camera -
+        //  split-screen halves included - culls it correctly by itself. The
+        //  scene-wide oversized override is opt-in only (see applyOversizedCulling).
+        if (applyOversizedCulling)
+        {
+            ApplyOversizedCullingToAllCameras();
+            _cullingOverrideActive = true;
+        }
 
         //Debug.Log($"[GrassCartoonOverlay] Baked {spawned} grass quads into {meshCount} band meshes " +
         //          $"(bandSize={bandSize}, {bands.Count} bands, {spriteMeta.Count} sprite(s)).");
@@ -356,6 +361,11 @@ public class GrassCartoonOverlay : MonoBehaviour
         mesh.colors32 = colors;
         mesh.triangles = triangles;
         mesh.RecalculateBounds();
+        // Small padding so a sprite shader that sways the tips can't be culled a
+        // frame early at the screen edge now that normal frustum culling is used.
+        Bounds bandBounds = mesh.bounds;
+        bandBounds.Expand(1f);
+        mesh.bounds = bandBounds;
 
         //  Create GameObject for this band 
         GameObject bandGO = new GameObject($"GrassBand_{batchId}");
@@ -381,10 +391,34 @@ public class GrassCartoonOverlay : MonoBehaviour
 
     // LateUpdate: keep culling matrix in sync 
 
+    // PERF: the oversized culling override is now OPT-IN. Each grass band mesh gets
+    // exact bounds from RecalculateBounds() and sits under a container at the world
+    // origin, so normal per-camera frustum culling already handles every camera,
+    // split-screen included. The override was also not scoped to grass: it made
+    // EVERY renderer and 2D light in ~100x the screen area render each frame -
+    // including all ~600 Y-sorted grass bands instead of the few dozen on screen.
+    // Turn it back on only if grass visibly disappears in a camera.
+    [Header("Culling")]
+    [Tooltip("Oversized camera culling override. Expensive: disables frustum culling " +
+             "for the whole scene. Leave OFF unless grass disappears in a camera.")]
+    public bool applyOversizedCulling = false;
+    private bool _cullingOverrideActive;
+
     void LateUpdate()
     {
-        if (containerGO != null)
+        if (applyOversizedCulling && containerGO != null)
+        {
             ApplyOversizedCullingToAllCameras();
+            _cullingOverrideActive = true;
+        }
+        else if (_cullingOverrideActive)
+        {
+            // Toggled off at runtime: restore normal culling explicitly.
+            var cams = Camera.allCameras;
+            for (int i = 0; i < cams.Length; i++)
+                if (cams[i] != null) cams[i].ResetCullingMatrix();
+            _cullingOverrideActive = false;
+        }
     }
 
     // Reused across frames so the per-frame culling update below allocates nothing.
@@ -482,4 +516,5 @@ public class GrassCartoonOverlay : MonoBehaviour
         public Material material;
     }
 }
+
 

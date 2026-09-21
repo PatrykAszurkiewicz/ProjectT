@@ -30,7 +30,11 @@ public class PauseMenu : MonoBehaviour
     public void QuitGame()
     {
         UIModalStack.ForceClear();
-        Application.Quit();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+    Application.Quit();
+#endif
     }
 
     private static void LeaveToScene(string scene)

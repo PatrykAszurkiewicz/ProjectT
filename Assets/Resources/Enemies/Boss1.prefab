@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 1608654102432218712}
   - component: {fileID: 7095944704209832952}
   - component: {fileID: 6383985145351426051}
+  - component: {fileID: -2068078188844707949}
   m_Layer: 8
   m_Name: Boss1
   m_TagString: Enemy
@@ -167,15 +168,45 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
   detectRange: 3
   attackRange: 2.3
   attackCooldown: 1
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8192
+  blockerLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.2
+  stuckMinCommitTime: 0.35
+  stuckTargetPull: 0.35
+  smoothSteeringEnabled: 1
+  lookAheadDistance: 1.6
+  avoidanceStrength: 1.8
+  steerResponsiveness: 6
+  wanderStrength: 0.25
+  wanderFrequency: 0.4
+  stuckArcWidth: 0.6
+  crowdSeparationEnabled: 1
+  crowdRadiusFactor: 2
+  personalSpaceFactor: 1.15
+  crowdSeparationStrength: 1
+  crowdSeparationWhileAttacking: 0.4
+  crowdDepenetrationPerStep: 0.015
+  crowdScanInterval: 2
+  SuppressCrowdSeparation: 0
+  ExternalMovementControl: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -190,6 +221,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &6383985145351426051
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -202,9 +235,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bc1493f68e1c8c440a969974ccba2599, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 3
-  currentHealth: 3
+  maxHealth: 1300
+  currentHealth: 1300
   currentArmor: 3
+  maxHealthIncreaseAnimDuration: 0.6
+  maxHealthMinPulseFraction: 0.12
   healthBarPrefab: {fileID: 4013683592240770047, guid: cde1533554ef19f439dc1bac60c6978b, type: 3}
   enemyData: {fileID: 11400000, guid: 8cef6b57228dcb64d92caa847ff7c97a, type: 2}
   energyDropChance: 0
@@ -212,8 +247,17 @@ MonoBehaviour:
   canDropEnergy: 1
   damageFlashDuration: 0.1
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  baseDeathVfxDuration: 0
+  baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
-  maxArmor: 3
+  maxArmor: 900
+  showTopScreenBossBar: 1
+  bossBarPrefabOverride: {fileID: 0}
+  hideWorldHealthBarWhenTopBarShown: 1
+  bossDisplayName: Goliath
   bossColliderRadius: 4
   bossColliderOffsetXFacingRight: 0
   bossColliderOffsetXFacingLeft: 0
@@ -231,6 +275,70 @@ MonoBehaviour:
   laserFireDuration: 1
   laserCooldown: 5
   laserSpawnLocalOffset: {x: 0.7, y: 0}
+  laserSpriteFrames:
+  - {fileID: 21300000, guid: 33f9e7929ee862e4a902f32d7b4c6c48, type: 3}
+  - {fileID: 21300000, guid: ce837237ee7cfb74abdb8b335f7abf42, type: 3}
+  - {fileID: 21300000, guid: 5265f47eb0eb3a24689dc13055a526a3, type: 3}
+  - {fileID: 21300000, guid: f43fe4b6d3c9b0c44a641af85cb869b6, type: 3}
+  - {fileID: 21300000, guid: 69ff2699dde31b440b0b1ac1b9d2d7ba, type: 3}
+  - {fileID: 21300000, guid: a47cd48d756d172478b8c289b466104d, type: 3}
+  - {fileID: 21300000, guid: 0fb91bd26210e124f9ee073d1e631495, type: 3}
+  - {fileID: 21300000, guid: 8248866a77e34aa41bb2b75e9a55fe70, type: 3}
+  - {fileID: 21300000, guid: 68b71b7d6e196154ba9502e99b273dc5, type: 3}
+  - {fileID: 21300000, guid: 22e24d8f0bba0024bac9e93e3c26e182, type: 3}
+  - {fileID: 21300000, guid: 68bcfe3ec39f9aa4d9f5525f8c280bba, type: 3}
+  - {fileID: 21300000, guid: 1c41c4eea0c5d9241a24b007dc9e519c, type: 3}
+  - {fileID: 21300000, guid: fe3f9bb9737d8b74f9eb982650222ed8, type: 3}
+  - {fileID: 21300000, guid: 6c4b7d6057d864849b351fbdde069255, type: 3}
+  - {fileID: 21300000, guid: 5f1de589ae96e884ba73799eab30f522, type: 3}
+  - {fileID: 21300000, guid: 5bd0d181490c889438368f152957cc40, type: 3}
+  - {fileID: 21300000, guid: 21f07a6f56eca8c47980d69b6feaa432, type: 3}
+  - {fileID: 21300000, guid: 535fa7f9e04889c4da06f832b65b56f3, type: 3}
+  - {fileID: 21300000, guid: 86f7ea3c17598e543b1ba9caa35bcc7f, type: 3}
+  - {fileID: 21300000, guid: b8d506e34b9c656408bce4c7a1e6aaa0, type: 3}
+  - {fileID: 21300000, guid: 161fda66c8676e24091a663368ca4399, type: 3}
+  - {fileID: 21300000, guid: aaaca661132f9a4428c3b0af9df93dac, type: 3}
+  - {fileID: 21300000, guid: 82ab4fb1d6428774d8495ec1de31fcac, type: 3}
+  - {fileID: 21300000, guid: 938e7f83db99322409389a93f61490da, type: 3}
+  - {fileID: 21300000, guid: c1c75f7c39201c243831614c3abcc9e5, type: 3}
+  - {fileID: 21300000, guid: 8b767d42f67c43f40a7b3a2c30685b55, type: 3}
+  - {fileID: 21300000, guid: be11c5e691e9752489fda4b106542681, type: 3}
+  - {fileID: 21300000, guid: 494b5fbb1886c1344aec6a4c4b0cc24a, type: 3}
+  - {fileID: 21300000, guid: 57d32f077a8db2f4ba60faa1a26b1161, type: 3}
+  - {fileID: 21300000, guid: cc6cf5b8089f9204a9182d2740902072, type: 3}
+  - {fileID: 21300000, guid: 89aa08cdf41e1e9478b63b6da9181749, type: 3}
+  - {fileID: 21300000, guid: 1787de3ad08181f42b208c093b03b005, type: 3}
+  - {fileID: 21300000, guid: 21c27110b7346d148aa2908c6e8b0481, type: 3}
+  - {fileID: 21300000, guid: 1da590c3a85163f47b053232132c121d, type: 3}
+  - {fileID: 21300000, guid: f81950db96c32004cbb8063e7b60de56, type: 3}
+  - {fileID: 21300000, guid: 6400a1df6aa2e4748ae76ff31c2cead7, type: 3}
+  - {fileID: 21300000, guid: b685abf7c063f6c4193d61fb3a5ba382, type: 3}
+  - {fileID: 21300000, guid: 1ae0c7cec5d2692428a9cf6e9d34c019, type: 3}
+  - {fileID: 21300000, guid: f1248c4079ce2b9408ec3c7088acff46, type: 3}
+  - {fileID: 21300000, guid: eec41e1774006f544875dec663b1fb02, type: 3}
+  - {fileID: 21300000, guid: a1f43cfe391b5834d9c07f75637633fc, type: 3}
+  - {fileID: 21300000, guid: 70893cffd20ec234cac574a1edfa6046, type: 3}
+  - {fileID: 21300000, guid: e250112c6be50cc46af0db1dc998e0de, type: 3}
+  - {fileID: 21300000, guid: c59b3c09aa22011469e1be65eb0f4288, type: 3}
+  - {fileID: 21300000, guid: a88b71eff757a6e4cbe0dfc34dfe5c26, type: 3}
+  - {fileID: 21300000, guid: e7558e859061bb74b80ec3c81260d314, type: 3}
+  - {fileID: 21300000, guid: c62e0e0656072d241b118259b7ccddd1, type: 3}
+  - {fileID: 21300000, guid: 411b4c0477ee75849874f9f8e50c6fe0, type: 3}
+  - {fileID: 21300000, guid: e41c50c93c40abb4a9108f178d3d8e0e, type: 3}
+  - {fileID: 21300000, guid: 7a6ac8ba70e7bd74c8cdf0ddb4d01b2d, type: 3}
+  - {fileID: 21300000, guid: d885fc29674be4640ab249be8f10b21e, type: 3}
+  - {fileID: 21300000, guid: eac82cf3fc9d7bf4faa860987ed5564a, type: 3}
+  - {fileID: 21300000, guid: 32dd60bfc4e46b04680736cd9c10e305, type: 3}
+  - {fileID: 21300000, guid: 84366f942370eb1478b8bf743fe41317, type: 3}
+  - {fileID: 21300000, guid: 8140a5f2b0433e446b36c82ce92d5160, type: 3}
+  - {fileID: 21300000, guid: 3d197afed5ece7246826cd1755f1c9d8, type: 3}
+  - {fileID: 21300000, guid: f7400d56131e4154497a02212f18fbb0, type: 3}
+  - {fileID: 21300000, guid: 768d564883f5a6f448e19aad0789f317, type: 3}
+  - {fileID: 21300000, guid: d40805844af0feb418e99efbe3316359, type: 3}
+  - {fileID: 21300000, guid: f3db6e2e1784a3f4596dc9fe6b6ca5ae, type: 3}
+  - {fileID: 21300000, guid: ce65a3c84a36c054f94d11c2cecb3553, type: 3}
+  - {fileID: 21300000, guid: 6d51d9ddab64fd84485e8556e8f3dc1a, type: 3}
+  - {fileID: 21300000, guid: 66e9db640ae012c4c82e7b1ec0586351, type: 3}
   laserSpritePath: Sprites/EnemySprites/LaserBeam
   laserBeamStartFraction: 0.1056
   laserTargetLayers:
@@ -240,13 +348,21 @@ MonoBehaviour:
   trackingMode: 0
   trackingRotationSpeed: 90
   trackingDelay: 0.3
+  laserSortingOrder: 2100
   showWarningTelegraph: 1
-  warningLineColor: {r: 1, g: 0, b: 0, a: 0.5}
+  telegraphColor: {r: 1, g: 0.32, b: 0.22, a: 1}
+  telegraphMaxAlpha: 0.55
+  telegraphOrbRadius: 0.45
+  telegraphStubLength: 2.2
+  telegraphStubWidth: 0.14
+  telegraphShowIntakeRing: 1
   playLaserChargeSound: 1
+  logLaserSoundDiagnostics: 0
   attackRange: 8
   spawnDetachableHead: 1
   headSpawnMinDistance: 10
   headSpawnMaxDistance: 20
+  headSpriteAsset: {fileID: 21300000, guid: 4cdaab451dc8a574fa17671451c3156c, type: 3}
   headSpritePath: Sprites/EnemySprites/Boss1/boss1_head_sprite
   headMapBoundsMin: -45
   headMapBoundsMax: 45
@@ -259,3 +375,34 @@ MonoBehaviour:
   laserRayColor: {r: 0, g: 1, b: 1, a: 1}
   laserEndMarkerColor: {r: 1, g: 0, b: 0, a: 1}
   spriteBoundsColor: {r: 1, g: 0, b: 1, a: 0.5}
+--- !u!114 &-2068078188844707949
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

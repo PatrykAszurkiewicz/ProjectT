@@ -186,7 +186,12 @@ public class Projectile : MonoBehaviour
             // that cares is active.
             TowerKillAttribution.MarkTowerHit(hitTarget);
 
-            targetStats.TakeDamage(damage);
+            // Boss5 (Bellkeeper) needs to tell TOWER damage from PLAYER damage:
+            // towers take a 25% penalty against it and are ignored entirely while
+            // it is mid-challenge. This is the real source of a tower projectile
+            // hit, so tag it here. For every other enemy FromTower is a straight
+            // passthrough to the identical TakeDamage call.
+            BossDamageRouting.FromTower(targetStats, damage);
 
             // Combat telemetry: tower (ranged) damage dealt.
             CombatStats.ReportTowerDamageDealt(damage);
@@ -246,4 +251,6 @@ public class Projectile : MonoBehaviour
         transform.rotation = Quaternion.AngleAxis(angle - 90f, Vector3.forward);
     }
 }
+
+
 

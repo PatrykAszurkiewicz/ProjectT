@@ -29,8 +29,28 @@ public class OptionsMenu : MonoBehaviour
     private const string KSfx = "opt.vol.sfx";
     private const string KMusOn = "opt.music.enabled";
     private const string KWave = "opt.wavePacing";
+
+    // DEFAULT VOLUMES — the baseline a new player starts from (0..1, 0.7 = 70%).
+    // Used whenever the player hasn't moved that slider yet; once they do, their
+    // saved choice wins. These are the single source of truth for the defaults:
+    // they override the volume values on the AudioManager component.
+    public const float DefaultMasterVolume = 1f;
+    public const float DefaultMusicVolume = 0.7f;
+    public const float DefaultAmbienceVolume = 1f;
+    public const float DefaultSfxVolume = 1f;
+
+    // Music ON/OFF for a new player (someone who has never pressed the Music button).
+    // Overrides the "Music Enabled" tick on whichever AudioManager is live.
+    public const bool DefaultMusicEnabled = true;
     // NOTE: difficulty persistence lives in EnemyStatModifierManager (its own PlayerPrefs
     // key), so this menu just reads/writes through SelectDifficulty / SelectedMode.
+
+    // 9-slice border for MenuPanel 1, in SOURCE pixels. The corner ornament (magenta
+    // flame + silver bevel diagonal) reaches ~170 px in from each edge, so a 140 border
+    // sliced through the bevel and Unity smeared it along the stretched edges. 180
+    // contains the whole ornament. Applied in code below so it works regardless of the
+    // sprite asset's import border.
+    private const float PanelBorder = 180f;
 
     private static OptionsMenu _instance;
     private GameObject _root;
@@ -38,6 +58,7 @@ public class OptionsMenu : MonoBehaviour
 
     private TextMeshProUGUI _musicBtnLabel;
     private TextMeshProUGUI _damageVigLabel;
+    private TextMeshProUGUI _lifeModeLabel;
     private readonly List<Button> _waveButtons = new List<Button>();
     private readonly WavePacingMode[] _waveModes = { WavePacingMode.Countdown, WavePacingMode.Immediate, WavePacingMode.ReadyUp };
     private readonly string[] _waveLabels = { "Countdown", "Immediate", "Ready" };
@@ -127,6 +148,7 @@ public class OptionsMenu : MonoBehaviour
         HighlightDifficulty(EnemyStatModifierManager.SelectedMode);
         RefreshMusicLabel();
         RefreshDamageVignetteLabel();
+        RefreshLifeModeLabel();
     }
 
     //  UI CONSTRUCTION
@@ -150,19 +172,35 @@ public class OptionsMenu : MonoBehaviour
         var pr = panel.GetComponent<RectTransform>();
         pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
         pr.pivot = new Vector2(0.5f, 0.5f);
-        // Height is now DERIVED, not grown by hand. The column below sums to ~932px
-        // (rows + 4px spacing) and the insets add 80, so 1020 fits inside the 1080
-        // reference height with margin to spare and leaves the flexible spacer at
-        // ~0 -- which is what keeps DIFFICULTY tight against the buttons under it.
-        // If you add a row, subtract its height from another row rather than growing
-        // this number past ~1030, or the panel will overflow the screen again.
-        pr.sizeDelta = new Vector2(900, 1020);
-        MenuTheme.ApplySprite(panel.AddComponent<Image>(), MenuTheme.PanelSprite, MenuTheme.PanelSolid);
+        // Height is DERIVED, not grown by hand, and the column is a fixed budget.
+        // The Player Death row (44px + 4px spacing = 48) was paid for rather than
+        // bolted on: +10 here, +16 from the smaller vertical inset below, and +16
+        // from the wave/difficulty rows dropping 56 -> 48. That is 42, plus the ~8px
+        // of slack the column already had. The flexible spacer still lands at ~0,
+        // which is what keeps DIFFICULTY tight against the buttons under it.
+        // 1030 is the ceiling -- past that the panel overflows the 1080 reference
+        // height. If you add another row, pay for it the same way.
+        pr.sizeDelta = new Vector2(900, 1030);
+        var panelImg = panel.AddComponent<Image>();
+        MenuTheme.ApplySprite(panelImg, MenuTheme.PanelSprite, MenuTheme.PanelSolid);
+        // 9-slice fix: bake the 180 px border so the corner ornament sits inside the
+        // fixed corner slices instead of smearing along the stretched edges.
+        // 180 / 1.3 ≈ 138 px corners on this 900×1020 panel; raise the multiplier to
+        // shrink the corners, lower it to enlarge them.
+        if (panelImg.sprite != null)
+        {
+            panelImg.sprite = WithBorder(panelImg.sprite, PanelBorder);
+            panelImg.type = Image.Type.Sliced;
+            panelImg.pixelsPerUnitMultiplier = 1.8f;
+        }
 
         var inner = MenuTheme.NewUI("Inner", panel.transform);
         var irt = inner.GetComponent<RectTransform>();
         irt.anchorMin = Vector2.zero; irt.anchorMax = Vector2.one;
-        irt.offsetMin = new Vector2(64, 40); irt.offsetMax = new Vector2(-64, -40);
+        // Vertical inset trimmed 40 -> 32 to fund the Player Death row. The panel
+        // art's corner ornament is ~138px, so 32 still clears it comfortably; going
+        // much below ~24 starts pushing the title into the decorative top edge.
+        irt.offsetMin = new Vector2(64, 32); irt.offsetMax = new Vector2(-64, -32);
         var v = inner.AddComponent<VerticalLayoutGroup>();
         v.spacing = 4; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
         v.childControlWidth = true; v.childControlHeight = true;
@@ -188,12 +226,14 @@ public class OptionsMenu : MonoBehaviour
         // Weapon blueprints, then Tutorial + Lore Archive side by side, above Close.
         var blueprints = MenuTheme.NewButton("Display Unlocked Weapons", inner.transform, 22, _font);
         SetH(blueprints, 56);
+        SkinButton(blueprints, true, 56);
         blueprints.onClick.AddListener(OpenBlueprints);
 
         BuildExtrasRow(inner.transform);
 
         var close = MenuTheme.NewButton("Close", inner.transform, 24, _font);
         SetH(close, 54);
+        SkinButton(close, true, 54);
         close.onClick.AddListener(CloseMenu);
     }
 
@@ -211,10 +251,12 @@ public class OptionsMenu : MonoBehaviour
 
         var tutorial = MenuTheme.NewButton("Tutorial", row.transform, 22, _font);
         var tle = tutorial.GetComponent<LayoutElement>(); tle.flexibleWidth = 1; tle.minWidth = 100;
+        SkinButton(tutorial, false, 52);   // 56 row - 2+2 padding
         tutorial.onClick.AddListener(OpenTutorial);
 
         var lore = MenuTheme.NewButton("Lore Archive", row.transform, 22, _font);
         var lle = lore.GetComponent<LayoutElement>(); lle.flexibleWidth = 1; lle.minWidth = 100;
+        SkinButton(lore, false, 52);
         lore.onClick.AddListener(OpenLoreArchive);
     }
 
@@ -233,11 +275,13 @@ public class OptionsMenu : MonoBehaviour
 
         var musicBtn = MenuTheme.NewButton("Music: On", row.transform, 22, _font);
         var mle = musicBtn.GetComponent<LayoutElement>(); mle.flexibleWidth = 1; mle.minWidth = 100;
+        SkinButton(musicBtn, false, 44);   // 48 row - 2+2 padding
         _musicBtnLabel = musicBtn.GetComponentInChildren<TextMeshProUGUI>();
         musicBtn.onClick.AddListener(ToggleMusic);
 
         var switchBtn = MenuTheme.NewButton("Switch Track", row.transform, 22, _font);
         var sle = switchBtn.GetComponent<LayoutElement>(); sle.flexibleWidth = 1; sle.minWidth = 100;
+        SkinButton(switchBtn, false, 44);
         switchBtn.onClick.AddListener(SwitchMusicTrack);
     }
 
@@ -285,15 +329,16 @@ public class OptionsMenu : MonoBehaviour
         AddHeader(body, "CONTROLS");
         var rebind = MenuTheme.NewButton("Keyboard / Gamepad Rebinding", body, 24, _font);
         SetH(rebind, 54);
+        SkinButton(rebind, true, 54);
         rebind.onClick.AddListener(OpenRebinding);
 
         //  AUDIO 
         AddHeader(body, "AUDIO");
         var am = AudioManager.instance;
-        AddSlider(body, "Master", am != null ? am.masterVolume : PlayerPrefs.GetFloat(KMaster, 1f), KMaster, v => { if (am) am.masterVolume = v; });
-        AddSlider(body, "Music", am != null ? am.musicVolume : PlayerPrefs.GetFloat(KMusic, 1f), KMusic, v => { if (am) am.musicVolume = v; });
-        AddSlider(body, "Ambience", am != null ? am.ambienceVolume : PlayerPrefs.GetFloat(KAmb, 1f), KAmb, v => { if (am) am.ambienceVolume = v; });
-        AddSlider(body, "SFX", am != null ? am.SFXVolume : PlayerPrefs.GetFloat(KSfx, 1f), KSfx, v => { if (am) am.SFXVolume = v; });
+        AddSlider(body, "Master", am != null ? am.masterVolume : PlayerPrefs.GetFloat(KMaster, DefaultMasterVolume), KMaster, v => { if (am) am.masterVolume = v; });
+        AddSlider(body, "Music", am != null ? am.musicVolume : PlayerPrefs.GetFloat(KMusic, DefaultMusicVolume), KMusic, v => { if (am) am.musicVolume = v; });
+        AddSlider(body, "Ambience", am != null ? am.ambienceVolume : PlayerPrefs.GetFloat(KAmb, DefaultAmbienceVolume), KAmb, v => { if (am) am.ambienceVolume = v; });
+        AddSlider(body, "SFX", am != null ? am.SFXVolume : PlayerPrefs.GetFloat(KSfx, DefaultSfxVolume), KSfx, v => { if (am) am.SFXVolume = v; });
 
         BuildMusicRow(body);
 
@@ -303,6 +348,7 @@ public class OptionsMenu : MonoBehaviour
 
         var vigBtn = MenuTheme.NewButton("Damage Vignette", body, 22, _font);
         SetH(vigBtn, 44);
+        SkinButton(vigBtn, true, 44);
         _damageVigLabel = vigBtn.GetComponentInChildren<TextMeshProUGUI>();
         vigBtn.onClick.AddListener(ToggleDamageVignette);
         RefreshDamageVignetteLabel();
@@ -310,6 +356,19 @@ public class OptionsMenu : MonoBehaviour
         //  GAMEPLAY 
         AddHeader(body, "GAMEPLAY");
         BuildWaveSelector(body);
+
+        // Respawnable / Non-Respawnable player. Single cycle button rather than a
+        // two-button selector, same shape as Damage Vignette above: it is a binary
+        // choice, and the label already says which mode is live, so a caption + row
+        // would cost 76px of the column budget to say the same thing.
+        // Unlike Difficulty this takes effect IMMEDIATELY -- PlayerStats.Die() reads
+        // PlayerLifeSettings live, so flipping it mid-run changes the very next death.
+        var lifeBtn = MenuTheme.NewButton("Player Death", body, 22, _font);
+        SetH(lifeBtn, 44);
+        SkinButton(lifeBtn, true, 44);
+        _lifeModeLabel = lifeBtn.GetComponentInChildren<TextMeshProUGUI>();
+        lifeBtn.onClick.AddListener(ToggleLifeMode);
+        RefreshLifeModeLabel();
 
         //  DIFFICULTY 
         AddHeader(body, "DIFFICULTY");
@@ -428,7 +487,7 @@ public class OptionsMenu : MonoBehaviour
 
         // Three mode buttons sharing the full width.
         var row = MenuTheme.NewUI("Row_Wave", parent);
-        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 56; rle.preferredHeight = 56; rle.flexibleHeight = 0;
+        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 48; rle.preferredHeight = 48; rle.flexibleHeight = 0;
         var h = row.AddComponent<HorizontalLayoutGroup>();
         h.spacing = 10; h.padding = new RectOffset(6, 6, 2, 2);
         h.childControlWidth = true; h.childControlHeight = true;
@@ -441,6 +500,7 @@ public class OptionsMenu : MonoBehaviour
             var mode = _waveModes[i];
             var b = MenuTheme.NewButton(_waveLabels[i], row.transform, 20, _font);
             var le = b.GetComponent<LayoutElement>(); le.flexibleWidth = 1; le.minWidth = 100;
+            SkinButton(b, false, 44);   // 48 row - 2+2 padding
             b.onClick.AddListener(() => SetWaveMode(mode));
             _waveButtons.Add(b);
         }
@@ -458,7 +518,7 @@ public class OptionsMenu : MonoBehaviour
 
         // Two mode buttons sharing the full width — same pattern as the wave selector.
         var row = MenuTheme.NewUI("Row_Difficulty", parent);
-        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 56; rle.preferredHeight = 56; rle.flexibleHeight = 0;
+        var rle = row.AddComponent<LayoutElement>(); rle.minHeight = 48; rle.preferredHeight = 48; rle.flexibleHeight = 0;
         var h = row.AddComponent<HorizontalLayoutGroup>();
         h.spacing = 10; h.padding = new RectOffset(6, 6, 2, 2);
         h.childControlWidth = true; h.childControlHeight = true;
@@ -471,6 +531,7 @@ public class OptionsMenu : MonoBehaviour
             var mode = _difficultyModes[i];
             var b = MenuTheme.NewButton(_difficultyLabels[i], row.transform, 20, _font);
             var le = b.GetComponent<LayoutElement>(); le.flexibleWidth = 1; le.minWidth = 100;
+            SkinButton(b, false, 44);   // 48 row - 2+2 padding
             b.onClick.AddListener(() => SetDifficulty(mode));
             _difficultyButtons.Add(b);
         }
@@ -482,7 +543,7 @@ public class OptionsMenu : MonoBehaviour
     {
         var am = AudioManager.instance;
         if (am != null) am.ToggleMusic();
-        bool on = am != null ? am.musicEnabled : (PlayerPrefs.GetInt(KMusOn, 1) == 1);
+        bool on = am != null ? am.musicEnabled : (PlayerPrefs.GetInt(KMusOn, DefaultMusicEnabled ? 1 : 0) == 1);
         PlayerPrefs.SetInt(KMusOn, on ? 1 : 0); PlayerPrefs.Save();
         RefreshMusicLabel();
     }
@@ -499,7 +560,7 @@ public class OptionsMenu : MonoBehaviour
     {
         if (_musicBtnLabel == null) return;
         var am = AudioManager.instance;
-        bool on = am != null ? am.musicEnabled : (PlayerPrefs.GetInt(KMusOn, 1) == 1);
+        bool on = am != null ? am.musicEnabled : (PlayerPrefs.GetInt(KMusOn, DefaultMusicEnabled ? 1 : 0) == 1);
         _musicBtnLabel.text = on ? "Music: On" : "Music: Off";
     }
 
@@ -520,6 +581,22 @@ public class OptionsMenu : MonoBehaviour
         }
     }
 
+    // Respawnable <-> Non-Respawnable. PlayerLifeSettings persists to PlayerPrefs
+    // itself, so there is no key to manage here.
+    private void ToggleLifeMode()
+    {
+        PlayerLifeSettings.Toggle();
+        RefreshLifeModeLabel();
+    }
+
+    private void RefreshLifeModeLabel()
+    {
+        if (_lifeModeLabel == null) return;
+        _lifeModeLabel.text = PlayerLifeSettings.RespawnEnabled
+            ? "Player Death: Respawn"
+            : "Player Death: Permanent";
+    }
+
     private void SetWaveMode(WavePacingMode mode)
     {
         var rc = ResolveConfig();
@@ -534,7 +611,7 @@ public class OptionsMenu : MonoBehaviour
         {
             bool active = _waveModes[i] == mode;
             if (_waveButtons[i].targetGraphic is Image img)
-                img.color = active ? MenuTheme.BtnActive : (MenuTheme.ButtonSprite != null ? Color.white : MenuTheme.BtnSolid);
+                img.color = active ? MenuTheme.BtnActive : (HasButtonArt(img) ? Color.white : MenuTheme.BtnSolid);
             var lbl = _waveButtons[i].GetComponentInChildren<TextMeshProUGUI>();
             if (lbl != null) lbl.color = active ? Color.white : MenuTheme.ValueCol;
         }
@@ -554,7 +631,7 @@ public class OptionsMenu : MonoBehaviour
         {
             bool active = _difficultyModes[i] == mode;
             if (_difficultyButtons[i].targetGraphic is Image img)
-                img.color = active ? MenuTheme.BtnActive : (MenuTheme.ButtonSprite != null ? Color.white : MenuTheme.BtnSolid);
+                img.color = active ? MenuTheme.BtnActive : (HasButtonArt(img) ? Color.white : MenuTheme.BtnSolid);
             var lbl = _difficultyButtons[i].GetComponentInChildren<TextMeshProUGUI>();
             if (lbl != null) lbl.color = active ? Color.white : MenuTheme.ValueCol;
         }
@@ -575,16 +652,20 @@ public class OptionsMenu : MonoBehaviour
     private static void OnSceneLoaded(UnityEngine.SceneManagement.Scene s, UnityEngine.SceneManagement.LoadSceneMode m)
         => ApplySavedSettings();
 
-    private static void ApplySavedSettings()
+    // Public so AudioManager can call it from Start(): the boot hook above and
+    // AudioBootstrap both run "after scene load" in no guaranteed order, so on the very
+    // first scene the AudioManager may not exist yet when Boot() fires.
+    public static void ApplySavedSettings()
     {
         var am = AudioManager.instance;
         if (am != null)
         {
-            if (PlayerPrefs.HasKey(KMaster)) am.masterVolume = PlayerPrefs.GetFloat(KMaster);
-            if (PlayerPrefs.HasKey(KMusic)) am.musicVolume = PlayerPrefs.GetFloat(KMusic);
-            if (PlayerPrefs.HasKey(KAmb)) am.ambienceVolume = PlayerPrefs.GetFloat(KAmb);
-            if (PlayerPrefs.HasKey(KSfx)) am.SFXVolume = PlayerPrefs.GetFloat(KSfx);
-            if (PlayerPrefs.HasKey(KMusOn)) am.musicEnabled = PlayerPrefs.GetInt(KMusOn) == 1;
+            // Saved choice if the player has one, otherwise the default above.
+            am.masterVolume = PlayerPrefs.GetFloat(KMaster, DefaultMasterVolume);
+            am.musicVolume = PlayerPrefs.GetFloat(KMusic, DefaultMusicVolume);
+            am.ambienceVolume = PlayerPrefs.GetFloat(KAmb, DefaultAmbienceVolume);
+            am.SFXVolume = PlayerPrefs.GetFloat(KSfx, DefaultSfxVolume);
+            am.musicEnabled = PlayerPrefs.GetInt(KMusOn, DefaultMusicEnabled ? 1 : 0) == 1;
         }
 
         // Wave pacing → the live RunConfig (the orchestrator reads it fresh each
@@ -595,4 +676,108 @@ public class OptionsMenu : MonoBehaviour
         // Difficulty is loaded by EnemyStatModifierManager itself (static field
         // initialised from its own PlayerPrefs key), so nothing to re-apply here.
     }
+
+    //  NEW BUTTON ART
+    // Button3Wider = normal buttons (split rows, chips), GigaWaski = full-width buttons.
+    // Only the graphic changes -- every size/LayoutElement set above stays untouched.
+    // The sprite is 9-sliced in code (import settings don't matter): the crack ornaments
+    // on each end never stretch, only the plain middle does. The multiplier scales the
+    // ornaments to the button's height. *Scale trims the thick outer glow a bit so the
+    // text sits inside the dark body (1.0 = art exactly as drawn).
+    private const string BtnSpriteDir = "Sprites/HUD/PauseMenu/PauseMenuMiddlePanel/";
+    private const float NormalBtnScale = 1.2f;
+    private const float WideBtnScale = 1.3f;
+    private static Sprite _btnNormal, _btnWide;
+    private static bool _btnWarned;
+
+    // Null-checked (not a "tried once" flag) so a sprite destroyed by an asset unload
+    // or a play-mode restart without domain reload is simply rebuilt.
+    private static Sprite ButtonArt(bool wide)
+    {
+        if (wide)
+        {
+            // GigaWaski 890x126 -- border (left, bottom, right, top)
+            if (_btnWide == null) _btnWide = LoadSliced("GigaWaski", new Vector4(200, 48, 280, 48));
+            return _btnWide;
+        }
+        // Button3Wider 648x181
+        if (_btnNormal == null) _btnNormal = LoadSliced("Button3Wider", new Vector4(120, 50, 188, 50));
+        return _btnNormal;
+    }
+
+    // True when the image shows real button art (old MenuTheme sprite or the new one),
+    // i.e. exactly the cases where the original code tinted with white, not BtnSolid.
+    private static bool HasButtonArt(Image img)
+    {
+        if (img == null || img.sprite == null) return false;
+        var s = img.sprite;
+        return s == MenuTheme.ButtonSprite || s == _btnNormal || s == _btnWide;
+    }
+
+    private static Sprite LoadSliced(string file, Vector4 border)
+    {
+        var src = Resources.Load<Sprite>(BtnSpriteDir + file);
+        if (src == null)
+        {
+            if (!_btnWarned) Debug.LogWarning("Button sprite not found: Resources/" + BtnSpriteDir + file);
+            _btnWarned = true;
+            return null;
+        }
+        try
+        {
+            float ppu = src.pixelsPerUnit > 0 ? src.pixelsPerUnit : 100f;
+            return Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), ppu, 0,
+                                 SpriteMeshType.FullRect, border);
+        }
+        catch { return src; }
+    }
+
+    // height = the button's final on-screen height (same number the layout gives it).
+    private static void SkinImage(Image img, bool wide, float height)
+    {
+        var art = ButtonArt(wide);
+        if (img == null || art == null) return;   // falls back to the MenuTheme look
+        img.sprite = art;
+        img.type = Image.Type.Sliced;
+        img.fillCenter = true;
+        img.preserveAspect = false;
+        img.pixelsPerUnitMultiplier = art.rect.height * (wide ? WideBtnScale : NormalBtnScale) / height;
+    }
+
+    private static void SkinButton(Button btn, bool wide, float height)
+    {
+        if (btn == null) return;
+        var img = btn.targetGraphic as Image;
+        if (img == null) img = btn.GetComponent<Image>();
+        SkinImage(img, wide, height);
+        // Old hover/pressed Button 1 sprites would come back on hover -- tint instead.
+        if (btn.transition == Selectable.Transition.SpriteSwap)
+        {
+            btn.spriteState = default;
+            btn.transition = Selectable.Transition.ColorTint;
+            var cb = ColorBlock.defaultColorBlock;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = cb.selectedColor = new Color(1f, 0.85f, 1f, 1f);
+            cb.pressedColor = new Color(0.75f, 0.65f, 0.8f, 1f);
+            btn.colors = cb;
+        }
+    }
+
+    // Rebuilds a sprite with a 9-slice border baked in, so a Sliced Image keeps its
+    // corners fixed while the edges/center stretch. Border is in source-texture pixels.
+    // The texture does NOT need Read/Write enabled — Sprite.Create only references a
+    // rect of the existing texture, it never reads pixels.
+    private static Sprite WithBorder(Sprite src, float border)
+    {
+        if (src == null) return null;
+        try
+        {
+            float ppu = src.pixelsPerUnit > 0 ? src.pixelsPerUnit : 100f;
+            return Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), ppu, 0,
+                                 SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+        }
+        catch { return src; }
+    }
 }
+
+

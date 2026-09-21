@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a65dffe645fdc3d41b15765340dfeb64, type: 3}
   m_Name: BalancedRunConfig 1
   m_EditorClassIdentifier: 
-  stageCount: 8
-  wavesPerStage: 6
+  stageCount: 3
+  wavesPerStage: 10
   hasFinalBoss: 1
   availableBiomes: 050000000100000002000000
   allowRepeatBiomes: 1
@@ -22,8 +22,9 @@ MonoBehaviour:
   enemyCountScalePerStage: 1.2
   spawnDelayScalePerStage: 0.85
   wavePacingMode: 2
-  timeBetweenWaves: 9
-  timeBetweenStages: 9
+  timeBetweenWaves: 20
+  firstWaveDelay: 20
+  timeBetweenStages: 20
   enemyHealthScalePerStage: 1.15
   enemyDamageScalePerStage: 1.15
   scaleBossesWithStage: 1
@@ -35,6 +36,7 @@ MonoBehaviour:
   stageBossPrefabs:
   - {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
   - {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
+  - {fileID: 3554655901426140030, guid: 49c91f3ebbfde064d800e5da415ccede, type: 3}
   stageBossPrefab: {fileID: 3554655901426140020, guid: 70f989dcf5af74f46835e485bffc25b6, type: 3}
   finalBossPrefab: {fileID: 3554655901426140020, guid: d7888df9ad469964fbc6cfc57957086a, type: 3}
   baseEnemyDropValue: 10
@@ -92,7 +94,23 @@ MonoBehaviour:
   - enemyPrefab: {fileID: 3554655901426140020, guid: 206632d8c910d944c8aeab7ac36537f6, type: 3}
     weight: 1
     minStageIndex: 6
-  baseEnemiesPerWave: 5
+  - enemyPrefab: {fileID: 3554655901426140020, guid: 206632d8c910d944c8aeab7ac36537f6, type: 3}
+    weight: 1
+    minStageIndex: 6
+  baseEnemiesPerWave: 10
   proceduralMinSpawnDelay: 0.5
   proceduralMaxSpawnDelay: 1.5
+  directionsPerStage:
+  - minDirections: 0
+    maxDirections: 2
+  - minDirections: 0
+    maxDirections: 3
+  - minDirections: 2
+    maxDirections: 4
+  bossAddsDuringStageBoss: 1
+  bossAddsDuringFinalBoss: 1
+  bossAddsPerBatch: 3
+  bossAddsInterval: {x: 9, y: 14}
+  bossAddsFirstDelay: 6
+  bossAddsMaxAlive: 5
   augmentEveryNWaves: 3

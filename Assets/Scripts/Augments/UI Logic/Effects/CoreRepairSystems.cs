@@ -14,6 +14,15 @@ public class CoreRepairSystems : MonoBehaviour
     private float timeSinceLastDamage = 0f;
     private bool isRegenerating = false;
     private float originalDecayRate = 0.7f;
+
+    // Session-wide baseline, captured the first time a real (positive) decay rate is
+    // seen. Static, so it needs the SubsystemRegistration reset below: with Domain
+    // Reload disabled, statics survive leaving and re-entering Play Mode.
+    private const float FallbackDecayRate = 0.7f;
+    private static float sBaselineDecayRate = -1f;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => sBaselineDecayRate = -1f;
     private bool isInitialized = false;
 
     // Visual components
@@ -39,7 +48,18 @@ public class CoreRepairSystems : MonoBehaviour
             return;
         }
 
-        originalDecayRate = EnergyManager.Instance.coreEnergyDecayRate;
+        // Only a POSITIVE value is a real decay rate. A negative one means some other
+        // CoreRepairSystems was mid-regeneration when we spawned -- most likely the one
+        // on the core this stage just replaced, whose OnDestroy has not run yet. Taking
+        // that as "original" and later "restoring" it would pin the core's decay to a
+        // regen rate permanently.
+        // NOTE: zero is a VALID baseline -- coreEnergyDecayRate is a serialized field
+        // and a project may legitimately disable core decay entirely. Only a NEGATIVE
+        // value is suspect, because the only thing that ever writes one is a
+        // CoreRepairSystems mid-regeneration.
+        float liveDecayRate = EnergyManager.Instance.coreEnergyDecayRate;
+        if (liveDecayRate >= 0f) sBaselineDecayRate = liveDecayRate;
+        originalDecayRate = sBaselineDecayRate >= 0f ? sBaselineDecayRate : FallbackDecayRate;
         core.OnDamageTaken += OnCoreDamaged;
         isInitialized = true;
 
@@ -185,3 +205,4 @@ public class CoreRepairSystems : MonoBehaviour
             Destroy(auraObject);
     }
 }
+

@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 6765865994119236545}
   - component: {fileID: 2403027582444690062}
   - component: {fileID: 6336874349318820782}
+  - component: {fileID: 4639341548303910659}
   m_Layer: 0
   m_Name: EnemyHpCanvas
   m_TagString: Untagged
@@ -99,8 +100,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c19dd0ebab81fb04eabc1e76f2cf6b89, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  barPrefab: {fileID: 0}
+  barPrefabResourcePath: Sprites/HUD/EnemyHP/EnemyBar
+  enemyBar: {fileID: 0}
   barUI: {fileID: 6336874349318820782}
+  replaceLegacyBar: 1
   offset: {x: 0, y: 1, z: 0}
+  fallbackCanvasScale: 0.01
+  fadeOutOnTargetLost: 0
+  fadeOutDuration: 0.2
 --- !u!114 &6336874349318820782
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -119,6 +127,37 @@ MonoBehaviour:
   fillLerpSpeed: 10
   shadowLerpSpeed: 2
   shadowDelay: 0.5
+--- !u!114 &4639341548303910659
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4013683592240770047}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0
 --- !u!1 &6327618239121462902
 GameObject:
   m_ObjectHideFlags: 0

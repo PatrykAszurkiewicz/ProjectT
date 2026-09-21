@@ -96,15 +96,16 @@ public class EyeStats : EnemyStats
         var bar = GetHealthBar();
         if (bar != null) Destroy(bar.gameObject);
 
-        // Notify wave spawner so the wave can progress.
-        WaveSpawner waveSpawner = FindAnyObjectByType<WaveSpawner>();
-        if (waveSpawner != null) waveSpawner.OnEnemyDeath();
-
-        // Notify EnergyManager — used for kill tracking / achievements.
-        if (EnergyManager.Instance != null)
-            EnergyManager.Instance.OnEnemyKilled(gameObject);
+        // Shared death book-keeping, identical to EnemyStats.PerformDeath: wave
+        // counter -> augment 335 tithe -> EnergyManager kill event -> attribution
+        // cleanup. This path previously did only the first and third of those, so an
+        // Eye killed by a tower paid NO tithe and leaked a TowerKillAttribution entry.
+        // The fixed drop above is deliberately left alone — it IS the Eye's reason for
+        // overriding death, and the hook does not touch drops.
+        EnemyStats.FireCommonDeathHooks(gameObject);
 
         // Destroy the GameObject (base CharacterStats.Die behaviour).
         Destroy(gameObject);
     }
 }
+

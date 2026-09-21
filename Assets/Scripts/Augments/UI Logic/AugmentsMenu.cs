@@ -73,6 +73,19 @@ public class AugmentsMenu : MonoBehaviour
         return PlayerRegistry.Instance.Get(boundPlayerIndex);
     }
 
+    void Start_CoopBindingSanityCheck()
+    {
+        // Diagnostic for a silent co-op failure: GameOrchestrator resolves per-player
+        // reward menus with FindAugmentMenuForPlayer, which matches on boundPlayerIndex.
+        // A co-op scene whose only menu is still at the -1 default matched NOTHING, so
+        // both players lost the augment they traded their heal for, with no error.
+        if (PlayerRegistry.Count > 1 && boundPlayerIndex < 0)
+            Debug.LogWarning($"[AugmentsMenu] '{name}' is in a {PlayerRegistry.Count}-player run but " +
+                             "boundPlayerIndex is still -1. Per-player reward menus are matched by " +
+                             "this index — set it to 0 for P1 and add a second menu bound to 1 for P2, " +
+                             "or the orchestrator falls back to one shared menu.");
+    }
+
     // Phase 6: gamepad/keyboard navigation for this menu's bound player, so two
     // viewport menus can be driven independently without a MultiplayerEventSystem.
     private PlayerInput _boundInput;
@@ -220,6 +233,7 @@ public class AugmentsMenu : MonoBehaviour
         if (debugMode) Debug.Log("AugmentsMenu: Start called");
 
         augmentsMenu.SetActive(false);
+        Start_CoopBindingSanityCheck();
 
         // Wait for AugmentRegistry to be ready
         StartCoroutine(WaitForRegistryAndGenerate());
@@ -561,12 +575,17 @@ public class AugmentsMenu : MonoBehaviour
         if (nameTexts != null && slotIndex < nameTexts.Length && nameTexts[slotIndex] != null)
         {
             nameTexts[slotIndex].text = augment.Name;
+            AugmentTextFormatter.ApplyPadding(nameTexts[slotIndex]);
         }
 
-        // Update description text
+        // Update description text — programmatically formatted rich text
+        // (colour-coded numbers/keywords + data-driven stat chips). See
+        // AugmentTextFormatter.cs. richText is forced on so the tags render.
         if (descriptionTexts != null && slotIndex < descriptionTexts.Length && descriptionTexts[slotIndex] != null)
         {
-            descriptionTexts[slotIndex].text = augment.Description;
+            descriptionTexts[slotIndex].richText = true;
+            descriptionTexts[slotIndex].text = AugmentTextFormatter.Format(augment);
+            AugmentTextFormatter.ApplyPadding(descriptionTexts[slotIndex]);
         }
     }
 
@@ -1309,3 +1328,6 @@ public class AugmentsMenu : MonoBehaviour
         }
     }
 }
+
+
+

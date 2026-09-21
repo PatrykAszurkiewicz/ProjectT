@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 7932242476479118238}
   - component: {fileID: 494122911128716204}
   - component: {fileID: -439340534160323970}
+  - component: {fileID: 6150762157388617733}
   m_Layer: 0
   m_Name: Parfumer
   m_TagString: Enemy
@@ -169,8 +170,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 50
-  currentHealth: 50
+  maxHealth: 24
+  currentHealth: 24
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -183,6 +184,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0.6
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
@@ -198,6 +202,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -224,6 +230,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &-439340534160323970
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -249,4 +256,74 @@ MonoBehaviour:
   cloudMistColor: {r: 0.25, g: 0.65, b: 0.15, a: 0.3}
   cloudWispColor: {r: 0.55, g: 0.95, b: 0.4, a: 0.55}
   cloudOuterColor: {r: 0.1, g: 0.3, b: 0.05, a: 0}
+  cloudSnowContrast: 1
+  cloudContrast:
+    opacity: 1
+    sizeMultiplier: 1
+    deepColor: {r: 0.16, g: 0.52, b: 0.08, a: 1}
+    lightColor: {r: 0.46, g: 0.8, b: 0.18, a: 1}
+    shadeOpacity: 0.4
+    puffCount: 7
+    puffOpacity: 0.34
+    expansion: 0.22
+    drift: 0.18
+    curlCount: 3
+    curlOpacity: 0.22
+    fadeInSeconds: 0.5
+    fadeOutSeconds: 1.2
+    dampenOverlaps: 1
   deathVfxDuration: 0.7
+  bodyFrameSprites: []
+  spriteFolderPath: 
+  animationFrameCount: 16
+  animationFrameDuration: 0.09
+  enableAura: 1
+  auraColor: {r: 0.45, g: 0.95, b: 0.35, a: 1}
+  auraSizeMultiplier: 1.55
+  auraYOffsetFraction: -0.08
+  auraPulseSpeed: 2
+  auraMinAlpha: 0.12
+  auraMaxAlpha: 0.34
+  auraScalePulse: 0.14
+  hoverEnabled: 1
+  hoverAmplitudeFraction: 0.05
+  hoverSpeed: 1.1
+  emitSquashEnabled: 1
+  emitSquashAmount: 0.12
+  emitSquashDuration: 0.45
+  stingEmissionEnabled: 1
+  stingPixelOffset: {x: 19, y: -142}
+  stingColor: {r: 0.5, g: 0.95, b: 0.35, a: 1}
+  stingTrickleRate: 5
+  stingBurstCount: 10
+--- !u!114 &6150762157388617733
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

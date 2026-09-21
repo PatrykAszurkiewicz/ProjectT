@@ -85,8 +85,23 @@ public class PlayerToolCooldownStore : MonoBehaviour
 
     // One timer per tool. Public fields so they're inspectable while playing.
     public TwoPhaseTimer book = new TwoPhaseTimer();
+    // Decoy and Turret use the SAME two-phase model as the book: an ACTIVE
+    // phase (the device is deployed) followed by a post-effect COOLDOWN. They
+    // live here — not on the launcher subsystems (which are destroyed on every
+    // tool-roll scroll) — so the active countdown and the recharge keep
+    // advancing while the player has scrolled to another tool, and so the
+    // cooldown can't be dodged by scrolling off the tool and back.
+    public TwoPhaseTimer decoy = new TwoPhaseTimer();
+    public TwoPhaseTimer turret = new TwoPhaseTimer();
     public float clockCooldownTimer;
     public float clockCooldownTotal;
+    // Trap recharge. A flat re-placement cooldown after EACH trap (traps have
+    // no active phase — they persist until triggered or bumped out by the
+    // max-count limit). Single-phase like the clock/smoke; it lives here so
+    // scrolling away from the Trap tool and back doesn't wipe the cooldown and
+    // let the player re-place instantly.
+    public float trapCooldownTimer;
+    public float trapCooldownTotal;
     // Smoke Screen recharge. Like the clock it's a single-phase cooldown; it
     // lives here (not on SmokeScreenSystem) so scrolling away from the Smoke
     // tool and back doesn't wipe the cooldown and let the player re-throw
@@ -99,6 +114,12 @@ public class PlayerToolCooldownStore : MonoBehaviour
     void Update()
     {
         book.Tick(Time.deltaTime);
+        // Advance the decoy/turret two-phase timers too. The active→cooldown
+        // handoff happens automatically inside Tick, so a decoy or turret that
+        // was deployed just before the player scrolled away still expires on
+        // time and rolls straight into its recharge.
+        decoy.Tick(Time.deltaTime);
+        turret.Tick(Time.deltaTime);
 
         if (clockCooldownTimer > 0f)
         {
@@ -110,6 +131,12 @@ public class PlayerToolCooldownStore : MonoBehaviour
         {
             smokeCooldownTimer -= Time.deltaTime;
             if (smokeCooldownTimer < 0f) smokeCooldownTimer = 0f;
+        }
+
+        if (trapCooldownTimer > 0f)
+        {
+            trapCooldownTimer -= Time.deltaTime;
+            if (trapCooldownTimer < 0f) trapCooldownTimer = 0f;
         }
 
     }
@@ -142,3 +169,4 @@ public class PlayerToolCooldownStore : MonoBehaviour
         return tagged != null ? tagged.transform : null;
     }
 }
+

@@ -247,6 +247,7 @@ public class ContinueRunMenu : MonoBehaviour
         // orchestrator in place can't change seating, which is what black-screens a
         // co-op→solo abandon.
         Debug.Log($"[ContinueRunMenu] Loading '{scene}' (resume={RunResumeIntent.Resume}, players={RunResumeIntent.PlayerCount}, suppressReopen={_suppressNextOpen}).");
+        BootProfiler.StartClock("[PERF] CONTINUE button pressed");
         ScreenFade.LoadScene(scene);
     }
 

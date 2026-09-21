@@ -15,7 +15,7 @@ MonoBehaviour:
   stageCount: 2
   wavesPerStage: 2
   hasFinalBoss: 1
-  availableBiomes: 05000000
+  availableBiomes: 02000000
   allowRepeatBiomes: 1
   mapLayoutLibrary: {fileID: 11400000, guid: 938991bd3fb9cfd4bba2cfc169709e4d, type: 2}
   waveConfigPool:
@@ -24,6 +24,7 @@ MonoBehaviour:
   spawnDelayScalePerStage: 0.85
   wavePacingMode: 2
   timeBetweenWaves: 3
+  firstWaveDelay: 3
   timeBetweenStages: 3
   enemyHealthScalePerStage: 1.15
   enemyDamageScalePerStage: 1.15
@@ -51,4 +52,10 @@ MonoBehaviour:
   baseEnemiesPerWave: 5
   proceduralMinSpawnDelay: 0.5
   proceduralMaxSpawnDelay: 1.5
+  bossAddsDuringStageBoss: 0
+  bossAddsDuringFinalBoss: 0
+  bossAddsPerBatch: 3
+  bossAddsInterval: {x: 9, y: 14}
+  bossAddsFirstDelay: 6
+  bossAddsMaxAlive: 10
   augmentEveryNWaves: 1

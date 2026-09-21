@@ -14,6 +14,47 @@ public class ParryIndicator : MonoBehaviour
     [Tooltip("Size of the indicator in world units")]
     [SerializeField] private float indicatorSize = 0.5f;
 
+    [Header("Compatibility")]
+    [Tooltip("Show the mark even though this enemy installs an AttackHandlerOverride.\n\n" +
+             "The override normally means 'ranged' — a Mort or Pitcher replaces the " +
+             "melee hit with a projectile, and its shots are parried in flight, so a " +
+             "head mark on the throw animation would be a lie.\n\n" +
+             "The Brute is the other kind of override: it suppresses the default " +
+             "single-target melee only so its own AoE slams can deal the damage " +
+             "instead. Those slams go through EnemyController.ApplyDamageToTarget " +
+             "like any melee hit, so they ARE parryable and the mark is honest. " +
+             "Tick this for that case.")]
+    [SerializeField] private bool showDespiteAttackOverride = false;
+
+    // Code-side access to the flag above, for enemies that add this component at
+    // runtime instead of authoring it on the prefab (Boss4). Must be set before
+    // this component's Start() runs — i.e. in the same frame as AddComponent.
+    public bool ShowDespiteAttackOverride
+    {
+        get => showDespiteAttackOverride;
+        set => showDespiteAttackOverride = value;
+    }
+
+    // Optional extra gate supplied by a companion component. When assigned and it
+    // returns false, the mark stays hidden even inside the parry frames. Lets an
+    // enemy whose attack cycle is sometimes NOT a parryable hit (Boss4 eating a
+    // frozen minion, or skipping the bite during its barrage) keep the "!" honest.
+    // Null for every existing prefab, so behaviour is unchanged.
+    public System.Func<bool> ShowCondition;
+
+    // Optional live height provider (world units above the pivot). Used by enemies
+    // whose body size changes mid-fight (Boss4's Brute growth), so the mark keeps
+    // sitting above the head instead of sinking into a sprite that grew under it.
+    // Null → the serialized yOffset is used, exactly as before.
+    public System.Func<float> YOffsetProvider;
+
+    /// Set the size / height from code (runtime-added indicators).
+    public void Configure(float worldYOffset, float worldSize)
+    {
+        yOffset = worldYOffset;
+        indicatorSize = worldSize;
+    }
+
     // Cached refs
     private EnemyController enemyController;
     private EnemyAnimationController animController;
@@ -56,7 +97,13 @@ public class ParryIndicator : MonoBehaviour
         // Their shots are parried in flight (see ProjectileParry), NOT by reacting
         // to the throw animation — so the melee-style head "!" is misleading here
         // (it implied you could melee-parry a Mort). Disable it for them.
-        if (enemyController.HasAttackOverride)
+        //
+        // Deliberately NOT final: the override is installed from the companion
+        // component's own Start(), and Unity does not order Start() between two
+        // components on the same object. Whether this check saw the override was
+        // therefore a coin toss. Update() re-tests it (see ShouldSuppress) so the
+        // outcome no longer depends on which script happened to wake first.
+        if (ShouldSuppress())
         {
             enabled = false;
             return;
@@ -67,8 +114,24 @@ public class ParryIndicator : MonoBehaviour
         SetVisible(false);
     }
 
+    // True when this enemy's damage is delivered by something other than the melee
+    // swing the mark telegraphs, so the mark would be misleading.
+    private bool ShouldSuppress()
+    {
+        if (showDespiteAttackOverride) return false;
+        return enemyController != null && enemyController.HasAttackOverride;
+    }
+
     void Update()
     {
+        // Catches an override installed after our Start() ran.
+        if (ShouldSuppress())
+        {
+            SetVisible(false);
+            enabled = false;
+            return;
+        }
+
         // Periodically check if player has shield (don't do every frame)
         if (Time.time > nextShieldCheck)
         {
@@ -104,6 +167,13 @@ public class ParryIndicator : MonoBehaviour
         // animation advances past the window and clears the mark on its own.)
         var parryStun = GetComponent<ParryStunEffect>();
         if (parryStun != null && parryStun.IsStunActive)
+        {
+            if (isShowingIndicator) SetVisible(false);
+            return;
+        }
+
+        // Companion veto (see ShowCondition).
+        if (ShowCondition != null && !ShowCondition())
         {
             if (isShowingIndicator) SetVisible(false);
             return;
@@ -276,6 +346,8 @@ public class ParryIndicator : MonoBehaviour
         float s = Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, 0.01f);
         indicatorGO.transform.localScale = Vector3.one / s;
 
+        float y = YOffsetProvider != null ? YOffsetProvider() : yOffset;
+
         // Gentle bob up and down
         float bob = Mathf.Sin(elapsed * 12f) * 0.04f;
         // Pulse the glow
@@ -283,11 +355,11 @@ public class ParryIndicator : MonoBehaviour
         {
             float pulse = 0.25f + Mathf.PingPong(elapsed * 3f, 0.2f);
             glowSR.color = new Color(1f, 0.85f, 0.1f, pulse);
-            glowSR.transform.localPosition = new Vector3(0f, yOffset + bob, 0f);
+            glowSR.transform.localPosition = new Vector3(0f, y + bob, 0f);
         }
         if (indicatorSR != null)
         {
-            indicatorSR.transform.localPosition = new Vector3(0f, yOffset + bob, 0f);
+            indicatorSR.transform.localPosition = new Vector3(0f, y + bob, 0f);
         }
     }
 
@@ -361,4 +433,5 @@ public class ParryIndicator : MonoBehaviour
         return _glowSprite;
     }
 }
+
 

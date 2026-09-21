@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 7288035209707823177}
   - component: {fileID: 8985743549121240849}
   - component: {fileID: 606109987111585013}
+  - component: {fileID: -1400424150558212307}
   m_Layer: 0
   m_Name: Vortex
   m_TagString: Enemy
@@ -190,7 +191,14 @@ MonoBehaviour:
   infallSpeed: 0.55
   angularMomentum: 2.2
   particleSize: 0.1
-  fallbackSortingOrder: 900
+  sortingLayerName: Default
+  grassSortBase: 1000
+  grassSortPrecision: 10
+  aboveGrassOffset: 30
+  bobAmplitude: 0.12
+  bobSpeed: 1.6
+  swayAmplitude: 0.05
+  swaySpeed: 0.6
 --- !u!114 &8985743549121240849
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -215,6 +223,7 @@ MonoBehaviour:
   maxAliveFromThisVortex: 12
   lifetimeSpawnBudget: 0
   birthRadiusScale: 0.85
+  spawnArcDegrees: 120
   birthPushSpeed: 6
   birthPushDuration: 0.3
   emergeDuration: 0.35
@@ -229,6 +238,9 @@ MonoBehaviour:
   placementAttempts: 24
   intensityTracksHealth: 1
   spawnCameraShake: 0.05
+  spitOnSpawn: 1
+  spitDuration: 0.5
+  spitAmount: 0.35
   showPathToVortex: 1
   pathFootprintSpacing: 1.5
   pathMaxDistance: 60
@@ -260,5 +272,39 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 1.3
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
   hitFlare: 0.35
+--- !u!114 &-1400424150558212307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

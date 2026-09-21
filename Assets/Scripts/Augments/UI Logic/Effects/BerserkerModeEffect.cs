@@ -22,6 +22,23 @@ public class BerserkerModeEffect : MonoBehaviour
     private float baseWeaponDamage;
     private Color originalColor;
 
+    // Ownership tracking for weaponData.damage.
+    //
+    // This effect WRITES weaponData.damage every frame, which made it hostile to
+    // everything else that touches weapon damage:
+    //   * a weapon hot-swap (augments 2 / 66 / 93 / 318 / 327 build a FRESH runtime
+    //     WeaponData copy) left it writing to the orphaned old copy forever, so the
+    //     berserker bonus silently stopped applying to the new weapon;
+    //   * any damage augment picked AFTER this effect initialised was overwritten on
+    //     the very next frame, because baseWeaponDamage was a one-time snapshot.
+    //
+    // We now remember the exact value we last wrote. If we read back something
+    // different, someone else changed the field, and we recover the NEW base by
+    // dividing out the multiplier we had applied — so external changes stick and
+    // compose with the berserker bonus instead of fighting it.
+    private float lastWrittenDamage = float.NaN;
+    private float lastAppliedMultiplier = 1f;
+
     private bool isInitialized = false;
     private float lastHealthPercent = 1f;
 
@@ -88,6 +105,8 @@ public class BerserkerModeEffect : MonoBehaviour
         }
 
         baseWeaponDamage = weaponData.damage;
+        lastWrittenDamage = float.NaN;
+        lastAppliedMultiplier = 1f;
         isInitialized = true;
 
         //Debug.Log($"[BERSERKER_MODE] Weapon initialized - Base damage: {baseWeaponDamage}");
@@ -104,6 +123,40 @@ public class BerserkerModeEffect : MonoBehaviour
 
     private void UpdateDamageBasedOnHealth()
     {
+        // Re-resolve the weapon's CURRENT runtime data every frame. A hot-swap
+        // replaces the WeaponData object outright; without this we would keep writing
+        // to the discarded copy and the bonus would vanish for the new weapon.
+        WeaponData live = weapon != null ? weapon.GetWeaponData() : null;
+        if (live == null) return;
+
+        if (!ReferenceEquals(live, weaponData))
+        {
+            // Weapon swapped. Put the OLD weapon's damage back, but only if it still
+            // holds the value we wrote — if something else changed it since, that
+            // change is theirs to keep.
+            if (weaponData != null && !float.IsNaN(lastWrittenDamage)
+                && Mathf.Approximately(weaponData.damage, lastWrittenDamage))
+            {
+                weaponData.damage = baseWeaponDamage;
+            }
+
+            weaponData = live;
+            baseWeaponDamage = live.damage;
+            lastWrittenDamage = float.NaN;
+            lastAppliedMultiplier = 1f;
+        }
+        else if (!float.IsNaN(lastWrittenDamage)
+                 && !Mathf.Approximately(weaponData.damage, lastWrittenDamage))
+        {
+            // Same weapon, but the field moved without us: another augment applied a
+            // damage change on top of our written value. Divide our own multiplier
+            // back out to recover the new true base, so their change persists instead
+            // of being erased on this frame.
+            baseWeaponDamage = lastAppliedMultiplier > 0.0001f
+                ? weaponData.damage / lastAppliedMultiplier
+                : weaponData.damage;
+        }
+
         float currentHealthPercent = playerStats.currentHealth / playerStats.maxHealth;
         float missingHealthPercent = 1f - currentHealthPercent;
 
@@ -116,6 +169,8 @@ public class BerserkerModeEffect : MonoBehaviour
         float newDamage = baseWeaponDamage * damageMultiplier;
 
         weaponData.damage = newDamage;
+        lastWrittenDamage = newDamage;
+        lastAppliedMultiplier = damageMultiplier;
 
         // Log when health changes significantly
         if (showDebugLogs && Mathf.Abs(currentHealthPercent - lastHealthPercent) > 0.05f)
@@ -155,8 +210,11 @@ public class BerserkerModeEffect : MonoBehaviour
 
     void OnDestroy()
     {
-        // Restore original values
-        if (isInitialized && weaponData != null)
+        // Restore original values — but only if the field still holds what we wrote.
+        // If another system changed it after us, that value is theirs, and stamping
+        // our stale base over it would silently revert their augment.
+        if (isInitialized && weaponData != null
+            && (float.IsNaN(lastWrittenDamage) || Mathf.Approximately(weaponData.damage, lastWrittenDamage)))
         {
             weaponData.damage = baseWeaponDamage;
         }
@@ -190,3 +248,5 @@ public class BerserkerModeEffect : MonoBehaviour
     public float GetDefensePenalty() => defensePenalty;
     public float GetDamagePerMissingHealthPercent() => damagePerMissingHealthPercent;
 }
+
+

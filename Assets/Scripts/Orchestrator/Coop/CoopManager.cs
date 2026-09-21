@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Users;
+using UnityEngine.SceneManagement;
+using System.Collections;
 
 // Central co-op coordinator for the gameplay scene (Phase 2).
 //  - LEGACY mode (no PlayerInputManager found) does nothing 
@@ -43,34 +45,178 @@ public class CoopManager : MonoBehaviour
     // so we can keep its binding mask widened and pair hot-plugged pads. Null in co-op.
     private PlayerInput _solo;
     private bool _reapplyingSoloMask;
+
+    // True once we have run the per-scene setup at least once. Distinguishes "our own
+    // Start is about to run" from "we are a persisted instance and a NEW scene just
+    // loaded under us" — the two cases sceneLoaded cannot tell apart on its own.
+    private bool _initialized;
+
+    // Retry handle. A gameplay scene may not have its PlayerInputManager reachable on
+    // the exact frame sceneLoaded fires (it can be created or enabled from another
+    // object's Start), so we re-check for a few frames before declaring LEGACY mode.
+    private Coroutine _retry;
     private const string SoloBindingGroups = "Keyboard&Mouse;Gamepad";
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        // DIAG (temporary): the duplicate branch used to be completely silent, so a
+        // second scene load where the fresh CoopManager kills itself looked exactly
+        // like "CoopManager never existed". The surviving instance's SCENE NAME is the
+        // tell: 'DontDestroyOnLoad' means an earlier CoopManager was carried across the
+        // load (most likely as a child of an object that persists itself, e.g. the one
+        // SessionConfig detaches to the root) and its Start() will never run again.
+        if (Instance != null && Instance != this)
+        {
+            if (Instance.gameObject.scene.name == "DontDestroyOnLoad")
+                Debug.LogWarning($"[CoopManager] '{Instance.name}' is living in DontDestroyOnLoad, so " +
+                                 $"this scene's copy is redundant and is being destroyed. The persisted " +
+                                 "instance now re-seats players on every scene load, so this is survivable " +
+                                 "— but it is NOT the intended layout. Something on that GameObject " +
+                                 "(SessionConfig, most likely) is calling DontDestroyOnLoad and dragging " +
+                                 "CoopManager along. Give that component its own GameObject.");
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
 
-        int target = 1;
-        if (RunResumeIntent.Pending && RunResumeIntent.PlayerCount > 0)
-            target = Mathf.Clamp(RunResumeIntent.PlayerCount, 1, 2);   // continue/lobby is authoritative
-        else if (SessionConfig.Instance != null)
-            target = Mathf.Clamp(SessionConfig.Instance.TargetPlayerCount, 1, 2);
+        TargetPlayerCount = ResolveTargetPlayerCount();
 
-        TargetPlayerCount = target;
+        // This object can end up in DontDestroyOnLoad without asking for it — anything
+        // sharing its GameObject that calls DontDestroyOnLoad takes us along (that is
+        // exactly how 'CoopSystems' persisted: SessionConfig lives on it and detaches
+        // itself to the root). A persisted CoopManager's Start() runs ONCE, in the first
+        // gameplay scene, and never again — so every later load came up with no player,
+        // no player camera, and Unity's "No cameras rendering" grey.
+        //
+        // Re-running the per-scene setup on each load makes us correct either way:
+        // scene-local (the intended layout) or accidentally persistent.
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    // Seating intent for the run that is ABOUT to start. Re-read on every scene load so
+    // a co-op run followed by a solo run doesn't inherit the old count.
+    private int ResolveTargetPlayerCount()
+    {
+        if (RunResumeIntent.Pending && RunResumeIntent.PlayerCount > 0)
+            return Mathf.Clamp(RunResumeIntent.PlayerCount, 1, 2);   // continue/lobby is authoritative
+        if (SessionConfig.Instance != null)
+            return Mathf.Clamp(SessionConfig.Instance.TargetPlayerCount, 1, 2);
+        return 1;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // Not yet set up: we are a fresh instance in the scene that just loaded, and our
+        // own Start() is a few moments away. Let it do the work — re-entering here would
+        // seat the player twice.
+        if (!_initialized) return;
+
+        // Additive loads (overlays, UI scenes) don't replace the gameplay scene, so the
+        // seating we already have is still valid.
+        if (mode != LoadSceneMode.Single) return;
+
+        ReinitializeForNewScene();
+    }
+
+    // Give the scene a few frames to produce a PlayerInputManager before concluding
+    // there isn't one. Runs ONLY when the immediate attempt failed, so the normal case
+    // still seats the player on the same frame as before — a delayed spawn would break
+    // anything that resolves the player once in its own Start (GremlinSpawner does).
+    private IEnumerator RetryInitialize()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            yield return null;
+            if (TryInitializeForScene()) { _retry = null; yield break; }
+        }
+        _retry = null;
+        ReportNoManager();
+    }
+
+    // A menu scene legitimately has no PlayerInputManager and never will. Only a
+    // GAMEPLAY scene missing one is an error worth shouting about.
+    private void ReportNoManager()
+    {
+        bool gameplayScene = FindFirstObjectByType<GameOrchestrator>() != null;
+
+        if (gameplayScene)
+        {
+            Debug.LogError($"[CoopManager] No PlayerInputManager in gameplay scene " +
+                           $"'{SceneManager.GetActiveScene().name}' → LEGACY mode: NO player will be " +
+                           "spawned, and therefore no player camera ('No cameras rendering'). Note " +
+                           "FindFirstObjectByType skips INACTIVE objects.");
+        }
+        else if (debugLog)
+        {
+            Debug.Log($"[CoopManager] Standing by in '{SceneManager.GetActiveScene().name}' — no " +
+                      "PlayerInputManager here, which is normal for a menu scene. Seating resumes " +
+                      "when a gameplay scene loads.");
+        }
+    }
+
+    // Drop everything that belonged to the OLD scene, then set up again from scratch.
+    // Every reference we hold across the load is dead: the PlayerInputManager is scene-
+    // local and was destroyed with its scene, the player cameras went with it, and the
+    // join/leave subscriptions pointed at that destroyed manager.
+    private void ReinitializeForNewScene()
+    {
+        ClearSceneState();
+
+        TargetPlayerCount = ResolveTargetPlayerCount();
+
+        _initialized = false;
+        if (_retry != null) { StopCoroutine(_retry); _retry = null; }
+        if (!TryInitializeForScene()) _retry = StartCoroutine(RetryInitialize());
+    }
+
+    private void ClearSceneState()
+    {
+        if (playerInputManager != null)
+        {
+            playerInputManager.onPlayerJoined -= HandlePlayerJoined;
+            playerInputManager.onPlayerLeft -= HandlePlayerLeft;
+        }
+        playerInputManager = null;
+
+        _cameras.Clear();
+        _spawnedCameras.Clear();
+
+        if (_solo != null) _solo.onControlsChanged -= OnSoloControlsChanged;
+        InputSystem.onDeviceChange -= OnSoloDeviceChange;
+        _solo = null;
     }
 
     private void Start()
     {
+        if (!TryInitializeForScene()) _retry = StartCoroutine(RetryInitialize());
+    }
+
+    /// <summary>
+    /// Wire up to this scene's PlayerInputManager and seat the players.
+    /// Returns false (quietly) when there is no PlayerInputManager to bind to — the
+    /// caller decides whether that is a menu scene (fine) or a broken gameplay scene.
+    /// </summary>
+    private bool TryInitializeForScene()
+    {
+        _initialized = true;
+
         if (playerInputManager == null)
             playerInputManager = FindFirstObjectByType<PlayerInputManager>();
 
         if (playerInputManager == null)
         {
             ManagedMode = false;
-            return;
+            return false;
         }
 
         ManagedMode = true;
+
+        // DIAG (temporary): proves Start actually ran, and on which objects.
+        Debug.Log($"[CoopManager] Start on '{name}' (scene '{gameObject.scene.name}') — " +
+                  $"PlayerInputManager='{playerInputManager.name}' (scene " +
+                  $"'{playerInputManager.gameObject.scene.name}'), TargetPlayerCount={TargetPlayerCount}, " +
+                  $"existing PlayerInput.all={PlayerInput.all.Count}, " +
+                  $"playerPrefab={(playerPrefab != null ? playerPrefab.name : "NULL")}");
 
         if (playerInputManager.playerPrefab == null && playerPrefab != null)
             playerInputManager.playerPrefab = playerPrefab;
@@ -87,10 +233,15 @@ public class CoopManager : MonoBehaviour
 
         if (autoJoinDevicesOnStart)
             AutoJoinLocalDevices();
+
+        return true;
     }
 
     private void OnDestroy()
     {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (_retry != null) { StopCoroutine(_retry); _retry = null; }
+
         if (playerInputManager != null)
         {
             playerInputManager.onPlayerJoined -= HandlePlayerJoined;
@@ -117,6 +268,21 @@ public class CoopManager : MonoBehaviour
             pref.PlayerIndex = pi.playerIndex;
             PlayerRegistry.ResortByIndex();
         }
+
+        // The prefab seats every player at one authored position. If the map has
+        // ALREADY been built by the time we get here — a second player joining
+        // mid-stage, or a scene where the layout goes up before seating — that
+        // position can be inside a layout obstacle, and a body that starts fully
+        // inside a static collider wedges instead of being pushed out.
+        //
+        // The reverse ordering (player first, map second) is the common one and is
+        // handled on the map's side, at the end of TowerDefenseMap.GenerateMap.
+        // Both are no-ops unless the player is genuinely inside solid geometry.
+        // pref.gameObject rather than pi.gameObject: PlayerRef requires PlayerStats,
+        // so it is always on the character root — the object that carries the body
+        // collider we measure against. PlayerInput is normally on the same object,
+        // but the lookup above already allows for it being on a child.
+        PlayerSpawnSafety.EvacuateIfStuck(pref != null ? pref.gameObject : pi.gameObject);
 
         if (debugLog)
         {
@@ -312,7 +478,23 @@ public class CoopManager : MonoBehaviour
                 else
                     solo = playerInputManager.JoinPlayer();   // pad-only machine
 
-                if (solo != null) BindSoloToAllDevices(solo);
+                // DIAG (temporary): JoinPlayer returns NULL when the manager refuses the
+                // join (join gate closed, maxPlayerCount already reached). Nothing fires
+                // onPlayerJoined in that case, so the old code just fell through quietly.
+                if (solo == null)
+                    Debug.LogError("[CoopManager] JoinPlayer returned NULL — the PlayerInputManager " +
+                                   "refused the join. Check its Max Player Count and whether joining " +
+                                   "was left disabled. No player, no camera.");
+                else
+                    BindSoloToAllDevices(solo);
+            }
+            else
+            {
+                // DIAG (temporary): a leftover PlayerInput from a previous run would
+                // block the join for the new one.
+                Debug.LogWarning($"[CoopManager] Skipping solo auto-join: playerInputManager.playerCount " +
+                                 $"is already {playerInputManager.playerCount}. If no player is visible, " +
+                                 "that seat is a stale leftover from the previous run.");
             }
             return;
         }
@@ -468,4 +650,6 @@ public class CoopManager : MonoBehaviour
         return false;
     }
 }
+
+
 

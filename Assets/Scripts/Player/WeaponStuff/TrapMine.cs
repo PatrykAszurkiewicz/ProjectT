@@ -18,20 +18,24 @@ public class TrapMine : MonoBehaviour
     private Vector3 captureStartPos;
 
     private SpriteRenderer baseRenderer, jawLRenderer, jawRRenderer;
-    private SpriteRenderer glowRenderer, runeRenderer, haloRenderer, shadowRenderer;
-    private SpriteRenderer pressurePlateRenderer; // NEW: inner pressure plate detail
-    private float blinkTimer;
-    private readonly Color glowOn = new Color(0.15f, 0.85f, 0.45f, 0.9f);
-    private readonly Color glowOff = new Color(0.15f, 0.85f, 0.45f, 0.15f);
+    private SpriteRenderer springLRenderer, springRRenderer; // leaf springs, the iconic side arms
+    private SpriteRenderer panRenderer;                      // center trigger pan
+    private SpriteRenderer chainRenderer;                    // anchor chain trailing off
+    private SpriteRenderer shadowRenderer;                   // grounded contact shadow
+    private SpriteRenderer hingeLRenderer, hingeRRenderer;   // hinge bolts joining springs to jaws
+    private SpriteRenderer nightGlowSR;                      // cool moonlight sheen (night only)
+    private NightLight nightLight;                           // actually lights the ground at night
+    private float nightGlowBaseA;                            // baseline alpha of the night sheen
     private float spawnScale;
-    private float runeColorPhase; // smooth color cycling for rune ring
+    private float tremorPhase;    // faint tension shiver while armed
+    private float glintTimer;     // occasional steel glint while armed
 
     private TrapHoldEffect activeHoldEffect;
     private const int SORT = 350;
 
-    // Y-sorting (same formula as GrassCartoonOverlay / PlayerMovement) 
+    // Y-sorting (same formula as GrassCartoonOverlay / PlayerMovement)
     // sortPrecision=10 means 1 world-unit of Y = 10 sort-order units.
-    // TRAP_SORT_BIAS = -4  →  the trap's highest sub-layer (glow, +3) lands at baseOrder − 1
+    // TRAP_SORT_BIAS = -4  →  the trap's highest sub-layer (jaws, +3) lands at baseOrder − 1
     private const float SORT_PRECISION = 10f;
     private const int SORT_ORDER_BASE = 1000;
     private const float SORT_Y_OFFSET = -0.15f;
@@ -57,73 +61,60 @@ public class TrapMine : MonoBehaviour
         }
         if (!isArmed) { armTimer -= Time.deltaTime; if (armTimer <= 0f) isArmed = true; }
 
-        // Glow — multi-layered pulsing with secondary color shift
-        if (glowRenderer)
+        // A set steel trap holds dead still. When armed we add only a faint tension
+        // tremor and the occasional glint of light catching the steel — no glow, no runes.
+        float tremor = 0f;
+        if (isArmed)
         {
-            float iv = isArmed ? 1.4f : 4.2f;
-            blinkTimer += Time.deltaTime;
-            float p = 0.5f + 0.5f * Mathf.Sin(blinkTimer / iv * Mathf.PI * 2f);
-            glowRenderer.color = Color.Lerp(glowOff, glowOn, p);
-            glowRenderer.transform.localScale = Vector3.one * (0.22f + p * 0.1f);
+            tremorPhase += Time.deltaTime * 30f;
+            tremor = Mathf.Sin(tremorPhase) * 0.004f + Mathf.Sin(tremorPhase * 2.3f) * 0.002f;
 
-            // Secondary outer glow ring (reuse same renderer, just pulse alpha harder when armed)
-            if (isArmed)
+            glintTimer -= Time.deltaTime;
+            if (glintTimer <= 0f)
             {
-                float fastPulse = 0.5f + 0.5f * Mathf.Sin(blinkTimer * 4.5f);
-                glowRenderer.transform.localScale = Vector3.one * (0.24f + p * 0.1f + fastPulse * 0.03f);
+                glintTimer = Random.Range(1.6f, 3.4f);
+                SpawnGlint();
             }
         }
 
-        // Halo pulse — bright, pulsating glow with warm/cool shift
-        if (haloRenderer)
-        {
-            float hp = 0.5f + 0.5f * Mathf.Sin(Time.time * 2.5f);
-            float ha = isArmed ? Mathf.Lerp(0.25f, 0.55f, hp) : 0.15f;
-            // Subtle warm-to-cool color shift
-            float warmShift = 0.5f + 0.5f * Mathf.Sin(Time.time * 1.2f);
-            float r = Mathf.Lerp(0.95f, 1f, warmShift);
-            float g = Mathf.Lerp(0.93f, 0.98f, warmShift);
-            float bl = Mathf.Lerp(0.85f, 0.95f, warmShift);
-            haloRenderer.color = new Color(r, g, bl, ha);
-            float haloScale = isArmed ? Mathf.Lerp(1.3f, 1.55f, hp) : 1.3f;
-            haloRenderer.transform.localScale = Vector3.one * haloScale;
-        }
+        // Jaws: fully spread when armed (open maw), a touch tighter during the arm delay.
+        // The tremor rides on top so the sprung steel looks tense, not lifeless.
+        float openAngle = (isArmed ? 26f : 20f) + tremor * 60f;
+        SetJaws(openAngle);
 
-        // Rune ring — rotation + subtle color cycling
-        if (runeRenderer)
+        // Night sheen — a slow cool shimmer, a little brighter once armed. Null (skipped) by day.
+        if (nightGlowSR)
         {
-            runeRenderer.transform.Rotate(0, 0, -25f * Time.deltaTime);
-            runeColorPhase += Time.deltaTime * 0.8f;
-            float rc = 0.5f + 0.5f * Mathf.Sin(runeColorPhase);
-            float runeAlpha = isArmed ? Mathf.Lerp(0.35f, 0.55f, rc) : 0.25f;
-            runeRenderer.color = new Color(
-                Mathf.Lerp(0.10f, 0.20f, rc),
-                Mathf.Lerp(0.50f, 0.65f, rc),
-                Mathf.Lerp(0.30f, 0.45f, rc),
-                runeAlpha);
+            float shimmer = 0.85f + 0.15f * Mathf.Sin(Time.time * 1.6f);
+            float armedMul = isArmed ? 1.15f : 0.85f;
+            Color c = nightGlowSR.color;
+            c.a = nightGlowBaseA * shimmer * armedMul;
+            nightGlowSR.color = c;
         }
-
-        // Pressure plate subtle bob
-        if (pressurePlateRenderer)
-        {
-            float bob = Mathf.Sin(Time.time * 1.8f + 0.5f) * 0.003f;
-            pressurePlateRenderer.transform.localPosition = new Vector3(0, bob, 0);
-        }
-
-        // Jaw breathe — wider when armed
-        float breatheSpeed = isArmed ? 2.5f : 2f;
-        float breatheMin = isArmed ? 18f : 15f;
-        float breatheMax = isArmed ? 28f : 25f;
-        float b = 0.5f + 0.5f * Mathf.Sin(Time.time * breatheSpeed);
-        SetJaws(Mathf.Lerp(breatheMin, breatheMax, b));
 
         if (isArmed) CheckProximity();
     }
 
+    // 'a' is the open amount in the same 0..~30 range the capture ramp uses.
+    // The top jaw lifts up and the bottom jaw drops down to open the maw; at a<=0 they
+    // meet at the centre and their teeth interlock (the bite). A slight tilt on the way
+    // shut makes the sprung steel read as snapping rather than sliding.
     void SetJaws(float a)
     {
-        if (jawLRenderer) jawLRenderer.transform.localRotation = Quaternion.Euler(0, 0, a);
-        if (jawRRenderer) jawRRenderer.transform.localRotation = Quaternion.Euler(0, 0, -a);
+        float k = Mathf.Clamp01(a / 26f);           // 0 = shut, 1 = fully open
+        float spread = Mathf.Lerp(0.008f, 0.10f, k); // vertical gap of each jaw from centre
+        float tilt = (1f - k) * 4f;                  // small inward tilt as it closes
+
+        if (jawLRenderer)
+        {
+            jawLRenderer.transform.localPosition = new Vector3(0f, 0.06f + spread, 0f);
+            jawLRenderer.transform.localRotation = Quaternion.Euler(0, 0, tilt);
+        }
+        if (jawRRenderer)
+        {
+            jawRRenderer.transform.localPosition = new Vector3(0f, -0.06f - spread, 0f);
+            jawRRenderer.transform.localRotation = Quaternion.Euler(0, 0, -tilt);
+        }
     }
 
 
@@ -135,13 +126,16 @@ public class TrapMine : MonoBehaviour
         int baseOrder = SORT_ORDER_BASE + Mathf.RoundToInt(-sortY * SORT_PRECISION) + TRAP_SORT_BIAS;
 
         if (shadowRenderer) shadowRenderer.sortingOrder = baseOrder - 3;
-        if (haloRenderer) haloRenderer.sortingOrder = baseOrder - 2;
-        if (runeRenderer) runeRenderer.sortingOrder = baseOrder;
+        if (chainRenderer) chainRenderer.sortingOrder = baseOrder - 2;
+        if (springLRenderer) springLRenderer.sortingOrder = baseOrder;
+        if (springRRenderer) springRRenderer.sortingOrder = baseOrder;
         if (baseRenderer) baseRenderer.sortingOrder = baseOrder + 1;
-        if (pressurePlateRenderer) pressurePlateRenderer.sortingOrder = baseOrder + 1;
-        if (jawLRenderer) jawLRenderer.sortingOrder = baseOrder + 2;
-        if (jawRRenderer) jawRRenderer.sortingOrder = baseOrder + 2;
-        if (glowRenderer) glowRenderer.sortingOrder = baseOrder + 3;
+        if (panRenderer) panRenderer.sortingOrder = baseOrder + 2;
+        if (jawLRenderer) jawLRenderer.sortingOrder = baseOrder + 3;
+        if (jawRRenderer) jawRRenderer.sortingOrder = baseOrder + 3;
+        if (hingeLRenderer) hingeLRenderer.sortingOrder = baseOrder + 4;
+        if (hingeRRenderer) hingeRRenderer.sortingOrder = baseOrder + 4;
+        if (nightGlowSR) nightGlowSR.sortingOrder = baseOrder + 5;
     }
 
     void TickCapture()
@@ -170,7 +164,7 @@ public class TrapMine : MonoBehaviour
     {
         var go = new GameObject("GT"); go.transform.position = pos + (Vector3)(Random.insideUnitCircle * 0.15f);
         var sr = go.AddComponent<SpriteRenderer>(); sr.sprite = TrapSpriteCache.SparkDot;
-        sr.sortingOrder = SORT + 10; sr.color = new Color(0.3f, 1f, 0.5f, 0.8f);
+        sr.sortingOrder = SORT + 10; sr.color = new Color(0.80f, 0.82f, 0.85f, 0.75f);
         go.transform.localScale = Vector3.one * Random.Range(0.06f, 0.12f);
         go.AddComponent<StruggleSparkFX>().Initialize(
             (Vector2)(transform.position - pos).normalized * 1.5f + Vector2.up * Random.Range(0.5f, 1.5f),
@@ -181,6 +175,7 @@ public class TrapMine : MonoBehaviour
     {
         if (isDisintegrating) return;
         isDisintegrating = true; isArmed = false;
+        if (nightLight) nightLight.enabled = false; // light out with the trap
 
         // If currently holding an enemy, force-release them
         if (activeHoldEffect != null && !activeHoldEffect.IsComplete)
@@ -197,7 +192,13 @@ public class TrapMine : MonoBehaviour
         gameObject.AddComponent<DisintegrateTrap>().Initialize(AllRenderers());
     }
 
-    SpriteRenderer[] AllRenderers() => new[] { baseRenderer, jawLRenderer, jawRRenderer, glowRenderer, runeRenderer, haloRenderer, shadowRenderer, pressurePlateRenderer };
+    SpriteRenderer[] AllRenderers()
+    {
+        var list = new System.Collections.Generic.List<SpriteRenderer>(11)
+        { baseRenderer, jawLRenderer, jawRRenderer, springLRenderer, springRRenderer, panRenderer, chainRenderer, shadowRenderer, hingeLRenderer, hingeRRenderer };
+        if (nightGlowSR) list.Add(nightGlowSR); // only exists at night
+        return list.ToArray();
+    }
 
     void CheckProximity()
     {
@@ -237,52 +238,103 @@ public class TrapMine : MonoBehaviour
         activeHoldEffect = enemy.AddComponent<TrapHoldEffect>();
         activeHoldEffect.Initialize(holdDuration, transform.position);
         if (CameraShake.Instance) CameraShake.Instance.Shake(0.10f, 0.10f);
-        if (glowRenderer) glowRenderer.color = new Color(1f, 0.3f, 0.1f, 0.8f);
     }
 
     void FadeOut()
     {
         if (isDisintegrating) return; isDisintegrating = true;
+        if (nightLight) nightLight.enabled = false; // light out with the trap
         gameObject.AddComponent<DisintegrateTrap>().Initialize(AllRenderers());
     }
 
     void BuildVisual()
     {
-        // Soft halo behind everything — warm-white ground glow, visible on any biome
-        var haloGo = new GameObject("Halo"); haloGo.transform.SetParent(transform, false);
-        haloRenderer = haloGo.AddComponent<SpriteRenderer>();
-        haloRenderer.sprite = TrapSpriteCache.SoftCircle;
-        haloRenderer.sortingOrder = SORT - 2;
-        haloRenderer.color = new Color(1f, 0.98f, 0.92f, 0.35f);
-        haloGo.transform.localScale = Vector3.one * 1.4f;
-
-        // Dark ground shadow ring beneath the halo (provides contrast on snow/light backgrounds)
+        // Grounded contact shadow — squashed dark ellipse, offset down so the trap reads as
+        // planted. This is what separates it from BRIGHT ground (snow, desert), no glow needed.
         var shadowGo = new GameObject("Shadow"); shadowGo.transform.SetParent(transform, false);
         shadowRenderer = shadowGo.AddComponent<SpriteRenderer>();
         shadowRenderer.sprite = TrapSpriteCache.SoftCircle;
         shadowRenderer.sortingOrder = SORT - 3;
-        shadowRenderer.color = new Color(0f, 0f, 0f, 0.18f);
-        shadowGo.transform.localScale = Vector3.one * 1.7f;
+        shadowRenderer.color = new Color(0f, 0f, 0f, 0.34f);
+        shadowGo.transform.localPosition = new Vector3(0f, -0.14f, 0f);
+        shadowGo.transform.localScale = new Vector3(1.5f, 0.82f, 1f);
 
-        // Rune ring — slightly larger to accommodate HD detail
-        runeRenderer = MakeSR("Rune", new Vector3(0, -0.02f, 0), TrapSpriteCache.RuneRing,
-            SORT, 0.85f, new Color(0.15f, 0.55f, 0.35f, 0.4f));
+        // Anchor chain trailing off to the lower-left, tucked behind the plate.
+        chainRenderer = MakeSR("Chain", new Vector3(-0.22f, -0.20f, 0), TrapSpriteCache.ChainTail,
+            SORT - 2, 0.55f, new Color(0.62f, 0.64f, 0.67f, 1f));
+        chainRenderer.transform.localRotation = Quaternion.Euler(0, 0, 28f);
 
-        // Base — HD metallic disc
-        baseRenderer = MakeSR("Base", Vector3.zero, TrapSpriteCache.TrapBase, SORT + 1, 0.65f, Color.white);
+        // Two leaf springs — the iconic side arms. They sit under the plate edge and stick out.
+        springLRenderer = MakeSR("SpringL", new Vector3(-0.34f, 0f, 0), TrapSpriteCache.GetSpring(true),
+            SORT, 0.62f, Color.white);
+        springRRenderer = MakeSR("SpringR", new Vector3(0.34f, 0f, 0), TrapSpriteCache.GetSpring(false),
+            SORT, 0.62f, Color.white);
 
-        // Pressure plate — inner octagonal detail sitting on top of base
-        pressurePlateRenderer = MakeSR("PressurePlate", new Vector3(0, 0, 0), TrapSpriteCache.PressurePlate,
-            SORT + 1, 0.35f, new Color(1f, 1f, 1f, 0.85f));
+        // Round stamped-steel spring plate.
+        baseRenderer = MakeSR("Base", Vector3.zero, TrapSpriteCache.TrapBase, SORT + 1, 0.66f, Color.white);
 
-        // Jaws — HD serrated teeth
-        jawLRenderer = MakeSR("JawL", new Vector3(-0.09f, 0.07f, 0), TrapSpriteCache.GetJaw(true), SORT + 2, 0.6f, Color.white);
-        jawLRenderer.transform.localRotation = Quaternion.Euler(0, 0, 20f);
-        jawRRenderer = MakeSR("JawR", new Vector3(0.09f, 0.07f, 0), TrapSpriteCache.GetJaw(false), SORT + 2, 0.6f, Color.white);
-        jawRRenderer.transform.localRotation = Quaternion.Euler(0, 0, -20f);
+        // Center trigger pan.
+        panRenderer = MakeSR("Pan", Vector3.zero, TrapSpriteCache.Pan, SORT + 2, 0.42f, Color.white);
 
-        // Glow — multi-layered radial
-        glowRenderer = MakeSR("Glow", new Vector3(0, 0.02f, 0), TrapSpriteCache.Glow, SORT + 3, 0.25f, glowOff);
+        // Jaws — top and bottom toothed steel arcs forming the maw. SetJaws drives them open/shut.
+        jawLRenderer = MakeSR("JawTop", new Vector3(0, 0.06f, 0), TrapSpriteCache.GetJaw(true), SORT + 3, 0.66f, Color.white);
+        jawRRenderer = MakeSR("JawBottom", new Vector3(0, -0.06f, 0), TrapSpriteCache.GetJaw(false), SORT + 3, 0.66f, Color.white);
+
+        // Hinge bolts on the left/right where the jaws pivot against the plate — the posts that
+        // visually tie the springs, plate and jaws into one mechanism.
+        hingeLRenderer = MakeSR("HingeL", new Vector3(-0.25f, 0f, 0), TrapSpriteCache.Bolt, SORT + 4, 0.17f, Color.white);
+        hingeRRenderer = MakeSR("HingeR", new Vector3(0.25f, 0f, 0), TrapSpriteCache.Bolt, SORT + 4, 0.17f, Color.white);
+
+        SetJaws(20f);
+
+        SetupNightVisibility();
+    }
+
+    // Night mode darkens the whole scene, so a bare steel trap would vanish. We (1) register a
+    // small, dim NightLight so the trap's patch of ground is actually lit through the darkness,
+    // and (2) lay a subtle COOL sheen sprite over the steel — moonlight catching metal, not a
+    // magic glow. Both no-op in daytime: NightLight does nothing without a NightOverlay, and
+    // NightGlow.AddGlow returns null, so the look is unchanged by day.
+    void SetupNightVisibility()
+    {
+        nightLight = gameObject.AddComponent<NightLight>();
+        nightLight.radius = 1.5f;              // small pool — reveals the trap, not the battlefield
+        nightLight.intensity = 0.5f;
+        nightLight.lightColor = new Color(0.66f, 0.78f, 1f); // cold moonlight
+        nightLight.warmTintStrength = 0.12f;   // mostly neutral, faint cool tint
+        nightLight.flickerSpeed = 0f;          // steady; the shimmer comes from the sheen sprite
+        nightLight.fadeInDuration = 0.35f;     // eases in with the pop-in
+
+        var glowGo = NightGlow.AddGlow(
+            gameObject,
+            new Color(0.72f, 0.82f, 1f),       // cool steel-blue
+            radius: 0.62f,
+            intensity: 0.34f,
+            sortingOrder: SORT + 5,
+            localOffset: Vector3.zero);
+        if (glowGo != null)
+        {
+            nightGlowSR = glowGo.GetComponent<SpriteRenderer>();
+            nightGlowBaseA = nightGlowSR != null ? nightGlowSR.color.a : 0f;
+        }
+    }
+
+    // Occasional bright specular glint sliding across a jaw — light catching cold steel.
+    void SpawnGlint()
+    {
+        if (!jawLRenderer && !jawRRenderer) return;
+        var host = (Random.value < 0.5f && jawLRenderer) ? jawLRenderer : jawRRenderer;
+        if (!host) host = jawLRenderer ? jawLRenderer : jawRRenderer;
+        if (!host) return;
+
+        var go = new GameObject("Glint");
+        go.transform.position = host.transform.position + (Vector3)(Random.insideUnitCircle * 0.14f);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = TrapSpriteCache.SparkDot;
+        sr.sortingOrder = host.sortingOrder + 1;
+        sr.color = new Color(1f, 1f, 1f, 0.9f);
+        go.transform.localScale = Vector3.one * Random.Range(0.05f, 0.09f);
+        go.AddComponent<SteelGlintFX>();
     }
 
     SpriteRenderer MakeSR(string n, Vector3 lp, Sprite s, int order, float sc, Color c)
@@ -319,6 +371,16 @@ public static class TrapSpriteCache
     public static Sprite ConstrictBand { get { if (!_constrictBand) _constrictBand = GenConstrictBand(); return _constrictBand; } }
     public static Sprite EnergyMote { get { if (!_energyMote) _energyMote = GenEnergyMote(); return _energyMote; } }
 
+    static Sprite _pan, _springL, _springR, _chainTail, _bolt;
+    public static Sprite Pan { get { if (!_pan) _pan = GenPan(); return _pan; } }
+    public static Sprite ChainTail { get { if (!_chainTail) _chainTail = GenChainTail(); return _chainTail; } }
+    public static Sprite Bolt { get { if (!_bolt) _bolt = GenBolt(); return _bolt; } }
+    public static Sprite GetSpring(bool left)
+    {
+        if (left) { if (!_springL) _springL = GenSpring(true); return _springL; }
+        else { if (!_springR) _springR = GenSpring(false); return _springR; }
+    }
+
     public static Sprite GetJaw(bool left)
     {
         if (left) { if (!_jawL) _jawL = GenJaw(true); return _jawL; }
@@ -347,27 +409,28 @@ public static class TrapSpriteCache
         return Mathf.Clamp01((threshold - val) / width + 0.5f);
     }
 
-    //  TRAP BASE
+    //  TRAP BASE — round stamped-steel spring plate: cold blue-grey steel, brushed grain,
+    //  rust bleeding in from the rim, rivets, a recessed dark hub for the pan, and a bright
+    //  specular edge so the silhouette reads on dark biomes (grass, marsh) without any glow.
     static Sprite GenTrapBase()
     {
         const int S = 128;
         var t = MkTex(S, S); var px = new Color[S * S];
-        Vector2 ct = new Vector2(S * 0.5f, S * 0.48f);
-        float outerR = S * 0.42f;
+        Vector2 ct = new Vector2(S * 0.5f, S * 0.49f);
+        float outerR = S * 0.44f;
 
-        // Metallic palette
-        Color metalDark = new Color(0.22f, 0.22f, 0.20f, 1f);
-        Color metalMid = new Color(0.35f, 0.35f, 0.32f, 1f);
-        Color metalLight = new Color(0.52f, 0.52f, 0.48f, 1f);
-        Color rimDark = new Color(0.14f, 0.14f, 0.12f, 1f);
-        Color rivetColor = new Color(0.18f, 0.18f, 0.16f, 1f);
-        Color scratchCol = new Color(0.55f, 0.55f, 0.50f, 0.3f);
+        // Cold steel palette (slightly blue) + rust
+        Color steelDark = new Color(0.14f, 0.16f, 0.19f, 1f);
+        Color steelMid = new Color(0.30f, 0.33f, 0.37f, 1f);
+        Color steelLight = new Color(0.56f, 0.60f, 0.65f, 1f);
+        Color steelSpec = new Color(0.86f, 0.90f, 0.96f, 1f); // hot specular edge
+        Color rimDark = new Color(0.07f, 0.08f, 0.10f, 1f);
+        Color rustDark = new Color(0.34f, 0.17f, 0.08f, 1f);
+        Color rustLight = new Color(0.52f, 0.28f, 0.13f, 1f);
+        Color rivetC = new Color(0.10f, 0.11f, 0.13f, 1f);
 
-        // Rivet positions (8 around perimeter + 4 inner)
-        float rivetDist = outerR * 0.82f;
-        float innerRivetDist = outerR * 0.45f;
-        float rivetR = 3.2f;
-        float innerRivetR = 2.2f;
+        float rivetDist = outerR * 0.80f;
+        float rivetR = 3.4f;
 
         for (int y = 0; y < S; y++)
             for (int x = 0; x < S; x++)
@@ -379,46 +442,45 @@ public static class TrapSpriteCache
                 if (d <= outerR + 1.5f)
                 {
                     float edgeAA = AA(d, outerR);
-
-                    // Directional lighting: top-left light source
                     float nx = (x - ct.x) / outerR;
                     float ny = (y - ct.y) / outerR;
-                    float lightDot = Mathf.Clamp01(0.5f + nx * 0.25f + ny * 0.35f);
+                    // Top-left light source
+                    float lightDot = Mathf.Clamp01(0.5f + nx * 0.28f + ny * 0.36f);
 
-                    // Base metal with subtle noise grain
-                    float grain = Noise2D(x * 0.15f, y * 0.15f) * 0.08f;
-                    c = Color.Lerp(metalMid, metalLight, lightDot);
-                    c.r += grain; c.g += grain; c.b += grain;
+                    // Brushed-steel body: fine circular grain
+                    float ang = Mathf.Atan2(y - ct.y, x - ct.x);
+                    float brushed = Noise2D(Mathf.Cos(ang) * 6f + d * 0.05f, Mathf.Sin(ang) * 6f) * 0.10f - 0.05f;
+                    c = Color.Lerp(steelMid, steelLight, lightDot);
+                    c.r += brushed; c.g += brushed; c.b += brushed;
 
-                    // Concentric ring engraving (inner detail)
-                    float ringD1 = Mathf.Abs(d - outerR * 0.65f);
-                    if (ringD1 < 1.2f)
-                        c = Color.Lerp(c, metalDark, (1f - ringD1 / 1.2f) * 0.35f);
+                    // Rust patches bleeding in from the rim (noise-masked, stronger near edge)
+                    float rustNoise = Noise2D(x * 0.09f + 13f, y * 0.09f - 7f);
+                    float rustEdge = Mathf.Clamp01((d / outerR - 0.5f) * 2f);
+                    float rust = Mathf.Clamp01((rustNoise - 0.55f) * 2.4f) * rustEdge;
+                    if (rust > 0f)
+                        c = Color.Lerp(c, Color.Lerp(rustDark, rustLight, rustNoise), rust * 0.8f);
 
-                    float ringD2 = Mathf.Abs(d - outerR * 0.35f);
-                    if (ringD2 < 0.8f)
-                        c = Color.Lerp(c, metalDark, (1f - ringD2 / 0.8f) * 0.25f);
+                    // Recessed dark hub where the pan seats
+                    float hubR = outerR * 0.40f;
+                    if (d < hubR)
+                        c = Color.Lerp(c, steelDark, Mathf.Clamp01(1f - d / hubR) * 0.55f);
+                    // Thin engraved ring around the hub
+                    if (Mathf.Abs(d - hubR) < 1.3f)
+                        c = Color.Lerp(c, rimDark, (1f - Mathf.Abs(d - hubR) / 1.3f) * 0.7f);
 
-                    // Beveled outer rim: dark edge with bright highlight just inside
-                    float rimWidth = 5f;
+                    // Beveled outer rim: dark lip + bright specular catch on the top-left
+                    float rimWidth = 6f;
                     if (d > outerR - rimWidth)
                     {
                         float rimT = (d - (outerR - rimWidth)) / rimWidth;
-                        c = Color.Lerp(c, rimDark, rimT * 0.7f);
-                        // Bright inner highlight
-                        float highlightBand = Mathf.Abs(d - (outerR - rimWidth * 0.7f));
-                        if (highlightBand < 1.2f)
-                            c = Color.Lerp(c, metalLight, (1f - highlightBand / 1.2f) * 0.4f * (0.5f + lightDot * 0.5f));
+                        c = Color.Lerp(c, rimDark, rimT * 0.85f);
+                        // Specular sliver just inside the lip, brightest where lit
+                        float specBand = Mathf.Abs(d - (outerR - rimWidth * 0.55f));
+                        if (specBand < 1.6f)
+                            c = Color.Lerp(c, steelSpec, (1f - specBand / 1.6f) * (0.25f + lightDot * 0.6f));
                     }
 
-                    // Radial scratch marks for worn metal look
-                    float ang = Mathf.Atan2(y - ct.y, x - ct.x) * Mathf.Rad2Deg;
-                    if (ang < 0) ang += 360f;
-                    float scratchNoise = Noise2D(ang * 0.3f, d * 0.2f);
-                    if (scratchNoise > 0.72f && d < outerR - 3f && d > outerR * 0.25f)
-                        c = Color.Lerp(c, scratchCol, (scratchNoise - 0.72f) * 1.5f);
-
-                    // Outer rivets (8)
+                    // Rivets around the plate
                     for (int i = 0; i < 8; i++)
                     {
                         float ra = i * 45f * Mathf.Deg2Rad;
@@ -427,29 +489,10 @@ public static class TrapSpriteCache
                         if (rd < rivetR + 1f)
                         {
                             float rivetAA = AA(rd, rivetR);
-                            // Rivet shading: highlight on top-left, shadow on bottom-right
-                            float rnx = (x - rp.x) / rivetR;
-                            float rny = (y - rp.y) / rivetR;
-                            float rivetLight = Mathf.Clamp01(0.3f + rnx * 0.3f + rny * 0.4f);
-                            Color rivetC = Color.Lerp(rivetColor, metalLight, rivetLight * 0.5f);
-                            c = Color.Lerp(c, rivetC, rivetAA * 0.85f);
-                        }
-                    }
-
-                    // Inner rivets (4, for the pressure plate housing)
-                    for (int i = 0; i < 4; i++)
-                    {
-                        float ra = (i * 90f + 45f) * Mathf.Deg2Rad;
-                        Vector2 rp = ct + new Vector2(Mathf.Cos(ra), Mathf.Sin(ra)) * innerRivetDist;
-                        float rd = Vector2.Distance(p, rp);
-                        if (rd < innerRivetR + 1f)
-                        {
-                            float rivetAA = AA(rd, innerRivetR);
-                            float rnx = (x - rp.x) / innerRivetR;
-                            float rny = (y - rp.y) / innerRivetR;
-                            float rivetLight = Mathf.Clamp01(0.3f + rnx * 0.3f + rny * 0.4f);
-                            Color rivetC = Color.Lerp(rivetColor, metalLight, rivetLight * 0.4f);
-                            c = Color.Lerp(c, rivetC, rivetAA * 0.8f);
+                            float rlx = (x - rp.x) / rivetR, rly = (y - rp.y) / rivetR;
+                            float rl = Mathf.Clamp01(0.3f + rlx * 0.3f + rly * 0.4f);
+                            Color rc = Color.Lerp(rivetC, steelLight, rl * 0.6f);
+                            c = Color.Lerp(c, rc, rivetAA * 0.9f);
                         }
                     }
 
@@ -511,116 +554,271 @@ public static class TrapSpriteCache
         return Sprite.Create(t, new Rect(0, 0, S, S), Vector2.one * 0.5f, S);
     }
 
-    //  JAW: 96×64
-    static Sprite GenJaw(bool left)
+    //  JAW — a curved steel arc with triangular fangs on the inner edge. topJaw=true bulges
+    //  up (∩) with fangs pointing down; false is the vertical mirror (∪, fangs up). Together
+    //  they form the maw around the pan. Pivot is the sprite centre; SetJaws spreads them.
+    static Sprite GenJaw(bool topJaw)
     {
-        const int W = 96, H = 64;
+        const int W = 128, H = 84;
         var t = MkTex(W, H); var px = new Color[W * H];
 
-        Color metalBase = new Color(0.38f, 0.38f, 0.34f, 1f);
-        Color metalDark = new Color(0.20f, 0.20f, 0.17f, 1f);
-        Color metalBright = new Color(0.58f, 0.58f, 0.52f, 1f);
-        Color toothTip = new Color(0.62f, 0.62f, 0.56f, 1f);
-        Color toothEdge = new Color(0.70f, 0.70f, 0.65f, 1f);
+        Color steelDark = new Color(0.12f, 0.14f, 0.16f, 1f);
+        Color steelMid = new Color(0.34f, 0.37f, 0.41f, 1f);
+        Color steelLight = new Color(0.60f, 0.64f, 0.70f, 1f);
+        Color steelSpec = new Color(0.90f, 0.94f, 1.00f, 1f);
+        Color toothTip = new Color(0.80f, 0.84f, 0.90f, 1f);
 
-        int numTeeth = 7;
-        float toothWidth = W / (float)numTeeth;
+        Vector2 C = new Vector2(W * 0.5f, H * 0.86f - W * 0.60f); // arc centre below the texture
+        float Rc = W * 0.60f;        // centreline radius of the jaw band
+        float bandHalf = 7.5f;       // half thickness of the steel band
+        float toothLen = 17f;        // fang length
+        float innerR = Rc - bandHalf;
+        int numTeeth = 10;
+        float toothW = W / (float)numTeeth;
+
+        for (int oy = 0; oy < H; oy++)
+            for (int ox = 0; ox < W; ox++)
+            {
+                // Geometry sampled in "top jaw" space; shading uses screen y so light stays top.
+                int gy = topJaw ? oy : (H - 1 - oy);
+                Vector2 p = new Vector2(ox, gy);
+                float dd = Vector2.Distance(p, C);
+                Color c = Color.clear;
+
+                float nlx = (ox - W * 0.5f) / (W * 0.5f);
+                float nly = (oy - H * 0.5f) / (H * 0.5f);
+                float lightDot = Mathf.Clamp01(0.5f - nlx * 0.12f + nly * 0.42f);
+
+                // Steel band (the jaw spine)
+                float bandDist = Mathf.Abs(dd - Rc);
+                if (bandDist < bandHalf + 1f)
+                {
+                    float aa = AA(bandDist, bandHalf);
+                    c = Color.Lerp(steelMid, steelLight, lightDot);
+                    // Outer-edge specular catch
+                    if (dd > Rc + bandHalf * 0.35f)
+                        c = Color.Lerp(c, steelSpec, Mathf.Clamp01((dd - Rc) / bandHalf) * (0.3f + lightDot * 0.5f));
+                    // Inner-edge shadow
+                    if (dd < Rc - bandHalf * 0.35f)
+                        c = Color.Lerp(c, steelDark, Mathf.Clamp01((Rc - dd) / bandHalf) * 0.5f);
+                    c.a = aa;
+                }
+
+                // Fangs on the inner edge, pointing toward the trap centre
+                if (dd < innerR + 1f && dd > innerR - toothLen)
+                {
+                    float depth = (innerR - dd) / toothLen;          // 0 at gum, 1 at tip
+                    depth = Mathf.Clamp01(depth);
+                    float tpos = ox / toothW;
+                    float local = tpos - Mathf.Floor(tpos);          // 0..1 across a tooth
+                    float halfW = Mathf.Lerp(0.46f, 0.015f, depth);  // taper to a point
+                    float td = Mathf.Abs(local - 0.5f);
+                    if (td < halfW + 0.02f)
+                    {
+                        float taa = Mathf.Clamp01((halfW - td) / 0.03f + 0.5f);
+                        Color tc = Color.Lerp(steelMid, toothTip, depth * 0.9f);
+                        // Bright central ridge down each fang
+                        if (td < 0.06f) tc = Color.Lerp(tc, steelSpec, (1f - td / 0.06f) * 0.5f);
+                        if (taa > c.a) { tc.a = taa; c = tc; }
+                    }
+                }
+
+                px[oy * W + ox] = c;
+            }
+        t.SetPixels(px); t.Apply();
+        return Sprite.Create(t, new Rect(0, 0, W, H), new Vector2(0.5f, 0.5f), W);
+    }
+
+    //  PAN — round steel trigger plate that seats in the base hub.
+    static Sprite GenPan()
+    {
+        const int S = 72;
+        var t = MkTex(S, S); var px = new Color[S * S];
+        Vector2 ct = Vector2.one * S * 0.5f;
+        float r = S * 0.42f;
+
+        Color panDark = new Color(0.16f, 0.18f, 0.20f, 1f);
+        Color panMid = new Color(0.30f, 0.33f, 0.36f, 1f);
+        Color panHi = new Color(0.52f, 0.56f, 0.61f, 1f);
+        Color slot = new Color(0.06f, 0.07f, 0.08f, 1f);
+
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x, y), ct);
+                Color c = Color.clear;
+                if (d <= r + 1.5f)
+                {
+                    float aa = AA(d, r);
+                    float nx = (x - ct.x) / r, ny = (y - ct.y) / r;
+                    // Gentle dome: brighter toward top-left, darker rim
+                    float light = Mathf.Clamp01(0.5f + nx * 0.25f + ny * 0.35f - (d / r) * 0.25f);
+                    c = Color.Lerp(panDark, panHi, light);
+                    // Rim lip
+                    if (d > r - 3f) c = Color.Lerp(c, panDark, (d - (r - 3f)) / 3f * 0.8f);
+                    // Trigger slot across the middle
+                    if (Mathf.Abs(y - ct.y) < 2.2f && Mathf.Abs(x - ct.x) < r * 0.62f)
+                        c = Color.Lerp(c, slot, 0.8f);
+                    c = Color.Lerp(c, panMid, 0f);
+                    c.a = aa;
+                }
+                px[y * S + x] = c;
+            }
+        t.SetPixels(px); t.Apply();
+        return Sprite.Create(t, new Rect(0, 0, S, S), Vector2.one * 0.5f, S);
+    }
+
+    //  LEAF SPRING — the iconic side arm. Points outward (eye at the far end), tapers toward
+    //  the plate. left=true points left; right is mirrored.
+    static Sprite GenSpring(bool left)
+    {
+        const int W = 96, H = 52;
+        var t = MkTex(W, H); var px = new Color[W * H];
+
+        Color steelDark = new Color(0.13f, 0.15f, 0.17f, 1f);
+        Color steelMid = new Color(0.31f, 0.34f, 0.38f, 1f);
+        Color steelLight = new Color(0.58f, 0.62f, 0.68f, 1f);
+        Color steelSpec = new Color(0.88f, 0.92f, 0.98f, 1f);
+        Color rust = new Color(0.44f, 0.23f, 0.11f, 1f);
+
+        float cy = H * 0.5f;
+        // Eye (the loop) sits at the outer end
+        float eyeX = left ? W * 0.16f : W * 0.84f;
+        float eyeOuterR = 12f, eyeInnerR = 5.5f;
 
         for (int y = 0; y < H; y++)
             for (int x = 0; x < W; x++)
             {
                 Color c = Color.clear;
-                float yn = y / (float)H; // 0=bottom, 1=top
-                float xc = W * 0.5f;
+                // Position along the arm: u=0 at plate (inner) end, 1 at eye (outer) end
+                float u = left ? (1f - x / (float)W) : (x / (float)W);
+                float yd = Mathf.Abs(y - cy);
 
-                // Curved jaw body shape: wider at bottom, narrows toward teeth
-                float bodyWidth = Mathf.Lerp(W * 0.48f, W * 0.38f, yn);
-                float xd = Mathf.Abs(x - xc);
-
-                // Teeth region (top portion of the jaw)
-                float teethStart = H * 0.55f;
-                bool inTeethZone = y >= teethStart;
-
-                if (inTeethZone)
+                // Tapered flat bar: thick near plate, thinner toward the eye
+                float halfH = Mathf.Lerp(H * 0.34f, H * 0.16f, u);
+                if (yd < halfH + 1f && u < 0.9f)
                 {
-                    // Calculate which tooth we're in
-                    float toothProgress = (y - teethStart) / (H - teethStart); // 0 at base, 1 at tip
-                    int toothIdx = Mathf.FloorToInt(x / toothWidth);
-                    float toothCenter = (toothIdx + 0.5f) * toothWidth;
-                    float toothLocalX = Mathf.Abs(x - toothCenter);
-
-                    // Triangle tooth shape: narrows toward tip
-                    float toothHalfW = Mathf.Lerp(toothWidth * 0.48f, toothWidth * 0.05f, toothProgress);
-
-                    // Alternate offset for left vs right jaw
-                    bool isActiveTooth = (toothIdx % 2 == (left ? 0 : 1));
-
-                    if (isActiveTooth && toothLocalX < toothHalfW + 1f)
-                    {
-                        float taa = AA(toothLocalX, toothHalfW);
-                        // Shading: brighter toward tip, edge highlight
-                        c = Color.Lerp(metalBase, toothTip, toothProgress * 0.8f);
-                        float edgeBright = 1f - toothLocalX / (toothHalfW + 0.01f);
-                        c = Color.Lerp(c, toothEdge, edgeBright * 0.3f * toothProgress);
-
-                        // Subtle central ridge on each tooth
-                        if (toothLocalX < 1.5f)
-                            c = Color.Lerp(c, metalBright, (1f - toothLocalX / 1.5f) * 0.25f);
-
-                        c.a = taa;
-                    }
-                    else if (!isActiveTooth && toothLocalX < toothWidth * 0.3f && toothProgress < 0.3f)
-                    {
-                        // Small stubs between active teeth
-                        float stubH = 0.3f;
-                        float stubW = toothWidth * 0.3f;
-                        float stubAA = AA(toothLocalX, stubW) * AA(toothProgress, stubH);
-                        c = Color.Lerp(metalDark, metalBase, 0.5f);
-                        c.a = stubAA * 0.8f;
-                    }
+                    float aa = AA(yd, halfH);
+                    float light = Mathf.Clamp01(0.5f + (cy - y) / halfH * 0.4f); // top-lit
+                    c = Color.Lerp(steelMid, steelLight, light);
+                    // Top specular edge
+                    if (y < cy - halfH * 0.5f)
+                        c = Color.Lerp(c, steelSpec, 0.4f);
+                    // Bottom shadow edge
+                    if (y > cy + halfH * 0.5f)
+                        c = Color.Lerp(c, steelDark, 0.5f);
+                    // A little rust streaking mid-arm
+                    float rn = Noise2D(x * 0.12f, y * 0.12f + (left ? 4f : 9f));
+                    if (rn > 0.66f) c = Color.Lerp(c, rust, (rn - 0.66f) * 1.6f);
+                    c.a = aa;
                 }
 
-                // Jaw body (below teeth)
-                if (y < teethStart + 4f && xd <= bodyWidth + 1.5f)
+                // The eye/loop at the outer end
+                float ed = Vector2.Distance(new Vector2(x, y), new Vector2(eyeX, cy));
+                if (ed < eyeOuterR + 1f)
                 {
-                    float bodyAA = AA(xd, bodyWidth);
-                    float bodyYN = y / teethStart;
-                    Color bodyC = Color.Lerp(metalBase, metalDark, bodyYN * 0.4f);
-
-                    // Directional light
-                    float lightD = (left ? -1f : 1f);
-                    float bodyLight = Mathf.Clamp01(0.5f + (x - xc) / bodyWidth * 0.3f * lightD);
-                    bodyC = Color.Lerp(metalDark, bodyC, 0.5f + bodyLight * 0.5f);
-
-                    // Rivet detail along jaw body
-                    float rivetY = H * 0.25f;
-                    for (int ri = 0; ri < 3; ri++)
+                    if (ed > eyeInnerR)
                     {
-                        float rx = xc + (ri - 1) * bodyWidth * 0.5f;
-                        float rd = Vector2.Distance(new Vector2(x, y), new Vector2(rx, rivetY));
-                        if (rd < 2.5f)
-                        {
-                            float raa = AA(rd, 2.5f);
-                            bodyC = Color.Lerp(bodyC, metalDark, raa * 0.6f);
-                        }
-                    }
-
-                    // Edge bevel
-                    if (xd > bodyWidth - 3f)
-                        bodyC = Color.Lerp(bodyC, metalDark, (xd - bodyWidth + 3f) / 3f * 0.5f);
-
-                    // Only overwrite if body pixel is more opaque
-                    if (bodyAA > c.a)
-                    {
-                        bodyC.a = bodyAA;
-                        c = bodyC;
+                        float ringAA = AA(ed, eyeOuterR) * (1f - AA(ed, eyeInnerR));
+                        float light = Mathf.Clamp01(0.5f + (cy - y) / eyeOuterR * 0.5f);
+                        Color ec = Color.Lerp(steelMid, steelLight, light);
+                        if (ringAA > c.a) { ec.a = Mathf.Clamp01(ringAA); c = ec; }
                     }
                 }
-
                 px[y * W + x] = c;
             }
         t.SetPixels(px); t.Apply();
-        return Sprite.Create(t, new Rect(0, 0, W, H), left ? new Vector2(1f, 0f) : new Vector2(0f, 0f), W);
+        return Sprite.Create(t, new Rect(0, 0, W, H), Vector2.one * 0.5f, W);
+    }
+
+    //  CHAIN TAIL — a few links running out to an anchor stake ring.
+    static Sprite GenChainTail()
+    {
+        const int W = 96, H = 64;
+        var t = MkTex(W, H); var px = new Color[W * H];
+
+        Color linkMid = new Color(0.34f, 0.36f, 0.40f, 1f);
+        Color linkLight = new Color(0.62f, 0.66f, 0.72f, 1f);
+        Color linkDark = new Color(0.14f, 0.15f, 0.17f, 1f);
+
+        // A gentle diagonal run of oval links from upper-right to lower-left.
+        int links = 4;
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+            {
+                Color c = Color.clear;
+                float best = 999f; bool inside = false;
+                for (int i = 0; i < links; i++)
+                {
+                    float u = i / (float)(links - 1);
+                    Vector2 lc = new Vector2(Mathf.Lerp(W * 0.82f, W * 0.20f, u), Mathf.Lerp(H * 0.74f, H * 0.30f, u));
+                    // Oval link: ring shape
+                    float ex = (x - lc.x) / 9f, ey = (y - lc.y) / 6.5f;
+                    float ring = Mathf.Abs(Mathf.Sqrt(ex * ex + ey * ey) - 1f);
+                    if (ring < 0.32f) { inside = true; best = Mathf.Min(best, ring); }
+                }
+                if (inside)
+                {
+                    float shade = 1f - best / 0.32f;
+                    float light = Mathf.Clamp01(0.5f + (H * 0.5f - y) / H * 0.6f);
+                    c = Color.Lerp(linkMid, linkLight, light * shade);
+                    c = Color.Lerp(linkDark, c, 0.5f + shade * 0.5f);
+                    c.a = Mathf.Clamp01(shade * 2.2f);
+                }
+                // Anchor stake ring at the lower-left end
+                Vector2 stake = new Vector2(W * 0.18f, H * 0.30f);
+                float sd = Vector2.Distance(new Vector2(x, y), stake);
+                if (sd > 6.5f && sd < 11f)
+                {
+                    float rAA = AA(sd, 11f) * (1f - AA(sd, 6.5f));
+                    float light = Mathf.Clamp01(0.5f + (stake.y - y) / 11f * 0.5f);
+                    Color sc = Color.Lerp(linkMid, linkLight, light);
+                    if (rAA > c.a) { sc.a = Mathf.Clamp01(rAA); c = sc; }
+                }
+                px[y * W + x] = c;
+            }
+        t.SetPixels(px); t.Apply();
+        return Sprite.Create(t, new Rect(0, 0, W, H), Vector2.one * 0.5f, W);
+    }
+
+    //  BOLT — small domed steel hinge bolt with a hex head and a top-left highlight.
+    static Sprite GenBolt()
+    {
+        const int S = 40;
+        var t = MkTex(S, S); var px = new Color[S * S];
+        Vector2 ct = Vector2.one * S * 0.5f;
+        float r = S * 0.42f;
+
+        Color dark = new Color(0.10f, 0.11f, 0.13f, 1f);
+        Color mid = new Color(0.34f, 0.37f, 0.41f, 1f);
+        Color hi = new Color(0.72f, 0.76f, 0.82f, 1f);
+
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                Color c = Color.clear;
+                // Hexagonal head via max of three axis projections
+                float dx = x - ct.x, dy = y - ct.y;
+                float hex = Mathf.Max(Mathf.Abs(dy),
+                            Mathf.Max(Mathf.Abs(dx * 0.866f + dy * 0.5f),
+                                      Mathf.Abs(dx * 0.866f - dy * 0.5f)));
+                if (hex < r + 1f)
+                {
+                    float aa = AA(hex, r);
+                    // Domed shading: bright toward top-left, dark rim
+                    float nx = dx / r, ny = dy / r;
+                    float light = Mathf.Clamp01(0.5f + nx * 0.35f + ny * 0.45f - (hex / r) * 0.3f);
+                    c = Color.Lerp(dark, hi, light);
+                    if (hex > r - 2f) c = Color.Lerp(c, dark, (hex - (r - 2f)) / 2f * 0.8f);
+                    // Small central pivot dimple
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (d < r * 0.3f) c = Color.Lerp(c, mid, (1f - d / (r * 0.3f)) * 0.5f);
+                    c.a = aa;
+                }
+                px[y * S + x] = c;
+            }
+        t.SetPixels(px); t.Apply();
+        return Sprite.Create(t, new Rect(0, 0, S, S), Vector2.one * 0.5f, S);
     }
 
     //  GLOW
@@ -1352,6 +1550,22 @@ public class TrapHoldEffect : MonoBehaviour
 }
 
 
+// Brief in-place steel glint — a quick bright flash that fades, no movement.
+public class SteelGlintFX : MonoBehaviour
+{
+    float life = 0.28f, maxLife = 0.28f; SpriteRenderer sr; float baseScale;
+    void Start() { sr = GetComponent<SpriteRenderer>(); baseScale = transform.localScale.x; }
+    void Update()
+    {
+        life -= Time.deltaTime;
+        if (life <= 0f) { Destroy(gameObject); return; }
+        float t = 1f - life / maxLife;              // 0..1
+        float a = Mathf.Sin(t * Mathf.PI);          // fade in then out
+        if (sr) { Color c = sr.color; c.a = a * 0.9f; sr.color = c; }
+        transform.localScale = Vector3.one * baseScale * (0.7f + a * 0.6f);
+    }
+}
+
 // Spark FX
 public class StruggleSparkFX : MonoBehaviour
 {
@@ -1405,7 +1619,7 @@ public class TrapReleaseBurstVFX : MonoBehaviour
         {
             var go = new GameObject("RP"); go.transform.position = transform.position;
             var sr = go.AddComponent<SpriteRenderer>(); sr.sprite = TrapSpriteCache.SparkDot; sr.sortingOrder = 5100;
-            sr.color = new Color(Random.Range(.2f, .5f), Random.Range(.7f, 1f), Random.Range(.3f, .6f), 1);
+            sr.color = new Color(Random.Range(.55f, .75f), Random.Range(.55f, .72f), Random.Range(.55f, .70f), 1);
             float a = Random.Range(0f, 360f) * Mathf.Deg2Rad, sp = Random.Range(2f, 5f), sz = Random.Range(.06f, .14f);
             go.transform.localScale = Vector3.one * sz;
             ps.Add(new P
@@ -1442,12 +1656,12 @@ public class TrapSnapVFX : MonoBehaviour
     {
         var ro = new GameObject("SR"); ro.transform.SetParent(transform, false);
         ringR = ro.AddComponent<SpriteRenderer>(); ringR.sprite = TrapSpriteCache.SnapRing; ringR.sortingOrder = 5200;
-        ringR.color = new Color(.3f, 1, .5f, .9f); ro.transform.localScale = Vector3.one * .1f;
+        ringR.color = new Color(0.85f, 0.88f, 0.92f, .85f); ro.transform.localScale = Vector3.one * .1f;
         for (int i = 0; i < 10; i++)
         {
             var go = new GameObject("SS"); go.transform.position = transform.position;
             var sr = go.AddComponent<SpriteRenderer>(); sr.sprite = TrapSpriteCache.SparkDot; sr.sortingOrder = 5210;
-            sr.color = new Color(Random.Range(.5f, .8f), Random.Range(.9f, 1f), Random.Range(.4f, .7f), 1);
+            sr.color = new Color(Random.Range(.75f, .95f), Random.Range(.78f, .95f), Random.Range(.80f, 1f), 1);
             float a = Random.Range(0f, 360f) * Mathf.Deg2Rad, sp = Random.Range(4f, 8f), sz = Random.Range(.08f, .15f);
             go.transform.localScale = Vector3.one * sz;
             ss.Add(new S { g = go, s = sr, v = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * sp, l = Random.Range(.15f, .35f), sz = sz });
@@ -1485,3 +1699,6 @@ public class DisintegrateTrap : MonoBehaviour
 
 // Empty marker component to identify grey overlay objects so we never re-process them.
 public class TrapOverlayMarker : MonoBehaviour { }
+
+
+

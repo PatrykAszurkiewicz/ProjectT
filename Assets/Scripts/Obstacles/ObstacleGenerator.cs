@@ -100,6 +100,18 @@ public class ObstacleGenerator : MonoBehaviour
     [Tooltip("Random scale variation (0.2 = ±20%).")]
     public float scaleVariation = 0.2f;
 
+    [Header("Auto Collider (only for prefabs without their own collider)")]
+    [Tooltip("Collider width as a fraction of the VISIBLE sprite width (transparent padding is ignored).")]
+    [Range(0.1f, 1f)]
+    public float colliderWidthFactor = 0.6f;
+
+    [Tooltip("Collider height as a fraction of the VISIBLE sprite height (transparent padding is ignored).")]
+    [Range(0.1f, 1f)]
+    public float colliderHeightFactor = 0.5f;
+
+    [Tooltip("Place the collider at the bottom of the visible sprite (trunk area) instead of its center.")]
+    public bool colliderAlignToBottom = true;
+
     [Header("Clustering")]
     [Tooltip("Enable composed clusters of multiple prefabs grouped together.")]
     public bool enableClusters = true;
@@ -551,7 +563,9 @@ public class ObstacleGenerator : MonoBehaviour
     {
         GameObject obs = Instantiate(prefab, new Vector3(pos.x, pos.y, 0f), Quaternion.identity);
         obs.transform.SetParent(containerGO.transform, true);
-        obs.transform.localScale = new Vector3(scale, scale, 1f);
+        //obs.transform.localScale = new Vector3(scale, scale, 1f);
+        Vector3 prefabScale = prefab.transform.localScale;
+        obs.transform.localScale = new Vector3(prefabScale.x * scale, prefabScale.y * scale, prefabScale.z);
 
         if (obs.GetComponent<Collider2D>() == null)
         {
@@ -559,8 +573,39 @@ public class ObstacleGenerator : MonoBehaviour
             SpriteRenderer sr = obs.GetComponentInChildren<SpriteRenderer>(true);
             if (sr != null && sr.sprite != null)
             {
-                box.size = sr.sprite.bounds.size;
-                box.offset = sr.sprite.bounds.center;
+                // Tight bounds from the sprite mesh: ignores transparent padding around
+                // the tree (requires Mesh Type = Tight in the sprite import settings,
+                // which is Unity's default). sprite.bounds would include the padding.
+                Vector2 min, max;
+                Vector2[] verts = sr.sprite.vertices;
+                if (verts != null && verts.Length > 0)
+                {
+                    min = verts[0];
+                    max = verts[0];
+                    for (int v = 1; v < verts.Length; v++)
+                    {
+                        min = Vector2.Min(min, verts[v]);
+                        max = Vector2.Max(max, verts[v]);
+                    }
+                }
+                else
+                {
+                    min = sr.sprite.bounds.min;
+                    max = sr.sprite.bounds.max;
+                }
+
+                Vector2 visibleSize = max - min;
+                Vector2 visibleCenter = (min + max) * 0.5f;
+
+                Vector2 size = new Vector2(visibleSize.x * colliderWidthFactor,
+                                           visibleSize.y * colliderHeightFactor);
+                box.size = size;
+
+                // Bottom-aligned = collider sits on the trunk, so units can walk
+                // "behind" the canopy. Otherwise centered on the visible sprite.
+                box.offset = colliderAlignToBottom
+                    ? new Vector2(visibleCenter.x, min.y + size.y * 0.5f)
+                    : visibleCenter;
             }
         }
 
@@ -942,3 +987,4 @@ public class ObstacleGenerator : MonoBehaviour
         { name = n; members = m; }
     }
 }
+

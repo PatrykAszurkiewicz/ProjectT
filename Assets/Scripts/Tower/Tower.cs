@@ -22,7 +22,25 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     public float generatorSelfConsumption = 0.1f;
     public bool isEnergyGenerator = false; // Should be set to true for Generator towers
     public float energyGenerationRate = 1f; // Energy units per second
-    public float generationRange = 4f; // Range to show generation effect
+    // DIAGNOSTIC: was a plain public field. It is now a property so that ANY runtime
+    // write -- another script, an augment via reflection, a manager resetting stats --
+    // is logged with the writer's stack trace. FormerlySerializedAs keeps the value
+    // already saved in prefabs and scenes. Callers that use tower.generationRange
+    // compile unchanged.
+    [SerializeField, UnityEngine.Serialization.FormerlySerializedAs("generationRange")]
+    private float _generationRange = 4f; // Range to show generation effect
+    public static bool LogGenerationRangeWrites = true;
+    public float generationRange
+    {
+        get => _generationRange;
+        set
+        {
+            if (LogGenerationRangeWrites && Application.isPlaying && !Mathf.Approximately(value, _generationRange))
+                Debug.Log($"[GenRange] '{towerName}' (id {GetInstanceID()}) generationRange " +
+                          $"{_generationRange:F2} -> {value:F2}. The stack trace below shows WHO wrote it.", this);
+            _generationRange = value;
+        }
+    }
     public float generationInterval = 0.25f; // How often to generate Energy (in seconds)
     public bool showGenerationEffects = true; // Visual effects for generation
     public Color generationEffectColor = new Color(0.3f, 0.7f, 1f, 0.5f); // Light blue with transparency
@@ -208,28 +226,159 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     [Header("Tower Properties")]
     public string towerName = "Basic Tower";
     public float damage = 10f;
-    private float _range = 5f;
+    // FIX: `_range` had no [SerializeField], so it was never serialized — `range` did
+    // not appear in the Inspector and could not be tuned per prefab. Every tower started
+    // at 5 from this initializer no matter what the prefab said. (Confirmed against
+    // BasicTower.prefab: it contains no `range:` entry at all.) LoadConfig() still
+    // overwrites this from Resources/Towers/tower_config during Awake when that JSON
+    // carries a range for the tower type.
+    [SerializeField] private float _range = 5f;
     public float range
     {
         get => _range;
         set
         {
             _range = value;
-            // Update projectile detection range when range changes
-            if (!isEnergyGenerator)
-            {
-                ProjectileRange = _range;
-                if (rangeCollider != null)
-                    rangeCollider.radius = _range;
-            }
+            ApplyDerivedProjectileRange();
         }
     }
+
+    /// Single source of truth for ProjectileRange and the trigger radius.
+    ///
+    /// FIX: this setter used to assign `ProjectileRange = _range` directly, while
+    /// SetupTower assigned `max(range * 2, tentacleReach * 3.5, 6)`. The two disagreed,
+    /// so ANY write to `range` — an augment, LoadConfig, a rebuild — halved a Basic
+    /// Tower's reach (ProjectileRange 10.0 -> 5.0) and shrank its trigger from 10.5 to
+    /// 5.0 world units, after which the tower stopped seeing enemies it used to hit.
+    /// Assigning `range` its own current value was enough to trigger it.
+    ///
+    /// The old setter was also type-blind: on a heal / hammer / laser tower
+    /// ProjectileRange is the heal radius, AOE radius or beam length, and it overwrote
+    /// all of them with `range`. Only generators were excluded.
+    ///
+    /// Both paths now call this, so they cannot drift apart again.
+    private void ApplyDerivedProjectileRange()
+    {
+        if (isEnergyGenerator)
+        {
+            ProjectileRange = generationRange;
+            SetRangeColliderWorldRadius(generationRange);
+            return;
+        }
+        if (isHealTower)
+        {
+            ProjectileRange = healRange;
+            SetRangeColliderWorldRadius(healRange);
+            return;
+        }
+        if (isHammerTower)
+        {
+            ProjectileRange = hammerAOERadius;
+            SetRangeColliderWorldRadius(hammerAOERadius);
+            return;
+        }
+        if (isLaserTower)
+        {
+            ProjectileRange = laserMaxLength;
+            SetRangeColliderWorldRadius(laserMaxLength);
+            return;
+        }
+
+        ProjectileRange = ComputeDerivedAttackRange();
+        SetRangeColliderWorldRadius(ProjectileRange + 0.5f);
+    }
+
+    // The tower's `range` as authored (prefab / tower_config), captured in Awake right
+    // after LoadConfig. Augments and upgrades change `range` relative to this.
+    private float _authoredRange = -1f;
+
+    /// Unbuffed attack reach for projectile/tentacle towers.
+    ///
+    /// FIX (range augments had no visible effect): this used to be
+    ///     max(range * 2, tentacleReach * 3.5, 6)
+    /// with the augmented `range` INSIDE the max(). Whenever the tentacle term or the
+    /// 6-unit floor was the larger one, raising `range` changed nothing at all — the
+    /// max() swallowed the buff, so ProjectileRange, the trigger collider and the range
+    /// ring all stayed put. A partly-swallowed buff (e.g. +20% range showing as +5%)
+    /// came from the same line.
+    ///
+    /// Now the base reach is derived from the AUTHORED range, and any change to `range`
+    /// since then is applied as a ratio on top of the final value. A tower whose
+    /// range*2 term already won behaves exactly as before; every other tower now gets
+    /// the full proportional bonus.
+    public float ComputeDerivedAttackRange()
+    {
+        float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
+        float authored = _authoredRange > 0f ? _authoredRange : _range;
+        float baseReach = Mathf.Max(authored * 2f, tentacleReach * 3.5f, 6f);
+        float scale = authored > 0.0001f ? _range / authored : 1f;
+        return baseReach * Mathf.Max(0.01f, scale);
+    }
+
+    private TowerTetherBoost _tetherBoost;
+
+    /// Generator reach including the tether FAR-zone buff.
+    ///
+    /// FIX (generator ring ignored the tether): TowerTetherBoost buffs a tower by
+    /// scaling ProjectileRange. For a generator, ProjectileRange is only a copy of
+    /// generationRange taken in SetupTower, and nothing generator-related reads it: the
+    /// range ring and everything else read the raw generationRange field, so the buff
+    /// never showed. The copy also goes stale: a generationRange change made after
+    /// SetupTower (an augment, an Inspector tweak in Play mode) never reaches it.
+    ///
+    /// This reads generationRange LIVE and applies the tether multiplier on top, so
+    /// both changes show. Anything that uses the generator's range for gameplay should
+    /// read this instead of generationRange.
+    public float EffectiveGenerationRange => generationRange * GenerationRangeMultiplier;
+
+    /// The tether FAR-zone range multiplier currently on this tower (1 = none).
+    /// Exposed separately so GeneratorEnergyNetwork can apply it on top of its own
+    /// linkRangeOverride / linkRangeBonus.
+    public float GenerationRangeMultiplier
+    {
+        get
+        {
+            if (_tetherBoost == null) _tetherBoost = GetComponent<TowerTetherBoost>();
+            return _tetherBoost != null ? _tetherBoost.RangeMultiplier : 1f;
+        }
+    }
+
+    // Extra travel allowed beyond ProjectileRange for a homing shot: covers the muzzle
+    // sitting off the tower centre (tentacle tip) and the target moving away mid-flight.
+    private const float ProjectileTravelSlackMultiplier = 1.25f;
+    private const float ProjectileTravelSlackFlat = 1f;
+
+    /// How far a fired projectile may travel before it self-retires. Must be derived from
+    /// ProjectileRange (the value Attack's `dist <= ProjectileRange` gate uses, including any
+    /// tether buff), never from the raw `range` field -- otherwise the tower fires at targets
+    /// its own projectiles cannot reach.
+    private float GetProjectileTravelBudget()
+    {
+        float r = ProjectileRange;
+        if (float.IsNaN(r) || float.IsInfinity(r) || r <= 0f) r = Mathf.Max(_range * 2f, 6f);
+        return r * ProjectileTravelSlackMultiplier + ProjectileTravelSlackFlat;
+    }
+
     public float fireRate = 1f;
     public int cost = 100;
     public TowerType towerType = TowerType.Basic;
 
     [Header("Visual Settings")]
     //public string spriteResourcePath = "Sprites/spritesheet_transparent2";
+    // ── Direct sprite references (preferred) ─────────────────────────────────
+    // Assign these on the tower PREFAB. When populated, spriteResourcePath below is
+    // ignored entirely and no Resources load happens at all: the frames are part of
+    // the prefab's dependency graph, so Unity streams them during scene load, off the
+    // main thread. This is also what lets a sprite atlas strip the source textures —
+    // anything under Resources/ is force-included and can never be stripped.
+    [Header("Sprite Frames (direct references — preferred)")]
+    [Tooltip("Animation frames in order. When set, Sprite Resource Path is ignored.")]
+    public Sprite[] spriteFrames;
+
+    /// True once this tower no longer needs Resources for its frames.
+    public bool HasDirectFrames => spriteFrames != null && spriteFrames.Length > 0;
+
+    [Tooltip("DEPRECATED fallback — used only when Sprite Frames above is empty.")]
     public string spriteResourcePath = "Sprites/Towers/tower_melee_sprite";
     public int spriteIndex = 0;
     public float spriteScale = 0.5f;
@@ -316,6 +465,34 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     }
     public float currentEnergy = 100f;
 
+    // -- Spawn-time energy seed ----------------------------------------------
+    // A tower rebuilt by a save-resume or a wave rewind must come back with the
+    // energy it had, not a full bar. Start() registers with EnergyManager, which
+    // (correctly) re-bases the pool -- so the restored value has to be re-applied
+    // AFTER the whole derivation chain, not before it.
+    //
+    // Only CURRENT energy is seeded. The saved max is deliberately discarded: it
+    // already included the upgrade bonus and every augment multiplier, and Start()
+    // re-derives both from the base. Storing it would double-count them.
+    [System.NonSerialized] private bool _hasEnergySeed = false;
+    [System.NonSerialized] private float _seedEnergy = 0f;
+
+    // Set at the very end of Start(). Version-proof stand-in for MonoBehaviour.didStart
+    // (Unity 2021.2+), used to tell "restore on a live tower" from "restore on a tower
+    // whose Start has not run yet and whose values are about to be re-based".
+    [System.NonSerialized] private bool _startRan = false;
+
+    /// Call BEFORE this tower's Start() runs -- i.e. straight after Instantiate in
+    /// TowerPlacementManager.RestoreTowerInto. `max` is accepted so existing call
+    /// sites compile unchanged, and is intentionally ignored (see above).
+    public void SeedEnergyForSpawn(float energy, float max = 0f)
+    {
+        _hasEnergySeed = true;
+        _seedEnergy = energy;
+    }
+
+    public bool HasSeededEnergy => _hasEnergySeed;
+
 
 
 
@@ -338,6 +515,67 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     //public bool CanFire => Time.time >= lastFireTime + (1f / fireRate);
     public bool CanFire => Time.time >= lastFireTime +
     (1f / Mathf.Max(0.0001f, fireRate * TowerCombatModifiers.FireRateMultiplier));
+    // ── Range collider sizing ────────────────────────────────────────────────
+    //
+    // CircleCollider2D.radius is in LOCAL space; the trigger's real reach is
+    // radius * lossyScale. Every range value in this class (range, ProjectileRange,
+    // healRange, hammerAOERadius, laserMaxLength, generationRange) is in WORLD units,
+    // and all nine assignment sites used to write them straight to .radius.
+    //
+    // BasicTower has an authored spriteScale of 0.25, so a requested range of 5.5
+    // produced a trigger that actually reached 1.375 world units, while
+    // ProjectileRange still said 5.0. An enemy 2.27 units away satisfied
+    // IsValidTarget and the layer mask but never entered the trigger, so
+    // OnTriggerEnter2D never fired, enemiesInRange stayed empty, currentTarget stayed
+    // null, and the tower silently never shot -- no exception, no warning, nothing in
+    // the log.
+    //
+    // The requested WORLD radius is remembered so it can be re-applied if the scale is
+    // assigned AFTER the radius. That ordering really happens: the `range` property
+    // setter sizes the collider, and it can run before SetupTower writes localScale.
+    [System.NonSerialized] private float _desiredWorldRadius = -1f;
+
+    /// Set the trigger radius from a WORLD-space range.
+    /// Always use this rather than writing rangeCollider.radius directly.
+    private void SetRangeColliderWorldRadius(float worldRadius)
+    {
+        _desiredWorldRadius = worldRadius;
+        ApplyRangeColliderRadius();
+    }
+
+    /// Re-apply the last requested world radius against the CURRENT transform scale.
+    private void RefreshRangeColliderScale()
+    {
+        if (_desiredWorldRadius >= 0f) ApplyRangeColliderRadius();
+    }
+
+    private void ApplyRangeColliderRadius()
+    {
+        if (rangeCollider == null || _desiredWorldRadius < 0f) return;
+
+        // A radius change does not re-raise trigger events for colliders already
+        // overlapping, so force the next UpdateTargeting to sweep.
+        _nextRescanTime = 0f;
+
+        Vector3 ls = transform.lossyScale;
+        float s = Mathf.Max(Mathf.Abs(ls.x), Mathf.Abs(ls.y));
+        if (s < 0.0001f || float.IsNaN(s) || float.IsInfinity(s)) s = 1f;   // degenerate scale
+
+        rangeCollider.radius = _desiredWorldRadius / s;
+    }
+
+    /// The trigger's actual reach in WORLD units -- i.e. what the distance checks in
+    /// IsValidTarget and Attack are effectively comparing against.
+    public float RangeColliderWorldRadius
+    {
+        get
+        {
+            if (rangeCollider == null) return 0f;
+            Vector3 ls = transform.lossyScale;
+            return rangeCollider.radius * Mathf.Max(Mathf.Abs(ls.x), Mathf.Abs(ls.y));
+        }
+    }
+
     public float ProjectileRange { get; private set; }
     public Transform FirePoint => firePoint;
 
@@ -380,6 +618,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     // State
     private bool isDisabledByDamage;
     private bool isDestroyed = false;
+
+    // See CentralCore: distinguishes Unity native teardown from the game-logic flag above.
+    // MonoBehaviour overloads ==, so a Unity-destroyed object compares equal to null.
+    private bool IsUnityObjectAlive => this != null;
     private Coroutine damageFlashCoroutine;
 
     // Generator ambience: a per-tower FMOD loop that plays only while a Generator
@@ -410,6 +652,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     void Awake()
     {
         LoadConfig();
+        if (LogGenerationRangeWrites && (isEnergyGenerator || towerType == TowerType.Generator))
+            Debug.Log($"[GenRange] '{towerName}' (id {GetInstanceID()}) spawned with generationRange=" +
+                      $"{_generationRange:F2}. If this is not your prefab value, this tower was NOT " +
+                      "built from the prefab you edited, or a scene override is winning.", this);
+        _authoredRange = _range;   // baseline for range augments — see ComputeDerivedAttackRange
         InitializeComponents();
         baseDamageForEnergyCost = damage; // Store base damage before augments are applied
 
@@ -442,6 +689,9 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     void OnDisable()
     {
         ActiveTowers.Remove(this);
+
+        // No Update() will run while inactive, so the beam can't fade itself out.
+        ShutdownLaserImmediate();
     }
 
     void Start()
@@ -458,6 +708,29 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         // Apply any augments that were applied before this tower was created
         ApplyGlobalAugments();
+
+        // The pool is now fully derived: EnergyManager base x upgrade level x
+        // augments. Only now is it safe to put back a restored tower's actual
+        // energy -- doing it any earlier and registration wipes it.
+        //
+        // _startRan is set FIRST so the RestoreEnergyState call below takes the
+        // live-tower path instead of re-arming the seed it is consuming.
+        _startRan = true;
+
+        if (_hasEnergySeed)
+        {
+            _hasEnergySeed = false;
+            RestoreEnergyState(_seedEnergy);   // max omitted: keep the derived pool
+        }
+
+        // A generator drives the energy-link network: zero decay for itself, decay
+        // cancellation + repair trickle for its neighbours, and a feed to the core.
+        // Bootstrapping here means no scene setup is required — the manager appears
+        // the first time a generator exists and dies with the scene. (Add a
+        // GeneratorEnergyNetwork component to the scene yourself if you want to
+        // author the tuning values; an existing instance always wins.)
+        if (IsGenerator()) GeneratorEnergyNetwork.EnsureExists();
+
         // ADD THIS ENTIRE SECTION
         if (isLaserTower)
         {
@@ -475,7 +748,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             laserMaxLength = 12f;
             range = 8f;
             ProjectileRange = 8f;
-            rangeCollider.radius = 8f;
+            SetRangeColliderWorldRadius(8f);
             //Debug.Log($"Laser setup: collider radius={rangeCollider.radius}, ProjectileRange={ProjectileRange}");
 
             // Beam widths + sorting are now driven by the upgraded VFX
@@ -541,6 +814,17 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
     void Update()
     {
+        // The laser VFX must keep ticking even when this tower is NOT operational.
+        // Everything below bails out the moment the tower is depleted / disabled by
+        // damage / destroyed, so without this the beam never receives its power-down
+        // frames: the LineRenderers stay enabled, and because they draw in WORLD
+        // space they sit frozen on their last positions for the rest of the run.
+        if (isLaserTower && !isDestroyed && !IsOperational())
+        {
+            DisableLaser();                // request "off"
+            TickLaserFX(Time.deltaTime);   // fade out, then disable the renderers
+        }
+
         // Runs before the state guards below so the loop stops cleanly the instant the
         // generator is depleted, disabled by damage, or destroyed.
         TickGeneratorAmbience();
@@ -814,7 +1098,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             if (stats != null)
             {
                 TowerKillAttribution.MarkTowerHit(target);
-                stats.TakeDamage(effectiveDamage);
+                BossDamageRouting.FromTower(stats, effectiveDamage);   // hammer AoE
                 CombatStats.ReportTowerDamageDealt(effectiveDamage);
                 ApplyFreezeEffect(target);
             }
@@ -1344,6 +1628,47 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // Just request "off". TickLaserFX plays the power-down fade and turns the
         // renderers/particles off once the beam has fully faded.
         isLaserActive = false;
+
+        // Clearing this as well makes IsLaserFiring go false on the SAME frame, so the
+        // held beam SFX loop can't drone on after the tower stops firing or dies.
+        // UpdateLaserBeam() sets it back to true as soon as a real endpoint exists.
+        laserHasBeam = false;
+    }
+
+    /// Hard, instant teardown of every laser visual - no fade. Used on paths where
+    /// there may be no further Update() to run the power-down (deactivation, sell,
+    /// destroy). Safe to call on non-laser towers and before InitializeLaser() ran.
+    void ShutdownLaserImmediate()
+    {
+        if (!isLaserTower) return;
+
+        isLaserActive = false;
+        laserHasBeam = false;
+        laserIgnitedThisRun = false;
+        laserEnvelope = 0f;
+
+        if (laserRenderer) laserRenderer.enabled = false;
+        if (laserGlowRenderer) laserGlowRenderer.enabled = false;
+        if (laserAuraRenderer) laserAuraRenderer.enabled = false;
+        if (laserMuzzleGlow) laserMuzzleGlow.enabled = false;
+        if (laserImpactGlow) laserImpactGlow.enabled = false;
+
+        if (laserStartParticles != null)
+            laserStartParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        if (laserImpactParticles != null)
+            laserImpactParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        // Retire any live shockwave rings - nothing will tick them after this.
+        for (int i = 0; i < laserRings.Count; i++)
+        {
+            var r = laserRings[i];
+            r.active = false;
+            if (r.sr) r.sr.enabled = false;
+            laserRings[i] = r;
+        }
+
+        // The held beam loop must never outlive the beam.
+        laserAttackSfx.Stop(immediate: true);
     }
 
     void UpdateLaserBeam()
@@ -1376,7 +1701,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (targetStats != null)
         {
             TowerKillAttribution.MarkTowerHit(targetStats.gameObject);
-            targetStats.TakeDamage(damageThisFrame);
+            BossDamageRouting.FromTower(targetStats, damageThisFrame);   // laser tick
             CombatStats.ReportTowerDamageDealt(damageThisFrame);
         }
     }
@@ -1686,9 +2011,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     float HealOnePlayer(PlayerStats stats, float healAmount)
     {
         if (stats == null) return 0f;
+        if (stats.currentHealth <= 0f) return 0f; // downed — let the revive system handle it
+        HealPlusEmitter.Ping(stats, healInterval + 0.15f); // green "+" FX while in range
         float missing = stats.maxHealth - stats.currentHealth;
         if (missing <= 0.01f) return 0f;          // already full
-        if (stats.currentHealth <= 0f) return 0f; // downed — let the revive system handle it
         float applied = Mathf.Min(missing, healAmount);
         stats.Heal(applied);
         return applied;
@@ -1850,6 +2176,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         }
         rangeCollider.isTrigger = true;
 
+        // localScale was assigned a few lines above, so re-apply any radius that was
+        // requested before the scale existed (the `range` setter can run first).
+        RefreshRangeColliderScale();
+
         // Only initialize tentacles for combat towers
         if (useTentacleTurret && !isEnergyGenerator)
         {
@@ -1974,37 +2304,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             }
         }
 
-        if (isEnergyGenerator)
-        {
-            // Generators use generation range instead of projectile range
-            ProjectileRange = generationRange;
-            rangeCollider.radius = generationRange;
-        }
-        else if (isHealTower)
-        {
-            // Heal towers use their heal radius
-            ProjectileRange = healRange;
-            rangeCollider.radius = healRange;
-        }
-        else if (isHammerTower)
-        {
-            // Hammer towers use AOE radius for detection
-            ProjectileRange = hammerAOERadius;
-            rangeCollider.radius = hammerAOERadius;
-        }
-        else if (isLaserTower)
-        {
-            // Laser towers use their max length
-            ProjectileRange = laserMaxLength;
-            rangeCollider.radius = laserMaxLength;
-        }
-        else
-        {
-            // Standard combat towers
-            float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
-            ProjectileRange = Mathf.Max(range * 2f, tentacleReach * 3.5f, 6f);
-            rangeCollider.radius = ProjectileRange + 0.5f;
-        }
+        // Was an inline copy of the per-type range rules. It now shares
+        // ApplyDerivedProjectileRange with the `range` setter — keeping two copies is
+        // exactly how the setter came to use a different formula from this method.
+        ApplyDerivedProjectileRange();
 
         LoadSprite();
         SetupSpriteCollision();
@@ -2014,18 +2317,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     {
         parentSlot = GetComponentInParent<TowerSlot>();
 
-        if (isEnergyGenerator)
-        {
-            // Generators use generation range instead of projectile range
-            ProjectileRange = generationRange;
-            rangeCollider.radius = generationRange;
-        }
-        else
-        {
-            float tentacleReach = tentacleConfig.length + tentacleConfig.attachmentOffset.magnitude;
-            ProjectileRange = Mathf.Max(range * 2f, tentacleReach * 3.5f, 6f);
-            rangeCollider.radius = ProjectileRange + 0.5f;
-        }
+        // Same shared derivation. This path also used to MISS the heal / hammer / laser
+        // cases entirely, so a heal tower rebuilt through here got range * 2 instead of
+        // its heal radius.
+        ApplyDerivedProjectileRange();
 
         LoadSprite();
         SetupSpriteCollision();
@@ -2133,6 +2428,17 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     // background at startup so the cost lands during the loading screen instead of
     // on a placement. Ordering semantics are unchanged: same Resources.LoadAll, same
     // stable OrderBy on the leading integer of each sprite name.
+    // One warning per folder, not per placed tower.
+    private static readonly HashSet<string> _warnedTowerFolders = new HashSet<string>();
+
+    private void WarnUnmigratedTower(string path)
+    {
+        if (!_warnedTowerFolders.Add(path)) return;
+        Debug.LogWarning($"[Tower] '{towerName}' still loads frames from Resources/'{path}'. " +
+                         "Assign Sprite Frames on this tower's prefab so the art can leave " +
+                         "the Resources folder.");
+    }
+
     private static class SpriteFrameCache
     {
         private static readonly Dictionary<string, Sprite[]> Cache = new Dictionary<string, Sprite[]>();
@@ -2246,7 +2552,16 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         // same stable OrderBy on the leading integer of each sprite name, so loose
         // numeric frames (00.png ... 48.png) still play in sequence and sliced
         // spritesheets still keep their slice order.
-        var sprites = SpriteFrameCache.GetFrames(spriteResourcePath);
+        // Direct references win. SpriteFrameCache exists only to hide the cost of
+        // Resources.LoadAll, and there is no cost to hide when the frames are already
+        // resident. (Measured on the enemy side: 20 ms across all 21 folders — the
+        // caching machinery was solving a problem that did not exist.)
+        Sprite[] sprites = HasDirectFrames
+            ? spriteFrames
+            : SpriteFrameCache.GetFrames(spriteResourcePath);
+
+        if (!HasDirectFrames && !string.IsNullOrEmpty(spriteResourcePath))
+            WarnUnmigratedTower(spriteResourcePath);
 
         // Always-on looping idle (e.g. Laser Tower): handle this FIRST and
         // independently of the spriteIndex gate below, and ALWAYS log the load
@@ -2396,8 +2711,92 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
 
     #region Targeting & Combat
+
+    // ── Periodic re-scan ─────────────────────────────────────────────────────
+    //
+    // WHY THIS EXISTS. enemiesInRange used to be populated in exactly ONE place --
+    // OnTriggerEnter2D -- which only fires when a collider CROSSES the boundary. An
+    // enemy that is already inside when the overlap begins never generates an enter
+    // event, so the tower simply never sees it. That produced the maddening
+    // "sometimes it targets, sometimes it doesn't" behaviour, because whether a given
+    // enemy was ever noticed depended purely on whether it happened to walk in from
+    // outside. Three routine cases hit it:
+    //
+    //   1. A tower is BUILT on top of enemies that are already standing there.
+    //   2. The trigger radius CHANGES at runtime (upgrades, augments, the world-scale
+    //      fix in SetRangeColliderWorldRadius). Unity does not re-evaluate existing
+    //      overlaps when a collider is resized, so anything already inside the old
+    //      radius but within the new one is invisible forever.
+    //   3. Enemies are POOLED. PrefabPool.Release() does SetActive(false), which fires
+    //      OnTriggerExit2D and removes them from the list; when the same instance is
+    //      re-activated inside the radius the enter callback is not reliably raised.
+    //
+    // An OverlapCircle sweep a few times a second is authoritative regardless of event
+    // history. The trigger callbacks are KEPT -- they give instant response on the
+    // frame an enemy arrives, and this sweep only backfills what they missed.
+    [Tooltip("Seconds between authoritative overlap re-scans. Lower = more responsive, " +
+             "slightly more physics work. 0.25 is imperceptible in play.")]
+    public float targetRescanInterval = 0.25f;
+
+    [System.NonSerialized] private float _nextRescanTime;
+
+    // Shared, non-allocating scratch buffer for the sweep.
+    private static readonly Collider2D[] _rescanHits = new Collider2D[64];
+
+    private void RescanEnemiesInRange()
+    {
+        if (rangeCollider == null) return;
+
+        float worldRadius = RangeColliderWorldRadius;
+        if (worldRadius <= 0f) return;
+
+        // ContactFilter2D overload, not OverlapCircleNonAlloc (deprecated in current
+        // Unity). This is not merely cosmetic:
+        //
+        //   useTriggers = true  -- the deprecated call obeys the GLOBAL
+        //   Physics2D.queriesHitTriggers project setting. If that is off, an enemy whose
+        //   only collider is a TRIGGER is invisible to the sweep, even though
+        //   OnTriggerEnter2D still fires for it. The two detection paths would then
+        //   disagree, which is exactly the intermittent behaviour this rescan exists to
+        //   eliminate. Asking for triggers explicitly makes the sweep independent of a
+        //   project-wide toggle.
+        var filter = new ContactFilter2D
+        {
+            useTriggers = true,
+            useLayerMask = true,
+            layerMask = targetLayer,
+            useDepth = false,
+        };
+
+        int n = Physics2D.OverlapCircle(transform.position, worldRadius, filter, _rescanHits);
+        if (n > _rescanHits.Length) n = _rescanHits.Length;
+
+        for (int i = 0; i < n; i++)
+        {
+            var col = _rescanHits[i];
+            if (col == null) continue;
+
+            GameObject go = col.gameObject;
+
+            // Same admission test OnTriggerEnter2D applies, so the two paths can never
+            // disagree about what belongs in the list.
+            if (!IsEnemy(go)) continue;
+            if (((1 << go.layer) & targetLayer) == 0) continue;
+            if (enemiesInRange.Contains(go)) continue;
+
+            enemiesInRange.Add(go);
+        }
+    }
+
     void UpdateTargeting()
     {
+        // Backfill anything the trigger events missed (see RescanEnemiesInRange).
+        if (Time.time >= _nextRescanTime)
+        {
+            _nextRescanTime = Time.time + Mathf.Max(0.05f, targetRescanInterval);
+            RescanEnemiesInRange();
+        }
+
         // Manual reverse loop instead of RemoveAll(lambda): the lambda captured
         // `this`, allocating a delegate every frame per tower. Same elements removed,
         // zero per-frame allocation.
@@ -2476,6 +2875,12 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
     bool IsValidTarget(GameObject target)
     {
         if (target == null || !IsEnemy(target)) return false;
+        // Boss5 (Bellkeeper): skip enemies that are temporarily untargetable while
+        // a State B challenge is running. This one line covers acquisition,
+        // per-frame retention, the in-range rescan AND the laser, because all four
+        // validate through here. Costs one int compare when no boss is mid-
+        // challenge: the gate early-outs on an empty set.
+        if (BossTargetingGate.IsUntargetable(target)) return false;
         float dist = Vector2.Distance(transform.position, target.transform.position);
         return dist <= ProjectileRange && ((1 << target.layer) & targetLayer) != 0;
     }
@@ -2588,7 +2993,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
             //Debug.Log($"[TOWER] {towerName} MELEE attack: {effectiveBaseDamage} * {meleeConfig.damageMultiplier} = {meleeDamage} damage to {target.name}");
             TowerKillAttribution.MarkTowerHit(target);
-            stats?.TakeDamage(meleeDamage);
+            BossDamageRouting.FromTower(stats, meleeDamage);   // melee swipe (null-safe inside)
             CombatStats.ReportTowerDamageDealt(meleeDamage);
             ApplyFreezeEffect(target);
             AudioManager.instance?.PlayOneShot(FMODEvents.instance.towerMeleeHit, FirePoint?.position ?? transform.position);
@@ -2601,8 +3006,13 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
             if (projectilePrefab != null)
             {
-                AudioManager.instance?.PlayOneShot(FMODEvents.instance.multiShotSound, FirePoint.position);
-                Vector3 spawn = FirePoint?.position ?? transform.position;
+                // FIX: this was `FirePoint.position` — unguarded, while the melee branch
+                // above correctly uses `FirePoint?.position ?? transform.position`.
+                // firePoint is created in InitializeTentacles(), which is skipped when
+                // useTentacleTurret is off or isEnergyGenerator is on; in that state melee
+                // worked and ranged threw an NRE right here.
+                Vector3 spawn = FirePoint != null ? FirePoint.position : transform.position;
+                AudioManager.instance?.PlayOneShot(FMODEvents.instance.multiShotSound, spawn);
                 Vector3 dir = (target.transform.position - spawn).normalized;
                 float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
 
@@ -2620,7 +3030,22 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 if (projectileComponent != null)
                 {
                     //Debug.Log($"[TOWER] {towerName} PROJECTILE attack dealing {effectiveBaseDamage} damage to {target.name}");
-                    projectileComponent.Initialize(target, effectiveBaseDamage, range);
+                    // FIX (tether FAR-zone buff dealt no damage in the extended belt):
+                    // the third argument is Projectile.maxRange -- the distance the shot may
+                    // TRAVEL before Projectile.Update retires it to the pool, before it ever
+                    // reaches OnTriggerEnter2D. We used to pass the raw `range` field, but the
+                    // firing gate above is `dist <= ProjectileRange`, and ProjectileRange is
+                    // derived as max(range * 2, tentacleReach * 3.5, 6) and then multiplied
+                    // by TowerTetherBoost. So the tower happily fired at an enemy 9 units away
+                    // with a projectile only allowed to fly ~`range` units: it vanished
+                    // mid-flight and dealt nothing. The buff never touches `range` (by design,
+                    // writing it would re-derive and wipe ProjectileRange), so every unit of
+                    // tether reach was a dead zone.
+                    //
+                    // The travel budget now comes from the SAME value the firing gate used,
+                    // plus slack for the muzzle offset and for a homing shot chasing a target
+                    // that keeps walking away during the flight.
+                    projectileComponent.Initialize(target, effectiveBaseDamage, GetProjectileTravelBudget());
 
                     if (freezeChance > 0f)
                     {
@@ -2636,7 +3061,7 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
                 {
                     //Debug.Log($"[TOWER] {towerName} DIRECT attack dealing {effectiveBaseDamage} damage to {target.name}");
                     TowerKillAttribution.MarkTowerHit(target);
-                    enemyStats.TakeDamage(effectiveBaseDamage);
+                    BossDamageRouting.FromTower(enemyStats, effectiveBaseDamage);   // base melee
                     CombatStats.ReportTowerDamageDealt(effectiveBaseDamage);
                     ApplyFreezeEffect(target);
                 }
@@ -2868,6 +3293,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             return;
         }
 
+        // Unity may have destroyed this tower during teardown while EnergyManager still
+        // references it. Bail before UpdateVisuals() touches the renderer/transform.
+        if (!IsUnityObjectAlive) return;
+
         if (isDestroyed)
         {
             Debug.LogWarning($"Tower '{towerName}': Trying to consume energy on destroyed tower, ignoring");
@@ -2899,6 +3328,8 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             Debug.LogWarning($"Tower '{towerName}': Trying to supply invalid energy amount: {amount}, ignoring");
             return;
         }
+
+        if (!IsUnityObjectAlive) return;
 
         if (isDestroyed)
         {
@@ -2971,12 +3402,14 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
 
         return maxEnergy > 0 ? currentEnergy / maxEnergy : 0f;
     }
-    public Vector3 GetPosition() => transform.position;
+    public Vector3 GetPosition() => IsUnityObjectAlive ? transform.position : Vector3.zero;
     public bool IsEnergyDepleted() => EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetTowerDeadThreshold();
     public bool IsEnergyLow() => EnergyManager.Instance != null && GetEnergyPercentage() <= EnergyManager.Instance.GetTowerCriticalThreshold();
 
     void UpdateVisuals()
     {
+        if (!IsUnityObjectAlive) return;
+
         // Skip visual updates if this tower is a grappling target
         if (isGrapplingTarget) return;
 
@@ -3069,6 +3502,55 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         if (!isDisabledByDamage) return;
         isDisabledByDamage = false;
         if (spriteRenderer != null) { var c = spriteRenderer.color; c.a = 1f; spriteRenderer.color = c; }
+    }
+
+    /// Set energy to an EXACT saved value for a state restore (wave rewind / save
+    /// resume). This is deliberately NOT SupplyEnergy():
+    ///
+    ///   * SupplyEnergy() early-returns on `isDestroyed`, so a tower destroyed during
+    ///     the wave being rewound could never be brought back — the rewind silently
+    ///     left it dead.
+    ///   * SupplyEnergy() only ever ADDS. WaveCheckpointService's downward branch used
+    ///     to write `currentEnergy` directly, which skipped OnEnergyChanged and
+    ///     UpdateVisuals — so after any rewind that LOWERED energy the bar kept showing
+    ///     the pre-rewind value for the rest of the fight.
+    ///
+    /// Pass maxEnergy <= 0 to leave the current pool alone.
+    public void RestoreEnergyState(float energy, float max = 0f)
+    {
+        if (!IsUnityObjectAlive) return;
+
+        // Called before Start() (a freshly rebuilt tower)? Then the write below is
+        // about to be overwritten by EnergyManager registration. Record it as a
+        // spawn seed so Start() puts it back once the pool is derived. Harmless on
+        // a live tower: Start has already run, so nothing consumes the seed.
+        if (!_startRan) SeedEnergyForSpawn(energy);
+
+        if (max > 0f && !float.IsNaN(max) && !float.IsInfinity(max))
+            maxEnergy = max;   // setter validates, rescales currentEnergy, updates visuals
+
+        if (float.IsNaN(energy) || float.IsInfinity(energy)) return;
+
+        float prev = currentEnergy;
+        currentEnergy = Mathf.Clamp(energy, 0f, maxEnergy);
+
+        // A restore re-animates a tower the rewind is undoing the death of.
+        if (currentEnergy > 0f)
+        {
+            isDestroyed = false;
+            if (isDisabledByDamage) EnableTower();
+        }
+
+        if (!Mathf.Approximately(prev, currentEnergy))
+        {
+            OnEnergyChanged?.Invoke(currentEnergy);
+            UpdateVisuals();
+            if (prev <= 0f && currentEnergy > 0f) OnEnergyRestored?.Invoke();
+        }
+        else
+        {
+            UpdateVisuals();   // pool may have changed even if the absolute did not
+        }
     }
 
     void StartDamageFlash()
@@ -3271,7 +3753,11 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
         healHaloSfx.Stop(immediate: true);
         laserAttackSfx.Stop(immediate: true);
 
-        // Cleanup laser
+        // Cleanup laser. Shut the visuals down first so nothing can be left enabled
+        // if the GameObject itself outlives this component (e.g. only the Tower
+        // component is removed).
+        ShutdownLaserImmediate();
+
         if (laserObject != null) DestroyImmediate(laserObject);
         if (laserStartParticles != null) DestroyImmediate(laserStartParticles.gameObject);
         if (laserImpactParticles != null) DestroyImmediate(laserImpactParticles.gameObject);
@@ -3354,7 +3840,10 @@ public class Tower : MonoBehaviour, IEnergyConsumer, IDamageable
             if (rangeCollider != null)
             {
                 UnityEditor.Handles.color = Color.green;
-                UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, rangeCollider.radius);
+                // Draw the WORLD radius. Handles.DrawWireDisc takes world units, but
+                // rangeCollider.radius is local — so on a scaled tower this gizmo used to
+                // draw a circle four times larger than the trigger really was.
+                UnityEditor.Handles.DrawWireDisc(transform.position, Vector3.forward, RangeColliderWorldRadius);
             }
 
             if (currentTarget != null)
@@ -3381,5 +3870,8 @@ public interface IDamageable
     float GetHealthPercentage();
     bool IsDestroyed();
 }
+
+
+
 
 

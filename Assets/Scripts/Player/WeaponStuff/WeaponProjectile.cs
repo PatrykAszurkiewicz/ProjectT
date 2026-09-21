@@ -95,7 +95,13 @@ public class WeaponProjectile : MonoBehaviour
             CharacterStats stats = other.GetComponent<CharacterStats>();
             if (stats != null)
             {
-                stats.TakeDamage(damage);
+                // Boss5 (Bellkeeper) must tell PLAYER damage from TOWER damage: its
+                // 'don't attack' challenge counts player hits and nullifies them,
+                // while tower damage is penalised and ignored. Left untagged, a shot
+                // fired from range would be classified by proximity and misread as
+                // tower fire. For every other enemy this is a straight passthrough to
+                // the identical virtual TakeDamage call.
+                BossDamageRouting.FromPlayer(stats, damage);
 
                 // Combat telemetry: player ranged damage dealt.
                 CombatStats.ReportPlayerDamageDealt(_owner, damage, other.transform.position);
@@ -246,3 +252,7 @@ public static class ProjectileDart
         Object.Destroy(trail.gameObject, trail.time + 0.05f);
     }
 }
+
+
+
+

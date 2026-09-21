@@ -1296,7 +1296,19 @@ public static class StatApplicator
                 synergy.damageMultiplier *= modification.Value;
             }
 
+            // FIX: damageMultiplier is the PER-NEIGHBOUR base of Mathf.Pow(mult, n).
+            // A CSV value <= 1 makes the whole system a silent no-op (pow(1,n) == 1),
+            // which is exactly what shipped. Clamp so a mis-authored row is visible.
+            if (synergy.damageMultiplier <= 1f)
+            {
+                Debug.LogWarning($"[Augment] Tower synergy multiplier resolved to " +
+                                 $"{synergy.damageMultiplier:F3} (<= 1), which would do nothing. " +
+                                 "Check the CSV value for this augment; clamping to 1.05.");
+                synergy.damageMultiplier = 1.05f;
+            }
+
             synergy.enabled = true;
+            synergy.UpdateTowerSynergies();   // apply immediately, don't wait for the tick
 
             //Debug.Log($"Tower synergy: {synergy.damageMultiplier}x per adjacent tower");
             return true;
@@ -1310,44 +1322,22 @@ public static class StatApplicator
             if (map == null) return false;
 
             int ringsToAdd = Mathf.RoundToInt(modification.Value);
-            int currentRingCount = map.rings.Count;
-            int availableSlots = map.maxTotalRings - currentRingCount;
 
-            if (availableSlots <= 0)
-            {
-                Debug.LogWarning($"Cannot add more rings: already at maximum ({map.maxTotalRings} rings)");
-                return false;
-            }
-
-            if (ringsToAdd > availableSlots)
-            {
-                //Debug.LogWarning($"Can only add {availableSlots} more ring(s), capping from {ringsToAdd}");
-                ringsToAdd = availableSlots;
-            }
-
-            for (int i = 0; i < ringsToAdd; i++)
-            {
-                // Get outermost ring parameters
-                float maxRadius = 2.3f;
-                int slotCount = 8;
-                float slotSize = 1.9f;
-
-                foreach (var ring in map.rings)
-                {
-                    if (ring.enabled && ring.radius > maxRadius)
-                    {
-                        maxRadius = ring.radius;
-                        slotCount = ring.slotCount;
-                        slotSize = ring.slotSize;
-                    }
-                }
-
-                map.AddRing(maxRadius + 1.8f, slotCount, slotSize);
-            }
-
-            map.GenerateMap();
-            //Debug.Log($"Added {ringsToAdd} tower placement ring(s) ({map.rings.Count}/{map.maxTotalRings} total)");
-            return true;
+            // All the work now lives in TowerDefenseMap.AddAugmentRings.
+            //
+            // The old code here appended to map.rings, but CreateTowerSlots reads
+            // activeLayout.rings whenever the layout defines any, and takes the
+            // CreateCustomSlots branch entirely for Custom layouts — so on every
+            // built-in layout this augment silently did nothing. It also spaced new
+            // rings 1.8 apart, which leaves only 0.3 between two towers: too narrow
+            // for an enemy to pass, wide enough to wedge in.
+            //
+            // AddAugmentRings writes to the list that's actually read, spaces rings so
+            // a lane survives between them, dodges bonus slots and obstacles, falls
+            // back to revealing bonus slots on Custom layouts, and does the
+            // tower-preserving rebuild itself.
+            int slotsGained = map.AddAugmentRings(ringsToAdd);
+            return slotsGained > 0;
         }
 
         // Handle additional tower SLOTS (works on ALL layout types)
@@ -2406,6 +2396,18 @@ public class AugmentRegistry : MonoBehaviour
         if (_instance == null)
         {
             _instance = this;
+
+            // FIX: DontDestroyOnLoad only works on ROOT GameObjects. When this component
+            // sits on a nested object Unity logs a warning and does nothing, so the
+            // registry — which the whole augment replay on resume depends on — was
+            // destroyed with the scene. Detach first so persistence is real.
+            if (transform.parent != null)
+            {
+                Debug.Log($"[AugmentRegistry] Detaching from '{transform.parent.name}' so " +
+                          "DontDestroyOnLoad can persist the registry across scene loads.");
+                transform.SetParent(null, true);
+            }
+
             DontDestroyOnLoad(gameObject);
             InitializeRegistry();
         }
@@ -3121,4 +3123,7 @@ public class AugmentTarget
         return new AugmentTarget(weapon.GetWeaponData());
     }
 }
+
+
+
 

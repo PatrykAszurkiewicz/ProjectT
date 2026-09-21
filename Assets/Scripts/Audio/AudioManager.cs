@@ -8,18 +8,65 @@ using FMOD.Studio;
 public class AudioManager : MonoBehaviour
 {
     [Header("Volume")]
+    // The four volumes are stored in the serialized fields below (the "m_" prefix is
+    // hidden by Unity, so the Inspector still shows "Master Volume", "Music Volume"...)
+    // and exposed to other scripts through the properties further down. Every write
+    // from code goes through a property setter, which can log WHO changed it — the
+    // console stack trace under each "[AudioManager] ... volume" line names the script.
+    // FormerlySerializedAs keeps the values already saved in prefabs and scenes.
     [Range(0, 1)]
-    public float masterVolume = 1;
+    [UnityEngine.Serialization.FormerlySerializedAs("masterVolume")]
+    [SerializeField] private float m_MasterVolume = 1;
     [Range(0, 1)]
-    public float musicVolume = 1;
+    [UnityEngine.Serialization.FormerlySerializedAs("musicVolume")]
+    [SerializeField] private float m_MusicVolume = 1;
     [Range(0, 1)]
-    public float ambienceVolume = 1;
+    [UnityEngine.Serialization.FormerlySerializedAs("ambienceVolume")]
+    [SerializeField] private float m_AmbienceVolume = 1;
     [Range(0, 1)]
-    public float SFXVolume = 1;
+    [UnityEngine.Serialization.FormerlySerializedAs("SFXVolume")]
+    [SerializeField] private float m_SFXVolume = 1;
+
+    [Tooltip("Log every time a script changes a volume, with the caller in the stack " +
+             "trace. Turn off once you've found what was overriding the Inspector values.")]
+    public bool logVolumeChanges = true;
+
+    public float masterVolume { get => m_MasterVolume; set => SetVolume(ref m_MasterVolume, value, "Master"); }
+    public float musicVolume { get => m_MusicVolume; set => SetVolume(ref m_MusicVolume, value, "Music"); }
+    public float ambienceVolume { get => m_AmbienceVolume; set => SetVolume(ref m_AmbienceVolume, value, "Ambience"); }
+    public float SFXVolume { get => m_SFXVolume; set => SetVolume(ref m_SFXVolume, value, "SFX"); }
+
+    private void SetVolume(ref float field, float value, string label)
+    {
+        if (Mathf.Approximately(field, value)) return;
+        if (logVolumeChanges)
+            Debug.Log($"[AudioManager] {label} volume changed by code: {field:0.00} -> {value:0.00} " +
+                      "(see the stack trace below for the script that did it)", this);
+        field = value;
+    }
 
     [Header("Music Settings")]
     public bool musicEnabled = true; // Enable by default
     private bool previousMusicEnabled = true;
+
+    //  Which gameplay tracks are eligible for random selection 
+    // One tick-box per candidate track. Untick a track to KEEP it out of the random
+    // rotation, tick it to allow it. The list auto-fills with every candidate track
+    // (see CandidateTrackNames), so new tracks show up here automatically and default
+    // to included. This only controls the random GAMEPLAY pool — the dedicated menu
+    // track (MusicMenu) is unaffected.
+    [System.Serializable]
+    public struct MusicTrackOption
+    {
+        public string name;               // matches a name in CandidateTrackNames
+        public bool includeInRandomPool;  // untick to exclude from random play
+    }
+
+    [Header("Random Music Pool")]
+    [Tooltip("Gameplay tracks eligible for random selection each run. Untick a track to " +
+             "exclude it from random play; tick to include it. Auto-fills with all " +
+             "candidate tracks — leave a new one ticked to have it join the rotation.")]
+    public List<MusicTrackOption> randomTrackPool = new List<MusicTrackOption>();
 
     [Header("Debug")]
     public bool enableDebugLogs = false;
@@ -37,17 +84,14 @@ public class AudioManager : MonoBehaviour
     private bool musicInitialized = false;
     private bool fmodInitialized = false;
 
-    // ── Random gameplay music track pool ─────────────────────────────────────
+    //  Random gameplay music track pool 
     // A run's background music is ONE FMOD event chosen at random from the pool
     // below (built from the four gameplay music EventReferences on FMODEvents). A
     // fresh track is rolled each time a run begins — AudioManager.UpdateMusicContext()
     // does this the moment a GameOrchestrator appears — and the Options menu's
     // "Switch Track" button rolls a different one on demand. The main menu plays a
     // separate dedicated track instead (see menu music, below).
-    //
-    // This layers on TOP of the existing MusicSection system: whichever track is
-    // loaded still receives section changes. Tracks that don't author a
-    // "MusicSection" parameter are handled gracefully (see _sectionParamMissing).
+
     private struct MusicTrack { public string name; public EventReference reference; }
     private readonly List<MusicTrack> _musicTracks = new List<MusicTrack>();
     private int _currentTrackIndex = -1;
@@ -58,8 +102,24 @@ public class AudioManager : MonoBehaviour
     // so simple (non-adaptive) tracks don't spam an error on every state change.
     // Cleared whenever the track changes.
     private bool _sectionParamMissing = false;
+    // Sections we've already warned about for the CURRENT track (so a track with no
+    // Boss region warns once, not on every boss fight). Cleared when the track changes.
+    private readonly HashSet<MusicSection> _warnedMissingSections = new HashSet<MusicSection>();
 
-    // ── Dedicated menu music (MusicMenu) ─────────────────────────────────────
+    // Canonical list of gameplay tracks that CAN enter the random pool, in a fixed
+    // order. This is the single place to register a track for random play. To add one:
+    //    add its EventReference to FMODEvents,
+    //    add its display name here,
+    //    map that name to the reference in ReferenceForTrackName() below.
+    // It then appears automatically as a tick-box under "Random Music Pool" (included
+    // by default), and an unassigned reference is skipped so partial wiring is fine.
+    private static readonly string[] CandidateTrackNames =
+    {
+        "Ambient", "Calm", "Electronic", "Piano",   // original four
+        "Guitar", "Clavi", "Orchestral", "Starting" // newly added 
+    };
+
+    //  Dedicated menu music (MusicMenu) 
     // The main menu plays its own FMOD event, separate from the gameplay tracks, so
     // the two can cross-fade when a run starts / ends. MusicDirector routes the
     // "Menu" section here and every other section to the gameplay bed.
@@ -83,7 +143,7 @@ public class AudioManager : MonoBehaviour
 
     private void Awake()
     {
-        // ---- Singleton ----------------------------------------------------
+        //  Singleton 
         // A duplicate can appear when a scene still carries its own audio object
         // while AudioBootstrap has already spawned the persistent one. Destroy the
         // COMPONENT, not the GameObject: this script may live on a shared
@@ -100,7 +160,16 @@ public class AudioManager : MonoBehaviour
         }
         instance = this;
 
-        // ---- Persistence --------------------------------------------------
+        if (logVolumeChanges)
+            Debug.Log($"[AudioManager] Live AudioManager is on '{gameObject.name}' " +
+                      $"(scene '{gameObject.scene.name}'). Starting volumes: master {m_MasterVolume:0.00}, " +
+                      $"music {m_MusicVolume:0.00}, ambience {m_AmbienceVolume:0.00}, SFX {m_SFXVolume:0.00}", this);
+
+        // Make sure every candidate track has a tick-box entry even when this came from
+        // a prefab instantiated at runtime (OnValidate doesn't run in that path).
+        SeedRandomTrackPool();
+
+        //  Persistence 
         // DontDestroyOnLoad only works on root objects. If this sits under a
         // "Managers" (or similar) parent, detach it first, keeping world position.
         // FMODEvents does the same for itself, so it survives whether it is a
@@ -113,9 +182,25 @@ public class AudioManager : MonoBehaviour
         StartCoroutine(InitializeFMOD());
     }
 
+    private void Start()
+    {
+        // Apply the player's saved volumes (or the Options menu defaults) as soon as
+        // this AudioManager exists, whatever order the startup hooks ran in.
+        if (!isDuplicate) OptionsMenu.ApplySavedSettings();
+    }
+
     private IEnumerator InitializeFMOD()
     {
         if (enableDebugLogs) Debug.Log("Initializing FMOD...");
+
+        // Buses valid ≠ FMOD ready. Bus validity only proves the MASTER bank loaded
+        // (the buses live there); the banks that hold the EVENTS can still be streaming
+        // from disk in a build. We therefore keep bus-readiness in a LOCAL and only set
+        // the public fmodInitialized flag AFTER every bank + its sample data is resident
+        // (see the bank-wait below). That single flag gates PlayOneShot and the sample
+        // preload alike, so this closes the intermittent "wave start / boss zoom
+        // sometimes don't play in the build" race.
+        bool busesValid = false;
 
         // Wait for FMOD to be ready
         int attempts = 0;
@@ -130,7 +215,7 @@ public class AudioManager : MonoBehaviour
 
                 if (masterBus.isValid() && musicBus.isValid() && ambienceBus.isValid() && sfxBus.isValid())
                 {
-                    fmodInitialized = true;
+                    busesValid = true;   // master bank is up; event banks may still be loading
 
                     // Tell FMOD to split spatial audio tracking for 2 players
                     //FMODUnity.RuntimeManager.StudioSystem.setNumListeners(2);
@@ -148,11 +233,41 @@ public class AudioManager : MonoBehaviour
             yield return new WaitForSeconds(0.05f);
         }
 
-        if (!fmodInitialized)
+        if (!busesValid)
         {
             Debug.LogError("Failed to initialize FMOD after 5 seconds!");
             yield break;
         }
+
+        // Buses being valid only means the MASTER bank is loaded — the buses live there.
+        // The banks that hold your EVENTS (SFX / Music) can still be streaming in from
+        // disk in a build. If we allow PlayOneShot / PreloadSampleData now, any event
+        // whose bank isn't resident yet fails silently (EventNotFound) — THAT is the
+        // intermittent "wave start / boss zoom sometimes don't play in the build". The
+        // editor never races because its banks are already warm. So wait for every bank
+        // (and any streaming sample data) before we call ourselves initialized.
+        //
+        // Version note: HaveAllBanksLoaded / AnySampleDataLoading() exist in FMOD for
+        // Unity 2.02+. On older versions, swap these for RuntimeManager.HasBankLoaded(
+        // "<YourBankName>") per bank, or load banks explicitly with LoadBank(). The gate
+        // is only meaningful if your FMOD settings actually request banks (the usual
+        // "Load All Bank Data") — which yours do, since the events do eventually play.
+        float bankWait = 0f;
+        while (!RuntimeManager.HaveAllBanksLoaded && bankWait < 10f)
+        {
+            bankWait += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        while (RuntimeManager.AnySampleDataLoading() && bankWait < 10f)
+        {
+            bankWait += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // Only NOW is it safe to play events / load their sample data. Everything gated
+        // on fmodInitialized (PlayOneShot, PlaySFX, PreloadSampleData, music init) is
+        // held back until here, which is what fixes the intermittent dropouts.
+        fmodInitialized = true;
 
         // Initialize music if enabled
         previousMusicEnabled = musicEnabled;
@@ -169,10 +284,7 @@ public class AudioManager : MonoBehaviour
         // EVERY trigger, not just the first. Loading and KEEPING the sample data makes
         // every start() instant. (This is why the RedEye beam was fine but the laser
         // tower and hammer were late: same play path, different resident-sample state.)
-        //
-        // This does NOT fix an event set to "Stream" in FMOD Studio — a stream always
-        // opens on start and carries its own latency. If a sound is still late after
-        // this, uncheck "Stream" on its audio asset in FMOD Studio.
+
         yield return StartCoroutine(PreloadTightSyncSampleData());
     }
 
@@ -295,6 +407,10 @@ public class AudioManager : MonoBehaviour
 #if UNITY_EDITOR
     private void OnValidate()
     {
+        // Keep the "Random Music Pool" list populated and in canonical order so the
+        // tick-boxes are visible/editable without entering Play mode.
+        SeedRandomTrackPool();
+
         // This is called when values change in the Inspector during runtime
         if (Application.isPlaying && previousMusicEnabled != musicEnabled)
         {
@@ -302,7 +418,32 @@ public class AudioManager : MonoBehaviour
             previousMusicEnabled = musicEnabled;
         }
     }
+
+    // Editor helper: re-enable every track and drop stale entries. Right-click the
+    // AudioManager component header → "Reset Random Music Pool (enable all)".
+    [ContextMenu("Reset Random Music Pool (enable all)")]
+    private void ResetRandomTrackPool()
+    {
+        randomTrackPool.Clear();
+        SeedRandomTrackPool();
+    }
 #endif
+
+    // Appends any candidate track missing from randomTrackPool (as ENABLED), in
+    // canonical order, without touching the user's existing tick choices. Cheap and
+    // idempotent; safe to call from Awake and OnValidate.
+    private void SeedRandomTrackPool()
+    {
+        for (int i = 0; i < CandidateTrackNames.Length; i++)
+        {
+            string name = CandidateTrackNames[i];
+            bool present = false;
+            for (int j = 0; j < randomTrackPool.Count; j++)
+                if (randomTrackPool[j].name == name) { present = true; break; }
+            if (!present)
+                randomTrackPool.Add(new MusicTrackOption { name = name, includeInRandomPool = true });
+        }
+    }
 
     private void InitializeAmbience(EventReference ambienceEventReference)
     {
@@ -424,64 +565,123 @@ public class AudioManager : MonoBehaviour
 
         try
         {
-            // Prefer the LABEL, not the raw float. In FMOD Studio "MusicSection" is a
+            // Set by LABEL, never by raw number. In FMOD Studio "MusicSection" is a
             // labeled parameter whose labels are spelled exactly like the MusicSection
-            // enum values (Menu, StageIntro, Calm, Intense, Boss, ...). Setting by label
-            // means "Boss" always finds the Boss region even if the labels get reordered
-            // in Studio — with a raw float, reordering silently sends you to the wrong
-            // music. The two must stay in lockstep: enum name == Studio label.
-            FMOD.RESULT result =
-                musicEventInstance.setParameterByNameWithLabel("MusicSection", section.ToString());
-
-            if (result == FMOD.RESULT.OK)
+            // enum values (Menu, StageIntro, Calm, Intense, Boss, ...).
+            //
+            // A track doesn't have to author every section. If a label is missing we
+            // walk a FALLBACK CHAIN of labels (see FallbackChain below), e.g. a track
+            // with no "Boss" plays its "Intense" section during the boss fight.
+            //
+            // We deliberately do NOT fall back to setParameterByName(float): on a
+            // labeled parameter the number is the label's POSITION in Studio's list,
+            // not the enum value, and FMOD clamps out-of-range values to the LAST label.
+            // So Boss (8) on a track with six labels silently played whatever label
+            // happened to be last — that was the old behaviour.
+            // A track whose "MusicSection" is a plain NUMERIC parameter (no labels) has
+            // no names to fall back through, so it keeps the original behaviour: the
+            // enum value is sent as the number.
+            if (!SectionParameterIsLabeled(out bool hasParameter))
             {
-                if (enableDebugLogs)
-                    Debug.Log($"Music section successfully set to: {section} ({(int)section})");
-            }
-            else if (result == FMOD.RESULT.ERR_EVENT_NOTFOUND)
-            {
-                // The label doesn't exist on the parameter yet. Two common causes:
-                //   • that section hasn't been authored in Studio (still building it), or
-                //   • "MusicSection" is a plain numeric parameter, not a labeled one.
-                // Fall back to the numeric value so a half-authored bank still plays
-                // *something*, but warn loudly so it gets fixed — a missing label is a
-                // real setup bug, not a runtime hiccup to swallow silently.
-                Debug.LogWarning(
-                    $"[AudioManager] MusicSection has no label '{section}'. Falling back to " +
-                    $"numeric {(int)section}. Add a label named exactly '{section}' to the " +
-                    "'MusicSection' parameter in FMOD Studio (labels must match the " +
-                    "MusicSection enum), then rebuild banks.");
-
-                FMOD.RESULT fallback =
-                    musicEventInstance.setParameterByName("MusicSection", (float)section);
-                if (fallback == FMOD.RESULT.ERR_EVENT_NOTFOUND)
+                if (!hasParameter)
                 {
-                    // Neither the label nor a numeric "MusicSection" exists on this
-                    // event: it's a simple (non-adaptive) track. Warn ONCE and stop
-                    // driving sections into it for as long as it stays loaded.
                     _sectionParamMissing = true;
                     Debug.LogWarning(
                         $"[AudioManager] Track '{CurrentMusicTrackName}' has no 'MusicSection' " +
                         "parameter — playing it as a plain loop and ignoring section changes. " +
                         "(Author a 'MusicSection' parameter on it if you want adaptive regions.)");
+                    return;
                 }
-                else if (fallback != FMOD.RESULT.OK)
-                    Debug.LogError($"Failed to set music parameter (numeric fallback): {fallback}");
+
+                FMOD.RESULT numeric = musicEventInstance.setParameterByName("MusicSection", (float)section);
+                if (numeric != FMOD.RESULT.OK)
+                    Debug.LogError($"Failed to set numeric music section '{section}': {numeric}");
                 else if (enableDebugLogs)
-                    Debug.Log($"Music section set via numeric fallback: {section} ({(int)section})");
+                    Debug.Log($"Music section set (numeric parameter): {section} ({(int)section})");
+                return;
             }
-            else
+
+            MusicSection[] chain = FallbackChain(section);
+            for (int i = 0; i < chain.Length; i++)
             {
-                // Any other result is a genuine failure (invalid handle, parameter name
-                // typo'd in code, event not loaded, ...). Surface it as an error — this
-                // is the "raise an error like before" behaviour, now scoped to real faults.
-                Debug.LogError($"Failed to set music parameter '{section}': {result}");
+                FMOD.RESULT result =
+                    musicEventInstance.setParameterByNameWithLabel("MusicSection", chain[i].ToString());
+
+                if (result == FMOD.RESULT.OK)
+                {
+                    if (i > 0 && _warnedMissingSections.Add(section))
+                        Debug.LogWarning(
+                            $"[AudioManager] Track '{CurrentMusicTrackName}' has no '{section}' " +
+                            $"section — playing '{chain[i]}' instead. Add a label named exactly " +
+                            $"'{section}' to its 'MusicSection' parameter in FMOD Studio if you " +
+                            "want a dedicated section.");
+                    if (enableDebugLogs)
+                        Debug.Log($"Music section set: {chain[i]}" +
+                                  (i > 0 ? $" (fallback for {section})" : ""));
+                    return;
+                }
+
+                if (result != FMOD.RESULT.ERR_EVENT_NOTFOUND)
+                {
+                    // A genuine failure (invalid handle, event not loaded, ...), not a
+                    // missing label — surface it.
+                    Debug.LogError($"Failed to set music section '{chain[i]}': {result}");
+                    return;
+                }
+                // ERR_EVENT_NOTFOUND → this label (or the whole parameter) is missing;
+                // try the next one in the chain.
+            }
+
+            // None of the labels in the chain exist on this track.
+            if (_warnedMissingSections.Add(section))
+            {
+                Debug.LogWarning(
+                    $"[AudioManager] Track '{CurrentMusicTrackName}' has none of the labels " +
+                    $"[{string.Join(", ", chain)}] on 'MusicSection' — keeping the current " +
+                    "section. Check the label spelling in FMOD Studio.");
             }
         }
         catch (System.Exception e)
         {
             Debug.LogError($"Exception setting music section: {e.Message}");
         }
+    }
+
+    // Which labels to try, in order, for each section. The first label that exists on
+    // the current track wins. Edit these to change what a partially-authored track
+    // plays. Every chain ends in a section every adaptive track is expected to have.
+    private static MusicSection[] FallbackChain(MusicSection s)
+    {
+        switch (s)
+        {
+            case MusicSection.Boss: return new[] { MusicSection.Boss, MusicSection.Intense, MusicSection.Calm };
+            case MusicSection.FinalBoss: return new[] { MusicSection.FinalBoss, MusicSection.Boss, MusicSection.Intense, MusicSection.Calm };
+            case MusicSection.Intense: return new[] { MusicSection.Intense, MusicSection.Calm };
+            case MusicSection.StageIntro: return new[] { MusicSection.StageIntro, MusicSection.Intro, MusicSection.Calm };
+            case MusicSection.Reward: return new[] { MusicSection.Reward, MusicSection.Calm };
+            case MusicSection.Pause: return new[] { MusicSection.Pause, MusicSection.Calm };
+            case MusicSection.Victory: return new[] { MusicSection.Victory, MusicSection.Calm };
+            case MusicSection.GameOver: return new[] { MusicSection.GameOver, MusicSection.Calm };
+            case MusicSection.Calm: return new[] { MusicSection.Calm, MusicSection.Intro };
+            default: return new[] { s, MusicSection.Calm };
+        }
+    }
+
+    // Inspects the loaded gameplay event's "MusicSection" parameter.
+    // hasParameter = false → the event has no such parameter (plain loop).
+    // Returns true only for a LABELED parameter (the normal adaptive setup).
+    private bool SectionParameterIsLabeled(out bool hasParameter)
+    {
+        hasParameter = false;
+        if (!musicEventInstance.isValid()) return false;
+        if (musicEventInstance.getDescription(out FMOD.Studio.EventDescription desc) != FMOD.RESULT.OK)
+            return false;
+        if (desc.getParameterDescriptionByName("MusicSection",
+                out FMOD.Studio.PARAMETER_DESCRIPTION param) != FMOD.RESULT.OK)
+            return false;
+
+        hasParameter = true;
+        return (param.flags & FMOD.Studio.PARAMETER_FLAGS.LABELED) != 0;
     }
 
     private IEnumerator DeferredMusicSection(MusicSection section)
@@ -730,6 +930,7 @@ public class AudioManager : MonoBehaviour
             ReleaseMusicInstance();
             musicInitialized = false;
             _sectionParamMissing = false;      // the new event may author MusicSection
+            _warnedMissingSections.Clear();
             InitializeMusic(ActiveMusicTrack());
             _loadedTrackIndex = _currentTrackIndex;
             if (musicInitialized && musicEventInstance.isValid())
@@ -831,8 +1032,62 @@ public class AudioManager : MonoBehaviour
         (_currentTrackIndex >= 0 && _currentTrackIndex < _musicTracks.Count)
             ? _musicTracks[_currentTrackIndex].name : "—";
 
-    // How many tracks were actually assigned in FMODEvents.
+    // How many tracks are currently ELIGIBLE (assigned AND ticked-on) for random play.
     public int MusicTrackCount { get { EnsureTrackPool(); return _musicTracks.Count; } }
+
+    // ── Include / exclude tracks at runtime (e.g. from an options toggle) ─────
+    // The inspector tick-boxes under "Random Music Pool" are the easy, no-code way to
+    // do this. These do the same thing from script. `name` must match one in
+    // CandidateTrackNames ("Ambient", "Calm", "Electronic", "Piano", "Guitar",
+    // "Clavi", "Orchestral", "Starting").
+
+    public bool IsTrackInRandomPool(string name)
+    {
+        for (int i = 0; i < randomTrackPool.Count; i++)
+            if (randomTrackPool[i].name == name) return randomTrackPool[i].includeInRandomPool;
+        return true; // never-seen candidate defaults to included
+    }
+
+    // Turn a track on/off in the random pool and rebuild the eligible list. The change
+    // takes effect on the next random roll (new run, or Options → "Switch Track"). If
+    // you exclude the track that's playing right now, it keeps playing until then. The
+    // currently-selected track is preserved by name if it's still eligible, so a live
+    // run isn't yanked onto a different track.
+    public void SetTrackInRandomPool(string name, bool include)
+    {
+        int slot = -1;
+        for (int i = 0; i < randomTrackPool.Count; i++)
+            if (randomTrackPool[i].name == name) { slot = i; break; }
+
+        if (slot >= 0)
+        {
+            var opt = randomTrackPool[slot];
+            opt.includeInRandomPool = include;
+            randomTrackPool[slot] = opt;
+        }
+        else
+        {
+            randomTrackPool.Add(new MusicTrackOption { name = name, includeInRandomPool = include });
+        }
+
+        // Rebuild the eligible pool, keeping the current selection if still eligible.
+        string selectedName = CurrentMusicTrackName;
+        _musicTracks.Clear();
+        _currentTrackIndex = -1;
+        EnsureTrackPool();
+        if (selectedName != "—")
+        {
+            for (int i = 0; i < _musicTracks.Count; i++)
+                if (_musicTracks[i].name == selectedName)
+                {
+                    _currentTrackIndex = i;
+                    // The live bed still holds this track; keep loaded/current in sync so
+                    // PlayGameplayMusic doesn't needlessly re-fade the same track.
+                    if (_loadedTrackIndex >= 0) _loadedTrackIndex = i;
+                    break;
+                }
+        }
+    }
 
     // Roll a random gameplay track for a new run. Called by MusicDirector when a fresh
     // GameOrchestrator appears (the player started/resumed a run). This only SELECTS
@@ -870,27 +1125,58 @@ public class AudioManager : MonoBehaviour
         }
     }
 
-    // Build the pool from FMODEvents' four gameplay music references (once).
-    // Unassigned references are skipped, so it works with however many are wired.
+    // Build the pool from FMODEvents' gameplay music references (once). A candidate is
+    // added only if BOTH its EventReference is assigned AND its "Random Music Pool"
+    // tick-box is on. Unassigned references are skipped, so it works with however many
+    // are wired.
     private void EnsureTrackPool()
     {
         if (_musicTracks.Count > 0) return;
         var fe = FMODEvents.instance;
         if (fe == null) return;
 
-        AddTrack("Ambient", fe.musicAmbient);
-        AddTrack("Calm", fe.musicCalm);
-        AddTrack("Electronic", fe.musicElectronic);
-        AddTrack("Piano", fe.musicPiano);
+        for (int i = 0; i < CandidateTrackNames.Length; i++)
+        {
+            string name = CandidateTrackNames[i];
+            EventReference reference = ReferenceForTrackName(fe, name);
+            if (reference.IsNull) continue;       // not wired in FMODEvents (yet)
+            if (!IsTrackEnabled(name)) continue;  // excluded via the inspector tick-box
+            _musicTracks.Add(new MusicTrack { name = name, reference = reference });
+        }
 
         if (_currentTrackIndex < 0 && _musicTracks.Count > 0)
             _currentTrackIndex = UnityEngine.Random.Range(0, _musicTracks.Count);
     }
 
-    private void AddTrack(string name, EventReference reference)
+    // Maps a candidate name to its FMODEvents reference. Keep in lockstep with
+    // CandidateTrackNames — a name with no case here yields a null reference and is
+    // simply skipped.
+    private static EventReference ReferenceForTrackName(FMODEvents fe, string name)
     {
-        if (!reference.IsNull)
-            _musicTracks.Add(new MusicTrack { name = name, reference = reference });
+        switch (name)
+        {
+            case "Ambient": return fe.musicAmbient;
+            case "Calm": return fe.musicCalm;
+            case "Electronic": return fe.musicElectronic;
+            case "Piano": return fe.musicPiano;
+            case "Guitar": return fe.musicGuitar;
+            case "Clavi": return fe.musicClavi;
+            case "Orchestral": return fe.musicOrchestral;
+            case "Starting": return fe.musicStarting;
+            default: return default;
+        }
+    }
+
+    // Looks up a track's include/exclude tick-box. A candidate that isn't listed yet is
+    // auto-added as ENABLED, so newly registered tracks default to "in the pool" and
+    // appear in the inspector list the first time the pool is built.
+    private bool IsTrackEnabled(string name)
+    {
+        for (int i = 0; i < randomTrackPool.Count; i++)
+            if (randomTrackPool[i].name == name) return randomTrackPool[i].includeInRandomPool;
+
+        randomTrackPool.Add(new MusicTrackOption { name = name, includeInRandomPool = true });
+        return true;
     }
 
     // True if at least one gameplay music track is available to play.
@@ -1181,4 +1467,5 @@ public sealed class SpatialLoopSfx
         }
     }
 }
+
 

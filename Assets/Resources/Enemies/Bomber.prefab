@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 7932242476479118238}
   - component: {fileID: 494122911128716204}
   - component: {fileID: -7734492995377625862}
+  - component: {fileID: -1401235044453586659}
   m_Layer: 0
   m_Name: Bomber
   m_TagString: Enemy
@@ -169,8 +170,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
-  currentHealth: 100
+  maxHealth: 12
+  currentHealth: 12
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -183,6 +184,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0.6
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
@@ -198,6 +202,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -224,6 +230,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &-7734492995377625862
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -236,8 +243,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 72ae71643dcf16d469303719f422bd67, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  useProceduralSprite: 1
+  proceduralSpriteWorldSize: 4.8
+  deathDisintegrationDuration: 1.2
+  rollWhenMoving: 1
+  rollSpeedScale: 1
+  pulsate: 1
+  pulseAmplitude: 0.045
+  pulseSpeed: 0.9
   targetUpdateInterval: 0.5
-  fuseStartRange: 0.8
+  fuseStartRange: 0.5
   fuseTime: 3
   explosionRadius: 2.5
   explosionLayers:
@@ -246,9 +261,41 @@ MonoBehaviour:
   blinkColor: {r: 2, g: 0.2, b: 0.2, a: 1}
   blinkIntervalStart: 0.5
   blinkIntervalEnd: 0.07
+  playFuseWarningSound: 1
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 0
   stuckCheckTime: 0.5
   minMovementThreshold: 0.05
+--- !u!114 &-1401235044453586659
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

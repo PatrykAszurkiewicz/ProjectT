@@ -18,8 +18,23 @@ MonoBehaviour:
   moveSpeed: 1
   damage: 1
   mass: 50
-  spriteFolderPath: Sprites/EnemySprites/RedEye
+  frames:
+  - {fileID: 21300000, guid: 6cf7e0e944f55704c92c10e46a45a153, type: 3}
+  - {fileID: -634885310014881863, guid: 6626cfc5e6d36794ca25cf9920c8b000, type: 3}
+  - {fileID: 6392138946130387929, guid: 6626cfc5e6d36794ca25cf9920c8b000, type: 3}
+  - {fileID: 7773322831608053422, guid: 6626cfc5e6d36794ca25cf9920c8b000, type: 3}
+  - {fileID: 40646829937744837, guid: 6626cfc5e6d36794ca25cf9920c8b000, type: 3}
+  - {fileID: 1998108985380050715, guid: 72e7ec29f9f776f40bd6103f84a1d81e, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
   animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 57
     frameCount: 11

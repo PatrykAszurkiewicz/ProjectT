@@ -16,31 +16,38 @@ public class BerserkController : MonoBehaviour
 {
     [Header("Growth Per Kill")]
     [Tooltip("Max-health multiplier gained per enemy eaten. 0.15 = +15% per kill (compounding).")]
-    [SerializeField] private float healthGrowthPerKill = 0.15f;
+    [SerializeField] private float healthGrowthPerKill = 0.10f;
 
     [Tooltip("Fraction of (new) max health restored per kill. 0.25 = heal 25% of max " +
              "on each kill. Set to 1 for a full refill, 0 to gain max-HP capacity " +
              "without any healing.")]
     [Range(0f, 1f)]
-    [SerializeField] private float healFractionPerKill = 0.25f;
+    [SerializeField] private float healFractionPerKill = 0.061f;
 
     [Tooltip("Damage multiplier gained per enemy eaten. 0.15 = +15% per kill (compounding). " +
              "Applied to the cloned EnemyData.damage so it never touches the shared asset.")]
-    [SerializeField] private float damageGrowthPerKill = 0.15f;
+    [SerializeField] private float damageGrowthPerKill = 0.10f;
 
     [Tooltip("Sprite/transform scale multiplier gained per enemy eaten. 0.25 = +25% bigger per kill (compounding).")]
-    [SerializeField] private float scaleGrowthPerKill = 0.25f;
+    [SerializeField] private float scaleGrowthPerKill = 0.16f;
 
     [Tooltip("Safety cap on total scale relative to the prefab's authored scale. " +
              "Prevents a Berserk on a kill streak from filling the whole screen. " +
              "e.g. 4 = at most 4x the prefab's starting size.")]
-    [SerializeField] private float maxScaleMultiplier = 4f;
+    [SerializeField] private float maxScaleMultiplier = 3f;
 
     [Header("Hunting")]
     [Tooltip("Physics layers to scan for huntable enemies. Leave at 0 (Nothing) " +
              "to fall back to scanning all EnemyStats in the scene (slower but " +
              "works without layer setup).")]
     [SerializeField] private LayerMask enemyScanLayers;
+
+    [Tooltip("How close (as a multiple of the controller's AttackRange) the Berserk " +
+             "must actually get to a hunted enemy before that enemy's death counts as " +
+             "an eaten kill. Stops it 'eating' — and growing from — enemies that die " +
+             "far away at detect range. 1.6 ≈ must reach melee. Set very high to restore " +
+             "the old 'count any hunted death' behaviour.")]
+    [SerializeField] private float eatRangeFactor = 1.6f;
 
     [Header("Eat / Inflate VFX")]
     [Tooltip("Duration of the inflation squash-and-stretch pop when an enemy is eaten.")]
@@ -68,8 +75,21 @@ public class BerserkController : MonoBehaviour
     // The enemy we are currently hunting, observed so we can tell when it dies.
     private Transform huntTarget;
     private EnemyStats huntTargetStats;
+    // True once we've closed to within eatRangeFactor * AttackRange of the current
+    // hunt target — i.e. we actually reached it, so its death counts as our meal.
+    private bool huntTargetEngaged;
 
     private int kills = 0;
+
+    // Raised once each time this Berserk finishes eating an enemy, AFTER the growth
+    // (health / damage / scale) has been applied. BerserkVisual subscribes to this
+    // to fire its devour VFX (eye flare, glitch spike, shadow-tendril lash, etc.).
+    // Kept as a plain event so the visual layer stays fully decoupled from the
+    // gameplay logic here.
+    public event System.Action OnAteEnemy;
+
+    /// Number of enemies this Berserk has eaten so far (drives its compounding growth).
+    public int Kills => kills;
 
     // The resting scale
     private Vector3 restingScale;
@@ -94,6 +114,14 @@ public class BerserkController : MonoBehaviour
         controller = GetComponent<EnemyController>();
         animController = GetComponent<EnemyAnimationController>();
 
+        // Guarantee the procedural visual is present. Adding it here (Awake) means it
+        // still injects its generated sprites before EnemyAnimationController.Start()
+        // runs, so you can't forget to add the component and end up with an invisible
+        // Berserk trying to load the (deleted) PNG folder. If it's already on the
+        // prefab this is a no-op.
+        if (GetComponent<BerserkVisual>() == null)
+            gameObject.AddComponent<BerserkVisual>();
+
         // Drive the controller's targeting through the composition hook. 
         controller.PriorityTargetProvider = GetNearestEnemyTarget;
     }
@@ -102,6 +130,15 @@ public class BerserkController : MonoBehaviour
     {
 
         ResolveScaleTarget();
+
+        // Give the Berserk its own melee attack sound. This routes through the
+        // controller's existing per-enemy attack-sound override, so BerserkAttack
+        // plays on the exact frame the hit lands (in sync with the attack animation)
+        // and reuses the normal PlayAttackSound path — no new play logic. Done in
+        // Start so FMODEvents is guaranteed initialised. Falls back to the shared
+        // enemyAttack sound if BerserkAttack is left unassigned in FMODEvents.
+        if (FMODEvents.instance != null && !FMODEvents.instance.berserkAttack.IsNull)
+            controller.SetAttackSoundOverrideIfUnset(FMODEvents.instance.berserkAttack);
     }
 
     private void ResolveScaleTarget()
@@ -170,17 +207,28 @@ public class BerserkController : MonoBehaviour
         // Detect a kill: we were hunting something and it has now died/vanished.
         if (huntTargetStats != null)
         {
-            if (huntTargetStats.IsDead() || huntTarget == null || huntTarget.gameObject == null
-                || !huntTarget.gameObject.activeInHierarchy)
+            bool alive = !huntTargetStats.IsDead() && huntTarget != null
+                         && huntTarget.gameObject != null && huntTarget.gameObject.activeInHierarchy;
+
+            // While the prey is alive, note whether we've actually closed to eating
+            // range at any point. This is what stops the Berserk "eating" (and
+            // growing from) enemies that die way out at detect range — it only
+            // counts a kill if we genuinely reached melee/eat distance of that prey.
+            if (alive)
             {
-                // Only count it as OUR kill if it actually died (not just wandered
-                // out of existence due to scene teardown). IsDead() covers the
-                // "we damaged it to death" case; a destroyed-but-not-dead object
-                // (rare) is treated conservatively as a kill too, since we were
-                // the one engaging it.
-                OnEnemyEaten();
+                float d = Vector2.Distance(transform.position, huntTarget.position);
+                if (d <= controller.AttackRange * eatRangeFactor)
+                    huntTargetEngaged = true;
+            }
+            else
+            {
+                // Prey is gone. Only claim it as an eaten kill if we were engaged.
+                if (huntTargetEngaged)
+                    OnEnemyEaten();
+
                 huntTarget = null;
                 huntTargetStats = null;
+                huntTargetEngaged = false;
             }
         }
 
@@ -200,6 +248,7 @@ public class BerserkController : MonoBehaviour
         {
             huntTarget = ct;
             huntTargetStats = es;
+            huntTargetEngaged = false; // must close to eat range before this one counts
         }
     }
 
@@ -303,6 +352,9 @@ public class BerserkController : MonoBehaviour
         inflateCoroutine = StartCoroutine(InflatePop());
         SpawnEatParticles();
         StartCoroutine(FeedFlash());
+
+        // Let the procedural visual layer (BerserkVisual) play its devour effect.
+        OnAteEnemy?.Invoke();
     }
 
     /// Squash-and-stretch inflation toward the new resting scale
@@ -411,6 +463,19 @@ public class BerserkEatParticles : MonoBehaviour
 
     private static Sprite _moteSprite;
 
+    // BUGFIX: this cache had no domain-reload reset and no hide flags, unlike
+    // Boss3Sprites which gets both right. Two consequences:
+    //   1. With "Enter Play Mode Options" on and domain reload DISABLED, exiting
+    //      play mode destroys the texture but leaves _moteSprite pointing at the
+    //      dead object, so the second Play session throws on every eat burst.
+    //   2. Without HideAndDontSave the texture/sprite leak and can be picked up by
+    //      scene serialization.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        _moteSprite = null;
+    }
+
     public void Emit(int count, Color color, int sortingOrder, string sortingLayer, float spread)
     {
         Sprite sprite = GetMoteSprite();
@@ -489,8 +554,14 @@ public class BerserkEatParticles : MonoBehaviour
         if (_moteSprite != null) return _moteSprite;
 
         const int size = 16;
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        tex.filterMode = FilterMode.Bilinear;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+            // Survives scene loads, never serialized into a scene - same as
+            // Boss3Sprites.NewTexture().
+            hideFlags = HideFlags.HideAndDontSave
+        };
         var px = new Color[size * size];
         Vector2 ctr = new Vector2(size * 0.5f, size * 0.5f);
         for (int y = 0; y < size; y++)
@@ -502,7 +573,12 @@ public class BerserkEatParticles : MonoBehaviour
         tex.SetPixels(px);
         tex.Apply();
         _moteSprite = Sprite.Create(tex, new Rect(0, 0, size, size), Vector2.one * 0.5f, 32f);
+        _moteSprite.name = "BerserkMote";
+        _moteSprite.hideFlags = HideFlags.HideAndDontSave;
         return _moteSprite;
     }
 }
+
+
+
 

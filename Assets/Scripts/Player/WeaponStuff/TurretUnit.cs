@@ -21,6 +21,15 @@ public class TurretUnit : MonoBehaviour
     private float fireCooldown = 0f;
     private Transform currentTarget;
 
+    // Optional self-expiry. When > 0 the turret disintegrates itself after this
+    // many seconds — this is what makes the turret disappear on schedule even
+    // while the player has scrolled to another tool (the launcher subsystem is
+    // gone then, so the turret must be able to expire on its own). A value <= 0
+    // means "never self-expire" (legacy behaviour: lives until Disintegrate()).
+    private float lifeTimer = -1f;
+
+    public bool IsDisintegrating => isDisintegrating;
+
     // Audio
     private float rotateSfxCooldown = 0f;
     private const float ROTATE_SFX_TRIGGER_ANGLE = 20f; // play rotate sound when barrel must swing > this many degrees
@@ -44,7 +53,8 @@ public class TurretUnit : MonoBehaviour
     private const int SORT_ORDER_BASE = 1000;
 
     public void Initialize(float damage, float range, float fireRate,
-                           float projectileSpeed, float armDelay, float rotationSpeed = 300f)
+                           float projectileSpeed, float armDelay, float rotationSpeed = 300f,
+                           float lifetime = 0f)
     {
         this.damage = damage;
         this.range = range;
@@ -52,6 +62,7 @@ public class TurretUnit : MonoBehaviour
         this.projectileSpeed = projectileSpeed;
         this.armTimer = armDelay;
         this.rotationSpeed = rotationSpeed;
+        this.lifeTimer = lifetime > 0f ? lifetime : -1f;
 
         if (this.damage <= 0f) this.damage = 8f;
         if (this.fireRate <= 0f) this.fireRate = 3f;
@@ -69,6 +80,18 @@ public class TurretUnit : MonoBehaviour
     private void Update()
     {
         if (isDisintegrating) return;
+
+        // Self-expiry: when the active window ends, disintegrate. This fires
+        // even if the launcher subsystem is gone (player on another tool).
+        if (lifeTimer > 0f)
+        {
+            lifeTimer -= Time.deltaTime;
+            if (lifeTimer <= 0f)
+            {
+                Disintegrate();
+                return;
+            }
+        }
 
         // Pop-in animation
         if (spawnScale < 1f)
@@ -852,3 +875,4 @@ public class DisintegrateTurret : MonoBehaviour
         public float lifetime, maxLifetime, startSize;
     }
 }
+

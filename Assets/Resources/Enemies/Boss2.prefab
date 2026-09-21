@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 1608654102432218712}
   - component: {fileID: 7095944704209832952}
   - component: {fileID: 7236748354758861933}
+  - component: {fileID: 100632753178160407}
   m_Layer: 8
   m_Name: Boss2
   m_TagString: Enemy
@@ -178,6 +179,7 @@ MonoBehaviour:
   detectRange: 3
   attackRange: 2.3
   attackCooldown: 1
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -195,6 +197,7 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  ExternalMovementControl: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -209,6 +212,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7236748354758861933
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -221,8 +226,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21f9dfe69dcf0424281eb056490349d5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 1
-  currentHealth: 1
+  maxHealth: 1200
+  currentHealth: 1200
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -235,8 +240,15 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
   maxArmor: 1000
+  showTopScreenBossBar: 1
+  bossBarPrefabOverride: {fileID: 0}
+  hideWorldHealthBarWhenTopBarShown: 1
+  bossDisplayName: Lich
   bossMaxArmor: 800
   bossMaxHealth: 800
   bossColliderRadius: 2
@@ -253,6 +265,14 @@ MonoBehaviour:
   rodChildName: LichRod
   rodLingerAfterCast: 0.2
   rodSortingOrder: 3000
+  rodAppearOffset: {x: 0.35, y: 1.6}
+  rodAppearDuration: 0.35
+  rodFloatDuration: 0.5
+  rodAppearStartScale: 0.25
+  rodAppearOvershoot: 1.12
+  rodAppearSpin: 160
+  rodGracefulDismiss: 1
+  rodDismissDuration: 0.3
   meteorTelegraphDuration: 1.5
   meteorExplosionRadius: 2.5
   meteorDamage: 40
@@ -261,6 +281,10 @@ MonoBehaviour:
   meteorDamageLayers:
     serializedVersion: 2
     m_Bits: 0
+  summonPrefabs:
+  - {fileID: 3554655901426140020, guid: a627fea01b9b4ba42ab8a6e52ff17e46, type: 3}
+  - {fileID: 3554655901426140020, guid: 31b997c0bb73d824a8324e6f7b12a14b, type: 3}
+  summonPickMode: 0
   smallSlimePrefab: {fileID: 3554655901426140020, guid: 080851c2917dee54a9e3758c4ab0bd8d, type: 3}
   summonCount: 3
   summonRingRadius: 2
@@ -269,6 +293,39 @@ MonoBehaviour:
   summonTelegraphRadius: 0.75
   summonTelegraphColor: {r: 0.7, g: 0.2, b: 1, a: 0.9}
   summonTelegraphPulseColor: {r: 1, g: 0.5, b: 1, a: 1}
+  playExplosionWarningSound: 1
+  playSummonSpawnSound: 1
+--- !u!114 &100632753178160407
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0
 --- !u!1001 &4952343202120976192
 PrefabInstance:
   m_ObjectHideFlags: 0

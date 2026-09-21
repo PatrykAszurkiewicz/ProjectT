@@ -83,6 +83,27 @@ public class BufferFogVisual : MonoBehaviour
     [Tooltip("How long a single lightning flash remains visible (seconds).")]
     [SerializeField] private float lightningDuration = 0.12f;
 
+    [Tooltip("Rework the lightning from a white strobe into a slow violet bloom " +
+             "that glows inside the cloud instead of snapping across it.\n\n" +
+             "This is applied as a PRESET in Configure(), overwriting the four " +
+             "legacy fields above, because those fields are already serialized " +
+             "into any wired fog prefab — changing their defaults would not " +
+             "reach an existing asset, but a brand-new field like this one " +
+             "always takes its default. Turn it off to get the original flash back.")]
+    [SerializeField] private bool softViolentLightning = true;
+
+    [Tooltip("Peak brightness of the soft arc, as a fraction of lightningColor's " +
+             "alpha. This is the single knob to turn if it is still too loud.")]
+    [Range(0f, 1f)][SerializeField] private float lightningIntensity = 0.40f;
+
+    [Tooltip("Colour at the bright middle of the arc. A pale lilac, NOT white — " +
+             "white is what made the old flash read as a camera bulb going off.")]
+    [SerializeField] private Color lightningCoreColor = new Color(0.78f, 0.48f, 1.00f, 1f);
+
+    [Tooltip("Colour the arc dissolves into at both ends. Deep purple, so the " +
+             "bolt fades into the mist rather than terminating on a hard tip.")]
+    [SerializeField] private Color lightningDeepColor = new Color(0.34f, 0.10f, 0.62f, 1f);
+
     [Header("Stasis Storm  ─────────────────────────")]
     [Tooltip("Continuous subtle electric threads crackling between points " +
              "inside the cloud. The 'always-on' equivalent of Lightning. " +
@@ -140,6 +161,11 @@ public class BufferFogVisual : MonoBehaviour
     private Puff[] mistPuffs;
     private readonly List<Wisp> activeWisps = new List<Wisp>();
     private LightningFlash currentLightning;
+
+    // Pre-allocated so the per-frame gradient rebuild does not churn the heap.
+    private readonly Gradient _lightningGradient = new Gradient();
+    private readonly GradientColorKey[] _lightningColorKeys = new GradientColorKey[3];
+    private readonly GradientAlphaKey[] _lightningAlphaKeys = new GradientAlphaKey[5];
     private StasisThread[] stasisThreads;
 
 
@@ -215,6 +241,18 @@ public class BufferFogVisual : MonoBehaviour
         var rootPos = transform.position;
         rootPos.z += fogZOffset;
         transform.position = rootPos;
+
+        // Soft-violet lightning preset. Overwrites the legacy values so the
+        // tuning lands whether this component was AddComponent'd at runtime or
+        // came off a serialized fog prefab.
+        if (softViolentLightning)
+        {
+            lightningColor = lightningCoreColor;
+            lightningWidth = 0.042f;      // was 0.07 — a filament, not a bar
+            lightningDuration = 0.34f;    // was 0.12 — a bloom, not a strobe
+            lightningSegments = Mathf.Max(lightningSegments, 14);
+            lightningInterval = Mathf.Max(lightningInterval, 4.2f);
+        }
 
         BuildSharedMaterial();
 
@@ -515,17 +553,44 @@ public class BufferFogVisual : MonoBehaviour
             nextLightningTime = Time.time + lightningInterval * Random.Range(0.6f, 1.4f);
         }
 
-        // Animate brightness: quick attack, slower decay.
-        if (currentLightning.go != null && currentLightning.lr != null)
+        if (currentLightning.go == null || currentLightning.lr == null) return;
+
+        float t = Mathf.Clamp01(
+            (Time.time - currentLightning.startTime) / Mathf.Max(0.0001f, lightningDuration));
+
+        if (!softViolentLightning)
         {
-            float t = (Time.time - currentLightning.startTime) / Mathf.Max(0.0001f, lightningDuration);
-            float a = (t < 0.25f) ? (t / 0.25f) : (1f - (t - 0.25f) / 0.75f);
-            a = Mathf.Clamp01(a) * fade;
-            Color sc = lightningColor; sc.a = a;
-            Color ec = lightningColor; ec.a = a * 0.3f;
-            currentLightning.lr.startColor = sc;
-            currentLightning.lr.endColor = ec;
+            // Legacy behaviour: quick attack, slower decay, flat colour.
+            float la = (t < 0.25f) ? (t / 0.25f) : (1f - (t - 0.25f) / 0.75f);
+            la = Mathf.Clamp01(la) * fade;
+            Color lsc = lightningColor; lsc.a = la;
+            Color lec = lightningColor; lec.a = la * 0.3f;
+            currentLightning.lr.startColor = lsc;
+            currentLightning.lr.endColor = lec;
+            return;
         }
+
+        // Symmetric sine envelope — no attack transient at all, which is the
+        // whole difference between "a bolt struck" and "something glowed".
+        // Skewed slightly early so it still feels like a discharge rather than
+        // a lamp being turned up and down.
+        float env = Mathf.Sin(Mathf.Pow(t, 0.75f) * Mathf.PI);
+        float peak = Mathf.Clamp01(env * fade * lightningIntensity * lightningColor.a);
+
+        // Both ends dissolve into the mist and the middle carries the light, so
+        // the arc never presents a hard endpoint anywhere in the cloud.
+        _lightningColorKeys[0] = new GradientColorKey(lightningDeepColor, 0f);
+        _lightningColorKeys[1] = new GradientColorKey(lightningCoreColor, 0.5f);
+        _lightningColorKeys[2] = new GradientColorKey(lightningDeepColor, 1f);
+
+        _lightningAlphaKeys[0] = new GradientAlphaKey(0f, 0f);
+        _lightningAlphaKeys[1] = new GradientAlphaKey(peak * 0.45f, 0.22f);
+        _lightningAlphaKeys[2] = new GradientAlphaKey(peak, 0.5f);
+        _lightningAlphaKeys[3] = new GradientAlphaKey(peak * 0.45f, 0.78f);
+        _lightningAlphaKeys[4] = new GradientAlphaKey(0f, 1f);
+
+        _lightningGradient.SetKeys(_lightningColorKeys, _lightningAlphaKeys);
+        currentLightning.lr.colorGradient = _lightningGradient;
     }
 
     private void SpawnLightning()
@@ -540,17 +605,26 @@ public class BufferFogVisual : MonoBehaviour
         lr.useWorldSpace = false;
         lr.material = lineMaterial;
         lr.startWidth = lightningWidth;
-        lr.endWidth = lightningWidth * 0.5f;
+        // Symmetric: the soft arc fades at BOTH ends, so a tapered tail would
+        // fight the gradient. The legacy flash keeps its taper.
+        lr.endWidth = softViolentLightning ? lightningWidth : lightningWidth * 0.5f;
         lr.positionCount = lightningSegments;
         lr.sortingLayerName = "Default";
         lr.sortingOrder = fogSortingOrder + 3; // top of the stack
         lr.numCornerVertices = 2;
 
-        // Two opposite-ish points on the cloud body.
+        // Endpoint span. The soft version stays well inside the cloud body so
+        // the arc is always seen THROUGH mist; the old one reached to 0.95 of
+        // the radius, which put both tips out in clear air where the hard line
+        // had nothing to diffuse it.
+        float reachMin = softViolentLightning ? 0.22f : 0.5f;
+        float reachMax = softViolentLightning ? 0.58f : 0.95f;
+        float jagScale = softViolentLightning ? 0.12f : 0.3f;
+
         float a1 = Random.Range(0f, Mathf.PI * 2f);
-        float a2 = a1 + Mathf.PI + Random.Range(-0.6f, 0.6f);
-        Vector2 p1 = new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * radius * Random.Range(0.5f, 0.95f);
-        Vector2 p2 = new Vector2(Mathf.Cos(a2), Mathf.Sin(a2)) * radius * Random.Range(0.5f, 0.95f);
+        float a2 = a1 + Mathf.PI + Random.Range(-0.9f, 0.9f);
+        Vector2 p1 = new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * radius * Random.Range(reachMin, reachMax);
+        Vector2 p2 = new Vector2(Mathf.Cos(a2), Mathf.Sin(a2)) * radius * Random.Range(reachMin, reachMax);
 
         for (int s = 0; s < lightningSegments; s++)
         {
@@ -558,8 +632,8 @@ public class BufferFogVisual : MonoBehaviour
             Vector2 lerp = Vector2.Lerp(p1, p2, u);
             if (s > 0 && s < lightningSegments - 1)
             {
-                lerp.x += Random.Range(-0.2f, 0.2f) * radius * 0.3f;
-                lerp.y += Random.Range(-0.2f, 0.2f) * radius * 0.3f;
+                lerp.x += Random.Range(-0.2f, 0.2f) * radius * jagScale;
+                lerp.y += Random.Range(-0.2f, 0.2f) * radius * jagScale;
             }
             lr.SetPosition(s, new Vector3(lerp.x, lerp.y, 0f));
         }
@@ -693,4 +767,5 @@ public class BufferFogVisual : MonoBehaviour
         lineMaterial = null;
     }
 }
+
 

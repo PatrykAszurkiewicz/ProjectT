@@ -83,6 +83,53 @@ public class PlayerAim : MonoBehaviour
     /// <summary>World-space point being aimed at (mouse cursor, or steered gamepad reticle).</summary>
     public Vector3 WorldPoint { get; private set; }
 
+    // Menu capture (tower selection wheel)
+    // While a radial menu is open, the mouse / right stick should ONLY steer the menu.
+    // Direction and WorldPoint feed the player's facing, torch cone and on-screen
+    // cursor, so if the wheel read them the whole player spun around while you picked
+    // a tower. During capture Direction/WorldPoint are frozen at their last values and
+    // the live input is written to MenuDirection instead.
+    //   Mouse:   MenuDirection comes from a "virtual stick" driven by mouse MOVEMENT
+    //            (delta), not the cursor's absolute position. The offset is clamped to
+    //            menuMouseRadius pixels, so it never drifts far from the centre and a
+    //            small sideways flick always reaches the neighbouring slice, no matter
+    //            where the real (hidden) cursor happens to be on screen.
+    //   Gamepad: MenuDirection = right-stick direction (sticky, like Direction).
+
+    /// <summary>True while a menu owns this player's aim input.</summary>
+    public bool MenuCaptured { get; private set; }
+
+    /// <summary>Normalized direction used to navigate a radial menu while captured.</summary>
+    public Vector2 MenuDirection { get; private set; } = Vector2.right;
+
+    [Header("Radial menu (mouse)")]
+    [Tooltip("Mouse sensitivity in the tower selection wheel. This is how far (in screen " +
+             "pixels) the mouse's virtual stick can travel from the wheel centre. SMALLER = " +
+             "more sensitive: a shorter mouse movement moves the selection to the next slice. " +
+             "Try 40-100. Gamepad is unaffected.")]
+    [Min(5f)] public float menuMouseRadius = 60f;
+
+    // Mouse virtual-stick offset (screen pixels) while a menu is captured.
+    private Vector2 menuMouseOffset;
+    private bool menuMouseSeeded;
+
+    /// <summary>Freeze gameplay aim and route input to <see cref="MenuDirection"/>.
+    /// <paramref name="origin"/> (the menu centre) is currently unused, since mouse menu
+    /// aim is delta-based. It is kept so callers don't need to change.</summary>
+    public void BeginMenuCapture(Vector3 origin)
+    {
+        // `origin` is kept for API compatibility; mouse menu aim is now delta-based.
+        menuMouseSeeded = false;
+        MenuDirection = Direction;   // start hovering where the player was already aiming
+        MenuCaptured = true;
+    }
+
+    /// <summary>Release the menu capture; gameplay aim resumes from where it was frozen.</summary>
+    public void EndMenuCapture()
+    {
+        MenuCaptured = false;
+    }
+
     /// <summary>Raw Look input this frame (right stick / mouse delta), BEFORE the
     /// "sticky" normalization that <see cref="Direction"/> applies. Unlike Direction,
     /// this returns to ~zero when the stick is released, which makes it suitable for
@@ -193,6 +240,14 @@ public class PlayerAim : MonoBehaviour
             UsingGamepad = false;
         // else: neither active this frame — keep the previous UsingGamepad.
 
+        if (MenuCaptured)
+        {
+            // Menu owns the input: steer MenuDirection only, leave Direction /
+            // WorldPoint (facing, torch, cursor) exactly where they were.
+            UpdateMenuAim(stick, mouse);
+            return;
+        }
+
         if (UsingGamepad)
         {
             UpdateGamepadAim(stick);
@@ -254,6 +309,42 @@ public class PlayerAim : MonoBehaviour
         WorldPoint = reticleWorld;
     }
 
+    private void UpdateMenuAim(Vector2 stick, Mouse mouse)
+    {
+        if (UsingGamepad)
+        {
+            // Gamepad: unchanged — the right stick's direction picks the slice.
+            if (stick.magnitude > stickDeadzone)
+                MenuDirection = stick.normalized;
+            // If the player switches to the mouse mid-menu, re-seed from here.
+            menuMouseSeeded = false;
+            return;
+        }
+
+        if (mouse == null) return;
+
+        // Seed the virtual stick at the edge, pointing at the currently hovered slice,
+        // so the first sideways movement immediately rotates to the neighbour.
+        if (!menuMouseSeeded)
+        {
+            menuMouseOffset = MenuDirection * menuMouseRadius;
+            menuMouseSeeded = true;
+        }
+
+        // Accumulate this frame's mouse movement (pixels, y-up like world space) and
+        // clamp to the radius. Because it is clamped, the "cursor" can never wander far
+        // from the centre, so the angle responds the same no matter where the real
+        // cursor is.
+        menuMouseOffset += mouse.delta.ReadValue();
+        if (menuMouseOffset.sqrMagnitude > menuMouseRadius * menuMouseRadius)
+            menuMouseOffset = menuMouseOffset.normalized * menuMouseRadius;
+
+        // Small centre dead zone so the hover doesn't jitter when pulled back to the hub.
+        float dead = menuMouseRadius * 0.25f;
+        if (menuMouseOffset.sqrMagnitude > dead * dead)
+            MenuDirection = menuMouseOffset.normalized;
+    }
+
     private void UpdateMouseAim(Mouse mouse)
     {
         if (mouse == null || cam == null) return;
@@ -267,3 +358,5 @@ public class PlayerAim : MonoBehaviour
             Direction = d.normalized;
     }
 }
+
+

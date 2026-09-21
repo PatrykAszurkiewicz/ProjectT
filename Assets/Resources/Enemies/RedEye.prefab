@@ -20,6 +20,7 @@ GameObject:
   - component: {fileID: -2368693965284244257}
   - component: {fileID: -3366803815278636831}
   - component: {fileID: 1938470116552391088}
+  - component: {fileID: -7192670033933956664}
   m_Layer: 0
   m_Name: RedEye
   m_TagString: Enemy
@@ -182,6 +183,7 @@ MonoBehaviour:
   detectRange: 4
   attackRange: 1.8
   attackCooldown: 0
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -199,6 +201,7 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  ExternalMovementControl: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -213,6 +216,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -239,6 +244,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &3794957722885732186
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -265,6 +271,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
   fixedEnergyDrop: 25
   skipDeathAnimation: 1
@@ -420,3 +429,34 @@ MonoBehaviour:
   beamSortingOrder: 32000
   beamSortingLayer: VFX
   debugLogs: 0
+--- !u!114 &-7192670033933956664
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

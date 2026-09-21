@@ -96,6 +96,56 @@ MonoBehaviour:
   fireRate: 1
   cost: 120
   towerType: 2
+  spriteFrames:
+  - {fileID: 21300000, guid: 4ab29c6c4c2e5bc41a5e8768b214842a, type: 3}
+  - {fileID: 21300000, guid: 35b0548167e474b4eb2f7a387537c63d, type: 3}
+  - {fileID: 21300000, guid: 2f6731c375a1a044285883b7bbf17844, type: 3}
+  - {fileID: 21300000, guid: cc3c24ee366046e4c87c1de43711515f, type: 3}
+  - {fileID: 21300000, guid: b57e2251d3c5c4f488208c9f608c5bf9, type: 3}
+  - {fileID: 21300000, guid: e29ebbd66b14bd244a123ff926303147, type: 3}
+  - {fileID: 21300000, guid: a5111adf531d222469a5f233b3a8eece, type: 3}
+  - {fileID: 21300000, guid: 9228a77795aea19459fb0a9ae62cff8b, type: 3}
+  - {fileID: 21300000, guid: 2a4420cbae54d054a97d9ed843f74a8b, type: 3}
+  - {fileID: 21300000, guid: 8a361b29f416ff3498a47b4940c9c79d, type: 3}
+  - {fileID: 21300000, guid: fdb21bb10a399b04dad2c925fecc5a66, type: 3}
+  - {fileID: 21300000, guid: 6219f16375a537c48a051d092b5dd7e7, type: 3}
+  - {fileID: 21300000, guid: 68b49038cd1f8d348973f536f62122a6, type: 3}
+  - {fileID: 21300000, guid: ff4111fe0b9096a4fb0d6afd22118b47, type: 3}
+  - {fileID: 21300000, guid: 40153fabd7f992b4f888481f2d198305, type: 3}
+  - {fileID: 21300000, guid: a8c682a2e1fd50342875b7af8afe63d0, type: 3}
+  - {fileID: 21300000, guid: 4e2e5594f2ac8494498132cea3c4026f, type: 3}
+  - {fileID: 21300000, guid: f3c2d86e97dbe6843aca8cc275c63d9b, type: 3}
+  - {fileID: 21300000, guid: 2815126a404eb1d44be96255ac30be98, type: 3}
+  - {fileID: 21300000, guid: fc29aea30df98944c82cc7a96c9f3303, type: 3}
+  - {fileID: 21300000, guid: cb121a26206186e44af20581dd77b6de, type: 3}
+  - {fileID: 21300000, guid: 8d684e28b0684524d911a4db12c4b6dd, type: 3}
+  - {fileID: 21300000, guid: e91d12e721ec4794d895e6136f150188, type: 3}
+  - {fileID: 21300000, guid: 053c91bb4563bb1418fbb4f327c328e3, type: 3}
+  - {fileID: 21300000, guid: 10e4156775103de488a00c65db98ba66, type: 3}
+  - {fileID: 21300000, guid: 4185edc859fd6bf4c981ecf0e89bf56e, type: 3}
+  - {fileID: 21300000, guid: a447f8d6e5ef5474a853e5991542ad0c, type: 3}
+  - {fileID: 21300000, guid: 9113df5ccfef1764eae90b9a9d20edd4, type: 3}
+  - {fileID: 21300000, guid: 6bbbe027394cfc041912459f16cb1ed4, type: 3}
+  - {fileID: 21300000, guid: 89c23e922f228e848946d2b913d12fdc, type: 3}
+  - {fileID: 21300000, guid: 4eaf1073eecf8ea4eb6dfa819a0cc917, type: 3}
+  - {fileID: 21300000, guid: d277ea8b784d5544ca7a81caa8b65316, type: 3}
+  - {fileID: 21300000, guid: 8ad3de84e7912ca41ac34e9d5226e4db, type: 3}
+  - {fileID: 21300000, guid: 8c503ded1bd045b4faf85ba994e47b90, type: 3}
+  - {fileID: 21300000, guid: 28c4814a40da9944696b03cc97943661, type: 3}
+  - {fileID: 21300000, guid: 9ac306f6f830b5e4da8b15fdddfe0bc0, type: 3}
+  - {fileID: 21300000, guid: a4933ea09b0b7ca4182687fe711214fb, type: 3}
+  - {fileID: 21300000, guid: 64d29dab2a086b34ab8fb923684bf950, type: 3}
+  - {fileID: 21300000, guid: 80c2e6518634b4c41a4665360649a190, type: 3}
+  - {fileID: 21300000, guid: 66212484eb0e31941881eb6e071e87e2, type: 3}
+  - {fileID: 21300000, guid: 329da99548b1a0c44ac533807f15d72c, type: 3}
+  - {fileID: 21300000, guid: da2b470d803063441bfded466915184e, type: 3}
+  - {fileID: 21300000, guid: 35ddbb4541a2f914682fed04ea64611f, type: 3}
+  - {fileID: 21300000, guid: 94ac80acfdf74da49995b2d5306b3516, type: 3}
+  - {fileID: 21300000, guid: 4e398bf786dee8741b338e2be3d7b712, type: 3}
+  - {fileID: 21300000, guid: 867dca48cbd159944acd8611d8d0815a, type: 3}
+  - {fileID: 21300000, guid: 979dcf7910155d9499de737c117ab526, type: 3}
+  - {fileID: 21300000, guid: c227ca2882e5b7040a6d5bfaa4b08db8, type: 3}
+  - {fileID: 21300000, guid: 693b46517879f4a4c952eefab258267c, type: 3}
   spriteResourcePath: Sprites/Buildings/Towers/LaserTower
   spriteIndex: 0
   spriteScale: 0.55
@@ -156,7 +206,7 @@ MonoBehaviour:
       m_RotationOrder: 4
   rotationSpeed: 180
   smoothRotation: 1
-  currentEnergy: 120
+  currentEnergy: 220
   requiresEnergyToFunction: 1
   showEnergyBar: 1
   energyBarOffsetOverride: 1.7
@@ -164,6 +214,7 @@ MonoBehaviour:
   immuneToEnemyDamage: 0
   damageFlashDuration: 0.15
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  targetRescanInterval: 0.25
 --- !u!1 &3321510626698392789
 GameObject:
   m_ObjectHideFlags: 0

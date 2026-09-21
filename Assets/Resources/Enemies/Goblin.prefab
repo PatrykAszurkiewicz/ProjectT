@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 1150557029478635688}
   - component: {fileID: 1235146779362298109}
   - component: {fileID: 1608654102432218712}
+  - component: {fileID: 7718552903093031079}
   m_Layer: 0
   m_Name: Goblin
   m_TagString: Enemy
@@ -166,9 +167,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
-  currentHealth: 100
-  currentArmor: 0
+  maxHealth: 40
+  currentHealth: 40
+  currentArmor: 5
+  maxHealthIncreaseAnimDuration: 0.6
+  maxHealthMinPulseFraction: 0.12
   healthBarPrefab: {fileID: 4013683592240770047, guid: cde1533554ef19f439dc1bac60c6978b, type: 3}
   enemyData: {fileID: 11400000, guid: d3f41e20a0dbd4c4294659626c6a08e5, type: 2}
   energyDropChance: 0
@@ -176,6 +179,11 @@ MonoBehaviour:
   canDropEnergy: 1
   damageFlashDuration: 0.1
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
+  baseDeathVfxDuration: 0
+  baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &1608654102432218712
 MonoBehaviour:
@@ -189,12 +197,63 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
   detectRange: 3
   attackRange: 2.3
   attackCooldown: 1
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 8192
+  blockerLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  requireLineOfSightToAttack: 1
   stuckCheckTime: 0.5
   minMovementThreshold: 0.2
+  smoothSteeringEnabled: 1
+  lookAheadDistance: 1.6
+  avoidanceStrength: 1.8
+  steerResponsiveness: 6
+  wanderStrength: 0.25
+  wanderFrequency: 0.4
+  stuckArcWidth: 0.6
+  ExternalMovementControl: 0
+--- !u!114 &7718552903093031079
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

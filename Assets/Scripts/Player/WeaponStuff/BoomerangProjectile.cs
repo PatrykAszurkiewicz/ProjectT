@@ -142,6 +142,29 @@ public class BoomerangProjectile : MonoBehaviour
         if (other.GetComponent<PlayerMovement>() != null) return;
         if (other.name.Contains("Energy")) return;
 
+        // Boss3 tree-hands: destroyable, but untagged and not CharacterStats, so the
+        // enemy path below would ignore them entirely. The boomerang passes through as
+        // it does with everything else — one hit per branch per trip.
+        var handBox = other.GetComponent<Boss3HandHurtbox>();
+        if (handBox != null)
+        {
+            var hand = handBox.Hand;
+            if (hand != null && hand.CanBeDamaged)
+            {
+                // Key on the hurtbox, not the collider: a hand carries six of them and
+                // would otherwise take six hits from one pass.
+                var handSet = isReturning ? hitReturning : hitOutgoing;
+                int handId = handBox.GetInstanceID();
+                if (!handSet.Contains(handId))
+                {
+                    handSet.Add(handId);
+                    hand.TakeHandDamage(damage, other.ClosestPoint(transform.position));
+                    PlayHitSfx();
+                }
+            }
+            return;
+        }
+
         if (!other.CompareTag("Enemy")) return;
 
         int id = other.GetInstanceID();
@@ -311,4 +334,6 @@ public class BoomerangProjectile : MonoBehaviour
         }
     }
 }
+
+
 

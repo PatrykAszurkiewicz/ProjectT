@@ -18,6 +18,8 @@ GameObject:
   - component: {fileID: 7932242476479118238}
   - component: {fileID: 494122911128716204}
   - component: {fileID: -2389295054375503156}
+  - component: {fileID: -5445216919234475752}
+  - component: {fileID: 5565781727544364811}
   m_Layer: 0
   m_Name: Pitcher
   m_TagString: Enemy
@@ -184,6 +186,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0.6
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &1608654102432218712
 MonoBehaviour:
@@ -207,6 +212,7 @@ MonoBehaviour:
   detectRange: 6
   attackRange: 5
   attackCooldown: 1.5
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -224,6 +230,7 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  ExternalMovementControl: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -238,6 +245,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -264,6 +273,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &-2389295054375503156
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -283,3 +293,246 @@ MonoBehaviour:
   tracerColor: {r: 0.72, g: 0.38, b: 1, a: 1}
   tracerWidth: 0.14
   tracerTime: 0.14
+  releaseDelayFrames: 2
+--- !u!114 &-5445216919234475752
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f40da5bed6ce7b64d8cb45e5238cf8b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  irisPosition: {x: -0.9275, y: -1.5085}
+  eyeCenterOffset: {x: 0.04, y: 0}
+  eyeSize: {x: 0.33, y: 0.35}
+  eyeTilt: 0
+  hideOnFramesWithoutEye: 1
+  bakedFrames:
+  - sprite: {fileID: 21300000, guid: 7c2887bac8fc0aa429b732ff77c21176, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 7ea7f3bb311e6a249812edf8f072e8ce, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: cadbe79461628ed428ad44880d19acca, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 2d85b554b72ab2048bd34d6f22f96bc5, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: c42fa5c680cc3ab47beb33aeea30ef75, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 788afcad7b3c0d24e82ccdc8c0f836bd, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 120b90b739bd2564d8161f0531065bbb, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: c0581c140926dbf4b914831451bc57f3, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: de9ae28446a9f6142a295c7db6337a14, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 914bb3a7dd7972f4b8d24fb55fe96f29, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: b0e8eb703b57c0544baff9ce4cf03e08, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 5c49906d4e8e60347bbf256c486a12c8, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 4c6b7d3c3a1353441ba61eef2289af55, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 5f800d1cd1d1c334aa375b805849468f, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: eeec227c31b112c4aaf367be2e9ef457, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 99612e7bdda543842b1721122ac8ea51, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 384b4d3288220074b99e7a5b5541b120, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: b1f9e5f5c5dfabb4ebc957cf8b09d02b, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: ae8cd00390e9d5347a62f9800663e5df, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: df107abf5a6290d4a8300a092eb71dcb, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 6126f0fad64251a428ce2a6b427d4606, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 0ab801b7ab69908488412254c68acbbd, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 7b33013ead35b584dba38731310fa759, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 0c37112571604cf4297991b727432e65, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 4bb6b3437d63e6647977c705a13d8713, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: f1ec9bcbee11fbc49ae64a544c2b5747, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 0c886839d83fd134b9e6f264815fa759, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 8764b1a24329aa640a37b48e6a4bcd74, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 71f3a91e56060574ba6b52e7eac5f770, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 07adc7444c2d9ed42aa4825d766cf78c, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 770e8d54a75974549b78d58e42ae8356, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: c7e42d50aaf2e4c448e265ebd40aa183, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: ed684bd0cfa227544b6d0887d44d8edb, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 62f3a3b9f57e06f4e9bda96be885d602, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 52a80b90fea2c4f45a360c4ecc2adf2d, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: d06c363974c0cf641ab87192d41542a5, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 9922d181d5148eb42ad6b9bad80879bf, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 12a3f05287855fe488e822c296a89994, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: 1e9ae2e147c0ba7439afcae7992266a6, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: b69a0d01d71587f40bd364441c983a5c, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  - sprite: {fileID: 21300000, guid: c3b9144d04ba5a2419a5824714220dce, type: 3}
+    irisPosition: {x: -0.9275, y: -1.5085}
+    eyeVisible: 0
+  coreColor: {r: 1, g: 1, b: 0.9, a: 1}
+  irisColor: {r: 1, g: 0.75, b: 0.2, a: 1}
+  rimColor: {r: 1, g: 0.25, b: 0, a: 1}
+  pupilColor: {r: 0.15, g: 0, b: 0, a: 1}
+  pupilWidth: 0.11
+  browHeight: 0.28
+  browSlope: 0.45
+  haloColor: {r: 1, g: 0.3, b: 0, a: 0.5}
+  haloSize: 1.1
+  fireGradient:
+    serializedVersion: 2
+    key0: {r: 0.45, g: 0.02, b: 0, a: 1}
+    key1: {r: 0.85, g: 0.12, b: 0, a: 1}
+    key2: {r: 1, g: 0.45, b: 0.03, a: 0}
+    key3: {r: 1, g: 0.82, b: 0.25, a: 0}
+    key4: {r: 1, g: 1, b: 0.88, a: 0}
+    key5: {r: 0, g: 0, b: 0, a: 0}
+    key6: {r: 0, g: 0, b: 0, a: 0}
+    key7: {r: 0, g: 0, b: 0, a: 0}
+    ctime0: 0
+    ctime1: 19661
+    ctime2: 36044
+    ctime3: 52428
+    ctime4: 65535
+    ctime5: 0
+    ctime6: 0
+    ctime7: 0
+    atime0: 0
+    atime1: 65535
+    atime2: 0
+    atime3: 0
+    atime4: 0
+    atime5: 0
+    atime6: 0
+    atime7: 0
+    m_Mode: 0
+    m_ColorSpace: -1
+    m_NumColorKeys: 5
+    m_NumAlphaKeys: 2
+  fireFps: 20
+  frontFlameOffset: {x: 0.01, y: -0.02}
+  frontFlameSize: {x: 0.48, y: 0.8}
+  frontFlameLean: 12
+  backFlameOffset: {x: 0.03, y: -0.03}
+  backFlameSize: {x: 0.62, y: 1}
+  backFlameLean: 22
+  backFlameTint: {r: 1, g: 0.7, b: 0.55, a: 0.85}
+  followBodyLean: 0.35
+  sweepPerSpeed: 4
+  maxSweep: 35
+  stretchPerSpeed: 0.03
+  maxStretch: 0.3
+  flickerSpeed: 8
+  flickerAmount: 0.3
+  emberCount: 8
+  emberLifetime: 0.6
+  emberRiseSpeed: 1.6
+  emberSpread: 0.5
+  emberSize: 0.06
+  emberHotColor: {r: 1, g: 0.9, b: 0.4, a: 1}
+  emberCoolColor: {r: 1, g: 0.15, b: 0, a: 0}
+  fxMaterial: {fileID: 0}
+  glowThroughDarkness: 1
+  deathFadeTime: 0.25
+  bakeIrisColor:
+    serializedVersion: 2
+    rgba: 4282460215
+  bakeColorTolerance: 32
+  bakeSearchRadius: 0.5
+  bakeMinPixelFraction: 0.0003
+--- !u!114 &5565781727544364811
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

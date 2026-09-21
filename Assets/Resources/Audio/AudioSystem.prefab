@@ -25,7 +25,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2621942428097089263}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 885.95496, y: 976.02496, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -45,12 +45,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2a4ed2ee8a775074b9ea666bc3b9b7be, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  masterVolume: 1
-  musicVolume: 1
-  ambienceVolume: 1
-  SFXVolume: 1
-  musicEnabled: 0
+  m_MasterVolume: 1
+  m_MusicVolume: 0.7
+  m_AmbienceVolume: 1
+  m_SFXVolume: 1
+  logVolumeChanges: 0
+  musicEnabled: 1
+  randomTrackPool:
+  - name: Ambient
+    includeInRandomPool: 1
+  - name: Calm
+    includeInRandomPool: 1
+  - name: Electronic
+    includeInRandomPool: 1
+  - name: Piano
+    includeInRandomPool: 1
+  - name: Guitar
+    includeInRandomPool: 1
+  - name: Clavi
+    includeInRandomPool: 1
+  - name: Orchestral
+    includeInRandomPool: 1
+  - name: Starting
+    includeInRandomPool: 0
   enableDebugLogs: 0
+  musicCrossfadeSeconds: 1.5
+  menuMusicEventPath: event:/Music/MusicMenu
 --- !u!1 &7292112455597863150
 GameObject:
   m_ObjectHideFlags: 0
@@ -95,6 +115,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 87dffe49f1c323b4da4cd1b01752f573, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  <musicMenu>k__BackingField:
+    Guid:
+      Data1: -1451426620
+      Data2: 1222330275
+      Data3: 545491116
+      Data4: 1018636422
+    Path: event:/Music/MusicMenu
   <musicAmbient>k__BackingField:
     Guid:
       Data1: -495093861
@@ -123,6 +150,34 @@ MonoBehaviour:
       Data3: -1986423419
       Data4: -1820070629
     Path: event:/Music/MusicCalm
+  <musicGuitar>k__BackingField:
+    Guid:
+      Data1: 2032565136
+      Data2: 1110407298
+      Data3: -1125118037
+      Data4: -161498286
+    Path: event:/Music/MusicGuitar
+  <musicClavi>k__BackingField:
+    Guid:
+      Data1: 1199190955
+      Data2: 1217409736
+      Data3: -1944245888
+      Data4: 1388125226
+    Path: event:/Music/MusicClavi
+  <musicOrchestral>k__BackingField:
+    Guid:
+      Data1: -534903161
+      Data2: 1163028946
+      Data3: 1017704066
+      Data4: 2010039474
+    Path: event:/Music/MusicOrchestral
+  <musicStarting>k__BackingField:
+    Guid:
+      Data1: -1760476870
+      Data2: 1190518290
+      Data3: -225838455
+      Data4: -1333311478
+    Path: event:/Music/MusicStarting
   <multiShotSound>k__BackingField:
     Guid:
       Data1: -179989327
@@ -417,6 +472,41 @@ MonoBehaviour:
       Data3: 715738044
       Data4: -222419347
     Path: event:/MenuClick
+  <stingerWaveCleared>k__BackingField:
+    Guid:
+      Data1: 639463143
+      Data2: 1325564995
+      Data3: -1429884032
+      Data4: -2140236361
+    Path: event:/WaveEnd
+  <stingerBossDefeated>k__BackingField:
+    Guid:
+      Data1: -89311253
+      Data2: 1307372813
+      Data3: 1120801664
+      Data4: -510272759
+    Path: event:/Bing
+  <stingerFinalBossDefeated>k__BackingField:
+    Guid:
+      Data1: -89311253
+      Data2: 1307372813
+      Data3: 1120801664
+      Data4: -510272759
+    Path: event:/Bing
+  <stingerVictory>k__BackingField:
+    Guid:
+      Data1: 387915679
+      Data2: 1105488373
+      Data3: -947672675
+      Data4: 1567662813
+    Path: event:/Music/StingerVictory
+  <stingerGameOver>k__BackingField:
+    Guid:
+      Data1: -1772308522
+      Data2: 1258773652
+      Data3: 437650589
+      Data4: 2031109412
+    Path: event:/Music/StingerGameOver
   <mortarShot>k__BackingField:
     Guid:
       Data1: 531262487
@@ -445,3 +535,227 @@ MonoBehaviour:
       Data3: 1015303065
       Data4: 1388267620
     Path: event:/MineExplosion
+  <pitcherAttack>k__BackingField:
+    Guid:
+      Data1: 270062831
+      Data2: 1320163461
+      Data3: 1392870304
+      Data4: -1758995674
+    Path: event:/PitcherAttack
+  <pitcherHit>k__BackingField:
+    Guid:
+      Data1: 752198630
+      Data2: 1128044493
+      Data3: 799790486
+      Data4: -1067062185
+    Path: event:/PitcherHit
+  <eyeAttack>k__BackingField:
+    Guid:
+      Data1: -2107960598
+      Data2: 1273681777
+      Data3: 378420370
+      Data4: 40794914
+    Path: event:/EyeAttack
+  <bomberExplosion>k__BackingField:
+    Guid:
+      Data1: 1820671921
+      Data2: 1306482628
+      Data3: -123685960
+      Data4: 1211681000
+    Path: event:/BomberExplosion
+  <berserkAttack>k__BackingField:
+    Guid:
+      Data1: -663322445
+      Data2: 1189255672
+      Data3: 636476834
+      Data4: 509965551
+    Path: event:/BerserkAttack
+  <splitterAttack>k__BackingField:
+    Guid:
+      Data1: -1614499900
+      Data2: 1318866254
+      Data3: -960455278
+      Data4: -1497507770
+    Path: event:/SplitterAttack
+  <splitterSplit>k__BackingField:
+    Guid:
+      Data1: 790187261
+      Data2: 1329952572
+      Data3: 907250334
+      Data4: -639339375
+    Path: event:/SplitterSplit
+  <vortexSpawn>k__BackingField:
+    Guid:
+      Data1: -523449827
+      Data2: 1295171623
+      Data3: 2048082355
+      Data4: 1805621944
+    Path: event:/VortexSpawn
+  <parfumerSmoke>k__BackingField:
+    Guid:
+      Data1: 67939562
+      Data2: 1276364989
+      Data3: 636684435
+      Data4: 1228644669
+    Path: event:/ParfumerSmoke
+  <bufferSmoke>k__BackingField:
+    Guid:
+      Data1: 67939562
+      Data2: 1276364989
+      Data3: 636684435
+      Data4: 1228644669
+    Path: event:/ParfumerSmoke
+  <smokeExplosion>k__BackingField:
+    Guid:
+      Data1: 1282179777
+      Data2: 1154339199
+      Data3: -1541828683
+      Data4: -2097106145
+    Path: event:/SmokeExplosion
+  <revenantActivation>k__BackingField:
+    Guid:
+      Data1: 2117981760
+      Data2: 1120098540
+      Data3: -1096177771
+      Data4: 321594150
+    Path: event:/RevenantActivation
+  <towerPlacement>k__BackingField:
+    Guid:
+      Data1: -1886757548
+      Data2: 1256546323
+      Data3: 37228461
+      Data4: 1016271403
+    Path: event:/TowerPlacement
+  <generatorTowerAmbience>k__BackingField:
+    Guid:
+      Data1: -1227214063
+      Data2: 1181242989
+      Data3: 334510742
+      Data4: 1623363263
+    Path: event:/GeneratorTowerAmbience
+  <rewardScreen>k__BackingField:
+    Guid:
+      Data1: -1631081471
+      Data2: 1239986127
+      Data3: 1889847180
+      Data4: 766772946
+    Path: event:/RewardScreen
+  <boss2Explosion>k__BackingField:
+    Guid:
+      Data1: -481558514
+      Data2: 1192866120
+      Data3: 190026893
+      Data4: 553969087
+    Path: event:/Boss2Explosion
+  <mineSetup>k__BackingField:
+    Guid:
+      Data1: -1007809968
+      Data2: 1079639936
+      Data3: 673127042
+      Data4: -1417251212
+    Path: event:/MineSetup
+  <torchSetup>k__BackingField:
+    Guid:
+      Data1: 1298968597
+      Data2: 1141295366
+      Data3: -1262262370
+      Data4: 423316405
+    Path: event:/TorchSetup
+  <cloakActivate>k__BackingField:
+    Guid:
+      Data1: -458085951
+      Data2: 1341947365
+      Data3: 2091349436
+      Data4: 1929161830
+    Path: event:/CloakActivate
+  <openChest>k__BackingField:
+    Guid:
+      Data1: -2003328999
+      Data2: 1243332722
+      Data3: -2018435672
+      Data4: -1117599490
+    Path: event:/OpenChest
+  <decoyAmbience>k__BackingField:
+    Guid:
+      Data1: -440677014
+      Data2: 1154328126
+      Data3: -1323941216
+      Data4: 1961407982
+    Path: event:/DecoyAmbience
+  <redEyeLaser>k__BackingField:
+    Guid:
+      Data1: -578133600
+      Data2: 1235218217
+      Data3: -1263540086
+      Data4: 1607279729
+    Path: event:/RedEyeLaserAttack
+  <bombWarning>k__BackingField:
+    Guid:
+      Data1: -1661188467
+      Data2: 1253479177
+      Data3: 1158436797
+      Data4: 569958508
+    Path: event:/BombWarning
+  <boss2ExplosionWarning>k__BackingField:
+    Guid:
+      Data1: 2060984378
+      Data2: 1141253024
+      Data3: -696827972
+      Data4: -1815806022
+    Path: event:/Boss2ExplosionWarning
+  <boss2Spawn>k__BackingField:
+    Guid:
+      Data1: 444658756
+      Data2: 1084113188
+      Data3: 1226184861
+      Data4: -1159817588
+    Path: event:/Boss2Spawn
+  <bossZoomSound>k__BackingField:
+    Guid:
+      Data1: 2070350851
+      Data2: 1211264450
+      Data3: -145954908
+      Data4: 1491012297
+    Path: event:/BossZoomSoundShorter
+  <waveStart>k__BackingField:
+    Guid:
+      Data1: 216846135
+      Data2: 1180219007
+      Data3: 1794102433
+      Data4: 190369664
+    Path: event:/WaveStart
+  <chestAppearance>k__BackingField:
+    Guid:
+      Data1: -351554827
+      Data2: 1128854556
+      Data3: -747732304
+      Data4: 1624760792
+    Path: event:/ChestAppearance
+  <healingTowerHalo>k__BackingField:
+    Guid:
+      Data1: -880089179
+      Data2: 1321301663
+      Data3: -1634964062
+      Data4: 16657855
+    Path: event:/HealingTowerHalo
+  <laserTowerAttack>k__BackingField:
+    Guid:
+      Data1: 402338324
+      Data2: 1301538740
+      Data3: -135552356
+      Data4: -1733743937
+    Path: event:/LaserTowerAttack
+  <gremlinAppearance2>k__BackingField:
+    Guid:
+      Data1: -137785337
+      Data2: 1256328913
+      Data3: 259961991
+      Data4: 1195445433
+    Path: event:/GremlinAppearance2
+  <hammerTowerAttack>k__BackingField:
+    Guid:
+      Data1: 134657330
+      Data2: 1233975418
+      Data3: 494478493
+      Data4: 1221938407
+    Path: event:/HammerTowerAttack

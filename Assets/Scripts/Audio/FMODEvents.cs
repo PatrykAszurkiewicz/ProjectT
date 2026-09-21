@@ -18,6 +18,15 @@ public class FMODEvents : MonoBehaviour
     [field: SerializeField] public EventReference musicElectronic { get; private set; }
     [field: SerializeField] public EventReference musicPiano { get; private set; }
     [field: SerializeField] public EventReference musicCalm { get; private set; }
+    // Extra gameplay tracks added to the random pool. Assign each to its FMOD event
+    // (event:/Music/MusicGuitar, .../MusicClavi, .../MusicOrchestral, .../MusicStarting).
+    // Whether each actually enters the random rotation is controlled per-track by the
+    // "Random Music Pool" tick-boxes on AudioManager — an unassigned event is simply
+    // skipped, so wiring them in one at a time is fine.
+    [field: SerializeField] public EventReference musicGuitar { get; private set; }
+    [field: SerializeField] public EventReference musicClavi { get; private set; }
+    [field: SerializeField] public EventReference musicOrchestral { get; private set; }
+    [field: SerializeField] public EventReference musicStarting { get; private set; }
 
     [field: Header("Multi Shot SFX")]
     [field: SerializeField] public EventReference multiShotSound { get; private set; }
@@ -148,6 +157,12 @@ public class FMODEvents : MonoBehaviour
     [field: SerializeField] public EventReference pitcherHit { get; private set; }
     [field: SerializeField] public EventReference eyeAttack { get; private set; }
     [field: SerializeField] public EventReference bomberExplosion { get; private set; }
+
+    [field: Header("Berserk SFX")]
+    // Melee attack of the Berserk enemy. Applied through EnemyController's per-enemy
+    // attackSoundOverride (BerserkController wires it up), so it plays on the exact
+    // frame the hit lands. Falls back to enemyAttack if left unassigned.
+    [field: SerializeField] public EventReference berserkAttack { get; private set; }
 
     [field: Header("Splitter SFX")]
     // Lunge attack; falls back to enemyAttack if left unassigned (see SplitterController).

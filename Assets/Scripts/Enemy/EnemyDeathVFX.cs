@@ -4,6 +4,32 @@ using System.Collections.Generic;
 
 // Enemy death VFX.
 // Animation driven by Update() (not coroutines) on an independent host GameObject.
+/// <summary>
+/// Which parts of the death effect to play.
+///
+/// Disintegration (the enemy breaking into pieces of its own sprite) and the dust
+/// blast (an expanding ground disc plus puffs) used to be one decision, both keyed
+/// off duration >= 1.0. That coupling is fine for a boss but wrong for a trash mob:
+/// a small enemy can look good coming apart without throwing up a blast the size of
+/// a boss death.
+/// </summary>
+public enum DeathVfxStyle
+{
+    /// Duration decides both, exactly as before. Default, so untouched callers and
+    /// prefabs behave identically.
+    Auto = 0,
+
+    /// Sprite pieces AND the dust blast, whatever the duration.
+    DisintegrateWithBlast = 1,
+
+    /// Sprite pieces, no dust blast. The one to use for smaller enemies.
+    DisintegrateOnly = 2,
+
+    /// Neither: the cheap generic puff chunks. What short durations have always
+    /// produced, now selectable regardless of duration.
+    ClassicOnly = 3,
+}
+
 public class EnemyDeathVFX : MonoBehaviour
 {
     private const float DISINTEGRATION_THRESHOLD = 1.0f;
@@ -13,7 +39,8 @@ public class EnemyDeathVFX : MonoBehaviour
         GameObject enemy,
         float duration = 1.5f,
         System.Action onComplete = null,
-        string sourceTexturePath = null)
+        string sourceTexturePath = null,
+        DeathVfxStyle style = DeathVfxStyle.Auto)
     {
         if (enemy == null)
         {
@@ -65,12 +92,25 @@ public class EnemyDeathVFX : MonoBehaviour
             return;
         }
 
-        bool isBoss = duration >= DISINTEGRATION_THRESHOLD;
+        // Two independent decisions from here on. 'Auto' reproduces the old
+        // behaviour by deriving both from duration; the explicit styles let a
+        // prefab ask for pieces without the blast (or the reverse).
+        bool autoBoss = duration >= DISINTEGRATION_THRESHOLD;
+
+        bool disintegrate;
+        bool blast;
+        switch (style)
+        {
+            case DeathVfxStyle.DisintegrateWithBlast: disintegrate = true; blast = true; break;
+            case DeathVfxStyle.DisintegrateOnly: disintegrate = true; blast = false; break;
+            case DeathVfxStyle.ClassicOnly: disintegrate = false; blast = false; break;
+            default: disintegrate = autoBoss; blast = autoBoss; break;
+        }
 
         var chunks = new List<ChunkData>(80);
         var embers = new List<PtclData>(60);
 
-        if (isBoss)
+        if (disintegrate)
         {
             bool fromSprite = TryBuildSpriteChunks(
                 chunks, sprite, flipX,
@@ -78,8 +118,25 @@ public class EnemyDeathVFX : MonoBehaviour
                 enemyScale, worldPos,
                 sourceTexturePath);
 
+            // The pixel path needs a CPU-readable texture. Enemies whose art is
+            // imported without Read/Write (the normal setting — it doubles texture
+            // memory, which is prohibitive for a 20-frame folder of large PNGs)
+            // used to drop straight to the generic orange blobs, which do not read
+            // as the enemy coming apart. Slice the ORIGINAL texture into sub-rect
+            // sprites instead: same grid, same motion, no CPU read, no per-chunk
+            // Texture2D allocation.
             if (!fromSprite || chunks.Count == 0)
             {
+                DiscardChunks(chunks);
+                fromSprite = TryBuildSpriteChunksDirect(
+                    chunks, sprite, flipX,
+                    sortOrder, sortLayerName, sortLayerID,
+                    enemyScale, worldPos);
+            }
+
+            if (!fromSprite || chunks.Count == 0)
+            {
+                DiscardChunks(chunks);
                 BuildFallbackChunks(chunks, worldBounds,
                     sortOrder, sortLayerName, sortLayerID, worldPos);
             }
@@ -101,7 +158,7 @@ public class EnemyDeathVFX : MonoBehaviour
         vfx._chunks = chunks;
         vfx._embers = embers;
         vfx._duration = duration;
-        vfx._isBoss = isBoss;
+        vfx._isBoss = disintegrate;
         vfx._enemy = enemy;
         vfx._onComplete = onComplete;
 
@@ -112,14 +169,17 @@ public class EnemyDeathVFX : MonoBehaviour
             worldPos, sprite, flipX,
             sortOrder, sortLayerName, sortLayerID, enemyScale));
 
-        if (isBoss)
+        // The big one: expanding dust disc + puffs. This is what a small enemy
+        // wants switched off.
+        if (blast)
             vfx.StartCoroutine(vfx.DoShockwave(
                 worldPos, sortOrder, sortLayerName,
                 worldBounds.extents.magnitude * 2.5f));
 
-        // Night mode: brief burst of light at the death position
+        // Night mode: brief burst of light at the death position. Sized off the
+        // blast, since that is the thing whose scale it is matching.
         if (NightOverlay.Instance != null)
-            vfx.StartCoroutine(vfx.DoNightDeathFlash(worldPos, isBoss));
+            vfx.StartCoroutine(vfx.DoNightDeathFlash(worldPos, blast));
     }
 
     // Instance state
@@ -145,12 +205,36 @@ public class EnemyDeathVFX : MonoBehaviour
         if (_elapsed >= _duration)
         {
             _done = true;
+            ReleaseOwnedSprites();
             if (_enemy != null) Destroy(_enemy);
             _onComplete?.Invoke();
             Destroy(gameObject);  // also destroys all parented chunks/embers
         }
     }
 
+
+    // Destroying a GameObject does NOT destroy a Sprite that was handed to its
+    // SpriteRenderer, so the sub-rect sprites built by TryBuildSpriteChunksDirect
+    // would accumulate one per chunk per death. Free them here. Only touches
+    // chunks that set ownsSprite, so no other builder is affected.
+    private void ReleaseOwnedSprites()
+    {
+        if (_chunks == null) return;
+        foreach (var c in _chunks)
+        {
+            if (!c.ownsSprite || c.sr == null) continue;
+            Sprite s = c.sr.sprite;
+            c.sr.sprite = null;
+            if (s != null) Destroy(s);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        // Covers scene unload / an early Destroy of the host, where Update never
+        // reached the completion branch above.
+        if (!_done) ReleaseOwnedSprites();
+    }
 
     private void TickChunks(float elapsed)
     {
@@ -222,12 +306,28 @@ public class EnemyDeathVFX : MonoBehaviour
         CachedSpritePixels cache = GetOrCachePixels(srcSprite, sourceTexturePath);
         if (cache == null)
         {
-            Debug.LogWarning("[VFX-CHUNKS] GetOrCachePixels returned null!");
+            // Not an error any more: TryBuildSpriteChunksDirect covers this.
+            // GetOrCachePixels has already logged the reason once for this texture.
             return false;
         }
 
-        float localPivotX = pivot.x - texRect.x;
-        float localPivotY = pivot.y - texRect.y;
+        // Pivot, expressed relative to the region we are about to slice.
+        //
+        // Sprite.pivot is ALREADY local to the sprite — pixels from the bottom-left
+        // of Sprite.rect. Subtracting textureRect.x/y (as this did) is a no-op for a
+        // lone PNG, where textureRect starts at 0,0, which is why it went unnoticed.
+        // For a sprite packed into an atlas, textureRect.x/y is where the frame
+        // landed on the atlas PAGE, so the subtraction threw every chunk off by that
+        // packing offset — up to a full 2048px page. Different frames pack to
+        // different spots, so the debris appeared beside the enemy or on top of it
+        // depending purely on which frame it happened to die on.
+        //
+        // textureRectOffset is the remaining correction: with tight packing the
+        // transparent margin is trimmed, so textureRect is inset within rect and the
+        // pivot has to move by that inset. It is (0,0) when nothing was trimmed.
+        Vector2 trimOffset = srcSprite.textureRectOffset;
+        float localPivotX = pivot.x - trimOffset.x;
+        float localPivotY = pivot.y - trimOffset.y;
 
         for (int cy = 0; cy < gridY; cy++)
             for (int cx = 0; cx < gridX; cx++)
@@ -299,6 +399,171 @@ public class EnemyDeathVFX : MonoBehaviour
 
         return chunks.Count > 0;
     }
+
+    // Abandon a half-built chunk list before trying the next builder. Clearing the
+    // list alone would strand the GameObjects: nothing has parented them yet, so
+    // nothing would ever tick or destroy them.
+    private static void DiscardChunks(List<ChunkData> chunks)
+    {
+        if (chunks.Count == 0) return;
+
+        foreach (var c in chunks)
+        {
+            if (c.ownsSprite && c.sr != null && c.sr.sprite != null)
+            {
+                Sprite s = c.sr.sprite;
+                c.sr.sprite = null;
+                Destroy(s);
+            }
+            if (c.go != null) Destroy(c.go);
+        }
+        chunks.Clear();
+    }
+
+    /// <summary>
+    /// Sprite-accurate chunks WITHOUT reading the texture on the CPU.
+    ///
+    /// Each cell of the same grid TryBuildSpriteChunks uses becomes a Sprite that
+    /// points at a sub-rect of the ORIGINAL texture, so the enemy visibly breaks
+    /// into pieces of itself. Because nothing is read back, this works on textures
+    /// imported without Read/Write, and it allocates no Texture2D per chunk.
+    ///
+    /// The one thing it cannot do is the alpha test — with no pixel data we cannot
+    /// tell an empty cell from a full one, so cells that are fully transparent still
+    /// get a GameObject. They draw nothing, so the effect looks the same; the cost
+    /// is a handful of extra empty renderers for the lifetime of the VFX.
+    /// </summary>
+    private static bool TryBuildSpriteChunksDirect(
+        List<ChunkData> chunks,
+        Sprite srcSprite, bool flipX,
+        int sortOrder, string sortLayerName, int sortLayerID,
+        Vector3 enemyScale, Vector3 origin)
+    {
+        Texture2D tex = srcSprite.texture;
+        if (tex == null) return false;
+
+        // Sprite Atlas packing may store a frame rotated or flipped to fit. Our
+        // cells are axis-aligned sub-rects, so slicing such a frame would produce
+        // scrambled debris. Rare (rotation is off by default), but cheap to
+        // detect — hand it to the generic fallback instead of drawing nonsense.
+        //
+        // SpritePackingRotation.None covers the untransformed case; every other
+        // member (FlipHorizontal, FlipVertical, Rotate180, Rotate90) means the
+        // pixels are not laid out the way this loop assumes.
+        if (srcSprite.packed && srcSprite.packingRotation != SpritePackingRotation.None)
+            return false;
+
+        // This path runs once per death and builds up to 196 sprites. If it ever
+        // becomes the frame-hitch again, say so with a number rather than leaving
+        // it to be guessed at from the outside.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        Rect texRect = srcSprite.textureRect;
+        Vector2 pivot = srcSprite.pivot;
+        float ppu = srcSprite.pixelsPerUnit;
+        if (ppu <= 0f) return false;
+
+        // Identical grid maths to TryBuildSpriteChunks, so both paths produce the
+        // same chunk sizes and the same silhouette break-up.
+        int gridX = Mathf.Clamp(Mathf.RoundToInt(texRect.width / 14f), 3, 14);
+        int gridY = Mathf.Clamp(Mathf.RoundToInt(texRect.height / 14f), 3, 14);
+        float cellW = texRect.width / gridX;
+        float cellH = texRect.height / gridY;
+
+        // Pivot, expressed relative to the region we are about to slice.
+        //
+        // Sprite.pivot is ALREADY local to the sprite — pixels from the bottom-left
+        // of Sprite.rect. Subtracting textureRect.x/y (as this did) is a no-op for a
+        // lone PNG, where textureRect starts at 0,0, which is why it went unnoticed.
+        // For a sprite packed into an atlas, textureRect.x/y is where the frame
+        // landed on the atlas PAGE, so the subtraction threw every chunk off by that
+        // packing offset — up to a full 2048px page. Different frames pack to
+        // different spots, so the debris appeared beside the enemy or on top of it
+        // depending purely on which frame it happened to die on.
+        //
+        // textureRectOffset is the remaining correction: with tight packing the
+        // transparent margin is trimmed, so textureRect is inset within rect and the
+        // pivot has to move by that inset. It is (0,0) when nothing was trimmed.
+        Vector2 trimOffset = srcSprite.textureRectOffset;
+        float localPivotX = pivot.x - trimOffset.x;
+        float localPivotY = pivot.y - trimOffset.y;
+
+        for (int cy = 0; cy < gridY; cy++)
+            for (int cx = 0; cx < gridX; cx++)
+            {
+                int px = Mathf.FloorToInt(cx * cellW);
+                int py = Mathf.FloorToInt(cy * cellH);
+                int pw = Mathf.Min(Mathf.CeilToInt(cellW), Mathf.FloorToInt(texRect.width) - px);
+                int ph = Mathf.Min(Mathf.CeilToInt(cellH), Mathf.FloorToInt(texRect.height) - py);
+                if (pw <= 0 || ph <= 0) continue;
+
+                // Sub-rect in TEXTURE space (textureRect origin + cell offset), so
+                // this is correct for an atlased sprite as well as a lone PNG.
+                Rect cellRect = new Rect(texRect.x + px, texRect.y + py, pw, ph);
+
+                // FullRect, explicitly. The 4-argument Sprite.Create overload
+                // defaults meshType to Tight, which asks Unity to trace an alpha
+                // outline of the region — per chunk, against the whole atlas page.
+                // A chunk is a rectangular piece by definition, so the tight mesh
+                // buys nothing and the tracing is pure cost.
+                Sprite cs = Sprite.Create(
+                    tex, cellRect, new Vector2(0.5f, 0.5f), ppu,
+                    0, SpriteMeshType.FullRect, Vector4.zero, false);
+                if (cs == null) continue;
+
+                float pixCX = px + pw * 0.5f - localPivotX;
+                float pixCY = py + ph * 0.5f - localPivotY;
+                float woX = (flipX ? -pixCX : pixCX) / ppu * enemyScale.x;
+                float woY = pixCY / ppu * enemyScale.y;
+                Vector3 cWorldPos = origin + new Vector3(woX, woY, 0f);
+
+                GameObject go = new GameObject("DC");
+                go.transform.position = cWorldPos;
+                go.transform.localScale = enemyScale;
+
+                SpriteRenderer csr = go.AddComponent<SpriteRenderer>();
+                csr.sprite = cs;
+                csr.sortingLayerName = sortLayerName;
+                csr.sortingLayerID = sortLayerID;
+                csr.sortingOrder = sortOrder + 10 + Random.Range(0, 5);
+                csr.flipX = flipX;
+                csr.color = Color.white;
+
+                Vector2 dir = (Vector2)(cWorldPos - origin);
+                if (dir.sqrMagnitude < 0.01f) dir = Random.insideUnitCircle;
+                dir = (dir.normalized * 0.6f + (Vector2)Random.insideUnitCircle * 0.4f).normalized;
+
+                chunks.Add(new ChunkData
+                {
+                    go = go,
+                    sr = csr,
+                    worldPos = cWorldPos,
+                    vel = dir * Random.Range(1.5f, 4.5f),
+                    rotSpeed = Random.Range(-360f, 360f),
+                    delay = Random.Range(0f, 0.12f),
+                    life = Random.Range(0.7f, 1.4f),
+                    grav = Random.Range(-3f, -0.5f),
+                    startScale = enemyScale,
+                    // Sprite.Create products are not owned by the GameObject, so
+                    // destroying the chunk would leak them. Flagged for cleanup.
+                    ownsSprite = true,
+                });
+            }
+
+        sw.Stop();
+        if (sw.ElapsedMilliseconds > CHUNK_BUILD_BUDGET_MS)
+        {
+            Debug.LogWarning($"[VFX] No-read chunk build took {sw.ElapsedMilliseconds} ms " +
+                             $"for {chunks.Count} chunks from '{tex.name}' " +
+                             $"({texRect.width}x{texRect.height}). That is a visible hitch — " +
+                             $"lower the grid clamp in TryBuildSpriteChunksDirect if it persists.");
+        }
+
+        return chunks.Count > 0;
+    }
+
+    // A death effect is allowed to cost a frame, not a stutter.
+    private const long CHUNK_BUILD_BUDGET_MS = 50;
 
     private static void BuildFallbackChunks(
         List<ChunkData> chunks, Bounds bounds,
@@ -625,16 +890,58 @@ public class EnemyDeathVFX : MonoBehaviour
     private static readonly Dictionary<string, CachedSpritePixels> _pixelCache
         = new Dictionary<string, CachedSpritePixels>();
 
+    // Textures already known to be unreadable. GetPixels on those throws, and the
+    // throw is expensive, so a Brute dying every few seconds would pay for it over
+    // and over and spam the console. One entry, one log line, then silence.
+    private static readonly HashSet<string> _pixelCacheMisses = new HashSet<string>();
+
+    // Static state must not survive a play-mode exit when domain reload is off —
+    // the cached arrays would describe textures from the previous session, and the
+    // pixel buffers alone can be tens of megabytes. Same pattern as
+    // EnemyAnimationController.ResetFolderCache.
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetPixelCache()
+    {
+        _pixelCache.Clear();
+        _pixelCacheMisses.Clear();
+        _chunkSprite = null;
+        _emberSprite = null;
+    }
+
+    /// <summary>
+    /// Cache key for one sprite's pixel region.
+    ///
+    /// This used to be the sprite's NAME, which is only unique by luck. Every enemy
+    /// that loads animation folders numbers its frames from 00000, so Brute/Walk,
+    /// Brute/Attack and Pitcher/Move all contain a sprite called "00000" — under the
+    /// old key the first one read would be served to all of them and enemies would
+    /// disintegrate into somebody else's pixels. The texture's instance ID plus the
+    /// region is unique by construction.
+    /// </summary>
+    private static string BuildPixelCacheKey(Sprite srcSprite, string sourceTexturePath)
+    {
+        Rect r = srcSprite.textureRect;
+        string tex = !string.IsNullOrEmpty(sourceTexturePath)
+            ? sourceTexturePath
+            : (srcSprite.texture != null
+                ? srcSprite.texture.GetInstanceID().ToString()
+                : "notex");
+
+        return string.Concat(tex, "|", srcSprite.name, "|",
+                             ((int)r.x).ToString(), ",", ((int)r.y).ToString(), ",",
+                             ((int)r.width).ToString(), ",", ((int)r.height).ToString());
+    }
+
     private static CachedSpritePixels GetOrCachePixels(Sprite srcSprite, string sourceTexturePath)
     {
-        // Cache key: source path if given (matches between bosses sharing a sheet),
-        // otherwise the sprite name.
-        string key = !string.IsNullOrEmpty(sourceTexturePath)
-            ? sourceTexturePath + "::" + srcSprite.name
-            : srcSprite.name;
+        string key = BuildPixelCacheKey(srcSprite, sourceTexturePath);
 
         if (_pixelCache.TryGetValue(key, out var cached) && cached != null)
             return cached;
+
+        // Known-unreadable: fail fast and silently, the caller has a fallback.
+        if (_pixelCacheMisses.Contains(key))
+            return null;
 
         Texture2D srcTex = null;
         Rect texRect;
@@ -674,6 +981,7 @@ public class EnemyDeathVFX : MonoBehaviour
         if (w <= 0 || h <= 0)
         {
             Debug.LogWarning($"[VFX] GetOrCachePixels: invalid region {w}x{h}");
+            _pixelCacheMisses.Add(key);
             return null;
         }
 
@@ -688,8 +996,12 @@ public class EnemyDeathVFX : MonoBehaviour
             // can fall back to the procedural fallback chunks. We do NOT use the
             // GPU blit / ReadPixels path anymore — it was the cause of the
             // D3D12 device-removed crashes.
-            Debug.LogWarning($"[VFX] GetOrCachePixels: GetPixels failed ({ex.Message}). " +
-                             $"Either enable Read/Write on the source PNG, or pass a valid sourceTexturePath.");
+            // Downgraded to a Log: this is now an expected, fully handled route —
+            // TryBuildSpriteChunksDirect produces sprite-accurate chunks without the
+            // read, so art imported the normal way is not a problem to be fixed.
+            Debug.Log($"[VFX] '{srcSprite.name}' is not CPU-readable ({ex.Message}). " +
+                      $"Using the no-read disintegration path.");
+            _pixelCacheMisses.Add(key);
             return null;
         }
 
@@ -760,6 +1072,10 @@ public class EnemyDeathVFX : MonoBehaviour
         public Vector2 vel;
         public float rotSpeed, delay, life, grav;
         public Vector3 startScale;
+
+        // True when `sr.sprite` was made by Sprite.Create for this chunk alone and
+        // must be destroyed with it (Unity does not collect those automatically).
+        public bool ownsSprite;
     }
 
     private class PtclData
@@ -772,3 +1088,5 @@ public class EnemyDeathVFX : MonoBehaviour
         public Color c0, c1;
     }
 }
+
+

@@ -600,7 +600,13 @@ public class FlamethrowerSystem
 
         foreach (var hit in hits)
         {
-            if (!hit.CompareTag("Enemy")) continue;
+            // Boss3's crawling tree-hands are destroyable player targets, but they carry
+            // no "Enemy" tag and no EnemyStats on purpose (tagging them would, among
+            // other things, make every branch detonate the player's bomb mines, which
+            // find their victims via FindGameObjectsWithTag("Enemy")). So they have to
+            // be recognised explicitly here or the cone would burn straight through them.
+            var handBox = hit.GetComponent<Boss3HandHurtbox>();
+            if (handBox == null && !hit.CompareTag("Enemy")) continue;
 
             // Measure to the CLOSEST point on the collider, not its centre, so
             // large / overlapping enemies register (ClosestPoint returns the
@@ -618,12 +624,22 @@ public class FlamethrowerSystem
                 if (angle > halfAngle) continue;
             }
 
-            int id = hit.GetInstanceID();
+            // A hand hurtbox carries SIX colliders on one GameObject, so deduping by
+            // collider id would apply the tick six times. Key on the hurtbox component
+            // instead; enemies keep their existing per-collider behaviour.
+            int id = handBox != null ? handBox.GetInstanceID() : hit.GetInstanceID();
             if (damagedThisTickIds.Contains(id)) continue;
             damagedThisTickIds.Add(id);
 
             float distanceFalloff = 1f - (dist / data.flameRange) * 0.4f;
             float dmg = data.damage * distanceFalloff;
+
+            if (handBox != null)
+            {
+                var hand = handBox.Hand;
+                if (hand != null) hand.TakeHandDamage(dmg, closest);
+                continue;
+            }
 
             CharacterStats stats = hit.GetComponent<CharacterStats>();
             if (stats != null)
@@ -642,4 +658,7 @@ public class FlamethrowerSystem
         }
     }
 }
+
+
+
 

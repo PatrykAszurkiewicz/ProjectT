@@ -35,6 +35,29 @@ public class GamepadMenuCursor : MonoBehaviour
              "for a temporary override.")]
     public bool hideCursorInGameplay = true;
 
+    [Tooltip("TEMP: log why the cursor is visible during gameplay, so we can find " +
+             "what keeps showing it. Rate-limited. Turn off once diagnosed.")]
+    public bool logCursorState = true;
+
+    // Diagnostic state (see LateUpdate).
+    private static bool _dbgWroteHiddenLastFrame;
+    private static float _dbgNextLog;
+
+    // Menu-side diagnostics (see LateUpdate / EndOfFrameAssert).
+    private static int _dbgStackChangedFrame = -1;   // frame UIModalStack last changed
+    private static int _dbgMenuAssertFrame = -1;     // frame we last asserted a MENU state
+    private static bool _dbgMenuAssertVisible;
+    private static int _dbgLoggedPadCount = -1;
+    private static float _dbgFrozenSince = -1f;
+
+    private static readonly WaitForEndOfFrame EndOfFrame = new WaitForEndOfFrame();
+    private Coroutine _endOfFrameRoutine;
+
+    /// <summary>Set by a mouse-only overlay (the IMGUI DebugMenu panel) that needs the OS
+    /// pointer while it is open even if a gamepad is connected. Only consulted while a
+    /// menu is open; unlike <see cref="ForceCursorVisible"/> it never affects gameplay.</summary>
+    public static bool MenuPointerRequired;
+
     private Vector2 pos;
     private bool active;
     private bool wasClickDown;
@@ -65,6 +88,12 @@ public class GamepadMenuCursor : MonoBehaviour
         _warpFrame = -1;
         _menuScene = false;
         ForceCursorVisible = false;
+        MenuPointerRequired = false;
+        _dbgStackChangedFrame = -1;
+        _dbgMenuAssertFrame = -1;
+        _dbgMenuAssertVisible = false;
+        _dbgLoggedPadCount = -1;
+        _dbgFrozenSince = -1f;
     }
 
     //  Self-install 
@@ -118,20 +147,230 @@ public class GamepadMenuCursor : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (_menuScene)
+        // Self-heal the scene kind: if the orchestrator wasn't in the scene at load
+        // time (spawned a frame or two later by a loader) _menuScene would be stuck
+        // TRUE and we'd treat live gameplay as a menu — cursor parked on screen.
+        // Flipping only menu->gameplay here can't cause the first-frame flash the
+        // load-time snapshot was written to avoid (that needs gameplay->menu).
+        if (_menuScene && GameOrchestrator.Instance != null) _menuScene = false;
+
+        // ---- DIAGNOSTIC ------------------------------------------------------
+        // If we drove the cursor HIDDEN last frame but it is visible again now, and
+        // we're in plain gameplay, then some OTHER script re-showed it after our
+        // LateUpdate. That is the only way this branch can be reached with a true
+        // cursor. Names the culprit category so we can stop guessing.
+        if (logCursorState && !_menuScene && !UIModalStack.IsOpen && !ForceCursorVisible
+            && hideCursorInGameplay && _dbgWroteHiddenLastFrame && Cursor.visible)
         {
-            if (!showCursorInMenuScenes) return;
-            if (!Cursor.visible) Cursor.visible = true;
-            if (Cursor.lockState != CursorLockMode.None) Cursor.lockState = CursorLockMode.None;
+            DbgLog("Cursor is visible in gameplay even though THIS component hid it last " +
+                   "frame → an EXTERNAL script sets Cursor.visible=true during gameplay " +
+                   "(search your project for 'Cursor.visible = true'), OR a second " +
+                   "GamepadMenuCursor with different settings runs after this one.");
+        }
+        // ----------------------------------------------------------------------
+
+        // A connected pad drives menus by focus (MenuNavigator) and the pad-cursor,
+        // so a visible OS pointer just clutters the screen. The cursor is therefore
+        // shown only for mouse-and-keyboard players.
+        bool padConnected = Gamepad.all.Count > 0;
+
+        if (logCursorState) DiagnoseMenuCursorAtLateUpdate(padConnected);
+
+        // Escape hatch: gameplay code that needs the OS pointer wins outright.
+        if (ForceCursorVisible)
+        {
+            if (logCursorState && !_menuScene && !UIModalStack.IsOpen)
+                DbgLog("Cursor visible because ForceCursorVisible == true (some gameplay " +
+                       "mode set it and may not have cleared it).");
+            SetCursor(true);
+            if (_menuScene || UIModalStack.IsOpen) NoteMenuAssert(true);
             return;
         }
 
-        if (!hideCursorInGameplay || ForceCursorVisible) return;
+        if (_menuScene)
+        {
+            if (!showCursorInMenuScenes) { _dbgWroteHiddenLastFrame = false; return; }
+            bool vis = MenuCursorVisible(padConnected);
+            SetCursor(vis);
+            NoteMenuAssert(vis);
+            _dbgWroteHiddenLastFrame = false;   // menu state, not the gameplay hide
+            return;
+        }
 
-        // A modal is up: UIModalStack already made the cursor visible. Don't fight it.
-        if (UIModalStack.IsOpen) return;
+        // ---- gameplay scene ----
 
-        if (Cursor.visible) Cursor.visible = false;
+        // A menu / reward screen is up. Pause, options, augment, the debug panel AND
+        // the post-stage reward screen all register with UIModalStack now, so this
+        // one test covers every case. Same rule: visible for mouse, hidden for pad.
+        if (UIModalStack.IsOpen)
+        {
+            bool vis = MenuCursorVisible(padConnected);
+            SetCursor(vis);
+            NoteMenuAssert(vis);
+            _dbgWroteHiddenLastFrame = false;
+            _dbgFrozenSince = -1f;
+            return;
+        }
+
+        if (logCursorState) DiagnoseFrozenWithoutModal();
+
+        // Live gameplay, nothing open -> the cursor is never wanted.
+        if (!hideCursorInGameplay)
+        {
+            if (logCursorState && Cursor.visible)
+                DbgLog($"Cursor visible because hideCursorInGameplay == false on '{name}'. " +
+                       $"Tick it ON in the Inspector (there are " +
+                       $"{FindObjectsByType<GamepadMenuCursor>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length} " +
+                       $"GamepadMenuCursor instance(s) in the scene).");
+            _dbgWroteHiddenLastFrame = false;   // opted out; we did NOT hide it
+            return;
+        }
+
+        SetCursor(false);
+        _dbgWroteHiddenLastFrame = true;        // we drove it hidden this frame
+    }
+
+    private void DbgLog(string msg)
+    {
+        if (Time.unscaledTime < _dbgNextLog) return;
+        _dbgNextLog = Time.unscaledTime + 1f;   // at most once/sec
+        Debug.LogWarning("[CursorDiag] " + msg);
+    }
+
+    private static void SetCursor(bool visible)
+    {
+        if (Cursor.visible != visible) Cursor.visible = visible;
+        if (visible && Cursor.lockState != CursorLockMode.None)
+            Cursor.lockState = CursorLockMode.None;
+    }
+
+    //  Menu cursor: enforced LAST in the frame 
+    // While a menu was open this component asserted "visible for mouse players" only in
+    // LateUpdate, with no execution order. Cursor.visible is last-writer-wins, so any
+    // script whose LateUpdate ran after it — or that hides the pointer from OnGUI or an
+    // end-of-frame coroutine — got the final word, and the menu opened with no pointer.
+    // The project does have per-frame cursor hiders outside this file: IntroTutorial has
+    // to disable "Cursor" / "Crosshair" components while it is up, and DebugMenu's
+    // LateUpdate exists specifically to beat "a per-frame cursor-hider elsewhere".
+    //
+    // Fix: while a menu owns the cursor, re-assert the same decision at END OF FRAME,
+    // after every Update, LateUpdate, coroutine and OnGUI. Scope is deliberately limited
+    // to menus; plain gameplay keeps exactly the old LateUpdate-only behaviour.
+
+    private static bool MenuCursorVisible(bool padConnected)
+        => !padConnected || MenuPointerRequired;
+
+    /// <summary>True if a menu owns the cursor right now; <paramref name="visible"/> is the
+    /// state it should have. Mirrors the menu branches of LateUpdate exactly.</summary>
+    private bool TryGetMenuCursorState(out bool visible)
+    {
+        visible = false;
+        if (_menuScene)
+        {
+            if (!showCursorInMenuScenes && !ForceCursorVisible) return false;
+        }
+        else if (!UIModalStack.IsOpen)
+        {
+            return false;
+        }
+
+        visible = ForceCursorVisible || MenuCursorVisible(Gamepad.all.Count > 0);
+        return true;
+    }
+
+    private static void NoteMenuAssert(bool visible)
+    {
+        _dbgMenuAssertFrame = Time.frameCount;
+        _dbgMenuAssertVisible = visible;
+    }
+
+    private void OnEnable()
+    {
+        UIModalStack.OnChanged -= OnModalStackChanged;
+        UIModalStack.OnChanged += OnModalStackChanged;
+        _endOfFrameRoutine = StartCoroutine(EndOfFrameAssert());
+    }
+
+    private static void OnModalStackChanged() => _dbgStackChangedFrame = Time.frameCount;
+
+    private System.Collections.IEnumerator EndOfFrameAssert()
+    {
+        while (true)
+        {
+            yield return EndOfFrame;
+
+            // Disabling a component does not stop its coroutines; honour it anyway.
+            if (!isActiveAndEnabled) continue;
+            if (!TryGetMenuCursorState(out bool visible)) continue;
+
+            if (logCursorState && visible && !Cursor.visible
+                && _dbgMenuAssertFrame == Time.frameCount && _dbgMenuAssertVisible
+                && _dbgStackChangedFrame != Time.frameCount)
+            {
+                DbgLog("A menu is open and the cursor should be visible, but a script HID it " +
+                       "after GamepadMenuCursor.LateUpdate this frame (a later LateUpdate or " +
+                       "OnGUI — typically a crosshair / custom-cursor script). Re-asserted at " +
+                       "end of frame. Search the project for 'Cursor.visible = false'.");
+            }
+
+            SetCursor(visible);
+            NoteMenuAssert(visible);
+        }
+    }
+
+    // Menu open but the cursor ends up hidden: say WHY, once, in plain words.
+    private void DiagnoseMenuCursorAtLateUpdate(bool padConnected)
+    {
+        if (!TryGetMenuCursorState(out bool wantVisible)) { _dbgLoggedPadCount = -1; return; }
+
+        // (a) Hidden on purpose because a gamepad is connected. If the player has no
+        //     controller plugged in, the device list names the phantom (Steam Input,
+        //     DS4Windows / ViGEm, Parsec, a gaming mouse's HID interface, …).
+        if (!wantVisible && padConnected)
+        {
+            int n = Gamepad.all.Count;
+            if (n != _dbgLoggedPadCount || _dbgStackChangedFrame == Time.frameCount)
+            {
+                _dbgLoggedPadCount = n;
+                var names = new System.Text.StringBuilder();
+                for (int i = 0; i < n; i++)
+                {
+                    var p = Gamepad.all[i];
+                    if (i > 0) names.Append(", ");
+                    names.Append(p != null ? $"'{p.displayName}' ({p.layout})" : "null");
+                }
+                Debug.Log($"[CursorDiag] Menu open → cursor hidden because {n} gamepad(s) are " +
+                          $"connected: {names}. If you have no controller plugged in, that " +
+                          "device is virtual — close the software creating it.");
+            }
+            return;
+        }
+        _dbgLoggedPadCount = -1;
+
+        // (b) Should be visible, we left it visible at the end of last frame, and it is
+        //     hidden now without the modal stack changing → an Update / coroutine hid it.
+        if (wantVisible && !Cursor.visible
+            && _dbgMenuAssertFrame == Time.frameCount - 1 && _dbgMenuAssertVisible
+            && _dbgStackChangedFrame != Time.frameCount)
+        {
+            DbgLog("A menu is open and the cursor should be visible, but a script hid it " +
+                   "during Update this frame. GamepadMenuCursor restores it; search the " +
+                   "project for 'Cursor.visible = false' to remove the fight.");
+        }
+    }
+
+    // Gameplay scene, clock frozen for a while, nothing on UIModalStack: some screen is
+    // pausing the game the legacy way (Time.timeScale = 0) without registering, so the
+    // gameplay rule hides the pointer on top of it.
+    private void DiagnoseFrozenWithoutModal()
+    {
+        if (Time.timeScale != 0f) { _dbgFrozenSince = -1f; return; }
+        if (_dbgFrozenSince < 0f) { _dbgFrozenSince = Time.unscaledTime; return; }
+        if (Time.unscaledTime - _dbgFrozenSince < 0.5f) return;   // ignore hit-stops
+
+        DbgLog("Time.timeScale has been 0 for a while but NO screen is registered with " +
+               "UIModalStack, so this counts as gameplay and the cursor is hidden. The " +
+               "screen that is open should call UIModalStack.Push(this) / Pop(this).");
     }
 
     private static void EnsureInScene()
@@ -240,7 +479,12 @@ public class GamepadMenuCursor : MonoBehaviour
         return (mouse.position.ReadValue() - pos).magnitude > realMouseTolerance;
     }
 
-    private void OnDisable() => ReleaseMouseButton(Mouse.current);
+    private void OnDisable()
+    {
+        UIModalStack.OnChanged -= OnModalStackChanged;
+        if (_endOfFrameRoutine != null) { StopCoroutine(_endOfFrameRoutine); _endOfFrameRoutine = null; }
+        ReleaseMouseButton(Mouse.current);
+    }
 
     private void ReleaseMouseButton(Mouse mouse)
     {
@@ -251,4 +495,6 @@ public class GamepadMenuCursor : MonoBehaviour
         wasClickDown = false;
     }
 }
+
+
 

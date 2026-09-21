@@ -91,7 +91,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6101606572910855374}
-  - component: {fileID: 8866022441913489179}
   m_Layer: 5
   m_Name: StatsUI
   m_TagString: Untagged
@@ -119,38 +118,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: -1820, y: -980}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &8866022441913489179
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 254779353535940789}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e4206e668b6dd3741aea52e88fe960ed, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  playerStats: {fileID: 0}
-  statTextPrefab: {fileID: 6312052752406402745, guid: 8b4eb1adff6910745801d4eff2d7dfec, type: 3}
-  container: {fileID: 1597092337167428422}
-  showPlayerStats: 1
-  showWeaponStats: 1
-  showTowerStats: 1
-  showEnemyStats: 1
-  showCoreStats: 1
-  showGlobalStats: 1
-  headerColor: {r: 1, g: 1, b: 1, a: 1}
-  normalColor: {r: 1, g: 1, b: 1, a: 1}
-  positiveColor: {r: 0.6272766, g: 0.94716984, b: 0.6272766, a: 1}
-  negativeColor: {r: 0.9622642, g: 0.33225343, b: 0.33225343, a: 1}
-  warningColor: {r: 1, g: 0.868953, b: 0.6245283, a: 1}
-  multiplierColor: {r: 0.7, g: 1, b: 0.7, a: 1}
-  autoRefresh: 1
-  refreshInterval: 0.5
-  showMultipliers: 1
-  multiplierThreshold: 0.001
-  textObjects: []
 --- !u!1 &832125834462144164
 GameObject:
   m_ObjectHideFlags: 0
@@ -8969,7 +8936,6 @@ GameObject:
   - component: {fileID: 733796529538079149}
   - component: {fileID: 5775216767455977842}
   - component: {fileID: 5189414880230878346}
-  - component: {fileID: 4402761593705704183}
   - component: {fileID: 6588066286151752058}
   m_Layer: 5
   m_Name: VisualPanel
@@ -9035,20 +9001,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &4402761593705704183
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4455392799025049062}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 35d6d3a62edd3f74eb037f9d04defb3d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  panel: {fileID: 733796529538079149}
-  augmentPrefab: {fileID: 4417424688965810255, guid: 9b3c765e9f7c8764dac2a47184144dff, type: 3}
 --- !u!114 &6588066286151752058
 MonoBehaviour:
   m_ObjectHideFlags: 0

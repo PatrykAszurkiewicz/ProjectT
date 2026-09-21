@@ -18,6 +18,7 @@ GameObject:
   - component: {fileID: 494122911128716204}
   - component: {fileID: -8547153050511928147}
   - component: {fileID: 4762212980718008091}
+  - component: {fileID: 5645708958077885346}
   m_Layer: 0
   m_Name: Mort
   m_TagString: Enemy
@@ -184,6 +185,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0.6
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 0
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
@@ -199,6 +203,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -225,6 +231,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &-8547153050511928147
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -247,6 +254,7 @@ MonoBehaviour:
   detectRange: 6
   attackRange: 4
   attackCooldown: 2
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -264,6 +272,7 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  ExternalMovementControl: 0
 --- !u!114 &4762212980718008091
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -279,9 +288,23 @@ MonoBehaviour:
   mortarPrefab: {fileID: 1307074388638911128, guid: 26f15c05ebae07c4294034d8496af196, type: 3}
   flightTime: 1.1
   spawnOffset: {x: 0, y: 0.4, z: 0}
+  autoFitMuzzleToSprite: 1
+  muzzleNormalized: {x: 0.795, y: 0.589}
+  muzzleFineTune: {x: 0, y: 0, z: 0}
   autoAddProjectileComponent: 1
   shellMaxLifetime: 6
   aimLead: 0
+  moveSpeedMultiplier: 0.65
+  totalShotFrames: 45
+  shotSecondsPerFrame: 0.05
+  autoConfigureFrames: 1
+  enableShotSqueeze: 1
+  inflateAmount: 0.16
+  inflateCurvePower: 3
+  bulgeAnisotropy: 0.35
+  releaseKick: 2.6
+  releaseSpringFrequency: 3.2
+  releaseDamping: 0.45
   plateSprite: {fileID: 0}
   plateChildName: MortPlate
   plateLocalPosition: {x: 0, y: -0.35, z: 0}
@@ -293,3 +316,34 @@ MonoBehaviour:
   plateBobAmplitude: 0.05
   plateBobSpeed: 0.7
   plateBobPhaseOffset: 0.5
+--- !u!114 &5645708958077885346
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

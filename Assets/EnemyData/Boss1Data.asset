@@ -13,13 +13,94 @@ MonoBehaviour:
   m_Name: Boss1Data
   m_EditorClassIdentifier: 
   enemyName: Boss1
-  maxHealth: 3
-  maxArmor: 3
+  maxHealth: 1300
+  maxArmor: 900
   moveSpeed: 1
   damage: 10
   mass: 500
-  spriteFolderPath: Sprites/EnemySprites/Boss1
+  frames:
+  - {fileID: 21300000, guid: e568190cbec642c489168cbd42b4587a, type: 3}
+  - {fileID: 21300000, guid: 24bdd433b02f880479f163c00fcc7ed1, type: 3}
+  - {fileID: 21300000, guid: e8063e8389dc2aa46a8ca11a6bffe2ee, type: 3}
+  - {fileID: 21300000, guid: 52a5b9162d4c88144afba78f539cad55, type: 3}
+  - {fileID: 21300000, guid: 5e12091fa1ce9b245ab4e9ee4855a53b, type: 3}
+  - {fileID: 21300000, guid: 37efcdd36fa23794caa92ca19047ee1c, type: 3}
+  - {fileID: 21300000, guid: 9507be03981aa0344bfeb052b1abb213, type: 3}
+  - {fileID: 21300000, guid: 3882a09cf1ab72341bfda735b00a62df, type: 3}
+  - {fileID: 21300000, guid: 243caeca68c66f941848fb0ab7430c73, type: 3}
+  - {fileID: 21300000, guid: f85adcc5379d1804ea93449caf3f5d5f, type: 3}
+  - {fileID: 21300000, guid: 625959550d11c1d45bfe8b910be9dc6c, type: 3}
+  - {fileID: 21300000, guid: b620e69b6f9347048b7a0d034ad9837b, type: 3}
+  - {fileID: 21300000, guid: 1a9e0110906b31a44a555c3c23955b84, type: 3}
+  - {fileID: 21300000, guid: d1849a3601e26a5458264ea32358dd87, type: 3}
+  - {fileID: 21300000, guid: 6fb1beb57e83f064088b72fc9a0aa8bd, type: 3}
+  - {fileID: 21300000, guid: 06b19753c3e6ff948b9f754dd2ac2590, type: 3}
+  - {fileID: 21300000, guid: 2887c15fed1edc04a94f3a3ebfbef6af, type: 3}
+  - {fileID: 21300000, guid: be93dacddca945042817879897dabd07, type: 3}
+  - {fileID: 21300000, guid: 8cc37350201e7dd4cb5cf9c6ae7dcd10, type: 3}
+  - {fileID: 21300000, guid: 5c97173fa571be444b0a9c0c7634e9ea, type: 3}
+  - {fileID: 21300000, guid: 69da1de4a49a55f4aba4f379d002ac07, type: 3}
+  - {fileID: 21300000, guid: fb3e6248691309f428b2ed634962ad6c, type: 3}
+  - {fileID: 21300000, guid: 1e872dad16937524cbf07ebe0e584904, type: 3}
+  - {fileID: 21300000, guid: 3c106ce7b9b37a14aaff5e545e574543, type: 3}
+  - {fileID: 21300000, guid: 3249af7f1e0e4464e973138821029bee, type: 3}
+  - {fileID: 21300000, guid: af3034a1b4546e941b30b4d99de10426, type: 3}
+  - {fileID: 21300000, guid: 18a072e4f8a53924394f2ba387d067fe, type: 3}
+  - {fileID: 21300000, guid: 4367b9fe6e0df9e458fe85b560709ec4, type: 3}
+  - {fileID: 21300000, guid: 7e538b08087feee4aa53eaa7ac52c6e0, type: 3}
+  - {fileID: 21300000, guid: f1e3303c15418bd4ca0e09a1069b97da, type: 3}
+  - {fileID: 21300000, guid: 94738143cf39e6340b996dbad897ba90, type: 3}
+  - {fileID: 21300000, guid: d95ca88f9cc31654ca73d434f34f28a6, type: 3}
+  - {fileID: 21300000, guid: 842fb585884258e4788a29775ba02aba, type: 3}
+  - {fileID: 21300000, guid: cabcace86587fc34cbd9612417f47373, type: 3}
+  - {fileID: 21300000, guid: 7c15157052f0c544d9dc7590d2b2560b, type: 3}
+  - {fileID: 21300000, guid: cf9c5383b7fecfb4aa339d570a7abc8d, type: 3}
+  - {fileID: 21300000, guid: 8817bfb91b3de15488594b0be4f85160, type: 3}
+  - {fileID: 21300000, guid: b997de41f8f6a314fa051b5806a735ba, type: 3}
+  - {fileID: 21300000, guid: e38b2b0a8f51aa84fb1de8d51ab25940, type: 3}
+  - {fileID: 21300000, guid: bbad8ac803d8ee04580ef189247a0ac2, type: 3}
+  - {fileID: 21300000, guid: 5268a86eba8d39447ba2e2c4ce43f6fc, type: 3}
+  - {fileID: 21300000, guid: d2a301760d79521449c060e4067c1e4c, type: 3}
+  - {fileID: 21300000, guid: 837d4e524b2195648a36a31c15015793, type: 3}
+  - {fileID: 21300000, guid: 1bf5e3457c0bc5041bb5478c2bc92a6a, type: 3}
+  - {fileID: 21300000, guid: cfc7e02ccaca2544da726bff207f7ab9, type: 3}
+  - {fileID: 21300000, guid: fe38be8903b7a614b9e82f506bf91e2b, type: 3}
+  - {fileID: 21300000, guid: 86efea8dcb8810e449a51d5f7ca3c58f, type: 3}
+  - {fileID: 21300000, guid: 2b9ec7a1d6ab7b74abb1cd91677e0677, type: 3}
+  - {fileID: 21300000, guid: d65755db4adbafa42a472b1162ee5982, type: 3}
+  - {fileID: 21300000, guid: 2c80632c6f96bd344983cd63ff9f6949, type: 3}
+  - {fileID: 21300000, guid: 9a6f1492129308c4c82bd03bb5ed2b15, type: 3}
+  - {fileID: 21300000, guid: 4bb8d567b97875a46aa20c68567c44cb, type: 3}
+  - {fileID: 21300000, guid: 109618b2c2660f74d9076a4a61189154, type: 3}
+  - {fileID: 21300000, guid: a24e79f60875f994db70b98945028296, type: 3}
+  - {fileID: 21300000, guid: f0ccd118f12349a48b4c497e287c8dab, type: 3}
+  - {fileID: 21300000, guid: cf663d5d2fbdc8d4c9e2583bebbf3b34, type: 3}
+  - {fileID: 21300000, guid: faf9a063528093d438d3cc07e6c55374, type: 3}
+  - {fileID: 21300000, guid: f9a7dac90b19bbd4292c134dd1e41c95, type: 3}
+  - {fileID: 21300000, guid: 406ee1d9318abb14cbbc8e706770092c, type: 3}
+  - {fileID: 21300000, guid: 4897b2608e2be0446ba36fac7780ce6c, type: 3}
+  - {fileID: 21300000, guid: b29aaa28641124f41ae4ed46a5caa4a3, type: 3}
+  - {fileID: 21300000, guid: 5f760abcddf06444d8005cb022770f7b, type: 3}
+  - {fileID: 21300000, guid: 467f2272de986dd42b819df34bf48be8, type: 3}
+  - {fileID: 21300000, guid: ed3c5fc9497e4454a8a7b27960903fa2, type: 3}
+  - {fileID: 21300000, guid: 537fa656544a69941a826ffc1b5b3ff6, type: 3}
+  - {fileID: 21300000, guid: 0f655f5162f67f64b968c5e4815d8f5e, type: 3}
+  - {fileID: 21300000, guid: f38d736d2961ff14c9b35a038a3082fb, type: 3}
+  - {fileID: 21300000, guid: a350d48c24e1558439674f815d95a1a6, type: 3}
+  - {fileID: 21300000, guid: 23847af279703c742b5c97157cb6480f, type: 3}
+  - {fileID: 21300000, guid: 7a8dd1203c4b3b94c96ff2d40dd24c8c, type: 3}
+  - {fileID: 21300000, guid: 42bd7bd5a91cd6b4e962f2c266a866cc, type: 3}
+  - {fileID: 21300000, guid: 4cdaab451dc8a574fa17671451c3156c, type: 3}
+  idleFrames: []
+  attackFrames: []
+  deathFrames: []
+  spriteFolderPath: 
+  spriteFacesLeft: 0
   animationSpeed: 0.1
+  useAnimationFolders: 0
+  idleFolderPath: 
+  attackFolderPath: 
+  deathFolderPath: 
   laserAttack:
     startFrame: 57
     frameCount: 11

@@ -200,6 +200,12 @@ public class SplitterController : MonoBehaviour
         // we don't have.
         if (stats != null) stats.ConfigureDeathVfx(0f);
 
+        // The Splitter runs its own blob-tuned separation in FixedUpdate below, so
+        // switch off the generic one EnemyController now does for every enemy —
+        // otherwise both push and the blobs ping-pong.
+        if (controller != null && separateFromNeighbours)
+            controller.SuppressCrowdSeparation = true;
+
         // Assigned in Awake so it's live before EnemyController.Start schedules its
         // first UpdateTarget tick.
         if (controller != null && useWindupAttack)
@@ -617,3 +623,5 @@ public class SiblingPhase : MonoBehaviour
         Destroy(host);
     }
 }
+
+

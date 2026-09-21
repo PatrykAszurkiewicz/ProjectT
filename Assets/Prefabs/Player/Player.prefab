@@ -26,6 +26,8 @@ GameObject:
   - component: {fileID: 5664973672278519711}
   - component: {fileID: 9108403552012902892}
   - component: {fileID: -46947542646479327}
+  - component: {fileID: 2278469041469339006}
+  - component: {fileID: -4801520846452692315}
   m_Layer: 7
   m_Name: Player
   m_TagString: Player
@@ -121,6 +123,130 @@ MonoBehaviour:
   playerSprites: []
   animationSpeed: 0.1
   playerScale: 0.5
+  walkFolder: Assets/Art/Player/Walk
+  attackFolder: Assets/Art/Player/Attack
+  rangedAttackFolder: 
+  idleFolder: 
+  deathFolder: 
+  autoLoadFramesInEditor: 1
+  walkFrames:
+  - {fileID: 21300000, guid: 528ad71d095c4fa4a8d39e36e2c15f72, type: 3}
+  - {fileID: 21300000, guid: b7ad11c679ac0d441817888236b9d417, type: 3}
+  - {fileID: 21300000, guid: 80ae6096704eafb4ca4805877bf1fad5, type: 3}
+  - {fileID: 21300000, guid: 58a3f4f957b9cbd4c981f1b1b258739e, type: 3}
+  - {fileID: 21300000, guid: 3e271b9510071aa4fac321812be35425, type: 3}
+  - {fileID: 21300000, guid: bf4bbd509749e2b46875f865cf13346c, type: 3}
+  - {fileID: 21300000, guid: b2a1153a9e43a9e4bb0b521acfa093d6, type: 3}
+  - {fileID: 21300000, guid: bfe3523acc3521c4ea3406550be146df, type: 3}
+  - {fileID: 21300000, guid: f8e1eea286da77549a1e8016db2afcc4, type: 3}
+  - {fileID: 21300000, guid: ceabdb4bd6fc42c469b55540dba202c3, type: 3}
+  - {fileID: 21300000, guid: e57c74ee1f189724b818538e1ebd8073, type: 3}
+  - {fileID: 21300000, guid: b603dcdbc7f795a41852862da8900e97, type: 3}
+  - {fileID: 21300000, guid: 35060ff340f152a468dc6d4d20049c0f, type: 3}
+  - {fileID: 21300000, guid: 234791e001ae9ea4ab93809da843b4a6, type: 3}
+  - {fileID: 21300000, guid: 5ddc3f3405cbb5440bb0e05bf0231faa, type: 3}
+  - {fileID: 21300000, guid: 78540a986374d934d9f44401d715faa6, type: 3}
+  - {fileID: 21300000, guid: 357c22b81c4dbf341a3001a6bd51cfb0, type: 3}
+  - {fileID: 21300000, guid: 60bad5d2f8e484247821f18bc942e6d1, type: 3}
+  - {fileID: 21300000, guid: 4212b08500939454ea9459e6191c9f9e, type: 3}
+  - {fileID: 21300000, guid: b28eaefe95a04794082291633d8adeba, type: 3}
+  - {fileID: 21300000, guid: 878b4e864cb34d14cb4eb93622d22c09, type: 3}
+  - {fileID: 21300000, guid: 887fe04c348e87f41a7d05353fcdbd2c, type: 3}
+  - {fileID: 21300000, guid: 2faf2067522b6c3469b7c259778bfaa9, type: 3}
+  - {fileID: 21300000, guid: 31cf026d5b6712b428d57a3fcb0e5fea, type: 3}
+  - {fileID: 21300000, guid: 50725735fc9abb84fab62b35e5bdc1e2, type: 3}
+  - {fileID: 21300000, guid: 76031b7a26fde5546b571914f2f75069, type: 3}
+  - {fileID: 21300000, guid: 07ca7b33098d21f4ea020a14653b8cb9, type: 3}
+  - {fileID: 21300000, guid: 59b4103b721dc3a44b090123d1496a37, type: 3}
+  - {fileID: 21300000, guid: 83a758b4bcc083443a7228043b9a99df, type: 3}
+  - {fileID: 21300000, guid: 6211339349c4bde4e99848fcb09efa2f, type: 3}
+  - {fileID: 21300000, guid: 3ac3e5595c3c03445a855994c1a69563, type: 3}
+  - {fileID: 21300000, guid: dce2dd1829a9e0e4488648becea9005f, type: 3}
+  - {fileID: 21300000, guid: 2e59f210f3a0d8d4192f90eaa5ebcf0c, type: 3}
+  - {fileID: 21300000, guid: 3c03b3382cd7cc948a8f528b97ef9561, type: 3}
+  - {fileID: 21300000, guid: 11a3b48ca531d394e93a2ea9bbc641e3, type: 3}
+  - {fileID: 21300000, guid: e0010ac5f07f1314786e534c074e7c58, type: 3}
+  - {fileID: 21300000, guid: 7d2ed09ded718fa489db489eaf4393f6, type: 3}
+  - {fileID: 21300000, guid: f49a6c50eff36314397e71044b8a5876, type: 3}
+  - {fileID: 21300000, guid: 962eaa455ac5f354ca05aa590417e4eb, type: 3}
+  - {fileID: 21300000, guid: 1ecae9d434bfb7b4dbbd15895c79f124, type: 3}
+  - {fileID: 21300000, guid: 3c4f0359344c8d547ac286f750a8dadf, type: 3}
+  - {fileID: 21300000, guid: 3c6657b626f309a4d9d28d203783f1c2, type: 3}
+  - {fileID: 21300000, guid: 10b12b8eba9018c408d4a83257ac0eb3, type: 3}
+  - {fileID: 21300000, guid: 8ec9412291861cb4085a242176dfafa7, type: 3}
+  - {fileID: 21300000, guid: c4e4996eeda598b42b3de095d8fa2dc3, type: 3}
+  - {fileID: 21300000, guid: e9e8dc8fd5134f34492640368edd9079, type: 3}
+  - {fileID: 21300000, guid: 3be027e9386efff45948e8d025877146, type: 3}
+  - {fileID: 21300000, guid: c9677b7d54ad7904dac1d6b655e2f3aa, type: 3}
+  attackFrames:
+  - {fileID: 21300000, guid: 7e4e79c28534a7a4eaa0e03ba4bc750d, type: 3}
+  - {fileID: 21300000, guid: 02e506dded4ee0a4a80de1f6bb61231d, type: 3}
+  - {fileID: 21300000, guid: d5be74e19f94c5048812d1835ce8821e, type: 3}
+  - {fileID: 21300000, guid: ba2015b827a3b164e9726872e7db024f, type: 3}
+  - {fileID: 21300000, guid: fb5fb12a9b1e14f45a11c3567953a6e5, type: 3}
+  - {fileID: 21300000, guid: c6c45a2d099776847bcf5e948cc7d15c, type: 3}
+  - {fileID: 21300000, guid: 7c27705078551ec4f9b09ea8f0364dd7, type: 3}
+  - {fileID: 21300000, guid: 3b9d040fe1e6f54479cad738c0b5cc38, type: 3}
+  - {fileID: 21300000, guid: 4cd74b521ff12d34aa101db460f1cc13, type: 3}
+  - {fileID: 21300000, guid: 4d2903d6e2de3e041a72e67717bb1371, type: 3}
+  - {fileID: 21300000, guid: 17da119e01988704fb7ce4a62fc1a634, type: 3}
+  - {fileID: 21300000, guid: f3cbb419fbd1de845ba1955ebaf23f8a, type: 3}
+  - {fileID: 21300000, guid: cb7e08443cee71e4bb2371658ff3e7c6, type: 3}
+  - {fileID: 21300000, guid: 66e104eb05bb87b4eacb11934dac5669, type: 3}
+  - {fileID: 21300000, guid: 7f95365dd10bd174a8c8b28c00da9ece, type: 3}
+  - {fileID: 21300000, guid: 483ef712d9c403b43be37880147150d8, type: 3}
+  - {fileID: 21300000, guid: 2c5248b57782a1644bb015ab10b3b35e, type: 3}
+  - {fileID: 21300000, guid: e067d7732c1bb6743a4522ee77e96ea1, type: 3}
+  - {fileID: 21300000, guid: 17d42862d1b08374995689ce6c805a68, type: 3}
+  - {fileID: 21300000, guid: 01fe670471fb9be488ed0cb6594ab193, type: 3}
+  - {fileID: 21300000, guid: 92836608afe570042851e7eb71bfbb0c, type: 3}
+  - {fileID: 21300000, guid: 1472755c8abf4764e9f41ce43ebcc310, type: 3}
+  - {fileID: 21300000, guid: cc58da75def7eb9468605dea6b3b0cde, type: 3}
+  - {fileID: 21300000, guid: 6447cda22df29044faafd38448fa49cf, type: 3}
+  - {fileID: 21300000, guid: 4171ed1e9f90f7447953815881d8ba27, type: 3}
+  - {fileID: 21300000, guid: 504755103f497a140a580c9e1aeabf40, type: 3}
+  - {fileID: 21300000, guid: b07303170840dce4793effa65e5c9711, type: 3}
+  - {fileID: 21300000, guid: e9ad8e22dd13b044b99fc7bcb31e16f0, type: 3}
+  - {fileID: 21300000, guid: ba0e6b2d9a4d75e4c8a04e03238e46d4, type: 3}
+  - {fileID: 21300000, guid: a8ac369b1c46e78409b35d99fd6e949f, type: 3}
+  - {fileID: 21300000, guid: 5ab34db79549a7145aebc5d0a11fc9cf, type: 3}
+  - {fileID: 21300000, guid: 56d68aa9f719b17469394373449a51fe, type: 3}
+  - {fileID: 21300000, guid: 349d310422ec8d94e92bfbef1c348d6d, type: 3}
+  - {fileID: 21300000, guid: 65cb9997e63d0a940b8ba9f5f78d17b6, type: 3}
+  - {fileID: 21300000, guid: 4bedb0b09873fd444baf20f6a422293f, type: 3}
+  - {fileID: 21300000, guid: 6fd7546d18ae7d04b92795914deacab5, type: 3}
+  - {fileID: 21300000, guid: e9212038fbdeed2479e62772ee6e2375, type: 3}
+  - {fileID: 21300000, guid: 372493641c6b77d4c842c5a884661ca1, type: 3}
+  - {fileID: 21300000, guid: 562b2b0d616b5384db508402e187097e, type: 3}
+  - {fileID: 21300000, guid: 1e64451192becca4ea9b11740790c57f, type: 3}
+  - {fileID: 21300000, guid: 96c8f5ff9ecbc4e4886a2ba2f307eef8, type: 3}
+  - {fileID: 21300000, guid: c263e5bc7f51fe945801d52058cf8171, type: 3}
+  - {fileID: 21300000, guid: 23740fde2bde37740aea88a0701ea466, type: 3}
+  - {fileID: 21300000, guid: 4d7631ab386fbb344a54a1d3d46cfc13, type: 3}
+  - {fileID: 21300000, guid: 70a74279c739fa84a86a994141647492, type: 3}
+  - {fileID: 21300000, guid: 9e63fb916c0af594ba8e153b78da079e, type: 3}
+  - {fileID: 21300000, guid: de00540f5ac03f94aa0f0b7c2c16a9b8, type: 3}
+  - {fileID: 21300000, guid: a893d726270281446b916e1a49d3e11d, type: 3}
+  rangedAttackFrames: []
+  idleFrames: []
+  deathFrames: []
+  walkFps: 24
+  idleFps: 12
+  attackFps: 24
+  deathFps: 18
+  fitAttackToAttackWindow: 1
+  attackWindowFallback: 0.3
+  idleHoldFrame: 0
+  downedPoseFrame: -1
+  moveThreshold: 0.05
+  facingMode: 1
+  facingSource: 0
+  artFacesRight: 1
+  walkFramesPerDirection: 0
+  attackFramesPerDirection: 0
+  firstDirectionAngle: 270
+  directionsClockwise: 1
+  enableProceduralFx: 1
   sortPrecision: 10
   sortOrderBase: 1000
   sortYOffset: -0.3
@@ -136,8 +262,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 337a360d5df186b448723f3b86390e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 500
-  currentHealth: 500
+  maxHealth: 250
+  currentHealth: 250
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -156,9 +282,9 @@ MonoBehaviour:
   staminaRegenRate: 1.25
   staminaDrainRate: 1.5
   currentStamina: 5
-  meleeAttackStaminaCost: 0.8
-  rangedAttackStaminaCost: 0.4
-  flamethrowerStaminaDrainPerSec: 1.4
+  meleeAttackStaminaCost: 0.7
+  rangedAttackStaminaCost: 0.3
+  flamethrowerStaminaDrainPerSec: 1.2
   obstacleDrawerStaminaCost: 1.5
   grapplingHookStaminaCost: 1.2
   shieldBlockStaminaCost: 0.9
@@ -432,6 +558,58 @@ MonoBehaviour:
       m_Calls: []
     m_ActionId: e0c83e7b-df35-456e-9f95-f20ded66191c
     m_ActionName: 'Player/Pause[/Keyboard/escape]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: 02572c0a-04e1-46aa-8307-2f22f27fea13
+    m_ActionName: 'Player/PreviousTool[/Keyboard/z,/Mouse/scroll/up]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: 622cb03d-af6b-4b43-98bd-22fab65e4353
+    m_ActionName: 'Player/NextTool[/Keyboard/x]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: d0678db0-2b32-4237-b403-f4347b4b3a2f
+    m_ActionName: 'Player/HotbarModifier[/Keyboard/leftCtrl,/Keyboard/rightCtrl]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: 8025daff-4ae4-413d-875a-bf3052dedbcc
+    m_ActionName: 'Player/Hotbar1[/Keyboard/1]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: af7cd726-55b0-4f81-8eeb-bc81fc163ae8
+    m_ActionName: 'Player/Hotbar2[/Keyboard/2]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: c9976d6b-7de7-476e-bae1-a1dd191e6096
+    m_ActionName: 'Player/Hotbar3[/Keyboard/3]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: a9a5e5d9-f716-4fa7-9fd4-5e5b472826c4
+    m_ActionName: 'Player/Hotbar4[/Keyboard/4]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: d74be6f4-67ea-4c41-8d57-b28a53a615ab
+    m_ActionName: 'Player/Hotbar5[/Keyboard/5]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: 0107ab84-24ec-4777-be6d-82e7a745ad94
+    m_ActionName: 'Player/Hotbar6[/Keyboard/6]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: e539b14a-9004-4668-8094-6a4eeb19a573
+    m_ActionName: 'Player/Hotbar7[/Keyboard/7]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: 2aa58b88-522d-4ca3-b41a-0b103465d888
+    m_ActionName: 'Player/Hotbar8[/Keyboard/8]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: c7aeea6b-014e-4b9b-8d7e-72154cfeb135
+    m_ActionName: 'Player/Hotbar9[/Keyboard/9]'
+  - m_PersistentCalls:
+      m_Calls: []
+    m_ActionId: dee5701b-6307-4e85-a015-c7e61fdd47cd
+    m_ActionName: 'Player/Hotbar10[/Keyboard/0]'
   m_NeverAutoSwitchControlSchemes: 0
   m_DefaultControlScheme: 
   m_DefaultActionMap: Player
@@ -471,23 +649,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 87274eeb7f439cd45babaebcc4b5c6a7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxTetherRange: 8
+  maxTetherRange: 10
   breakRangeMultiplier: 1.15
+  zoneHysteresis: 0.04
   maxSimultaneousTethers: 8
   nearZoneEnd: 0.3
   midZoneEnd: 0.6
-  farRangeBonusPerTether: 0.7
-  midDamageBonusPerTether: 0.6
+  farRangeBonusPerTether: 0.2
+  farBuffGrowsDetectionRange: 1
+  midDamageBonusPerTether: 0.1
   nearDecayReductionPerTether: 0.2
-  maxBuffBonus: 4
+  maxBuffBonus: 2
   nearCoreDecayMultiplier: 0.7
   enableBulkSupply: 1
-  debugLogTowerEnergyChanges: 1
+  debugLogTowerEnergyChanges: 0
   bulkSupplyEnergyPerSec: 5
   retargetInterval: 0.1
-  farColor: {r: 1, g: 0.85, b: 0.3, a: 0.85}
-  midColor: {r: 1, g: 0.55, b: 0.2, a: 0.85}
-  nearColor: {r: 0.3, g: 0.9, b: 1, a: 0.85}
+  tetherCountSettleSeconds: 0.4
+  farColor: {r: 0.75, g: 0.5, b: 1, a: 0.9}
+  midColor: {r: 1, g: 0.4, b: 0.18, a: 0.9}
+  nearColor: {r: 0.3, g: 0.9, b: 1, a: 0.9}
   supplyColor: {r: 0.3, g: 0.6, b: 1, a: 1}
   supplyFlowSpeed: 6
   supplyWidthMultiplier: 1.5
@@ -498,6 +679,8 @@ MonoBehaviour:
   wobbleSpeed: 6
   playerAnchorOffset: {x: 0, y: 0}
   towerAnchorOffset: {x: 0, y: 0.2}
+  chainFadeSpeed: 4
+  zoneColorBlendSpeed: 6
   sortPrecision: 10
   sortOrderBase: 1000
   towerSortYOffset: -0.3
@@ -641,6 +824,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   reviveHealthPercent: 0.3
   reviveInvulnerabilitySeconds: 2
+  downedScreenEffect: 1
   downedTint: {r: 0.5, g: 0.5, b: 0.55, a: 0.9}
 --- !u!114 &-46947542646479327
 MonoBehaviour:
@@ -656,6 +840,109 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   nonRigidbodyVelocity: 0
   attenuationObject: {fileID: 0}
+--- !u!114 &2278469041469339006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2052934577418199866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 7663035579871565056}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 45
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0
+--- !u!114 &-4801520846452692315
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2052934577418199866}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6190ee3d7150b74eaaf501a490dd9d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableBreathing: 1
+  idleBreathRate: 0.45
+  idleBreathAmount: 0.03
+  volumePreservation: 0.65
+  walkStepRate: 2.2
+  walkBounceAmount: 0.015
+  walkSwayDegrees: 1.2
+  swayRateMultiplier: 0.5
+  locomotionBlendSpeed: 7
+  motionSmoothing: 0.07
+  facingBlendSpeed: 6
+  facingFlipThreshold: 0.25
+  attackRetriggerLockout: 0.35
+  swayDampWhileAttacking: 0.6
+  enableAttackFlourish: 1
+  anticipationFraction: 0.2
+  strikeFraction: 0.24
+  anticipationCrouch: 0.045
+  tiltDegrees: 7
+  flourishDurationScale: 1.7
+  enableSlash: 1
+  slashFolder: Assets/Art/Player/BladeSlash
+  autoLoadFramesInEditor: 1
+  slashFrames:
+  - {fileID: 21300000, guid: 44f77cecacdcac64eb62039cec220da0, type: 3}
+  - {fileID: 21300000, guid: 064ebee1a1a72ae448642f1867eff754, type: 3}
+  - {fileID: 21300000, guid: 91f8b31b71326474ab4959124282d9c6, type: 3}
+  - {fileID: 21300000, guid: a80de759375726d46aff7ffe1589b452, type: 3}
+  - {fileID: 21300000, guid: e8271878615bec54b8a2049ef662ae41, type: 3}
+  - {fileID: 21300000, guid: 0d8c304efb2dd1c4480d5f6c11c1bebd, type: 3}
+  - {fileID: 21300000, guid: 2a1ba584ee55a8d439dad5f5592c388b, type: 3}
+  - {fileID: 21300000, guid: c74545b313dad0d4997c44f10b8008b5, type: 3}
+  - {fileID: 21300000, guid: 42cbc552cb49a454b9b84a4609567077, type: 3}
+  - {fileID: 21300000, guid: 61ad14b7a3132af45ad01f91d11c9ece, type: 3}
+  - {fileID: 21300000, guid: adfb1e20ed0ded04eadb2a9da4b3ecf3, type: 3}
+  - {fileID: 21300000, guid: fad4725b96e42084488a26ec409f7570, type: 3}
+  - {fileID: 21300000, guid: 673e62b392ba06a428ab65722046083b, type: 3}
+  - {fileID: 21300000, guid: 7eb2c138ea7d0254498f328d0259070d, type: 3}
+  fitSlashToAttackWindow: 1
+  slashWindowScale: 1
+  slashFps: 40
+  slashStartDelayFraction: 0
+  slashFadeOutFrames: 3
+  slashScale: 0.45
+  slashOffsetForward: 0.35
+  slashOffsetUp: 0
+  mirrorWhenFacingLeft: 1
+  alternateSwingDirection: 0
+  slashFollowsPlayer: 1
+  slashTint: {r: 1, g: 1, b: 1, a: 1}
+  slashSortingOffset: 1
+  maxConcurrentSlashes: 3
+  enableEchoes: 1
+  echoesPerSwing: 2
+  echoTint: {r: 0.58, g: 0.14, b: 0.26, a: 0.18}
+  echoBackOffset: 0.1
+  echoTiltBoost: 7
+  echoLifetime: 0.2
+  echoSortingOffset: 1
+  keepGameplayUnchanged: 1
 --- !u!1 &3030295974643579905
 GameObject:
   m_ObjectHideFlags: 0

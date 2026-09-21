@@ -1159,7 +1159,12 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
             // ApplyGrapplePull dumps force into the scarecrow's rigidbody.
             // With zero linear damping on its prefab, that velocity never
             // decays and the scarecrow ends up shoving the player around.
-            if (GetComponent<Scarecrow>() != null)
+            // Bosses are immovable by design: the hook pulls the PLAYER to them,
+            // never the reverse. Covers Boss1/Boss2/Boss3 and any future boss without
+            // per-boss wiring. (Boss3 is Kinematic anyway and would be caught by the
+            // body-type rule in IsSolidTarget(), but Boss1/Boss2 main bodies may be
+            // Dynamic, and a yankable boss is never intended.)
+            if (GetComponent<Scarecrow>() != null || GetComponent<BaseBossStats>() != null)
             {
                 isSolidTarget = true;
             }
@@ -1226,7 +1231,29 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         return transform.position + grapplePointOffset;
     }
 
-    public bool IsSolidTarget() => !isDestroyed && isSolidTarget;
+    /// A target counts as solid — meaning the hook pulls the PLAYER to it rather
+    /// than dragging it — when it is flagged solid OR when its body physically
+    /// cannot be dragged.
+    ///
+    /// The body-type half is evaluated HERE rather than baked into
+    /// DetermineTargetType() on purpose. Awake order between components on one
+    /// GameObject is undefined, so DetermineTargetType can run before
+    /// InsectController.Awake flips the body to Kinematic and would cache the wrong
+    /// answer. Reading it at use time is also correct for bodies that change type
+    /// later (Boss3 goes Kinematic in its own setup; EnemyDeathVFX goes Static).
+    ///
+    /// Without this, a non-Dynamic enemy takes the "drag the enemy" branch in
+    /// ShouldPullPlayer and then ApplyGrapplePull's body-type guard refuses to move
+    /// it — the hook latches and NOTHING happens. Treating it as solid gives the
+    /// intended "immovable" feel instead: the player is reeled in to it.
+    public bool IsSolidTarget() => !isDestroyed && (isSolidTarget || HasImmovableBody());
+
+    /// True when the rigidbody cannot be meaningfully dragged. Kinematic and Static
+    /// bodies ignore AddForce, and a direct velocity write on them never decays
+    /// (no drag, no collision response) — which is what sent grappled Insects
+    /// sailing off the map. No rigidbody at all is also undraggable.
+    private bool HasImmovableBody()
+        => rb == null || rb.bodyType != RigidbodyType2D.Dynamic;
 
     public Transform GetTransform()
     {
@@ -1256,6 +1283,24 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
     {
         if (isDestroyed || rb == null || isSolidTarget) return;
 
+        // BODY-TYPE GUARD — mirrors EnemyController.ApplyKnockback.
+        //
+        // AddForce is silently ignored on a non-Dynamic body, but the direct
+        // linearVelocity assignment below is NOT: writing velocity to a Kinematic
+        // body moves it, and a Kinematic body has no drag and no collision
+        // response, so that velocity NEVER decays. Nothing clears it when the pull
+        // sequence ends either (only the PLAYER's velocity is zeroed there), so the
+        // target sails off the map through walls, still alive — which keeps
+        // GameOrchestrator.CountLivingEnemiesInScene() above zero and hangs the wave.
+        //
+        // This bites the Insect and EliteInsect specifically: InsectController.Awake
+        // forces RigidbodyType2D.Kinematic to make them immovable ambush enemies, and
+        // its comment claims that also defeats the grappling hook. That is true for
+        // the two AddForce calls and false for the velocity write — this guard makes
+        // the comment accurate. Dynamic enemies are unaffected: they still get pulled
+        // exactly as before, and their drag/collisions settle them normally.
+        if (rb.bodyType != RigidbodyType2D.Dynamic) return;
+
         rb.AddForce(direction * force * 1.45f, ForceMode2D.Impulse);
         rb.AddForce(direction * force * 2.8f, ForceMode2D.Force);
 
@@ -1263,3 +1308,5 @@ public class GrapplingTarget : MonoBehaviour, IGrapplingTarget
         rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, pullVelocity, 1.0f);
     }
 }
+
+

@@ -18,6 +18,8 @@ GameObject:
   - component: {fileID: 7932242476479118238}
   - component: {fileID: 494122911128716204}
   - component: {fileID: -8947219949801942984}
+  - component: {fileID: 625259555917501422}
+  - component: {fileID: 8461567348814627089}
   m_Layer: 0
   m_Name: Berserk
   m_TagString: Enemy
@@ -35,7 +37,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.25, y: 0.25, z: 0.25}
+  m_LocalScale: {x: 0.2, y: 0.2, z: 0.2}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -157,7 +159,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: -0.29690236, y: -0.025817586}
-  m_Radius: 2.0052838
+  m_Radius: 4
 --- !u!114 &1235146779362298109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -170,8 +172,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c8c3d597db75a941a26ae60379ae3bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
-  currentHealth: 100
+  maxHealth: 70
+  currentHealth: 70
   currentArmor: 0
   maxHealthIncreaseAnimDuration: 0.6
   maxHealthMinPulseFraction: 0.12
@@ -184,6 +186,9 @@ MonoBehaviour:
   damageFlashColor: {r: 2, g: 2, b: 2, a: 1}
   baseDeathVfxDuration: 0.6
   baseDestroyHealthBarBeforeVfx: 1
+  deathVfxStyle: 2
+  immuneToCrowdControl: 0
+  deathFailsafeExtraSeconds: 5
   currentMoveSpeedDebug: 0
 --- !u!114 &1608654102432218712
 MonoBehaviour:
@@ -197,9 +202,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d7e46374a1561804a83095b5bc682ab1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  attackSoundOverride:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
   detectRange: 7
   attackRange: 2.3
   attackCooldown: 1
+  attackWhiffTolerance: 1.25
   avoidDistance: 1
   obstacleLayer:
     serializedVersion: 2
@@ -217,6 +230,7 @@ MonoBehaviour:
   wanderStrength: 0.25
   wanderFrequency: 0.4
   stuckArcWidth: 0.6
+  ExternalMovementControl: 0
 --- !u!114 &7095944704209832952
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -231,6 +245,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxRotationAngle: 20
   orientationSmoothSpeed: 10
+  parryFreezePoseMode: 0
+  parryFreezePoseFrame: 0
 --- !u!114 &7932242476479118238
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -257,6 +273,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   yOffset: 1.8
   indicatorSize: 0.5
+  showDespiteAttackOverride: 0
 --- !u!114 &-8947219949801942984
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -269,16 +286,91 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d8cc6ee848effc14abd6d35a19c9e4e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  healthGrowthPerKill: 0.15
-  healFractionPerKill: 0.155
-  damageGrowthPerKill: 0.15
-  scaleGrowthPerKill: 0.3
+  healthGrowthPerKill: 0.1
+  healFractionPerKill: 0.061
+  damageGrowthPerKill: 0.1
+  scaleGrowthPerKill: 0.16
   maxScaleMultiplier: 3
   enemyScanLayers:
     serializedVersion: 2
     m_Bits: 0
+  eatRangeFactor: 1.6
   inflateDuration: 0.35
   inflateOvershoot: 0.4
   eatParticleCount: 18
   eatParticleColor: {r: 1, g: 0.35, b: 0.15, a: 1}
   debugLogs: 0
+--- !u!114 &625259555917501422
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ab0e54274adf044a88a9a224394fc93, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  idleCycleDuration: 1.05
+  attackTotalDuration: 0.34
+  idleSpeed: 0.09
+  attackSpeed: 0.055
+  parryFrameStart: 0
+  parryFrameEnd: 4
+  minParryWindow: 0.28
+  rootScaleOverride: 0.16
+  healthBarMargin: 0.3
+  chromaticBase: 0.018
+  chromaticBurst: 0.1
+  glitchInterval: 0.65
+  ghostBaseAlpha: 0.3
+  sliceCount: 3
+  sliceThrow: 0.11
+  sliceRerollInterval: 0.035
+  threadCount: 10
+  threadLength: 0.55
+  shardCount: 10
+  shardOrbit: 0.34
+  auraAlpha: 0.42
+  auraSizeFrac: 0.9
+  bloomAlpha: 0.26
+  groundShadowAlpha: 0.45
+  eyeGlowAlpha: 0.72
+  eyeGlowSizeFrac: 0.16
+  maxExtraEyes: 6
+  emberInterval: 0.18
+  ashInterval: 0.42
+  deathVfxDuration: 1.15
+  debugLogs: 0
+--- !u!114 &8461567348814627089
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3554655901426140020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3166401e25ea5544a99dd745daa59056, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetSprite: {fileID: 0}
+  groundLine: 0
+  manualGroundY: -0.5
+  groundAdjust: 0
+  castDirection: 320
+  length: 0.5
+  color: {r: 0, g: 0, b: 0, a: 1}
+  opacity: 0.4
+  fadeTowardTip: 0.6
+  blur: 0.04
+  blurSamples: 4
+  contactShadow: 1
+  contactOpacity: 0.35
+  contactWidth: 0.75
+  contactAspect: 0.35
+  sortingOrderOffset: -1
+  followSpriteVisibility: 1
+  debugLog: 0
+  debugDrawOnTop: 0

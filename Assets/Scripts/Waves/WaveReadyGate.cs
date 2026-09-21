@@ -30,16 +30,43 @@ public class WaveReadyGate : MonoBehaviour
     public float buttonFontSize = 30f;
 
     [Header("Countdown")]
-    public float countdownFontSize = 150f;
+    public float countdownFontSize = 127.5f;
+    [Tooltip("Flat colour of the countdown number. IGNORED when Countdown Use Gradient is on.")]
     public Color countdownColor = new Color(1f, 0.86f, 0.55f, 1f);
-    public Color countdownShadowColor = new Color(0f, 0f, 0f, 0.55f);
+
+    [Tooltip("Fade the number vertically between the two colours below instead of using the " +
+             "flat Countdown Color. TextMeshPro does this per-vertex, so it costs nothing.")]
+    public bool countdownUseGradient = true;
+
+    [Tooltip("Top of the countdown number's vertical gradient — the lit edge.")]
+    public Color countdownGradientTop = new Color(1f, 0.94f, 1f, 1f);
+
+    [Tooltip("Bottom of the countdown number's vertical gradient — the colour it settles into.")]
+    public Color countdownGradientBottom = new Color(0.72f, 0.42f, 0.98f, 1f);
+    [Tooltip("Hard offset copy behind the number. OFF by default — it fights a light " +
+             "gradient, which carries its own depth. Turn ON only if the number gets lost " +
+             "against bright biomes.")]
+    public bool countdownShowShadow = false;
+    public Color countdownShadowColor = new Color(0.18f, 0.02f, 0.28f, 0.45f);
+    [Tooltip("Caption above the countdown number. EMPTY (the default) shows just the number, " +
+             "which is what the countdown was designed around — the number's position is fixed " +
+             "by the group, so nothing shifts either way. Set it to e.g. \"NEXT WAVE\" to bring " +
+             "the label back.")]
+    public string countdownCaption = "";
     public Color captionColor = new Color(0.96f, 0.80f, 0.58f, 0.9f);
-    [Tooltip("How far above screen-centre the countdown number sits (reference pixels).")]
-    public float countdownYOffset = 180f;
+    [Tooltip("How far above screen-centre the countdown number sits (reference pixels). " +
+             "Higher = further up. Note the number itself sits another 70px BELOW this, " +
+             "from NumberPivot's offset, so the digit lands around (countdownYOffset - 70).")]
+    public float countdownYOffset = 240f;
 
     [Header("Canvas")]
     [Tooltip("Sorting order. Sits just below the lore scroll (9998) / archive menu (9996) " +
-             "so modal popups still cover it, but above gameplay HUD.")]
+             "so those in-game popups still cover it, but above gameplay HUD. This canvas " +
+             "lives in the HUD sort band (9990s), which is ABOVE the menu band (~4800–5100) " +
+             "and the pause menu below it — so it can't be layered behind the menus by sort " +
+             "order alone. Instead the whole overlay is hidden while any menu is open " +
+             "(see UIModalStack.IsOpen in Update), which keeps it behind the menus and in " +
+             "front of the biome without depending on the pause menu's scene-authored order.")]
     public int sortingOrder = 9994;
 
     [Header("Co-op input")]
@@ -120,6 +147,16 @@ public class WaveReadyGate : MonoBehaviour
 
         if (Aborted()) { Finish(); return; }
 
+        // Step behind any open menu. This canvas sits in the HUD sort band (9990s),
+        // above the menu band and the pause menu, so it would otherwise draw ON TOP of
+        // the pause menu opened mid-countdown. Hiding it while a menu is on the modal
+        // stack keeps it behind the menus and in front of the biome, regardless of the
+        // pause menu's scene-authored sort order. Gameplay is frozen while a modal is
+        // up (timeScale 0), so the countdown clock doesn't advance while hidden.
+        bool menuOpen = MenuCovering();
+        if (_canvasGO != null) _canvasGO.SetActive(!menuOpen);
+        if (menuOpen) return;   // don't poll ready-ups while a menu has focus
+
         if (_uiMode == UiMode.ReadyUp)
         {
             PollGamepads();
@@ -129,6 +166,11 @@ public class WaveReadyGate : MonoBehaviour
         }
         // Countdown visuals are driven by the coroutine.
     }
+
+    // True while any menu/modal (pause menu, options, rebind, …) is on the UIModalStack.
+    // The pause menu registers as a modal, so this covers the reported case of opening
+    // it during the between-wave countdown.
+    private static bool MenuCovering() => UIModalStack.IsOpen;
 
     private bool Aborted()
     {
@@ -201,7 +243,8 @@ public class WaveReadyGate : MonoBehaviour
     {
         EnsureBuilt();
         _uiMode = m;
-        ShowCanvas();
+        // Show now unless a menu is already up; Update keeps this in sync thereafter.
+        if (_canvasGO != null) _canvasGO.SetActive(!MenuCovering());
 
         bool readyup = (m == UiMode.ReadyUp);
         if (_buttonGO != null) _buttonGO.SetActive(readyup);
@@ -235,7 +278,6 @@ public class WaveReadyGate : MonoBehaviour
         }
     }
 
-    private void ShowCanvas() { if (_canvasGO != null) _canvasGO.SetActive(true); }
     private void HideCanvas() { if (_canvasGO != null) _canvasGO.SetActive(false); }
 
 
@@ -326,14 +368,19 @@ public class WaveReadyGate : MonoBehaviour
         gr.anchoredPosition = new Vector2(0f, countdownYOffset);
         gr.sizeDelta = new Vector2(620f, 360f);
 
-        var caption = NewText("Caption", gr, "NEXT WAVE", 34f, FontStyles.Bold,
-                              TextAlignmentOptions.Center, captionColor);
-        caption.characterSpacing = 12f;
-        var capRt = caption.rectTransform;
-        capRt.anchorMin = new Vector2(0.5f, 1f); capRt.anchorMax = new Vector2(0.5f, 1f);
-        capRt.pivot = new Vector2(0.5f, 1f);
-        capRt.anchoredPosition = new Vector2(0f, 0f);
-        capRt.sizeDelta = new Vector2(620f, 56f);
+        // Caption is opt-in. Skipped entirely when blank rather than created-and-hidden,
+        // so the default costs no GameObject and no TMP submesh.
+        if (!string.IsNullOrWhiteSpace(countdownCaption))
+        {
+            var caption = NewText("Caption", gr, countdownCaption, 34f, FontStyles.Bold,
+                                  TextAlignmentOptions.Center, captionColor);
+            caption.characterSpacing = 12f;
+            var capRt = caption.rectTransform;
+            capRt.anchorMin = new Vector2(0.5f, 1f); capRt.anchorMax = new Vector2(0.5f, 1f);
+            capRt.pivot = new Vector2(0.5f, 1f);
+            capRt.anchoredPosition = new Vector2(0f, 0f);
+            capRt.sizeDelta = new Vector2(620f, 56f);
+        }
 
         // Pivot we scale for the "pop", containing a shadow + the number.
         var pivotGO = new GameObject("NumberPivot", typeof(RectTransform));
@@ -344,15 +391,31 @@ public class WaveReadyGate : MonoBehaviour
         _numberPivot.anchoredPosition = new Vector2(0f, -70f);
         _numberPivot.sizeDelta = new Vector2(400f, 240f);
 
-        _numberShadow = NewText("Shadow", _numberPivot, "3", countdownFontSize, FontStyles.Bold,
-                                TextAlignmentOptions.Center, countdownShadowColor);
-        var sr = _numberShadow.rectTransform;
-        StretchFull(sr);
-        sr.anchoredPosition = new Vector2(5f, -6f);
+        // Skipped entirely when off, rather than created transparent — one less TMP
+        // submesh per frame. UpdateCountdownVisual already null-checks it.
+        if (countdownShowShadow)
+        {
+            _numberShadow = NewText("Shadow", _numberPivot, "3", countdownFontSize, FontStyles.Bold,
+                                    TextAlignmentOptions.Center, countdownShadowColor);
+            var sr = _numberShadow.rectTransform;
+            StretchFull(sr);
+            sr.anchoredPosition = new Vector2(5f, -6f);
+        }
 
         _numberText = NewText("Number", _numberPivot, "3", countdownFontSize, FontStyles.Bold,
                               TextAlignmentOptions.Center, countdownColor);
         StretchFull(_numberText.rectTransform);
+
+        if (countdownUseGradient)
+        {
+            // TMP MULTIPLIES the vertex gradient by .color, so the face has to be white
+            // or the gradient comes out tinted by countdownColor on top of itself.
+            _numberText.color = Color.white;
+            _numberText.enableVertexGradient = true;
+            _numberText.colorGradient = new VertexGradient(
+                countdownGradientTop, countdownGradientTop,
+                countdownGradientBottom, countdownGradientBottom);
+        }
 
         _countdownGroup.SetActive(false);
     }
@@ -422,3 +485,5 @@ public class WaveReadyGate : MonoBehaviour
 #endif
     }
 }
+
+

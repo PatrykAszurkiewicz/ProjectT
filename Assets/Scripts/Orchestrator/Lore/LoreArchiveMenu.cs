@@ -84,6 +84,13 @@ public class LoreArchiveMenu : MonoBehaviour
     private readonly List<Item> items = new List<Item>();
     private int selectedId = int.MinValue;
 
+    // Hover-grow for the themed buttons (Close, Reset). Driven from this class's
+    // Update() rather than a separate component, and on UNSCALED time — the archive
+    // freezes timeScale, so a Time.deltaTime lerp would sit stuck mid-animation.
+    private class Hover { public RectTransform rt; public float target; }
+    private readonly List<Hover> hovers = new List<Hover>();
+    private const float HoverGrow = 1.12f, HoverPress = 1.04f, HoverSpeed = 12f;
+
     // MenuScene's Button_Lore points at the LoreArchiveMenu COMPONENT sitting in that
     // scene. This class is DontDestroyOnLoad, so on the second visit to MenuScene the
     // scene's copy used to `Destroy(gameObject)` itself as a duplicate — leaving the
@@ -132,6 +139,8 @@ public class LoreArchiveMenu : MonoBehaviour
         // Esc is arbitrated, not read raw: reading it here AND in the Pause action meant
         // one press both closed this menu and toggled pause underneath it.
         if (isOpen && MenuBackInput.ConsumeBack(this)) Close();
+
+        if (isOpen && hovers.Count > 0) UpdateHoverScales();
     }
 
     // Nothing else open, we're the thing that's open, or the top screen is one this
@@ -172,6 +181,9 @@ public class LoreArchiveMenu : MonoBehaviour
         if (_isProxy) { if (_instance != null) _instance.Close(); return; }
         if (!isOpen) return;
         isOpen = false;
+        // The panel hides with SetActive(false), so a button sitting under the cursor
+        // never receives its PointerExit — without this it reopens still enlarged.
+        foreach (var h in hovers) { h.target = 1f; if (h.rt != null) h.rt.localScale = Vector3.one; }
         if (root != null) root.SetActive(false);
         UIModalStack.Pop(this);
     }
@@ -197,13 +209,18 @@ public class LoreArchiveMenu : MonoBehaviour
 
         if (themePanel == null)
         {
-            themePanel = Themed(assignedPanel, "MenuPanel 1", new Vector4(140, 140, 140, 140));
+            //themePanel = Themed(assignedPanel, "MenuPanel 1", new Vector4(140, 140, 140, 140));
+            themePanel = Themed(assignedPanel, "MenuPanel 1", new Vector4(180, 180, 180, 180));
             if (themePanel == null) { themePanel = LorePaperArt.MakePanelSprite(); WarnLoadFailed(); }
         }
         if (themeListPanel == null && assignedListPanel != null)
             themeListPanel = WithBorder(assignedListPanel, new Vector4(140, 140, 140, 140));
         if (themeBtn == null) themeBtn = Themed(assignedButton, "Button", new Vector4(70, 80, 70, 80));
-        if (themeBtnHi == null) themeBtnHi = Themed(assignedButtonHi, "Button_1", new Vector4(80, 90, 80, 90));
+        // Border MUST match themeBtn's. The Close button's rect (70x64) is smaller than
+        // the border sum, so Unity compresses the 9-slice to fit — a bigger border on the
+        // highlight sprite compresses harder and the frame visibly tightens on hover.
+        // That was the "button shrinks when I mouse over it" bug.
+        if (themeBtnHi == null) themeBtnHi = Themed(assignedButtonHi, "Button_1", new Vector4(70, 80, 70, 80));
     }
 
     private static void WarnLoadFailed()
@@ -244,6 +261,7 @@ public class LoreArchiveMenu : MonoBehaviour
     {
         if (builtPanel) return;
         builtPanel = true;
+        hovers.Clear();     // the old canvas (if any) is gone; drop its entries
         CacheArt();
 
         var go = new GameObject("LoreArchiveCanvas");
@@ -268,6 +286,7 @@ public class LoreArchiveMenu : MonoBehaviour
         // Themed panel (bigger now), 9-sliced.
         var panelImg = NewImage("Panel", root.transform, themePanel, Color.white);
         panelImg.type = Image.Type.Sliced;
+        panelImg.pixelsPerUnitMultiplier = 1.9f;
         var pr = panelImg.rectTransform;
         pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f);
         pr.pivot = new Vector2(0.5f, 0.5f);
@@ -280,19 +299,22 @@ public class LoreArchiveMenu : MonoBehaviour
         hr.offsetMin = new Vector2(260, -126); hr.offsetMax = new Vector2(-260, -54);
 
         // Close button (top-right, inset past corner ornament).
+        // Pivot is CENTRED, not (1,1): with a corner pivot the hover scale grows the
+        // button down-and-left, which reads as the button sliding. anchoredPosition is
+        // offset by half the size so it sits in exactly the same place as before.
         var closeBtn = ThemedButton("Close", pr, "X", 28, out RectTransform cr);
-        cr.anchorMin = cr.anchorMax = new Vector2(1f, 1f); cr.pivot = new Vector2(1f, 1f);
-        cr.anchoredPosition = new Vector2(-60, -54);
+        cr.anchorMin = cr.anchorMax = new Vector2(1f, 1f); cr.pivot = new Vector2(0.5f, 0.5f);
         cr.sizeDelta = new Vector2(70, 64);
+        cr.anchoredPosition = new Vector2(-60 - 35, -54 - 32);
         closeBtn.onClick.AddListener(Close);
 
         // Optional debug reset (top-left, inset).
         if (debugResetButton)
         {
             var resetBtn = ThemedButton("Reset", pr, "Reset Lore", 22, out RectTransform rr);
-            rr.anchorMin = rr.anchorMax = new Vector2(0f, 1f); rr.pivot = new Vector2(0f, 1f);
-            rr.anchoredPosition = new Vector2(60, -54);
+            rr.anchorMin = rr.anchorMax = new Vector2(0f, 1f); rr.pivot = new Vector2(0.5f, 0.5f);
             rr.sizeDelta = new Vector2(210, 64);
+            rr.anchoredPosition = new Vector2(60 + 105, -54 - 32);
             resetBtn.onClick.AddListener(() =>
             {
                 LoreCodex.Instance.ClearAll();
@@ -447,6 +469,11 @@ public class LoreArchiveMenu : MonoBehaviour
         {
             img = NewImage(name, parent, themeBtn, Color.white);
             img.type = Image.Type.Sliced;
+            // The themed button art has a big ornate border. On a small rect (Close is
+            // 70x64) the 9-slice corners don't fit and Unity squashes the frame away to
+            // nothing. Raising the multiplier shrinks the border in UI space so the
+            // square actually renders.
+            img.pixelsPerUnitMultiplier = 2.6f;
         }
         else
         {
@@ -455,20 +482,58 @@ public class LoreArchiveMenu : MonoBehaviour
         rt = img.rectTransform;
 
         var btn = img.gameObject.AddComponent<Button>();
-        if (themeBtn != null && themeBtnHi != null)
-        {
-            btn.transition = Selectable.Transition.SpriteSwap;
-            btn.spriteState = new SpriteState { highlightedSprite = themeBtnHi, pressedSprite = themeBtnHi, selectedSprite = themeBtn };
-        }
-        else
-        {
-            var cb = btn.colors; cb.highlightedColor = new Color(1f, 0.7f, 1f, 1f); btn.colors = cb;
-        }
+        // ColorTint, NOT SpriteSwap. Swapping to a sprite with different 9-slice borders
+        // changes how the frame is compressed, which is what made the box around the X
+        // jump and then vanish on hover. One sprite, tint + scale only — the geometry
+        // can't move.
+        btn.transition = Selectable.Transition.ColorTint;
+        var cb = btn.colors;
+        cb.normalColor = Color.white;
+        cb.highlightedColor = new Color(1f, 0.86f, 1f, 1f);
+        cb.pressedColor = new Color(0.86f, 0.66f, 0.90f, 1f);
+        cb.selectedColor = cb.highlightedColor;
+        cb.fadeDuration = 0.10f;
+        btn.colors = cb;
 
         var txt = NewText(name + "Label", rt, label, fontSize, FontStyles.Bold, TextAlignmentOptions.Center,
                           themeBtn != null ? Color.white : magentaText);
         StretchFull(txt.rectTransform);
+
+        // Grow on hover / selection. EventTrigger and Button both receive the pointer
+        // events, so onClick still fires normally.
+        var hov = new Hover { rt = rt, target = 1f };
+        hovers.Add(hov);
+        var trig = img.gameObject.AddComponent<UnityEngine.EventSystems.EventTrigger>();
+        AddTrigger(trig, UnityEngine.EventSystems.EventTriggerType.PointerEnter, () => hov.target = HoverGrow);
+        AddTrigger(trig, UnityEngine.EventSystems.EventTriggerType.PointerExit, () => hov.target = 1f);
+        AddTrigger(trig, UnityEngine.EventSystems.EventTriggerType.PointerDown, () => hov.target = HoverPress);
+        AddTrigger(trig, UnityEngine.EventSystems.EventTriggerType.PointerUp, () => hov.target = HoverGrow);
+        AddTrigger(trig, UnityEngine.EventSystems.EventTriggerType.Select, () => hov.target = HoverGrow);
+        AddTrigger(trig, UnityEngine.EventSystems.EventTriggerType.Deselect, () => hov.target = 1f);
+
         return btn;
+    }
+
+    private static void AddTrigger(UnityEngine.EventSystems.EventTrigger trig,
+                                   UnityEngine.EventSystems.EventTriggerType type, System.Action fn)
+    {
+        var entry = new UnityEngine.EventSystems.EventTrigger.Entry { eventID = type };
+        entry.callback.AddListener(_ => fn());
+        trig.triggers.Add(entry);
+    }
+
+    // Frame-rate independent ease toward each button's current target size.
+    private void UpdateHoverScales()
+    {
+        float k = 1f - Mathf.Exp(-HoverSpeed * Time.unscaledDeltaTime);
+        for (int i = hovers.Count - 1; i >= 0; i--)
+        {
+            var h = hovers[i];
+            if (h.rt == null) { hovers.RemoveAt(i); continue; }   // prunes entries from a rebuilt canvas
+            Vector3 want = Vector3.one * h.target;
+            h.rt.localScale = Vector3.Lerp(h.rt.localScale, want, k);
+            if ((h.rt.localScale - want).sqrMagnitude < 1e-6f) h.rt.localScale = want;
+        }
     }
 
     private void EnsureEventSystem()
@@ -560,3 +625,5 @@ public class LoreArchiveMenu : MonoBehaviour
     }
 #endif
 }
+
+

@@ -20,6 +20,12 @@ public class WeaponBlueprintDrop : MonoBehaviour
     public float arcHeight = 1f;
     public float collectionRadius = 0.8f;
 
+    [Tooltip("Seconds after spawn after which the drop flies to the nearest player no matter " +
+             "how far away they are. Stops the blueprint from being left behind when the " +
+             "post-stage menu or victory screen appears right after a boss dies. " +
+             "Negative = only the normal magnet range applies.")]
+    public float homeToPlayerAfter = 1.5f;
+
     [Header("Arming")]
     [Tooltip("Seconds after spawn before the drop can be collected. " +
              "Prevents the player from instantly grabbing the drop while " +
@@ -58,6 +64,7 @@ public class WeaponBlueprintDrop : MonoBehaviour
     private Vector3 startPos;
     private Vector3 spawnPos;
     private float arcProgress;
+    private float arcDurationScale = 1f;   // longer flights take proportionally longer
     private float bobTimer;
     private float glowTimer;
 
@@ -344,17 +351,19 @@ public class WeaponBlueprintDrop : MonoBehaviour
 
         float dist = Vector3.Distance(transform.position, playerTransform.position);
 
-        if (!isMovingToPlayer && dist <= magnetRange)
+        bool homing = homeToPlayerAfter >= 0f && Time.time - spawnTime >= homeToPlayerAfter;
+        if (!isMovingToPlayer && (dist <= magnetRange || homing))
         {
             isMovingToPlayer = true;
             startPos = transform.position;
             arcProgress = 0f;
+            arcDurationScale = Mathf.Max(1f, dist / Mathf.Max(0.01f, magnetRange));
             if (glowObject != null) glowObject.SetActive(false);
         }
 
         if (isMovingToPlayer)
         {
-            arcProgress += arcSpeed * Time.deltaTime;
+            arcProgress += arcSpeed * Time.deltaTime / arcDurationScale;
             if (arcProgress >= 1f) { Collect(); return; }
 
             Vector3 target = playerTransform.position;
@@ -496,4 +505,8 @@ public class WeaponBlueprintDrop : MonoBehaviour
         Destroy(gameObject);
     }
 }
+
+
+
+
 

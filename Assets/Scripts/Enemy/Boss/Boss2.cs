@@ -7,7 +7,7 @@ using System.Collections.Generic;
 //   Meteor (rod-cast AoE):
 //   Summon (rod-cast slimes):
 
-public class Boss2 : BaseBossStats
+public class Boss2 : BaseBossStats, ISpritePrewarm
 {
     //  Boss Config 
     [Header("Boss2 Configuration")]
@@ -63,9 +63,51 @@ public class Boss2 : BaseBossStats
              "still letting damage flashes and UI render on top.")]
     [SerializeField] private int rodSortingOrder = 3000;
 
+    //  Rod summon animation 
+    [Header("Lich Rod — Summon Animation")]
+    [Tooltip("Local-space offset from the rod's resting (hand) position where it magically " +
+             "materializes before floating into the hand. Kept mostly vertical so it reads " +
+             "correctly regardless of which way the boss is facing.")]
+    [SerializeField] private Vector2 rodAppearOffset = new Vector2(0.35f, 1.6f);
+
+    [Tooltip("Seconds for the magical materialize: the rod fades + scales in with a sparkle burst " +
+             "at the appear point.")]
+    [SerializeField] private float rodAppearDuration = 0.35f;
+
+    [Tooltip("Seconds for the rod to float from the materialize point down into the boss's hand.")]
+    [SerializeField] private float rodFloatDuration = 0.5f;
+
+    [Tooltip("How small the rod starts (as a fraction of its normal scale) when it materializes.")]
+    [Range(0.05f, 1f)]
+    [SerializeField] private float rodAppearStartScale = 0.25f;
+
+    [Tooltip("Scale overshoot at the peak of the materialize pop (1 = no overshoot). A little pop " +
+             "reads as 'magic'; the rod settles back to its normal scale as it lands in the hand.")]
+    [Range(1f, 1.5f)]
+    [SerializeField] private float rodAppearOvershoot = 1.12f;
+
+    [Tooltip("Total degrees the rod spins while conjuring in (unwinds to its resting rotation as it " +
+             "reaches the hand). 0 = no spin. ~90–180 is a gentle conjure; 360 is more flamboyant.")]
+    [SerializeField] private float rodAppearSpin = 160f;
+
+    [Tooltip("When the cast finishes, gracefully dismiss the rod (fade + shrink + drift up) instead " +
+             "of snapping it off instantly.")]
+    [SerializeField] private bool rodGracefulDismiss = true;
+
+    [Tooltip("Seconds for the graceful dismiss fade-out (only used when rodGracefulDismiss is on).")]
+    [SerializeField] private float rodDismissDuration = 0.3f;
+
     private GameObject lichRod;
     private SpriteRenderer[] lichRodRenderers;
     private ParticleSystem[] lichRodParticles;
+
+    // Authored resting pose of the rod (the hand), cached in FindAndHideRod so the summon
+    // animation can materialize it away from the hand and float it back to EXACTLY here.
+    private Vector3 _rodHomeLocalPos;
+    private Vector3 _rodBaseLocalScale = Vector3.one;
+    private Quaternion _rodBaseLocalRot = Quaternion.identity;
+    private Color[] _rodBaseColors;      // per-renderer authored colours (for alpha fades)
+    private Coroutine _rodAnimRoutine;   // the in-flight appear / dismiss tween, if any
 
     //  Meteor Attack 
     [Header("Meteor Attack")]
@@ -89,8 +131,30 @@ public class Boss2 : BaseBossStats
 
     //  Summon Attack 
     [Header("Summon Attack")]
-    [Tooltip("Prefab to spawn (SmallSlime).")]
+    [Tooltip("Prefabs the Lich can summon (e.g. SmallSlimeV1, SmallSlimeV2). Drag in as many " +
+             "as you like; empty slots are ignored. Adding the same prefab twice makes it " +
+             "twice as likely in the Random modes.")]
+    [SerializeField] private GameObject[] summonPrefabs = new GameObject[0];
+
+    public enum SummonPickMode
+    {
+        RandomEachSlime,   // every slime in a cast rolls its own prefab (mixed groups)
+        RandomEachCast,    // one prefab is rolled per cast; the whole group matches
+        Alternate          // cycles V1, V2, V1, V2… continuing across casts
+    }
+
+    [Tooltip("How a prefab is chosen from Summon Prefabs for each summoned slime.")]
+    [SerializeField] private SummonPickMode summonPickMode = SummonPickMode.RandomEachSlime;
+
+    // LEGACY single-prefab slot from before summonPrefabs existed. Hidden from the
+    // inspector and only used as a fallback when summonPrefabs is empty, so any old
+    // scene/prefab data that still points at the original SmallSlime keeps working.
+    [HideInInspector]
     [SerializeField] private GameObject smallSlimePrefab;
+
+    // Cursor for SummonPickMode.Alternate. Persists across casts so an odd summonCount
+    // still produces an even mix over the fight.
+    private int _summonAlternateIndex = 0;
 
     [Tooltip("How many slimes are summoned per cast.")]
     [SerializeField] private int summonCount = 6;
@@ -172,6 +236,12 @@ public class Boss2 : BaseBossStats
         {
             maxHealth = bossMaxHealth;
             maxArmor = bossMaxArmor;
+
+            // No EnemyData asset: EnemyStats.Awake skips its whole init block
+            // (including `currentHealth = maxHealth`), so seed it here or the boss
+            // spawns on CharacterStats' serialized default of 100 HP regardless of
+            // bossMaxHealth and dies almost instantly. Boss3 already did this.
+            currentHealth = maxHealth;
         }
 
         base.Awake();
@@ -215,7 +285,7 @@ public class Boss2 : BaseBossStats
         //          $"lichRod={(lichRod != null ? "OK" : "NOT FOUND")}, " +
         //          $"animController={(animController != null ? "OK" : "MISSING")}, " +
         //          $"collider={(col != null ? $"{col.GetType().Name} enabled={col.enabled} isTrigger={col.isTrigger}" : "MISSING")}, " +
-        //          $"smallSlimePrefab={(smallSlimePrefab != null ? "OK" : "NULL")}");
+        //          $"summonPrefabs={GetSummonPool().Count}");
     }
 
     private GameObject FindAnyHealthBarPrefab()
@@ -254,21 +324,104 @@ public class Boss2 : BaseBossStats
         col.offset = new Vector2(0f, bossColliderOffsetY);
     }
 
-    // Pre-loads the slime's sprite folder so EnemyAnimationController.Start() on each
-    // spawned slime hits a warm cache. Without this, every slime in a summon burst calls
+    // ISpritePrewarm: warms what Boss2 loads on spawn beyond its EnemyData body folder —
+    // chiefly the summoned-slime folder, which Boss2.Start() loads via PrewarmSlimeSprites()
+    // on its own spawn frame. Called on the PREFAB during the black stage-warm so that
+    // spawn-frame load is a cache hit and the boss doesn't stall. Reads serialized
+    // references only — safe to run without instantiating the boss.
+    public void PrewarmSpriteFolders()
+    {
+        // Boss2's own body frames are direct references on EnemyData now, so there is
+        // nothing to warm for them (and LoadFolderCached no longer exists).
+        // Warm EVERY summonable variant — PrewarmSlimeSprites() is then a cache hit.
+        foreach (var prefab in GetSummonPool())
+            WarmSummonSpriteFolder(prefab);
+    }
+
+    // Pre-loads each summon variant's sprite folder so EnemyAnimationController.Start() on
+    // each spawned slime hits a warm cache. Without this, every slime in a summon burst calls
     // Resources.LoadAll<Sprite>(spriteFolderPath) in its own first-frame Start, all on the
     // main thread — that's a major part of the visible freeze when the boss summons.
     // Costs one synchronous load at scene-start, when nothing else is happening.
     private void PrewarmSlimeSprites()
     {
-        if (smallSlimePrefab == null) return;
-        var slimeStats = smallSlimePrefab.GetComponent<EnemyStats>();
-        if (slimeStats == null || slimeStats.enemyData == null) return;
-        string folder = slimeStats.enemyData.spriteFolderPath;
-        if (string.IsNullOrEmpty(folder)) return;
+        foreach (var prefab in GetSummonPool())
+            WarmSummonSpriteFolder(prefab);
+    }
+
+    private static void WarmSummonSpriteFolder(GameObject prefab)
+    {
+        if (prefab == null) return;
+        var slimeStats = prefab.GetComponent<EnemyStats>();
+        var d = slimeStats != null ? slimeStats.enemyData : null;
+        if (d == null) return;
+
+        // A MIGRATED slime needs no prewarm: its frames are direct references on the
+        // EnemyData asset, so the prefab reference chain already loaded them with the
+        // scene. Only the legacy Resources path needs warming.
+        if (d.HasDirectFrames || string.IsNullOrEmpty(d.spriteFolderPath)) return;
+
         // The return value is discarded — Unity keeps the sprites alive in its internal
         // resource cache, so the slime's Start() will get them back from cache instantly.
-        Resources.LoadAll<Sprite>(folder);
+        // Loading the same folder twice (duplicate entries) is just a cache hit.
+        Resources.LoadAll<Sprite>(d.spriteFolderPath);
+    }
+
+    // All non-null summon prefabs, in inspector order (duplicates kept on purpose — they
+    // act as weights for the Random modes). Falls back to the legacy smallSlimePrefab
+    // slot when the array is empty. Reads serialized data only, so it's safe on a PREFAB.
+    private List<GameObject> GetSummonPool()
+    {
+        var pool = new List<GameObject>(summonPrefabs != null ? summonPrefabs.Length : 1);
+        if (summonPrefabs != null)
+        {
+            for (int i = 0; i < summonPrefabs.Length; i++)
+                if (summonPrefabs[i] != null) pool.Add(summonPrefabs[i]);
+        }
+
+        if (pool.Count == 0 && smallSlimePrefab != null)
+            pool.Add(smallSlimePrefab);
+
+        return pool;
+    }
+
+    // Decides which prefab each slime of ONE cast will be. Resolved up front (before the
+    // telegraph delay) so the whole cast is decided at once. `pool` must be non-empty.
+    private GameObject[] PickSummonPrefabs(List<GameObject> pool, int count)
+    {
+        var picks = new GameObject[Mathf.Max(0, count)];
+        if (picks.Length == 0 || pool == null || pool.Count == 0) return picks;
+
+        switch (summonPickMode)
+        {
+            case SummonPickMode.RandomEachCast:
+                {
+                    GameObject one = pool[Random.Range(0, pool.Count)];
+                    for (int i = 0; i < picks.Length; i++) picks[i] = one;
+                    break;
+                }
+
+            case SummonPickMode.Alternate:
+                {
+                    for (int i = 0; i < picks.Length; i++)
+                    {
+                        // Modulo on read too, in case the pool shrank since the last cast.
+                        _summonAlternateIndex %= pool.Count;
+                        picks[i] = pool[_summonAlternateIndex];
+                        _summonAlternateIndex = (_summonAlternateIndex + 1) % pool.Count;
+                    }
+                    break;
+                }
+
+            default: // RandomEachSlime
+                {
+                    for (int i = 0; i < picks.Length; i++)
+                        picks[i] = pool[Random.Range(0, pool.Count)];
+                    break;
+                }
+        }
+
+        return picks;
     }
 
     private void InitializeBossHealthBar()
@@ -389,6 +542,19 @@ public class Boss2 : BaseBossStats
         // with the rod, otherwise they keep emitting in mid-air after the cast ends.
         lichRodParticles = lichRod.GetComponentsInChildren<ParticleSystem>(true);
 
+        // Cache the rod's authored resting pose + colours. The summon animation moves and
+        // fades the rod, so it needs the originals to restore an exact, drift-free rest state
+        // (position in the hand, full scale, authored per-renderer alpha) after every cast.
+        _rodHomeLocalPos = lichRod.transform.localPosition;
+        _rodBaseLocalScale = lichRod.transform.localScale;
+        _rodBaseLocalRot = lichRod.transform.localRotation;
+        if (lichRodRenderers != null)
+        {
+            _rodBaseColors = new Color[lichRodRenderers.Length];
+            for (int i = 0; i < lichRodRenderers.Length; i++)
+                _rodBaseColors[i] = lichRodRenderers[i] != null ? lichRodRenderers[i].color : Color.white;
+        }
+
         SetRodVisible(false);
     }
 
@@ -481,29 +647,173 @@ public class Boss2 : BaseBossStats
 
     private void SetRodVisible(bool visible)
     {
-        // Toggle every SpriteRenderer that belongs to the rod (the shaft, the orb, etc.).
-        if (lichRodRenderers != null)
+        if (!visible)
         {
-            foreach (var sr in lichRodRenderers)
-                if (sr != null) sr.enabled = visible;
+            // Hard hide (death / cleanup, or the end of a non-graceful dismiss): stop any
+            // in-flight summon animation and restore the authored resting pose so the NEXT
+            // cast starts from a clean, drift-free state.
+            if (_rodAnimRoutine != null) { StopCoroutine(_rodAnimRoutine); _rodAnimRoutine = null; }
+            RestoreRodRestPose();
         }
 
-        // Toggle particle systems on the rod the same way
-        if (lichRodParticles != null)
+        SetRodRenderersEnabled(visible);
+        SetRodParticlesPlaying(visible);
+    }
+
+    // Enable/disable every SpriteRenderer on the rod (the shaft, the orb, etc.).
+    private void SetRodRenderersEnabled(bool on)
+    {
+        if (lichRodRenderers == null) return;
+        foreach (var sr in lichRodRenderers)
+            if (sr != null) sr.enabled = on;
+    }
+
+    // Start/stop the rod's particle systems (e.g. the orb glow) so they don't keep
+    // emitting in mid-air after the rod is gone.
+    private void SetRodParticlesPlaying(bool on)
+    {
+        if (lichRodParticles == null) return;
+        foreach (var ps in lichRodParticles)
         {
-            foreach (var ps in lichRodParticles)
-            {
-                if (ps == null) continue;
-                if (visible)
-                {
-                    if (!ps.isPlaying) ps.Play(true);
-                }
-                else
-                {
-                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                }
-            }
+            if (ps == null) continue;
+            if (on) { if (!ps.isPlaying) ps.Play(true); }
+            else ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
+    }
+
+    // Fades the whole rod by scaling every renderer's authored alpha by t (0..1). Keeps the
+    // relationship between parts (a shaft at a=1 and an orb glow at a=0.8 fade proportionally).
+    private void SetRodAlpha(float t)
+    {
+        if (lichRodRenderers == null) return;
+        t = Mathf.Clamp01(t);
+        for (int i = 0; i < lichRodRenderers.Length; i++)
+        {
+            var sr = lichRodRenderers[i];
+            if (sr == null) continue;
+            Color c = (_rodBaseColors != null && i < _rodBaseColors.Length) ? _rodBaseColors[i] : sr.color;
+            c.a *= t;
+            sr.color = c;
+        }
+    }
+
+    // Snaps the rod back to its exact authored resting pose (hand position, scale, rotation,
+    // full alpha) so repeated summon animations can't accumulate drift.
+    private void RestoreRodRestPose()
+    {
+        if (lichRod != null)
+        {
+            lichRod.transform.localPosition = _rodHomeLocalPos;
+            lichRod.transform.localScale = _rodBaseLocalScale;
+            lichRod.transform.localRotation = _rodBaseLocalRot;
+        }
+        SetRodAlpha(1f);
+    }
+
+    // Magically materialize the rod above the hand, then float it into the hand. Replaces the
+    // old hard SetRodVisible(true) at the start of a cast. Two phases:
+    //   1. Materialize — at the appear point, fade + scale-pop in with a spark burst.
+    //   2. Float       — glide from the appear point down into the hand and settle.
+    private IEnumerator PlayRodSummonAppear()
+    {
+        if (lichRod == null) yield break;
+
+        Transform rt = lichRod.transform;
+        Vector3 appearPos = _rodHomeLocalPos + (Vector3)rodAppearOffset;
+
+        // Start state: at the appear point, tiny, spun, and fully transparent.
+        rt.localPosition = appearPos;
+        rt.localScale = _rodBaseLocalScale * Mathf.Max(0.01f, rodAppearStartScale);
+        rt.localRotation = _rodBaseLocalRot * Quaternion.Euler(0f, 0f, rodAppearSpin);
+        SetRodAlpha(0f);
+        SetRodRenderersEnabled(true);
+        SetRodParticlesPlaying(true);
+
+        // Conjure burst (flash + arcane ring + sparks) at the materialize point.
+        SpawnRodConjureVFX(appearPos);
+
+        // Phase 1: materialize.
+        float e = 0f;
+        float appearDur = Mathf.Max(0.01f, rodAppearDuration);
+        while (e < appearDur)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / appearDur);
+
+            // Alpha: ease-out so it "flashes" into being.
+            SetRodAlpha(1f - (1f - p) * (1f - p));
+
+            // Scale: rise from the start scale up to the overshoot peak (ease-out).
+            float pop = Mathf.Sin(p * Mathf.PI * 0.5f);
+            rt.localScale = _rodBaseLocalScale * Mathf.LerpUnclamped(rodAppearStartScale, rodAppearOvershoot, pop);
+
+            // Unwind most of the spin during the pop; the rest finishes in phase 2.
+            rt.localRotation = _rodBaseLocalRot * Quaternion.Euler(0f, 0f, Mathf.Lerp(rodAppearSpin, rodAppearSpin * 0.35f, p));
+
+            yield return null;
+        }
+
+        // Phase 2: float into the hand and settle.
+        e = 0f;
+        float floatDur = Mathf.Max(0.01f, rodFloatDuration);
+        float startSpin = rodAppearSpin * 0.35f;
+        while (e < floatDur)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / floatDur);
+            float ease = 1f - Mathf.Pow(1f - p, 3f);   // ease-out cubic: brisk, then gentle onto the hand
+
+            rt.localPosition = Vector3.LerpUnclamped(appearPos, _rodHomeLocalPos, ease);
+            rt.localScale = _rodBaseLocalScale * Mathf.Lerp(rodAppearOvershoot, 1f, ease);
+            rt.localRotation = _rodBaseLocalRot * Quaternion.Euler(0f, 0f, Mathf.Lerp(startSpin, 0f, ease));
+            SetRodAlpha(1f);
+
+            yield return null;
+        }
+
+        // Land exactly on the authored resting pose.
+        RestoreRodRestPose();
+        _rodAnimRoutine = null;
+    }
+
+    // Graceful counterpart to the summon: fade + shrink + drift up, then hard-hide (which also
+    // restores the rest pose for next time). Used at the end of a cast when rodGracefulDismiss is on.
+    private IEnumerator PlayRodDismiss()
+    {
+        if (lichRod == null) { SetRodVisible(false); yield break; }
+
+        Transform rt = lichRod.transform;
+        Vector3 startPos = rt.localPosition;
+        Vector3 startScale = rt.localScale;
+        Vector3 endPos = startPos + Vector3.up * (Mathf.Abs(rodAppearOffset.y) * 0.35f);
+
+        float e = 0f;
+        float dur = Mathf.Max(0.01f, rodDismissDuration);
+        while (e < dur)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / dur);
+            rt.localPosition = Vector3.Lerp(startPos, endPos, p);
+            rt.localScale = Vector3.Lerp(startScale, startScale * 0.4f, p);
+            SetRodAlpha(1f - p);
+            yield return null;
+        }
+
+        SetRodVisible(false);   // hard hide + restore rest pose
+        _rodAnimRoutine = null;
+    }
+
+    // Spawns the cosmetic "conjure" burst at the rod's materialize point, parented to the boss
+    // (in local space) so it tracks the boss if it happens to move.
+    private void SpawnRodConjureVFX(Vector3 localAppearPos)
+    {
+        var go = new GameObject("RodConjureFX");
+        go.transform.SetParent(transform, false);
+        go.transform.localPosition = localAppearPos;
+        var fx = go.AddComponent<Boss2RodConjureFX>();
+        string sortLayer = bossSprite != null ? bossSprite.sortingLayerName : "Default";
+        // +10 so the burst renders just above the rod itself.
+        fx.Play(sortLayer, rodSortingOrder + 10);
     }
 
 
@@ -557,8 +867,10 @@ public class Boss2 : BaseBossStats
         bool ecWasEnabled = ec != null && ec.enabled;
         if (ec != null) ec.enabled = false;
 
-        // Show the rod for the duration of the cast.
-        SetRodVisible(true);
+        // Magically conjure the rod: it materializes above the hand, then floats into it.
+        // We wait for this to finish before casting so the spell reads as coming FROM the rod.
+        _rodAnimRoutine = StartCoroutine(PlayRodSummonAppear());
+        yield return _rodAnimRoutine;
 
         if (nextCastIsSummon)
             yield return StartCoroutine(PerformSummonAttack());
@@ -568,9 +880,17 @@ public class Boss2 : BaseBossStats
         // Toggle for next time so the two attacks alternate.
         nextCastIsSummon = !nextCastIsSummon;
 
-        // Linger so the rod doesn't snap away the instant the spell resolves.
+        // Linger so the rod doesn't snap away the instant the spell resolves, then dismiss it.
         yield return new WaitForSeconds(rodLingerAfterCast);
-        SetRodVisible(false);
+        if (rodGracefulDismiss)
+        {
+            _rodAnimRoutine = StartCoroutine(PlayRodDismiss());
+            yield return _rodAnimRoutine;
+        }
+        else
+        {
+            SetRodVisible(false);
+        }
 
         if (ec != null) ec.enabled = ecWasEnabled;
         isCasting = false;
@@ -698,16 +1018,25 @@ public class Boss2 : BaseBossStats
                 {
                     //Debug.Log($"[Boss2] Hitting CharacterStats on {cs.gameObject.name} (via collider {hit.name})");
                     cs.TakeDamage(scaledMeteorDamage);
+                    // Player-side on-hit augments (Damage Reflection / Ice Armor). These
+                    // fired ONLY from EnemyController before, so boss specials reflected
+                    // nothing. The damagedCharacters set already dedups, so this cannot
+                    // double-fire, and it is a no-op for non-player CharacterStats.
+                    EnemyController.NotifyCharacterDamaged(cs, scaledMeteorDamage, gameObject);
                     continue;
                 }
 
-                // Towers / Core: route via the energy damage system.
+                // Towers / Core: route via EnergyManager directly — the SAME path
+                // regular enemies (EnemyController) and Boss1's laser use. NOTE: the
+                // old code went through EnemyDamageSystem.Instance, which is a separate
+                // optional singleton; if no EnemyDamageSystem exists in the scene that
+                // instance is null and towers/core took NO explosion damage at all.
                 var consumer = hit.GetComponentInParent<IEnergyConsumer>();
                 if (consumer != null && damagedConsumers.Add(consumer))
                 {
                     //Debug.Log($"[Boss2] Hitting IEnergyConsumer on {hit.gameObject.name}");
-                    if (EnemyDamageSystem.Instance != null)
-                        EnemyDamageSystem.Instance.DamageEnergyConsumer(consumer, scaledMeteorDamage, gameObject);
+                    if (EnergyManager.Instance != null)
+                        EnergyManager.Instance.DamageEnergyConsumer(consumer, scaledMeteorDamage, gameObject);
                     continue;
                 }
 
@@ -725,8 +1054,60 @@ public class Boss2 : BaseBossStats
         {
             if (ps == null) continue;
             if (damagedCharacters.Add(ps))
+            {
                 ps.TakeDamage(scaledMeteorDamage);
+                EnemyController.NotifyCharacterDamaged(ps, scaledMeteorDamage, gameObject);
+            }
         }
+
+        // Layer-independent safety net for the BASE: towers + the central core.
+        // The OverlapCircleAll pass above only sees colliders on meteorDamageLayers,
+        // so if that mask is set narrowly (e.g. Player only) the explosion would never
+        // touch a building. We walk the tower registry and the tagged Core directly and
+        // damage any whose body overlaps the blast. damagedConsumers dedups so anything
+        // already hit by the overlap pass isn't hit twice.
+        var towers = Tower.ActiveTowers;
+        for (int i = towers.Count - 1; i >= 0; i--)   // backward: damage may remove from the list
+        {
+            var tower = towers[i];
+            if (tower != null)
+                DamageConsumerIfInRadius(tower, tower.gameObject, pos, radius,
+                                         scaledMeteorDamage, damagedConsumers);
+        }
+
+        GameObject coreObj = GameObject.FindGameObjectWithTag("Core");
+        if (coreObj != null)
+        {
+            var coreConsumer = coreObj.GetComponentInParent<IEnergyConsumer>();
+            if (coreConsumer != null)
+                DamageConsumerIfInRadius(coreConsumer, coreObj, pos, radius,
+                                         scaledMeteorDamage, damagedConsumers);
+        }
+    }
+
+    // Damages an IEnergyConsumer building (tower / core) through the energy system if
+    // its body overlaps the blast, but only once (tracked in 'already'). Uses the
+    // collider surface for a fair test on large buildings — ClosestPoint returns pos
+    // itself when pos is inside the collider, so it reads 0 there — and falls back to
+    // pivot distance when there's no collider.
+    private void DamageConsumerIfInRadius(
+        IEnergyConsumer consumer, GameObject go, Vector3 pos, float radius,
+        float damage, HashSet<IEnergyConsumer> already)
+    {
+        if (consumer == null || go == null) return;
+
+        var col = go.GetComponent<Collider2D>();
+        float dist = (col != null)
+            ? Vector2.Distance(pos, col.ClosestPoint(pos))   // surface distance (0 if inside)
+            : Vector2.Distance(pos, go.transform.position);  // fallback: pivot distance
+        if (dist > radius) return;
+
+        if (!already.Add(consumer)) return;                  // already damaged this blast
+
+        // Same path regular enemies use (EnergyManager, not EnemyDamageSystem) so this
+        // works whether or not an EnemyDamageSystem singleton exists in the scene.
+        if (EnergyManager.Instance != null)
+            EnergyManager.Instance.DamageEnergyConsumer(consumer, damage, gameObject);
     }
 
 
@@ -743,12 +1124,16 @@ public class Boss2 : BaseBossStats
 
         // If nothing can be summoned, still honour the cast timing but skip the
         // telegraph — there's nothing to warn the player about.
-        if (smallSlimePrefab == null)
+        List<GameObject> summonPool = GetSummonPool();
+        if (summonPool.Count == 0)
         {
-            Debug.LogWarning("Boss2: smallSlimePrefab is not assigned — summon attack cannot spawn anything.");
+            Debug.LogWarning("Boss2: no Summon Prefabs assigned — summon attack cannot spawn anything.");
             yield return new WaitForSeconds(summonSpawnDelay);
             yield break;
         }
+
+        // Decide which variant each slot gets now, alongside the spawn positions.
+        GameObject[] spawnPrefabs = PickSummonPrefabs(summonPool, summonCount);
 
         // Compute a spawn radius that's guaranteed to be OUTSIDE the boss's collider.
         float bossColliderR = 0f;
@@ -807,13 +1192,16 @@ public class Boss2 : BaseBossStats
                 AudioManager.instance.PlayOneShot(FMODEvents.instance.boss2Spawn, spawnPos);
             }
 
-            GameObject slime = Instantiate(smallSlimePrefab, spawnPos, Quaternion.identity);
+            GameObject prefab = spawnPrefabs[i];
+            if (prefab == null) continue; // asset removed mid-cast; skip this slot
+
+            GameObject slime = Instantiate(prefab, spawnPos, Quaternion.identity);
 
             // Enable behaviour, guarantee correct sorting (so the grass overlay can't
             // bury it), and kick off the materialize pop.
             PrepareSummonedSlime(slime);
 
-            StartCoroutine(SuperviseSpawnedSlime(slime));
+            StartCoroutine(SuperviseSpawnedSlime(slime, prefab));
 
             // Yield one frame between spawns. The smoke puffs cover the staggered timing
             // so it still reads as "they all appeared at once". Skip the wait after the
@@ -856,7 +1244,9 @@ public class Boss2 : BaseBossStats
     }
 
 
-    private IEnumerator SuperviseSpawnedSlime(GameObject slime)
+    // `sourcePrefab` is the variant this slime was spawned from, so a stuck V2 is
+    // replaced by a fresh V2 (not by whatever the pool would roll next).
+    private IEnumerator SuperviseSpawnedSlime(GameObject slime, GameObject sourcePrefab)
     {
         if (slime == null) yield break;
 
@@ -883,12 +1273,12 @@ public class Boss2 : BaseBossStats
 
         // Slime never moved in the watch window — treat it as stuck and respawn.
         // Use the same position so the player still sees the slime materialize there.
-        if (slime == null || smallSlimePrefab == null) yield break;
+        if (slime == null || sourcePrefab == null) yield break;
         Vector3 stuckPos = slime.transform.position;
         Destroy(slime);
 
         SpawnSummonPoof(stuckPos);
-        GameObject fresh = Instantiate(smallSlimePrefab, stuckPos, Quaternion.identity);
+        GameObject fresh = Instantiate(sourcePrefab, stuckPos, Quaternion.identity);
         PrepareSummonedSlime(fresh);
     }
 
@@ -1086,13 +1476,26 @@ public class Boss2 : BaseBossStats
         // Reset to idle frame 0 BEFORE disabling animController, mirroring Boss1.
         if (bossSprite != null && enemyData != null)
         {
-            var allSprites = Resources.LoadAll<Sprite>(enemyData.spriteFolderPath);
-            if (allSprites != null && allSprites.Length > 0)
+            // FIX: see the matching change in Boss1. This re-loaded and re-sorted the
+            // whole sprite folder synchronously during the boss-kill freeze just to pick
+            // one frame, and read spriteFolderPath directly — so it would silently stop
+            // working once the sprites left Resources/.
+            Sprite idleFrame = animController != null
+                ? animController.GetFrame(enemyData.idle.startFrame)
+                : null;
+
+            if (idleFrame == null && !string.IsNullOrEmpty(enemyData.spriteFolderPath))
             {
-                System.Array.Sort(allSprites, (a, b) => a.name.CompareTo(b.name));
-                if (enemyData.idle.startFrame < allSprites.Length)
-                    bossSprite.sprite = allSprites[enemyData.idle.startFrame];
+                var allSprites = Resources.LoadAll<Sprite>(enemyData.spriteFolderPath);
+                if (allSprites != null && allSprites.Length > 0)
+                {
+                    System.Array.Sort(allSprites, (a, b) => string.CompareOrdinal(a.name, b.name));
+                    if (enemyData.idle.startFrame < allSprites.Length)
+                        idleFrame = allSprites[enemyData.idle.startFrame];
+                }
             }
+
+            if (idleFrame != null) bossSprite.sprite = idleFrame;
         }
 
         // Hide the rod if it was visible mid-cast.
@@ -1150,8 +1553,21 @@ public class Boss2 : BaseBossStats
         // Roll for a permanent weapon/tool blueprint drop, same as every boss.
         RollBlueprintDrop(deathPos);
 
-        if (EnergyManager.Instance != null)
-            EnergyManager.Instance.OnEnemyKilled(gameObject);
+        // Shared death book-keeping. This used to be a bare EnergyManager call, which
+        // meant a boss killed by a tower paid NO augment-335 tithe and left a stale
+        // TowerKillAttribution entry behind. FireCommonDeathHooks runs the exact same
+        // sequence EnemyStats.PerformDeath uses (wave counter -> tithe -> EnergyManager
+        // -> attribution cleanup) and still raises OnEnemyKilledEvent, so lifesteal and
+        // health-on-kill behave exactly as before.
+        //
+        // The wave-counter notify balances the enemiesAlive++ that
+        // WaveSpawner.SpawnEnemyPublic did when GameOrchestrator.SpawnBoss spawned us.
+        // Orchestrator mode never reads that counter, so this changes nothing there; it
+        // stops a boss placed in a plain WaveConfig from soft-locking standalone mode.
+        //
+        // NOTE: drops are deliberately NOT routed through the hook — this boss already
+        // spawns its own reward ring above, and adding the standard roll would double it.
+        EnemyStats.FireCommonDeathHooks(gameObject);
 
         // Run the standard disintegration VFX, then play the boss death sound on completion.
         EnemyDeathVFX.Trigger(
@@ -1162,11 +1578,23 @@ public class Boss2 : BaseBossStats
                 if (AudioManager.instance != null && FMODEvents.instance != null)
                     AudioManager.instance.PlayOneShot(FMODEvents.instance.towerDeath, deathPos);
             });
+
+        // Guaranteed teardown if the VFX above never finishes. Bosses never reach
+        // CharacterStats.Die() -> Destroy(gameObject), so a failed VFX would leave this
+        // object alive forever and GameOrchestrator.WaitForBossDead() would spin on it
+        // for the rest of the session. Fires well after the VFX should have completed,
+        // so the normal death path is untouched.
+        ScheduleDeathFailsafe(disintegrationDuration);
     }
 
 
     //  CLEANUP 
-    private void OnDestroy()
+    // OVERRIDE (was a private declaration that HID EnemyStats.OnDestroy).
+    // Unity dispatches only the most-derived OnDestroy, so while this was private
+    // the boss never unregistered from EnemyStatModifierManager and never released
+    // its damage-flash material. base.OnDestroy() runs LAST so this class's own
+    // teardown happens first, exactly as it did before.
+    protected override void OnDestroy()
     {
         // Safety net for the paths that never run ExecuteBossDeath — scene unload
         // mid-cast, or the boss being destroyed outright. Idempotent.
@@ -1174,6 +1602,8 @@ public class Boss2 : BaseBossStats
 
         if (HealthBar != null)
             Destroy(HealthBar.gameObject);
+
+        base.OnDestroy();
     }
 
 
@@ -2967,6 +3397,137 @@ public static class Boss2SummonFlashSprites
         return _thinRing;
     }
 }
+
+
+
+
+// Cosmetic "conjure" burst played where the Lich's rod materializes: a bright flash, an
+// expanding arcane ring, and a spray of sparks. Purely visual — self-destructs after ~0.7s.
+// Reuses the procedural sprites already used by the summon telegraph/poof effects so it needs
+// no art assets and stays visually cohesive with the rest of Boss2's magic.
+public class Boss2RodConjureFX : MonoBehaviour
+{
+    private static readonly Color FlashHot = new Color(1f, 0.85f, 1f, 1f);   // near-white pink
+    private static readonly Color RingColor = new Color(0.85f, 0.35f, 1f, 1f); // arcane violet
+    private static readonly Color SparkColor = new Color(1f, 0.78f, 1f, 1f);  // hot-pink mote
+
+    private string _sortLayer = "Default";
+    private int _baseOrder = 3000;
+
+    public void Play(string sortingLayerName, int baseOrder)
+    {
+        if (!string.IsNullOrEmpty(sortingLayerName)) _sortLayer = sortingLayerName;
+        _baseOrder = baseOrder;
+        StartCoroutine(Run());
+    }
+
+    private IEnumerator Run()
+    {
+        BuildFlash();
+        BuildRing();
+        BuildSparkles();
+        yield return new WaitForSeconds(0.7f);
+        Destroy(gameObject);
+    }
+
+    private SpriteRenderer NewSprite(string name, Sprite sprite, int order)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        sr.sortingLayerName = _sortLayer;
+        sr.sortingOrder = order;
+        return sr;
+    }
+
+    // FLASH: a bright disc that pops open and fades — the "here it comes" beat.
+    private void BuildFlash()
+    {
+        var sr = NewSprite("ConjureFlash", Boss2SummonFlashSprites.GetSoftDisc(), _baseOrder + 2);
+        StartCoroutine(FlashRoutine(sr));
+    }
+
+    private IEnumerator FlashRoutine(SpriteRenderer sr)
+    {
+        var t = sr.transform;
+        float dur = 0.3f, e = 0f;
+        while (e < dur)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / dur);
+            t.localScale = Vector3.one * Mathf.Lerp(0.25f, 1.4f, 1f - (1f - p) * (1f - p));
+            Color c = Color.Lerp(FlashHot, RingColor, p);
+            c.a = (1f - p) * 0.9f;
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(sr.gameObject);
+    }
+
+    // RING: a thin arcane circle that expands outward and fades — the summoning mark.
+    private void BuildRing()
+    {
+        var sr = NewSprite("ConjureRing", Boss2SummonFlashSprites.GetThinRing(), _baseOrder + 1);
+        StartCoroutine(RingRoutine(sr));
+    }
+
+    private IEnumerator RingRoutine(SpriteRenderer sr)
+    {
+        var t = sr.transform;
+        float dur = 0.45f, e = 0f;
+        while (e < dur)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / dur);
+            float ease = 1f - (1f - p) * (1f - p);
+            t.localScale = Vector3.one * Mathf.Lerp(0.15f, 1.9f, ease);
+            Color c = RingColor;
+            c.a = (1f - p) * 0.85f;
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(sr.gameObject);
+    }
+
+    // SPARKS: a ring of motes that shoot outward and shrink away.
+    private void BuildSparkles()
+    {
+        const int count = 9;
+        for (int i = 0; i < count; i++)
+        {
+            float ang = (360f / count) * i + Random.Range(-12f, 12f);
+            StartCoroutine(SparkRoutine(ang));
+        }
+    }
+
+    private IEnumerator SparkRoutine(float angleDeg)
+    {
+        var sr = NewSprite("ConjureSpark", Boss2SummonFlashSprites.GetSoftDisc(), _baseOrder + 3);
+        var t = sr.transform;
+        float dur = Random.Range(0.35f, 0.55f);
+        float dist = Random.Range(0.5f, 1.0f);
+        float size = Random.Range(0.12f, 0.22f);
+        float rad = angleDeg * Mathf.Deg2Rad;
+        Vector3 dir = new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f);
+        float e = 0f;
+        while (e < dur)
+        {
+            e += Time.deltaTime;
+            float p = Mathf.Clamp01(e / dur);
+            float ease = 1f - (1f - p) * (1f - p);
+            t.localPosition = dir * Mathf.Lerp(0.05f, dist, ease);
+            t.localScale = Vector3.one * size * (1f - p);
+            Color c = Color.Lerp(SparkColor, RingColor, p);
+            c.a = 1f - p;
+            sr.color = c;
+            yield return null;
+        }
+        Destroy(sr.gameObject);
+    }
+}
+
+
 
 
 

@@ -73,7 +73,7 @@
 	</object>
 	<object class="EventMixerMaster" id="{49ecdd6c-5427-4efe-977f-cc59dfa533a1}">
 		<property name="volume">
-			<value>-12.5</value>
+			<value>-6</value>
 		</property>
 		<relationship name="effectChain">
 			<destination>{9d7e6667-9be3-495a-96e7-ee5759a3d2c2}</destination>
@@ -99,6 +99,7 @@
 	<object class="MixerBusEffectChain" id="{9d7e6667-9be3-495a-96e7-ee5759a3d2c2}">
 		<relationship name="effects">
 			<destination>{c30a6fa4-f439-4789-9182-26f80b643d0d}</destination>
+			<destination>{9d313ad8-12ff-407d-8ac7-5c806e8f889f}</destination>
 			<destination>{c67da327-131b-4e96-9c5c-2d254fd5b37d}</destination>
 		</relationship>
 	</object>
@@ -110,6 +111,23 @@
 	</object>
 	<object class="MixerBusFader" id="{581cf3cc-917d-48ff-aed9-176bbfa9300c}" />
 	<object class="MixerBusFader" id="{c30a6fa4-f439-4789-9182-26f80b643d0d}" />
+	<object class="DelayEffect" id="{9d313ad8-12ff-407d-8ac7-5c806e8f889f}">
+		<property name="delay">
+			<value>12</value>
+		</property>
+		<property name="feedback">
+			<value>43</value>
+		</property>
+		<property name="level">
+			<value>-12.5</value>
+		</property>
+		<property name="dryLevel">
+			<value>-18</value>
+		</property>
+		<property name="delayChangeMode">
+			<value>1</value>
+		</property>
+	</object>
 	<object class="SpatialiserEffect" id="{c67da327-131b-4e96-9c5c-2d254fd5b37d}">
 		<property name="minimumDistance">
 			<value>4</value>

@@ -3,26 +3,62 @@ using System.Collections;
 using System.Collections.Generic;
 
 
-// Bomber — a special enemy that completely ignores the player and walks straight
-// toward the nearest tower or the central core.  Once it enters explosion range,
-// it blinks red for 3 seconds and detonates, damaging everything nearby (towers,
-// core, and the player — but not other enemies).
-
-
+// Bomber — enemy that completely ignores the player and walks straight
+// toward the nearest tower or the central core
+[DefaultExecutionOrder(100)]
 [RequireComponent(typeof(EnemyStats))]
 [RequireComponent(typeof(Rigidbody2D))]
 public class BomberController : MonoBehaviour
 {
+    [Header("Procedural Sprite")]
+    [Tooltip("Generate the Bomber's look in code (a serious organic spiked monster " +
+             "ball) instead of loading a PNG sheet from Resources. Lets you delete " +
+             "the old placeholder 00.png. Turn OFF to fall back to the old PNG pipeline.")]
+    [SerializeField] private bool useProceduralSprite = true;
+
+    [Tooltip("World-space height (units) of the generated sprite. Purely cosmetic — " +
+             "the collider is a separate component, so fuse range / explosion radius " +
+             "are unchanged. Default is large (a hulking ball); lower it to taste.")]
+    [SerializeField] private float proceduralSpriteWorldSize = 4.8f;
+
+    [Tooltip("Disintegration VFX duration when the Bomber is KILLED (by towers/player) " +
+             "before it can detonate. 1.0+ uses the full sprite-shatter shown for bosses. " +
+             "Set 0 to disable. Does NOT affect the detonation path, which keeps its own " +
+             "explosion VFX.")]
+    [SerializeField] private float deathDisintegrationDuration = 1.2f;
+
+    [Tooltip("Spin the ball about its centre as it travels, like a rolling boulder. " +
+             "Only applies to the procedural sprite; it stops while the fuse is armed. " +
+             "Purely visual — never touches physics, the collider, or the health bar.")]
+    [SerializeField] private bool rollWhenMoving = true;
+
+    [Tooltip("Roll speed multiplier. 1 = physically-correct rolling for the sprite's " +
+             "size (fairly slow for a big ball); raise it for a livelier tumble.")]
+    [SerializeField] private float rollSpeedScale = 1f;
+
+    [Header("Pulsate")]
+    [Tooltip("Subtle 'breathing' scale pulse so the ball looks alive. Visual only — " +
+             "the collider radius used for arming is cached at Start, so fuse range " +
+             "stays put. Only applies to the procedural sprite.")]
+    [SerializeField] private bool pulsate = true;
+
+    [Tooltip("Pulse depth as a fraction of size (0.06 = ±6%).")]
+    [SerializeField] private float pulseAmplitude = 0.06f;
+
+    [Tooltip("Pulse speed in cycles per second.")]
+    [SerializeField] private float pulseSpeed = 1.05f;
+
     [Header("Targeting")]
     [Tooltip("How often (seconds) the Bomber re-evaluates its target.")]
     [SerializeField] private float targetUpdateInterval = 0.5f;
 
     [Header("Explosion")]
-    [Tooltip("Edge-to-edge GAP (world units) between the Bomber's body and the " +
-             "target's body at which the fuse starts. ~0 means it must be nearly " +
-             "touching. This is size-independent, so it works the same against a " +
-             "small tower and the large central core. Keep it small (0.3–0.8).")]
-    [SerializeField] private float fuseStartRange = 0.5f;
+    [Tooltip("Edge-to-edge GAP (world units) between the Bomber's COLLIDER and the " +
+             "target's collider at which the fuse starts — this is literally how far " +
+             "apart the two bodies are when it plants, so smaller = it hugs the target " +
+             "before arming. Size-independent (works the same vs a small tower and the " +
+             "large core). Lower it toward 0 for near-contact; raise it to arm early.")]
+    [SerializeField] private float fuseStartRange = 0.15f;
 
     [Tooltip("Seconds from fuse start to detonation.")]
     [SerializeField] private float fuseTime = 3f;
@@ -83,8 +119,20 @@ public class BomberController : MonoBehaviour
     // rim flash or EnemyStats' damage flash.
     private float fuseStartTime = 0f;
     private Color fuseBaseColor = Color.white;
+
+    // The sprite's resting tint, captured once in Start() before anything can
+    // recolour it. Unfreeze() restores THIS rather than a hardcoded white, so a
+    // tinted Bomber prefab isn't bleached the first time it is frozen.
+    private Color restingColor = Color.white;
     private bool fuseCancelled = false;
     private float bomberBodyRadius = 0f;
+
+    // Rolling-ball spin. Accumulated Z angle (degrees) driven by horizontal travel.
+    // Applied to transform.rotation, which the animation controller has been told
+    // to leave alone (SetOrientationDrivingEnabled(false)), so nothing fights it.
+    private float rollAngle = 0f;
+    private float lastRollSign = 1f; // remembered horizontal heading for spin direction
+    private Vector3 baseScale = Vector3.one; // captured at Start; the pulse multiplies this
 
     // Combined avoidance mask: walls/buildings (obstacleLayer) PLUS towers.
 
@@ -113,6 +161,56 @@ public class BomberController : MonoBehaviour
     private float knockbackTimer = 0f;
     private Vector2 knockbackVelocity;
 
+    // Procedural-sprite + death-VFX wiring. Runs after EnemyStats.Awake (see the
+    // DefaultExecutionOrder above) but before every component's Start(), so the
+    // sprite is in place and the animation controller has nothing to load.
+    private void Awake()
+    {
+        if (!useProceduralSprite) return;
+
+        var st = GetComponent<EnemyStats>();
+        var sr = GetComponent<SpriteRenderer>();
+        var anim = GetComponent<EnemyAnimationController>();
+
+        // Build (or reuse) the shared procedural monster-ball sprite. It carries a
+        // READABLE texture, which is exactly what EnemyDeathVFX needs to shatter
+        // it into chunks — no PNG, no Read/Write import flag, no source path.
+        float ppu = BomberSprite.SIZE / Mathf.Max(0.1f, proceduralSpriteWorldSize);
+        Sprite bomberSprite = BomberSprite.Get(ppu);
+
+        if (sr != null && bomberSprite != null)
+            sr.sprite = bomberSprite;
+
+        // Point the (already-cloned) EnemyData away from the deleted PNG folder and
+        // collapse every animation range onto the single procedural frame. This
+        // stops the animation controller from logging "0 sprites" errors and makes
+        // it impossible to index past our one sprite. Scoped to this clone only.
+        if (st != null && st.enemyData != null)
+        {
+            st.enemyData.spriteFolderPath = string.Empty;
+            st.enemyData.idle = new AnimationFrameRange(0, 1);
+            st.enemyData.attack = new AnimationFrameRange(0, 1);
+            st.enemyData.death = new AnimationFrameRange(0, 1);
+        }
+
+        // Hand the sprite to the animation controller so its state machine still
+        // runs off code, not a PNG sheet. (No-op-safe if there's no controller.)
+        if (anim != null && bomberSprite != null)
+        {
+            anim.SetSpritesDirectly(new[] { bomberSprite });
+
+            // The monster ball ROLLS instead of leaning — take rotation away from
+            // the controller so its walk-lean can't fight our spin below.
+            anim.SetOrientationDrivingEnabled(false);
+        }
+
+        // Disintegrate when killed by towers/player before detonating. The
+        // detonation path (PerformExplosionDeath) is untouched and still plays
+        // its own meteor explosion VFX.
+        if (st != null && deathDisintegrationDuration > 0f)
+            st.ConfigureDeathVfx(deathDisintegrationDuration, destroyHealthBarBeforeVfx: true);
+    }
+
     private void Start()
     {
         stats = GetComponent<EnemyStats>();
@@ -120,6 +218,14 @@ public class BomberController : MonoBehaviour
         spriteRenderer = GetComponent<SpriteRenderer>();
         animController = GetComponent<EnemyAnimationController>();
         smoothFlip = GetComponent<SmoothSpriteFlip>();
+
+        // Cache the resting scale — the pulse multiplies it — and disable the
+        // left/right flip for the procedural ball: it's radially symmetric, so a
+        // flip is invisible anyway and would only fight the pulse's localScale.
+        baseScale = transform.localScale;
+        if (spriteRenderer != null) restingColor = spriteRenderer.color;
+        if (useProceduralSprite && smoothFlip != null)
+            smoothFlip.enabled = false;
 
         // Cache the Bomber's own collider radius so arming uses edge-to-edge
         // gap (body-to-body), which is independent of target size.
@@ -171,16 +277,22 @@ public class BomberController : MonoBehaviour
             if (freezeTimeRemaining <= 0f) Unfreeze();
         }
 
-        if (isKnockedBack)
-        {
-            knockbackTimer -= Time.deltaTime;
-            if (knockbackTimer <= 0f) isKnockedBack = false;
-        }
+        // BUGFIX: the knockback timer used to be decremented HERE as well as in
+        // FixedUpdate, so it drained at ~2x real time and a 0.25s knockback lasted
+        // ~0.125s (drifting with framerate vs fixed timestep). FixedUpdate owns the
+        // knockback - it is the only place that also decays knockbackVelocity and
+        // writes it to the Rigidbody - so the decrement belongs there and only there.
     }
 
     // Drive the arm-blink here so it is the LAST writer to spriteRenderer.color each frame. 
     private void LateUpdate()
     {
+        // Roll the ball while it travels. Runs in LateUpdate so it has the final
+        // say on rotation each frame (the animation controller has been told not
+        // to touch it). Naturally stops once the fuse arms and velocity is zeroed.
+        UpdateRoll();
+        UpdatePulse();
+
         if (!isFuseActive || hasExploded || spriteRenderer == null) return;
 
         float elapsed = Time.time - fuseStartTime;
@@ -192,6 +304,42 @@ public class BomberController : MonoBehaviour
 
         bool on = (Mathf.FloorToInt(elapsed / period) & 1) == 0;
         spriteRenderer.color = on ? blinkColor : fuseBaseColor;
+    }
+
+    // Spin the sprite about its centre like a rolling boulder. Uses the rolling
+    // constraint angle = distance / radius, driven by the FULL travel distance so
+    // it tumbles no matter which way it heads (not just left/right). The spin
+    // direction follows the last horizontal heading, so it stays consistent even
+    // while moving straight up or down. Visual only: writes transform.rotation
+    // (which nothing else drives for the Bomber) and never touches the Rigidbody,
+    // collider, or the unparented health bar. Frozen while armed/dead so the ball
+    // sits still through its warning blink and detonation.
+    private void UpdateRoll()
+    {
+        if (!useProceduralSprite || !rollWhenMoving) return;
+        if (rb == null || isFuseActive || hasExploded) return;
+
+        float speed = rb.linearVelocity.magnitude;
+        if (speed < 0.01f) return;
+
+        if (Mathf.Abs(rb.linearVelocity.x) > 0.05f)
+            lastRollSign = Mathf.Sign(rb.linearVelocity.x);
+
+        float radius = Mathf.Max(0.1f, proceduralSpriteWorldSize * 0.5f);
+        float distance = speed * Time.deltaTime;                 // travel this frame, any direction
+        rollAngle -= (distance / radius) * Mathf.Rad2Deg * rollSpeedScale * lastRollSign;
+        transform.rotation = Quaternion.Euler(0f, 0f, rollAngle);
+    }
+
+    // Subtle 'breathing' pulse so the ball reads as a living thing. Scales the
+    // sprite about its centre; the collider radius used for arming was cached once
+    // at Start, so the fuse range is unaffected by the pulse. Rotation (roll) and
+    // scale (pulse) are independent, so they coexist on the same transform.
+    private void UpdatePulse()
+    {
+        if (!useProceduralSprite || !pulsate || hasExploded) return;
+        float s = 1f + pulseAmplitude * Mathf.Sin(Time.time * pulseSpeed * (Mathf.PI * 2f));
+        transform.localScale = baseScale * s;
     }
 
     private void FixedUpdate()
@@ -206,7 +354,14 @@ public class BomberController : MonoBehaviour
         }
 
         // Parry stun.
-        if (GetComponent<ParryStunEffect>() != null)
+        // BUGFIX: this used to test whether the ParryStunEffect COMPONENT EXISTS
+        // rather than whether the stun is still active. Powerful Parry (331) leaves
+        // the component alive after the freeze window as a lingering damage debuff,
+        // so a single parried shot pinned the Bomber in place permanently - it never
+        // moved or detonated again. Test IsStunActive, matching EnemyController and
+        // BruteController (whose comment warns about exactly this mistake).
+        var parryStun = GetComponent<ParryStunEffect>();
+        if (parryStun != null && parryStun.IsStunActive)
         {
             rb.linearVelocity = Vector2.zero;
             return;
@@ -496,6 +651,10 @@ public class BomberController : MonoBehaviour
             if (cs != null && damagedChars.Add(cs))
             {
                 cs.TakeDamage(damage);
+                // Player-side on-hit augments (Damage Reflection / Ice Armor). The
+                // explosion never routes through EnemyController, so these used to be
+                // skipped entirely. damagedChars already dedups; no-op for non-players.
+                EnemyController.NotifyCharacterDamaged(cs, damage, gameObject);
                 continue;
             }
 
@@ -521,7 +680,10 @@ public class BomberController : MonoBehaviour
                 var ps = player.GetComponentInChildren<CharacterStats>()
                       ?? player.GetComponentInParent<CharacterStats>();
                 if (ps != null && !damagedChars.Contains(ps))
+                {
                     ps.TakeDamage(damage);
+                    EnemyController.NotifyCharacterDamaged(ps, damage, gameObject);
+                }
             }
         }
     }
@@ -546,16 +708,26 @@ public class BomberController : MonoBehaviour
     {
         if (stats != null && stats.canDropEnergy)
         {
-            if (stats.energyDropValue > 0 && stats.energyDropChance >= 0f)
-                EnergyDropManager.TrySpawnEnergyDrop(transform.position, stats.energyDropChance, stats.energyDropValue);
-            else
-                EnergyDropManager.TrySpawnEnemyDrop(transform.position, GameOrchestrator.Instance?.CurrentStageIndex ?? 0);
+            // Routed through EnemyDropAugments, exactly as EnemyStats.PerformDeath does.
+            // The block here used to hand-roll the per-enemy-override branch against the
+            // raw EnergyDropManager — the pre-augment API — which produced the same
+            // drops but silently skipped Lucky Strikes (337), Marksman's Bounty (341)
+            // and Plunder (342). SpawnEnemyDrop applies that same override internally,
+            // so the drop behaviour is unchanged; only the augments are now honoured.
+            EnemyDropAugments.SpawnEnemyDrop(
+                transform.position,
+                GameOrchestrator.Instance?.CurrentStageIndex ?? 0,
+                gameObject,
+                stats.energyDropChance,
+                stats.energyDropValue);
         }
 
-        EnergyManager.Instance?.OnEnemyKilled(gameObject);
-
-        WaveSpawner waveSpawner = FindAnyObjectByType<WaveSpawner>();
-        waveSpawner?.OnEnemyDeath();
+        // Shared death book-keeping, identical to EnemyStats.PerformDeath: wave
+        // counter -> augment 335 tithe -> EnergyManager kill event -> attribution
+        // cleanup. This path previously did only the wave counter and the EnergyManager
+        // call, so a Bomber detonated by a tower paid NO tithe and leaked a
+        // TowerKillAttribution entry.
+        EnemyStats.FireCommonDeathHooks(gameObject);
 
         // Destroy the health bar manually since we're not going through EnemyStats.Die().
         var hb = stats?.GetHealthBar();
@@ -577,9 +749,12 @@ public class BomberController : MonoBehaviour
     {
         isFrozen = false;
         freezeTimeRemaining = 0f;
-        // Color will be overwritten by blink coroutine if fuse is active.
+        // Color will be overwritten by the fuse blink if the fuse is active.
+        // BUGFIX: this used to restore a hardcoded Color.white, which permanently
+        // bleached any tinted prefab after its first freeze. Restore the tint
+        // captured at Start instead - same thing EnemyController.UnfreezeEnemy does.
         if (spriteRenderer != null && !isFuseActive)
-            spriteRenderer.color = Color.white;
+            spriteRenderer.color = restingColor;
     }
 
     public void ApplyKnockback(Vector2 direction, float force, float duration = 0.25f)

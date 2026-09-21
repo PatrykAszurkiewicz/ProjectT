@@ -15,7 +15,7 @@ MonoBehaviour:
   weaponName: Pistol
   sprite: {fileID: -420296200359305026, guid: 329ddd65160367146bc52eab86eeb3dc, type: 3}
   damage: 10
-  attackCooldown: 0.2
+  attackCooldown: 0.3
   armorBonus: 0
   knockBack: 1
   knockBackForce: 5
@@ -23,6 +23,7 @@ MonoBehaviour:
   projectilePrefab: {fileID: 3232055685823593232, guid: 7ea1d9be1e07e514abb49a628ecb9ab3, type: 3}
   projectileSpeed: 10
   size: {x: 1, y: 1}
+  useBladeSlashFx: 0
   isGrapplingHook: 0
   hookRange: 12
   hookSpeed: 20
@@ -51,12 +52,15 @@ MonoBehaviour:
   trapBossHoldDuration: 3
   trapProximityRadius: 1.2
   trapArmDelay: 0.4
+  trapCooldown: 2
   isTurret: 0
   turretRange: 5
   turretFireRate: 3
   turretProjectileSpeed: 12
   turretArmDelay: 0.4
   turretRotationSpeed: 300
+  turretActiveDuration: 15
+  turretCooldown: 7
   isFlamethrower: 0
   flameRange: 4.5
   flameConeAngle: 45
@@ -75,6 +79,8 @@ MonoBehaviour:
   decoyBossDuration: 3
   decoyArmDelay: 0.3
   decoyBossVFXOffset: {x: -1, y: 2}
+  decoyActiveDuration: 10
+  decoyCooldown: 6
   isBoomerang: 0
   boomerangRange: 6
   boomerangCurve: 2.5

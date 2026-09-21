@@ -461,6 +461,11 @@ public class AugmentEffectHandler : MonoBehaviour
 
         // Equip into the tool slot directly
         weapon.HotSwapTool(newToolData);
+
+        // FIX: RunSaveData.equippedToolAsset was never written by anything, so a tool
+        // equipped mid-run did not survive a resume. Report it to the persistence ledger
+        // the same way the weapon slot goes through WeaponSelectionManager.
+        RunPersistence.Instance?.RecordEquippedTool(toolAssetName);
     }
 
     //  Augments 334–348 
@@ -613,5 +618,6 @@ public class AugmentEffectHandler : MonoBehaviour
         //Debug.Log($"[AUGMENT] Energy Attunement — all energy gains +{bonus * 100f:F0}%.");
     }
 }
+
 
 

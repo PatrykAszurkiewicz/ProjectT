@@ -10,9 +10,25 @@ public class Weapon : MonoBehaviour
     [SerializeField] private GameObject visual;
 
     private List<EnemyStats> hitEnemies = new List<EnemyStats>();
+
+    // Boss3's crawling tree-hands are destroyable targets that are deliberately NOT
+    // tagged "Enemy" and carry no EnemyStats (making a temporary branch a real enemy
+    // would leak it into wave counters, kill hooks and the boss's own player-detection).
+    // They therefore need their own per-swing dedup list, exactly like hitEnemies.
+    private readonly List<Boss3TreeHand> hitHands = new List<Boss3TreeHand>();
     private bool meleeHitSoundPlayedThisSwing = false;
     private PlayerStats playerStats;
     private bool isOnCooldown = false;
+
+    // Player FX, for the hand-drawn melee arc. Resolved upward because Weapon sits on a
+    // child of the player, and per-instance so co-op players each swing their own.
+    private PlayerProceduralAnimFx _animFx;
+
+    // PlayerMovement ADDS PlayerProceduralAnimFx in its Start() when the prefab
+    // doesn't already carry one, and Start() runs after this component's Awake — so
+    // resolve lazily instead of caching a null for the rest of the run.
+    private PlayerProceduralAnimFx AnimFx
+        => _animFx != null ? _animFx : (_animFx = GetComponentInParent<PlayerProceduralAnimFx>());
     public WeaponData defaultWeapon;
     public float grapplingDamage = 0f;
 
@@ -28,6 +44,10 @@ public class Weapon : MonoBehaviour
     private bool toolAttackBuffered = false;
     private float toolBufferTimer = 0f;
     private bool isToolRightHeld = false;
+    // Handle to the generic tool-cooldown coroutine (bomb / torch / grapple /
+    // drawer). Tracked so a tool swap can stop the OLD tool's cooldown instead
+    // of letting it linger and clobber the newly-equipped tool's state.
+    private Coroutine _toolCooldownCo;
 
     // Obstacle drawer: "start as soon as cooldown clears" flag. Hold-to-use
     // tools don't fit the existing 0.15s buffer model — a player who places
@@ -181,6 +201,63 @@ public class Weapon : MonoBehaviour
             info.has = true;
             if (smokeSystem.IsOnCooldown)
             { info.phase = ToolGaugePhase.CooldownFill; info.value = smokeSystem.CooldownNormalized; }
+            else
+            { info.phase = ToolGaugePhase.Ready; info.value = 1f; }
+            return info;
+        }
+
+        // Decoy: two-phase like the book — a depleting clock while deployed,
+        // then a rising fill gauge during the recharge.
+        if (toolData.isDecoy && decoyLauncherSystem != null)
+        {
+            info.has = true;
+            switch (decoyLauncherSystem.CurrentPhase)
+            {
+                case DecoyLauncherSystem.DecoyPhase.Active:
+                    info.phase = ToolGaugePhase.ActiveClock;
+                    info.value = decoyLauncherSystem.ActiveNormalized;    // 1→0 while deployed
+                    break;
+                case DecoyLauncherSystem.DecoyPhase.CoolingDown:
+                    info.phase = ToolGaugePhase.CooldownFill;
+                    info.value = decoyLauncherSystem.CooldownNormalized;  // 0→1 recharge
+                    break;
+                default:
+                    info.phase = ToolGaugePhase.Ready;
+                    info.value = 1f;
+                    break;
+            }
+            return info;
+        }
+
+        // Turret: same two-phase gauge as the decoy.
+        if (toolData.isTurret && turretLauncherSystem != null)
+        {
+            info.has = true;
+            switch (turretLauncherSystem.CurrentPhase)
+            {
+                case TurretLauncherSystem.TurretPhase.Active:
+                    info.phase = ToolGaugePhase.ActiveClock;
+                    info.value = turretLauncherSystem.ActiveNormalized;
+                    break;
+                case TurretLauncherSystem.TurretPhase.CoolingDown:
+                    info.phase = ToolGaugePhase.CooldownFill;
+                    info.value = turretLauncherSystem.CooldownNormalized;
+                    break;
+                default:
+                    info.phase = ToolGaugePhase.Ready;
+                    info.value = 1f;
+                    break;
+            }
+            return info;
+        }
+
+        // Trap: single-phase — just a rising fill gauge during the flat
+        // re-placement recharge (no active phase).
+        if (toolData.isTrap && trapLauncherSystem != null)
+        {
+            info.has = true;
+            if (trapLauncherSystem.IsOnCooldown)
+            { info.phase = ToolGaugePhase.CooldownFill; info.value = trapLauncherSystem.CooldownNormalized; }
             else
             { info.phase = ToolGaugePhase.Ready; info.value = 1f; }
             return info;
@@ -371,6 +448,17 @@ public class Weapon : MonoBehaviour
 
     private void CleanupToolSubsystems()
     {
+        // Drop any input/cooldown state that belonged to the tool we're leaving.
+        // Without this, a right-click buffered while the OLD tool was on cooldown
+        // (or the OLD tool's still-running generic cooldown) would carry across
+        // the swap and fire ExecuteToolAttack() against the NEW toolData — placing
+        // a decoy/turret/etc. the player never clicked for. This is the root of
+        // the "wrong tool activates after a cooldown" bug: HotSwapTool (including
+        // the auto-equip in WeaponRollController.OnUnlocksChanged that runs every
+        // time a tool is unlocked) changes toolData but used to leave this
+        // transient state behind.
+        ResetToolInputState();
+
         if (grapplingSystem != null) { grapplingSystem.Cleanup(); grapplingSystem = null; }
         if (obstacleDrawerSystem != null) { obstacleDrawerSystem.Cleanup(); obstacleDrawerSystem = null; }
         if (bombLauncherSystem != null) { bombLauncherSystem.Cleanup(); bombLauncherSystem = null; }
@@ -389,6 +477,25 @@ public class Weapon : MonoBehaviour
         CleanupSmokeReticle();
         // Any deferred drawer start belongs to the *old* tool — drop it.
         obstacleDrawerStartPending = false;
+    }
+
+    // Clear the transient per-tool right-click state so nothing queued for the
+    // tool we're leaving can execute on the tool we're switching to. Safe to
+    // call on every tool teardown: the generic cooldown here is non-persistent
+    // (store-based tools keep their own timers on PlayerToolCooldownStore, which
+    // this does NOT touch), so resetting it changes no cooldown-dodge semantics.
+    private void ResetToolInputState()
+    {
+        toolAttackBuffered = false;
+        toolBufferTimer = 0f;
+        obstacleDrawerStartPending = false;
+
+        if (_toolCooldownCo != null)
+        {
+            StopCoroutine(_toolCooldownCo);
+            _toolCooldownCo = null;
+        }
+        isToolOnCooldown = false;
     }
 
     //  SWAP COOLDOWN
@@ -447,6 +554,7 @@ public class Weapon : MonoBehaviour
         playerStats = GetComponentInParent<PlayerStats>();
         _aim = GetComponentInParent<PlayerAim>();
         _playerRef = GetComponentInParent<PlayerRef>();
+        _animFx = GetComponentInParent<PlayerProceduralAnimFx>();
         CreateRuntimeWeaponData();
         InitializeWeaponData();
         SetupWeapon();
@@ -663,7 +771,7 @@ public class Weapon : MonoBehaviour
             if (playerStats != null)
                 playerStats.TryConsumeStamina(playerStats.obstacleDrawerStaminaCost);
 
-            StartCoroutine(ToolCooldownRoutine());
+            StartToolCooldown();
         }
     }
 
@@ -890,6 +998,19 @@ public class Weapon : MonoBehaviour
                 AudioManager.instance.PlaySFX(FMODEvents.instance.meleeSwing, transform.position);
 
             NotifyCloakOffensiveAttack(); // swinging at enemies breaks stealth
+
+            // Blade arc. Fired HERE rather than from PlayerAttack/PlayerMovement because
+            // this is the one point a swing is known to be real — past the cooldown gate
+            // at the top of PerformAttack and past the stamina check above. Driving it
+            // from the input event instead drew an arc for every click, including the
+            // ones this weapon swallows while it is still on cooldown.
+            //
+            // The window is the raw attackCooldown because that is exactly how long
+            // AttackRoutine leaves attackCollider enabled, so the arc is on screen for
+            // precisely the frames the swing can damage something.
+            if (weaponData.useBladeSlashFx && AnimFx != null)
+                AnimFx.TriggerBladeSlash(weaponData.attackCooldown);
+
             StartCoroutine(AttackRoutine());
             StartCoroutine(WeaponCooldownRoutine());
         }
@@ -979,7 +1100,7 @@ public class Weapon : MonoBehaviour
                 if (playerStats != null)
                     playerStats.TryConsumeStamina(playerStats.grapplingHookStaminaCost);
 
-                StartCoroutine(ToolCooldownRoutine());
+                StartToolCooldown();
             }
         }
         else if (toolData.isBombLauncher)
@@ -987,47 +1108,49 @@ public class Weapon : MonoBehaviour
             if (bombLauncherSystem != null)
             {
                 bombLauncherSystem.PlaceMine();
-                StartCoroutine(ToolCooldownRoutine());
+                StartToolCooldown();
             }
         }
         else if (toolData.isTrap)
         {
-            if (trapLauncherSystem != null)
-            {
+            // The trap owns its own persistent re-placement cooldown (on
+            // PlayerToolCooldownStore), so gate on it here and do NOT start the
+            // generic ToolCooldownRoutine. PlaceTrap also no-ops while cooling down.
+            if (trapLauncherSystem != null && trapLauncherSystem.CanFire())
                 trapLauncherSystem.PlaceTrap();
-                StartCoroutine(ToolCooldownRoutine());
-            }
         }
         else if (toolData.isTurret)
         {
+            // The turret owns its own two-phase timing (active window → cooldown)
+            // on PlayerToolCooldownStore. Re-placing while active RELOCATES it;
+            // placing while cooling down is a no-op. Do NOT start the generic
+            // ToolCooldownRoutine (PlaceTurret decides and plays its own SFX).
             if (turretLauncherSystem != null)
-            {
                 turretLauncherSystem.PlaceTurret();
-                StartCoroutine(ToolCooldownRoutine());
-            }
         }
         else if (toolData.isTorch)
         {
             if (torchPlacerSystem != null)
             {
                 torchPlacerSystem.PlaceTorch();
-                StartCoroutine(ToolCooldownRoutine());
+                StartToolCooldown();
             }
         }
         else if (toolData.isDecoy)
         {
-            if (decoyLauncherSystem != null)
+            // The decoy owns its own two-phase timing (active window → cooldown)
+            // on PlayerToolCooldownStore. Re-placing while active RELOCATES it;
+            // placing while cooling down is a no-op. Do NOT start the generic
+            // ToolCooldownRoutine. PlaceDecoy returns true only when a decoy was
+            // actually (re)placed — gate the deploy SFX on that.
+            if (decoyLauncherSystem != null && decoyLauncherSystem.PlaceDecoy())
             {
-                decoyLauncherSystem.PlaceDecoy();
-
                 // Decoy deploy SFX
                 if (AudioManager.instance != null && FMODEvents.instance != null
                     && !FMODEvents.instance.decoySetup.IsNull)
                 {
                     AudioManager.instance.PlayOneShot(FMODEvents.instance.decoySetup, transform.position);
                 }
-
-                StartCoroutine(ToolCooldownRoutine());
             }
         }
         else if (toolData.isBook)
@@ -1093,7 +1216,7 @@ public class Weapon : MonoBehaviour
                     if (playerStats != null)
                         playerStats.TryConsumeStamina(playerStats.obstacleDrawerStaminaCost);
 
-                    StartCoroutine(ToolCooldownRoutine());
+                    StartToolCooldown();
                 }
             }
         }
@@ -1164,11 +1287,22 @@ public class Weapon : MonoBehaviour
         isOnCooldown = false;
     }
 
+    // Start (or restart) the generic tool cooldown, keeping a handle so a tool
+    // swap can cancel it. Only bomb / torch / grapple / drawer use this shared
+    // cooldown; the store-based tools (decoy / turret / trap / book / cloak /
+    // clock / smoke) own their own persistent timing and never touch it.
+    private void StartToolCooldown()
+    {
+        if (_toolCooldownCo != null) StopCoroutine(_toolCooldownCo);
+        _toolCooldownCo = StartCoroutine(ToolCooldownRoutine());
+    }
+
     private IEnumerator ToolCooldownRoutine()
     {
         isToolOnCooldown = true;
         yield return new WaitForSeconds(CooldownModifier.Apply(toolData.attackCooldown));
         isToolOnCooldown = false;
+        _toolCooldownCo = null;
     }
 
     //  PROJECTILE & MELEE
@@ -1481,6 +1615,7 @@ public class Weapon : MonoBehaviour
     private IEnumerator AttackRoutine()
     {
         hitEnemies.Clear();
+        hitHands.Clear();
         meleeHitSoundPlayedThisSwing = false;
         attackCollider.enabled = true;
         yield return new WaitForSeconds(weaponData.attackCooldown);
@@ -1489,7 +1624,16 @@ public class Weapon : MonoBehaviour
 
     private void OnTriggerStay2D(Collider2D other)
     {
-        if (!attackCollider.enabled || !other.CompareTag("Enemy")) return;
+        if (!attackCollider.enabled) return;
+
+        // ── Boss3 tree-hands ──
+        // These sit on the enemy LAYER (so the collision matrix already lets the swing
+        // reach them) but carry no "Enemy" tag and no EnemyStats, so the enemy path
+        // below would return on its very first line and a melee swing would silently do
+        // nothing to a branch. Handled here, ahead of that check.
+        if (TryDamageBoss3Hand(other)) return;
+
+        if (!other.CompareTag("Enemy")) return;
 
         var enemy = other.GetComponent<EnemyStats>();
         if (enemy == null || hitEnemies.Contains(enemy)) return;
@@ -1512,7 +1656,12 @@ public class Weapon : MonoBehaviour
                 if (parryEffect != null)
                     damage *= parryEffect.DamageMultiplier;
 
-                stats.TakeDamage(damage);
+                // Boss5 (Bellkeeper) counts PLAYER hits during its 'don't attack'
+                // challenge and nullifies them, while tower damage is penalised and
+                // ignored. Tagging here means that never depends on a heuristic.
+                // For every other enemy this is a straight passthrough to the same
+                // virtual TakeDamage call.
+                BossDamageRouting.FromPlayer(stats, damage);
 
                 // Combat telemetry: player melee/flamethrower/hammer damage dealt,
                 // attributed to this weapon's owner (co-op safe via _playerRef).
@@ -1537,6 +1686,43 @@ public class Weapon : MonoBehaviour
 
         if (weaponData.knockBack)
             ApplyKnockback(enemy);
+    }
+
+    /// Melee-swing damage against a Boss3 tree-hand. Returns true when <paramref
+    /// name="other"/> was a hand hurtbox, so the caller can stop — a branch is not an
+    /// enemy and none of the enemy-side handling (knockback, vampire drain, EnemyStats
+    /// routing) applies to it.
+    ///
+    /// Deduped per swing via hitHands, because OnTriggerStay2D fires every frame the
+    /// swing collider overlaps and would otherwise shred a branch in a single swing.
+    private bool TryDamageBoss3Hand(Collider2D other)
+    {
+        var hurtbox = other.GetComponent<Boss3HandHurtbox>();
+        if (hurtbox == null) return false;
+
+        var hand = hurtbox.Hand;
+        if (hand == null || !hand.CanBeDamaged) return true;   // consumed, just not damageable
+        if (hitHands.Contains(hand)) return true;
+        if (weaponData == null || weaponData.damage <= 0f) return true;
+
+        hitHands.Add(hand);
+
+        // Landing a hit definitively breaks stealth, same as hitting an enemy.
+        NotifyCloakOffensiveAttack();
+
+        Vector2 contact = other.ClosestPoint(transform.position);
+        hand.TakeHandDamage(weaponData.damage, contact);
+
+        // NOT reported to CombatStats: damage spent on a branch is not damage dealt to
+        // the boss, and folding it in would quietly change what those figures mean.
+
+        if (!meleeHitSoundPlayedThisSwing && AudioManager.instance != null && FMODEvents.instance != null)
+        {
+            AudioManager.instance.PlaySFX(FMODEvents.instance.meleeHit, contact);
+            meleeHitSoundPlayedThisSwing = true;
+        }
+
+        return true;
     }
 
     private void ApplyKnockback(EnemyStats enemy)
@@ -1567,4 +1753,5 @@ public class Weapon : MonoBehaviour
         CleanupToolSubsystems();
     }
 }
+
 

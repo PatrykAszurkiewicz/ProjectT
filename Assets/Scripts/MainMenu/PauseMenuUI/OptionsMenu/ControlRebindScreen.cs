@@ -27,6 +27,14 @@ public class ControlRebindScreen : MonoBehaviour
     private const string PanelSpritePath = "Sprites/HUD/PauseMenu/PauseMenuMiddlePanel/MenuPanel 1";
     private const string ButtonSpritePath = "Sprites/HUD/PauseMenu/PauseMenuMiddlePanel/Button 1";
 
+    // 9-slice border for MenuPanel 1, in SOURCE pixels. Same fix as the lore archive:
+    // the corner ornament (magenta flame + silver bevel diagonal) reaches ~170 px in
+    // from each edge, so a 140 border sliced THROUGH the bevel tail and Unity smeared
+    // it along the stretched edges. 180 keeps the whole ornament inside the fixed
+    // corner slices. Injected in code (WithBorder) so this screen works regardless of
+    // whether the sprite asset's import border happens to be set.
+    private const float PanelBorder = 180f;
+
     private const string MapName = "Player";
     private const string KbmGroup = "Keyboard&Mouse";
     private const string PadGroup = "Gamepad";
@@ -396,7 +404,10 @@ public class ControlRebindScreen : MonoBehaviour
 
     private void BuildUI()
     {
-        _panelSprite = Resources.Load<Sprite>(PanelSpritePath);
+        // Bake the 9-slice border into the panel sprite in code (was: plain Resources.Load).
+        // ApplySprite() then switches the Image to Sliced automatically because the sprite
+        // now carries a non-zero border.
+        _panelSprite = WithBorder(Resources.Load<Sprite>(PanelSpritePath), PanelBorder);
         _buttonSprite = Resources.Load<Sprite>(ButtonSpritePath);
         _headerFont = ResolveTitleFont();
 
@@ -424,6 +435,9 @@ public class ControlRebindScreen : MonoBehaviour
         pr.sizeDelta = new Vector2(900, 1000);
         var panelImg = panel.AddComponent<Image>();
         ApplySprite(panelImg, _panelSprite, PanelSolid);
+        // Border is 180 now; 180 / 1.3 ≈ 138 px corners on this 900×1000 panel.
+        // Raise the multiplier to shrink the corners, lower it to enlarge them.
+        panelImg.pixelsPerUnitMultiplier = 1.9f;
 
         // Inner content column, inset so it clears the frame border + corner art.
         var inner = NewUI("Inner", panel.transform);
@@ -525,6 +539,10 @@ public class ControlRebindScreen : MonoBehaviour
         br.pivot = new Vector2(0.5f, 0.5f); br.sizeDelta = new Vector2(720, 260);
         var boxImg = box.AddComponent<Image>();
         ApplySprite(boxImg, _panelSprite, PanelSolid);
+        // This listen box is short (260 tall): at multiplier 1 two 180 px corners
+        // (360 total) would exceed the height and Unity would clamp/distort them. A
+        // larger multiplier keeps them well inside — 180 / 2.5 ≈ 72 px per corner.
+        boxImg.pixelsPerUnitMultiplier = 2.5f;
 
         var bv = box.AddComponent<VerticalLayoutGroup>();
         bv.padding = new RectOffset(50, 50, 44, 44); bv.spacing = 18;
@@ -623,6 +641,22 @@ public class ControlRebindScreen : MonoBehaviour
         }
     }
 
+    // Rebuilds a sprite with a 9-slice border baked in, so a Sliced Image keeps its
+    // corners fixed while the edges/center stretch. Border is in source-texture pixels.
+    // The texture does NOT need Read/Write enabled — Sprite.Create only references a
+    // rect of the existing texture, it never reads pixels.
+    private static Sprite WithBorder(Sprite src, float border)
+    {
+        if (src == null) return null;
+        try
+        {
+            float ppu = src.pixelsPerUnit > 0 ? src.pixelsPerUnit : 100f;
+            return Sprite.Create(src.texture, src.rect, new Vector2(0.5f, 0.5f), ppu, 0,
+                                 SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+        }
+        catch { return src; }
+    }
+
     private TMP_FontAsset ResolveTitleFont() => MenuTheme.ResolveFont(titleFont, titleFontTtf);
 
     private static Sprite MakeHorizontalFade()
@@ -685,3 +719,4 @@ public class ControlRebindScreen : MonoBehaviour
         return sb.ToString();
     }
 }
+

@@ -1,10 +1,11 @@
+using System.Collections;
 using UnityEngine;
 
 // Pitcher ranged enemy. It reuses EnemyController for everything (target
 // acquisition, movement, obstacle avoidance, stuck handling, the attack
 // cycle and the attack animation timing) and only swaps out what happens at
 // the moment the attack lands: instead of an instant melee hit, it throws a
-// homing projectile at the current target.
+// projectile at the current target.
 
 [RequireComponent(typeof(EnemyController))]
 [RequireComponent(typeof(EnemyStats))]
@@ -37,8 +38,25 @@ public class PitcherController : MonoBehaviour
     [Tooltip("How long (seconds) a point of the trail lingers.")]
     [SerializeField] private float tracerTime = 0.14f;
 
+    [Header("Release Timing")]
+    [Tooltip("Extra wait AFTER EnemyData.hitFrame before the dart actually leaves, " +
+             "measured in ATTACK-ANIMATION FRAMES (fractions allowed, e.g. 1.5).\n\n" +
+             "The throw animation shows the crystal pushing out of the body first; " +
+             "releasing exactly on hitFrame made the dart appear before that. " +
+             "Being frame-based, the delay stays in step with the art if you later " +
+             "retime attack.speedOverride.\n\n" +
+             "0 = release exactly on hitFrame (old behaviour). Keep " +
+             "hitFrame + this below attack.frameCount so the dart still leaves " +
+             "during the throw animation.")]
+    [SerializeField, Min(0f)] private float releaseDelayFrames = 2f;
+
     private EnemyController enemyController;
     private EnemyStats stats;
+    private EnemyAnimationController animController;
+    private EnemyFieryEyes fieryEyes;   // optional; flares when the dart leaves
+
+    private Coroutine pendingRelease;
+    private Transform pendingTarget;
 
     private void Awake()
     {
@@ -46,9 +64,19 @@ public class PitcherController : MonoBehaviour
         // cycle can run — same ordering rationale as InsectController.
         enemyController = GetComponent<EnemyController>();
         stats = GetComponent<EnemyStats>();
+        animController = GetComponent<EnemyAnimationController>();
+        fieryEyes = GetComponent<EnemyFieryEyes>();
 
         if (enemyController != null)
             enemyController.AttackHandlerOverride = ThrowProjectile;
+    }
+
+    private void OnDisable()
+    {
+        // Disabling a MonoBehaviour stops its coroutines; forget the pending throw
+        // so a stale handle can't be "flushed" later.
+        pendingRelease = null;
+        pendingTarget = null;
     }
 
     private void OnDestroy()
@@ -61,8 +89,88 @@ public class PitcherController : MonoBehaviour
 
     // Invoked by EnemyController.PerformHit() at the configured hit frame of the
     // attack animation. 'target' is whatever the controller currently has
-    // locked: player, a tower, or the core.
+    // locked: player, a tower, or the core. The actual release is deferred by
+    // releaseDelayFrames so the dart leaves once the art shows it pushing out.
     private void ThrowProjectile(Transform target)
+    {
+        if (target == null) return;
+
+        float delay = GetReleaseDelaySeconds();
+        if (delay <= 0f)
+        {
+            Release(target);
+            return;
+        }
+
+        // Only reachable if the delay outlasts a whole attack cycle + cooldown.
+        // Let the earlier dart go now rather than silently swallowing it.
+        if (pendingRelease != null)
+        {
+            StopCoroutine(pendingRelease);
+            pendingRelease = null;
+            Transform earlier = pendingTarget;
+            pendingTarget = null;
+            if (IsLiveTarget(earlier) && CanStillThrow()) Release(earlier);
+        }
+
+        pendingTarget = target;
+        pendingRelease = StartCoroutine(ReleaseAfterDelay(target, delay));
+    }
+
+    private float GetReleaseDelaySeconds()
+    {
+        if (releaseDelayFrames <= 0f) return 0f;
+        float secondsPerFrame = (stats != null && stats.enemyData != null)
+            ? stats.enemyData.AttackAnimSpeed
+            : 0.1f;
+        return releaseDelayFrames * Mathf.Max(0f, secondsPerFrame);
+    }
+
+    private IEnumerator ReleaseAfterDelay(Transform target, float delay)
+    {
+        // Scaled time, same clock the attack animation samples (Time.time), so the
+        // release stays locked to the sprite and pauses with the game.
+        yield return new WaitForSeconds(delay);
+
+        pendingRelease = null;
+        pendingTarget = null;
+
+        // The Pitcher can die, get parry-stunned or be taken over by a
+        // confusion/berserk effect inside the delay. A corpse must not throw.
+        if (!CanStillThrow()) yield break;
+
+        // The original target may have died during the wind-up; fall back to
+        // whatever the controller is locked on now instead of throwing at nothing.
+        if (!IsLiveTarget(target))
+        {
+            target = enemyController != null ? enemyController.CurrentTarget : null;
+            if (!IsLiveTarget(target)) yield break;
+        }
+
+        Release(target);
+    }
+
+    private bool CanStillThrow()
+    {
+        if (enemyController == null || !enemyController.enabled) return false; // DelayedDeath / CC suspension disable it
+        if (stats != null && stats.IsDead()) return false;
+
+        if (animController != null && (animController.IsDying || animController.IsAnimationFrozen))
+            return false;
+
+        var stun = GetComponent<ParryStunEffect>();
+        if (stun != null && stun.IsStunActive) return false;
+
+        return true;
+    }
+
+    private static bool IsLiveTarget(Transform t)
+        => t != null && t.gameObject.activeInHierarchy;
+
+    // The actual throw (the body of the old ThrowProjectile, unchanged apart from
+    // the eye flare). Aims at the target's position at RELEASE time, not at the
+    // hit frame, so the delay doesn't make the shot lag behind a moving player.
+    private void Release(Transform target)
     {
         if (target == null) return;
 
@@ -84,6 +192,9 @@ public class PitcherController : MonoBehaviour
             AudioManager.instance.PlayOneShot(FMODEvents.instance.pitcherAttack, spawn);
         }
 
+        if (fieryEyes != null)
+            fieryEyes.Flare();
+
         GameObject projObj = Instantiate(
             projectilePrefab, spawn, Quaternion.AngleAxis(angle, Vector3.forward));
 
@@ -95,7 +206,7 @@ public class PitcherController : MonoBehaviour
         if (projectile != null)
         {
             // Hand the firing controller to the projectile so that, on impact,
-            // it can reuse EnemyController.ApplyDamageToTarget 
+            // it can reuse EnemyController.ApplyDamageToTarget
             float damage = stats != null ? stats.Damage : 0f;
             // homing:false → the shot commits to its launch heading instead of
             // tracking the player, so the player can side-step it. (A parried
@@ -110,3 +221,6 @@ public class PitcherController : MonoBehaviour
         }
     }
 }
+
+
+

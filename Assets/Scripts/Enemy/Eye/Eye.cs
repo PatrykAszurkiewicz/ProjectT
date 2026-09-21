@@ -488,6 +488,11 @@ public class Eye : MonoBehaviour
                     var cs = targetGO.GetComponent<CharacterStats>();
                     if (cs != null) cs.TakeDamage(damage);
                 }
+
+                // Player-side on-hit augments (Damage Reflection / Ice Armor). The AOE
+                // pulse never routes through EnemyController, so these were skipped
+                // entirely. hitGOs already dedups this GameObject for the pulse.
+                EnemyController.NotifyPlayerDamaged(targetGO, damage, gameObject);
                 continue;
             }
 
@@ -983,5 +988,4 @@ public class Eye : MonoBehaviour
 // the Eye mid-attack can no longer freeze puffs or leave dust stuck on the
 // ground. Added at runtime via AddComponent; it needs no state of its own.
 public sealed class EyeAttackDustRunner : MonoBehaviour { }
-
 
